@@ -59,6 +59,18 @@ def test_guard_daemon_state_rejects_different_package_version_peer() -> None:
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
+def test_healthz_details_require_compatible_same_release_peer() -> None:
+    compatible = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": __version__,
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+    incompatible = dict(compatible)
+    incompatible["compatibility_version"] = "not-current"
+    assert daemon_manager_module._daemon_healthz_details_match_current_runtime(compatible)
+    assert not daemon_manager_module._daemon_healthz_details_match_current_runtime(incompatible)
+
+
 def test_load_guard_daemon_url_rejects_older_package_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

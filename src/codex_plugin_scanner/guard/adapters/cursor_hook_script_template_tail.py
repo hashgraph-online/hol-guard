@@ -307,12 +307,19 @@ def _cursor_availability_response(
         }, 2
 
 
+_LAST_HOOK_EVENT_NAME = ""
+
+
 def main() -> int:
     try:
         return _main_inner()
     except Exception:
         if _recording_only_from_guard_home():
-            print(json.dumps({"permission": "allow"}))
+            compact = _LAST_HOOK_EVENT_NAME.strip().lower().replace("_", "").replace("-", "")
+            if compact in {"aftershellexecution", "aftermcpexecution"}:
+                print("{}")
+            else:
+                print(json.dumps({"permission": "allow"}))
             return 0
         print(
             json.dumps(
@@ -340,6 +347,8 @@ def _main_inner() -> int:
         return 2
     inferred = _infer_cursor_hook_event_name(payload)
     hook_event_name = str(inferred.get("hook_event_name") or inferred.get("hookEventName") or "preToolUse")
+    global _LAST_HOOK_EVENT_NAME
+    _LAST_HOOK_EVENT_NAME = hook_event_name
     prepared = _prepare_cursor_hook_payload(inferred)
     workspace = _workspace_from_cursor_input(prepared)
     guard_argv = list(GUARD_HOOK_ARGV)

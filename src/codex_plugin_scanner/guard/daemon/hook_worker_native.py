@@ -8,27 +8,21 @@ from pathlib import Path
 from typing import Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..config import load_guard_config
 from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus
-from ..protection_posture import protection_is_off
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-from .hook_availability_policy import availability_harness_response, recording_only_pre_tool_response
+from .hook_availability_policy import (
+    availability_harness_response,
+    hook_review_is_recording_only,
+    recording_only_pre_tool_response,
+)
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
     harness_json_from_native_pre_tool,
     post_tool_fail_safe_response,
 )
-
-
-def _config_is_recording_only(guard_home: Path, workspace: Path | None) -> bool:
-    try:
-        config = load_guard_config(guard_home, workspace=workspace)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
 def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
@@ -163,8 +157,7 @@ class HookWorkerNativeMixin:
         command = pre_tool_command(payload)
         if command is None:
             raise HookWorkerUnsupported("fast path PreToolUse requires a command")
-        config = load_guard_config(guard_home, workspace=workspace)
-        recording_only = protection_is_off(posture=config.protection_posture, mode=config.mode)
+        recording_only = hook_review_is_recording_only(guard_home=guard_home, workspace=workspace)
         native = self._review_pre_tool_native(command, guard_home=guard_home, cwd=workspace, home_dir=home_dir)
         if native is not None:
             if recording_only:
@@ -212,7 +205,7 @@ class HookWorkerNativeMixin:
         deadline: float | None,
     ) -> dict[str, object]:
         policy_snapshot = self._native_policy_snapshot(workspace)
-        recording_only = _config_is_recording_only(guard_home, workspace) or (
+        recording_only = hook_review_is_recording_only(guard_home=guard_home, workspace=workspace) or (
             policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
         )
         edge = self._review_raw_hook_native(
