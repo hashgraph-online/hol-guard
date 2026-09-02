@@ -28,7 +28,7 @@ fn fixture_file_handle(path: &Path) -> fs::File {
     #[cfg(windows)]
     {
         let private_root = path.parent().unwrap_or(path);
-        return crate::resident_state::private_file(path, true, private_root).unwrap();
+        crate::resident_state::private_file(path, true, private_root).unwrap()
     }
     #[cfg(not(windows))]
     fs::File::create(path).unwrap()

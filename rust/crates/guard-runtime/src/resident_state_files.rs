@@ -71,7 +71,7 @@ pub(crate) fn remove_windows_private_file(
     windows_security::remove_private_file(path, private_root)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, test))]
 pub(crate) fn bind_windows_private_directory(
     path: &Path,
     private_root: &Path,
@@ -246,6 +246,7 @@ pub(crate) fn open_private_read(
     Ok(Some(file))
 }
 
+#[cfg(any(not(windows), test))]
 pub(crate) fn ensure_private_directory(
     path: &Path,
     protect_windows: bool,

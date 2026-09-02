@@ -22,16 +22,21 @@ mod resident_state_files;
 pub(crate) use resident_startup_lock::{
     acquire_startup_lock, clear_stale_startup_lock, StartupLock,
 };
+#[cfg(all(windows, test))]
+pub(crate) use resident_state_files::bind_windows_private_directory;
+#[cfg(any(not(windows), test))]
+#[allow(unused_imports)]
+pub(crate) use resident_state_files::ensure_private_directory;
 #[cfg(windows)]
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{
-    bind_windows_existing_directory, bind_windows_private_directory, open_private_read,
-    protect_windows_private_path, remove_windows_private_file, replace_windows_private_file,
-    verify_windows_private_file, verify_windows_private_path,
+    bind_windows_existing_directory, open_private_read, protect_windows_private_path,
+    remove_windows_private_file, replace_windows_private_file, verify_windows_private_file,
+    verify_windows_private_path,
 };
+#[allow(unused_imports)]
 pub(crate) use resident_state_files::{
-    ensure_private_directory, ensure_private_directory_under, is_lock_contention, private_file,
-    private_lock_file,
+    ensure_private_directory_under, is_lock_contention, private_file, private_lock_file,
 };
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";

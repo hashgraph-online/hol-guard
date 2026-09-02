@@ -80,6 +80,7 @@ where
         .map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 pub(super) fn bind_windows_private_directory(
     path: &Path,
     private_root: &Path,
@@ -87,6 +88,7 @@ pub(super) fn bind_windows_private_directory(
     bind_windows_private_directory_under(path, private_root)
 }
 
+#[cfg(test)]
 pub(super) fn bind_windows_private_directory_under(
     path: &Path,
     private_root: &Path,
@@ -205,6 +207,7 @@ pub(super) fn create_private_file(path: &Path, private_root: &Path) -> io::Resul
     .map_err(io::Error::other)
 }
 
+#[allow(dead_code)]
 pub(super) fn create_private_directory(path: &Path) -> io::Result<bool> {
     let binding = with_directory_binding(path, path, true, |binding| Ok(binding.created_final()))
         .map_err(io::Error::other)?;
@@ -224,6 +227,7 @@ pub(super) fn open_private_file(path: &Path, private_root: &Path) -> io::Result<
     .map_err(io::Error::other)
 }
 
+#[allow(dead_code)]
 pub(super) fn open_private_directory(path: &Path, private_root: &Path) -> io::Result<File> {
     with_existing_directory(path, private_root, |binding| {
         let handle = binding.handle();
@@ -441,6 +445,27 @@ fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Resul
     Ok(())
 }
 
+fn verify_windows_owner(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
+    let system = "S-1-5-18"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
+    let administrators = "S-1-5-32-544"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_administrators_sid_failed".to_owned())?;
+    let applied_owner = applied
+        .owner()
+        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
+    if !windows_owner_is_trusted(
+        applied_owner,
+        owner,
+        system.as_ref(),
+        administrators.as_ref(),
+    ) {
+        return Err("native_resident_windows_acl_not_private".to_owned());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,25 +492,4 @@ mod tests {
             administrators.as_ref(),
         ));
     }
-}
-
-fn verify_windows_owner(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
-    let system = "S-1-5-18"
-        .parse::<LocalBox<Sid>>()
-        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
-    let administrators = "S-1-5-32-544"
-        .parse::<LocalBox<Sid>>()
-        .map_err(|_| "native_resident_windows_administrators_sid_failed".to_owned())?;
-    let applied_owner = applied
-        .owner()
-        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
-    if !windows_owner_is_trusted(
-        applied_owner,
-        owner,
-        system.as_ref(),
-        administrators.as_ref(),
-    ) {
-        return Err("native_resident_windows_acl_not_private".to_owned());
-    }
-    Ok(())
 }

@@ -572,8 +572,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.active_stream_clients_lock = threading.Lock()
         self.shutdown_started = shutdown_started
         self.diagnostics = diagnostics
-        self.auth_audit_lock = threading.Lock()
-        self.denial_audit_lock = threading.Lock()
+        self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
         self.auth_audit_windows = {}
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
@@ -8105,9 +8104,10 @@ class GuardDaemonServer:
             if serve_thread is None:
                 self._server.server_close()
         _ = self._finish_service()
-        if self._join_service_thread(
-            serve_thread, deadline=time.monotonic() + 5
-        ) is None and self._thread is serve_thread:
+        if (
+            self._join_service_thread(serve_thread, deadline=time.monotonic() + 5) is None
+            and self._thread is serve_thread
+        ):
             self._thread = None
 
     def _begin_service(self) -> None:

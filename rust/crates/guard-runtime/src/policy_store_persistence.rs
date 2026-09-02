@@ -200,17 +200,6 @@ pub(super) fn map_private_read_error(kind: &str, error: String) -> String {
     }
 }
 
-#[cfg(windows)]
-pub(super) fn map_verifier_read_error(error: String) -> String {
-    if error.ends_with("_invalid") {
-        "native_policy_verifier_key_invalid".to_owned()
-    } else if error.ends_with("_not_private") {
-        "native_policy_verifier_key_not_private".to_owned()
-    } else {
-        "native_policy_verifier_key_read_failed".to_owned()
-    }
-}
-
 pub(super) fn read_private_json(
     path: &Path,
     maximum_bytes: u64,
@@ -376,15 +365,17 @@ pub(super) fn persist_private_bytes(
     let result = replace_temporary(&temporary, path, kind, private_root);
     #[cfg(windows)]
     drop(file);
+    #[cfg(not(windows))]
     if let Err(error) = result {
-        #[cfg(not(windows))]
         let _ = fs::remove_file(&temporary);
-        // On Windows the replacement helper may have committed the rename
-        // before a post-commit identity/ACL check failed.  Leave the source
-        // candidate for the bounded startup recovery pass instead of
-        // deleting through a pathname that may now designate the target.
         return Err(error);
     }
+    // On Windows the replacement helper may have committed the rename before
+    // a post-commit identity/ACL check failed. Leave the source candidate for
+    // the bounded startup recovery pass instead of deleting through a
+    // pathname that may now designate the target.
+    #[cfg(windows)]
+    result?;
     #[cfg(unix)]
     {
         persistence_fault(PersistBoundary::DirectorySync)?;

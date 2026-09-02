@@ -22,7 +22,7 @@ fn write_fixture_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
             .map_err(|_| "native_approval_v4_authority_invalid".to_owned())?;
         file.write_all(bytes)
             .map_err(|_| "native_approval_v4_authority_invalid".to_owned())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     fs::write(path, bytes).map_err(|_| "native_approval_v4_authority_invalid".to_owned())

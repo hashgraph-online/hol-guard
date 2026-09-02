@@ -132,14 +132,9 @@ fn existing_private_file(path: &Path, private_root: &Path) -> Result<bool, Strin
         // not use pathname metadata here: a same-name replacement between a
         // stat and the subsequent open must never be treated as our budget
         // file, and foreign-owner/reparse objects must fail closed.
-        return crate::resident_state::open_private_read(
-            path,
-            4096,
-            "restart_budget",
-            private_root,
-        )
-        .map(|file| file.is_some())
-        .map_err(|_| "native_resident_restart_budget_invalid".to_owned());
+        crate::resident_state::open_private_read(path, 4096, "restart_budget", private_root)
+            .map(|file| file.is_some())
+            .map_err(|_| "native_resident_restart_budget_invalid".to_owned());
     }
 
     #[cfg(not(windows))]
