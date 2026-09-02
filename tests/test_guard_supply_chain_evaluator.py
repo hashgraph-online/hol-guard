@@ -1284,6 +1284,74 @@ def test_cloud_access_token_refresh_failure_returns_safe_evaluation(
     assert expected_code in reason_codes, reason_codes
 
 
+def test_cloud_non_timeout_transport_error_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
+
+    def raise_connection_error(**_kwargs: object) -> object:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_connection_error)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "cloud_http_error" for reason in result.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in result.reasons)
+
+
+def test_cloud_non_timeout_refresh_error_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
+
+    def resolve_auth(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        del kwargs
+        return {
+            "sync_url": "http://127.0.0.1:8042/api/guard/receipts/sync",
+            "access_token": "token",
+            "dpop_key_material": None,
+        }
+
+    attempts = 0
+
+    def open_cloud(**kwargs: object) -> object:
+        nonlocal attempts
+        attempts += 1
+        request = kwargs["request"]
+        assert isinstance(request, urllib.request.Request)
+        if attempts == 1:
+            raise urllib.error.HTTPError(request.full_url, 401, "expired", {}, None)
+        raise OSError("connection reset")
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", resolve_auth)
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", open_cloud)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert attempts == 2
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "cloud_http_error" for reason in result.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in result.reasons)
+
+
 def test_unavailable_configured_credentials_use_complete_signed_bundle(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

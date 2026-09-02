@@ -74,6 +74,7 @@ from .runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
     _guard_sync_request,
+    _is_timeout_error,
     _normalized_receipts_sync_url,
     _resolve_guard_sync_auth_context,
     _urlopen_json_with_timeout_retry,
@@ -1130,6 +1131,58 @@ def _evaluate_with_cloud(
             return resolve_fail_closed_decision()
         return "block"
 
+    def handle_cloud_os_error(
+        error: OSError,
+    ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
+        if _is_timeout_error(error):
+            if resolve_cloud_failure_decision() == "block":
+                return (
+                    _cloud_fail_closed_evaluation(
+                        code="cloud_timeout",
+                        message=(
+                            "Guard Cloud evaluation timed out, so this package request is paused for "
+                            "explicit review."
+                        ),
+                        artifact=artifact,
+                        targets=targets,
+                        workspace_dir=workspace_dir,
+                        workspace_fingerprint=workspace_fingerprint,
+                        bundle_meta=bundle_meta,
+                        # A timeout is a transient availability failure, not a
+                        # package verdict. Keep the install stopped, but put it
+                        # in the approval queue so a human can decide remotely.
+                        fail_closed_decision="ask",
+                    ),
+                    None,
+                )
+            return None, _cloud_fallback_reason(
+                code="cloud_timeout",
+                message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
+            )
+
+        fail_closed_decision = resolve_cloud_failure_decision()
+        if fail_closed_decision == "block":
+            return (
+                _cloud_fail_closed_evaluation(
+                    code="cloud_http_error",
+                    message=(
+                        "Guard Cloud evaluation could not be reached, so Guard blocked the install "
+                        "rather than bypassing Cloud package protection."
+                    ),
+                    artifact=artifact,
+                    targets=targets,
+                    workspace_dir=workspace_dir,
+                    workspace_fingerprint=workspace_fingerprint,
+                    bundle_meta=bundle_meta,
+                    fail_closed_decision=fail_closed_decision,
+                ),
+                None,
+            )
+        return None, _cloud_fallback_reason(
+            code="cloud_http_error",
+            message="Guard Cloud evaluation could not be reached, so Guard used local package intelligence.",
+        )
+
     try:
         auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
     except GuardSyncAuthorizationExpiredError:
@@ -1282,31 +1335,8 @@ def _evaluate_with_cloud(
                 response_payload = None
             except urllib.error.HTTPError as refreshed_error:
                 status_code = refreshed_error.code
-            except OSError:
-                if resolve_cloud_failure_decision() == "block":
-                    return (
-                        _cloud_fail_closed_evaluation(
-                            code="cloud_timeout",
-                            message=(
-                                "Guard Cloud evaluation timed out, so this package request is paused for "
-                                "explicit review."
-                            ),
-                            artifact=artifact,
-                            targets=targets,
-                            workspace_dir=workspace_dir,
-                            workspace_fingerprint=workspace_fingerprint,
-                            bundle_meta=bundle_meta,
-                            # A timeout is a transient availability failure, not a
-                            # package verdict. Keep the install stopped, but put it
-                            # in the approval queue so a human can decide remotely.
-                            fail_closed_decision="ask",
-                        ),
-                        None,
-                    )
-                return None, _cloud_fallback_reason(
-                    code="cloud_timeout",
-                    message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-                )
+            except OSError as error:
+                return handle_cloud_os_error(error)
             except ValueError:
                 return (
                     _cloud_fail_closed_evaluation(
@@ -1348,30 +1378,8 @@ def _evaluate_with_cloud(
                     f"Guard cloud evaluation returned HTTP {status_code}, so Guard fell back to local intelligence."
                 ),
             )
-    except OSError:
-        if resolve_cloud_failure_decision() == "block":
-            return (
-                _cloud_fail_closed_evaluation(
-                    code="cloud_timeout",
-                    message=(
-                        "Guard Cloud evaluation timed out, so this package request is paused for explicit review."
-                    ),
-                    artifact=artifact,
-                    targets=targets,
-                    workspace_dir=workspace_dir,
-                    workspace_fingerprint=workspace_fingerprint,
-                    bundle_meta=bundle_meta,
-                    # A timeout is a transient availability failure, not a
-                    # package verdict. Keep the install stopped, but put it
-                    # in the approval queue so a human can decide remotely.
-                    fail_closed_decision="ask",
-                ),
-                None,
-            )
-        return None, _cloud_fallback_reason(
-            code="cloud_timeout",
-            message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-        )
+    except OSError as error:
+        return handle_cloud_os_error(error)
     except (RuntimeError, ValueError):
         return (
             _cloud_fail_closed_evaluation(
