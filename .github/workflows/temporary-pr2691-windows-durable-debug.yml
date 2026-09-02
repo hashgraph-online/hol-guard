@@ -1,4 +1,4 @@
-name: Temporary PR 2691 Windows durable-state diagnostic
+name: Temporary PR 2691 Windows read diagnostic
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
         with:
           ref: tmp/pr2691-windows-durable-debug-20260902
           persist-credentials: false
-      - name: Instrument durable-state operations
+      - name: Trace private-file read failure
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -26,209 +26,48 @@ jobs:
           @'
           from pathlib import Path
 
-          def replace_once(path: Path, old: str, new: str) -> None:
-              text = path.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f'{path}: target count {count}')
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          state_files = Path('rust/crates/guard-runtime/src/resident_state_files.rs')
-          replace_once(
-              state_files,
-              '''        Err(_) => return Err(format!("native_resident_{kind}_read_failed")),
+          path = Path('rust/crates/guard-runtime/src/resident_state_files.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''        Err(_) => return Err(format!("native_resident_{kind}_read_failed")),
               };
-              let metadata = file
-                  .metadata()
-                  .map_err(|_| format!("native_resident_{kind}_invalid"))?;
-          ''',
-              '''        Err(error) => {
+          '''
+          new = '''        Err(error) => {
                       eprintln!(
                           "DBG open_private_read path={} kind={} io_kind={:?} raw={:?} error={}",
-                          path.display(),
-                          kind,
-                          error.kind(),
-                          error.raw_os_error(),
-                          error
+                          path.display(), kind, error.kind(), error.raw_os_error(), error
                       );
                       return Err(format!("native_resident_{kind}_read_failed"));
                   }
               };
-              let metadata = file.metadata().map_err(|error| {
-                  eprintln!(
-                      "DBG open_private_read metadata path={} kind={} io_kind={:?} raw={:?} error={}",
-                      path.display(),
-                      kind,
-                      error.kind(),
-                      error.raw_os_error(),
-                      error
-                  );
-                  format!("native_resident_{kind}_invalid")
-              })?;
-          ''',
-          )
-          replace_once(
-              state_files,
-              '''    windows_security::verify_windows_handle(&file, owner.as_ref())?;
-              Ok(Some(file))
-          }
-          ''',
-              '''    windows_security::verify_windows_handle(&file, owner.as_ref()).map_err(|error| {
-                  eprintln!(
-                      "DBG open_private_read verify path={} kind={} error={}",
-                      path.display(),
-                      kind,
-                      error
-                  );
-                  error
-              })?;
-              Ok(Some(file))
-          }
-          ''',
-          )
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError(f'open_private_read target count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          state_windows = Path('rust/crates/guard-runtime/src/resident_state_windows.rs')
-          replace_once(
-              state_windows,
-              '''    with_existing_directory(parent, private_root, |binding| {
-                  let file = binding.create_private_file(name, &descriptor)?;
-                  if let Err(error) = verify_windows_handle(&file, owner.as_ref()) {
-                      let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
-                      return Err(io::Error::other(error));
-                  }
-                  Ok(file)
-              })
-          }
-          ''',
-              '''    with_existing_directory(parent, private_root, |binding| {
-                  let file = binding.create_private_file(name, &descriptor)?;
-                  if let Err(error) = verify_windows_handle(&file, owner.as_ref()) {
-                      let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
-                      return Err(io::Error::other(error));
-                  }
-                  Ok(file)
-              })
-              .inspect_err(|error| {
-                  eprintln!(
-                      "DBG create_private_file path={} private_root={} kind={:?} raw={:?} error={}",
-                      path.display(),
-                      private_root.display(),
-                      error.kind(),
-                      error.raw_os_error(),
-                      error
-                  );
-              })
-          }
-          ''',
-          )
-          replace_once(
-              state_windows,
-              '''    with_existing_directory(parent, private_root, |binding| {
+          path = Path('rust/crates/guard-runtime/src/resident_state_windows.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''    with_existing_directory(parent, private_root, |binding| {
                   binding.open_private_file(name)
               })
           }
-          ''',
-              '''    with_existing_directory(parent, private_root, |binding| {
+          '''
+          new = '''    with_existing_directory(parent, private_root, |binding| {
                   binding.open_private_file(name)
               })
               .inspect_err(|error| {
                   eprintln!(
-                      "DBG open_private_file path={} private_root={} kind={:?} raw={:?} error={}",
-                      path.display(),
-                      private_root.display(),
-                      error.kind(),
-                      error.raw_os_error(),
-                      error
+                      "DBG open_private_file path={} private_root={} io_kind={:?} raw={:?} error={}",
+                      path.display(), private_root.display(), error.kind(), error.raw_os_error(), error
                   );
               })
           }
-          ''',
-          )
-          replace_once(
-              state_windows,
-              '''    with_existing_directory(parent, private_root, |binding| {
-                  let source = binding.open_private_file(temporary_name)?;
-                  verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
-                  binding.replace_private_file(&source, destination_name)
-              })
-              .map_err(|error| error.to_string())
-          }
-          ''',
-              '''    with_existing_directory(parent, private_root, |binding| {
-                  let source = binding.open_private_file(temporary_name)?;
-                  verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
-                  binding.replace_private_file(&source, destination_name)
-              })
-              .map_err(|error| {
-                  eprintln!(
-                      "DBG replace_private_file source={} destination={} private_root={} kind={:?} raw={:?} error={}",
-                      temporary.display(),
-                      path.display(),
-                      private_root.display(),
-                      error.kind(),
-                      error.raw_os_error(),
-                      error
-                  );
-                  error.to_string()
-              })
-          }
-          ''',
-          )
-
-          binding = Path('rust/crates/guard-runtime-windows-process/src/directory_binding.rs')
-          replace_once(
-              binding,
-              '''        match self.open_private_file(destination) {
-                      Ok(_) => {}
-                      Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                      Err(error) => return Err(error),
-                  }
-                  rename_into_directory(self, source, destination)?;
-                  let committed = self.open_private_file(destination)?;
-          ''',
-              '''        match self.open_private_file(destination) {
-                      Ok(_) => {}
-                      Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                      Err(error) => {
-                          eprintln!(
-                              "DBG binding destination pre-open name={:?} kind={:?} raw={:?} error={}",
-                              destination,
-                              error.kind(),
-                              error.raw_os_error(),
-                              error
-                          );
-                          return Err(error);
-                      }
-                  }
-                  rename_into_directory(self, source, destination).map_err(|error| {
-                      eprintln!(
-                          "DBG binding rename name={:?} kind={:?} raw={:?} error={}",
-                          destination,
-                          error.kind(),
-                          error.raw_os_error(),
-                          error
-                      );
-                      error
-                  })?;
-                  let committed = self.open_private_file(destination).map_err(|error| {
-                      eprintln!(
-                          "DBG binding committed-open name={:?} kind={:?} raw={:?} error={}",
-                          destination,
-                          error.kind(),
-                          error.raw_os_error(),
-                          error
-                      );
-                      error
-                  })?;
-          ''',
-          )
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError(f'open_private_file target count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
           '@ | python -
-
           rustup toolchain install 1.88.0 --profile minimal --component rustfmt
           rustup default 1.88.0
           cargo fmt --manifest-path rust/Cargo.toml --all
           $env:RUST_BACKTRACE = '1'
           cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime approval::approval_v4::tests::ed25519_assertion_validates_and_persists_counter_zero_and_one -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_resident::restart_budget::tests::repeated_updates_replace_budget_without_leaving_temporary_state -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime policy_store::policy_store_persistence::windows_recovery_tests::authority_recovery_replaces_only_valid_private_backup -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_resident::lease::tests::dropping_owned_malformed_lease_removes_the_owned_artifact -- --nocapture --test-threads=1
