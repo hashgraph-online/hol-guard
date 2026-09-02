@@ -1,4 +1,4 @@
-name: Temporary PR 2691 Windows durable-state repair validation
+name: Temporary PR 2691 Windows full-path rename validation
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
         with:
           ref: tmp/pr2691-windows-durable-debug-20260902
           persist-credentials: false
-      - name: Apply and validate Windows repairs
+      - name: Validate full-path atomic rename
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -61,31 +61,120 @@ jobs:
           )
 
           private_files = Path('rust/crates/guard-runtime-windows-process/src/private_files.rs')
-          replace_once(
-              private_files,
-              '''    let header_size = size_of::<FILE_RENAME_INFO>() - size_of::<u16>();
-          ''',
-              '''    let filename_offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
-          ''',
-          )
-          replace_once(
-              private_files,
-              '''    let buffer_size = header_size
+          old = '''pub(super) fn rename_into_directory(
+              binding: &super::directory_binding::PrivateDirectoryBinding,
+              source: &std::fs::File,
+              destination: &OsStr,
+          ) -> io::Result<()> {
+              let name = destination.encode_wide().collect::<Vec<_>>();
+              if name.is_empty() || name.contains(&0) {
+                  return Err(io::Error::new(
+                      io::ErrorKind::InvalidInput,
+                      "private destination name is invalid",
+                  ));
+              }
+              let header_size = size_of::<FILE_RENAME_INFO>() - size_of::<u16>();
+              let byte_count = name
+                  .len()
+                  .checked_mul(size_of::<u16>())
+                  .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+              let buffer_size = header_size
                   .checked_add(byte_count)
                   .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
-          ''',
-              '''    let buffer_size = size_of::<FILE_RENAME_INFO>()
-                  .checked_add(byte_count)
+              let mut buffer = vec![0u8; buffer_size];
+              // SAFETY: The buffer is sized to include the fixed header and the exact
+              // UTF-16 payload expected by FILE_RENAME_INFO.
+              unsafe {
+                  let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
+                  (*info).ReplaceIfExists = TRUE;
+                  (*info).RootDirectory = binding.handle().as_raw_handle() as HANDLE;
+                  (*info).FileNameLength = byte_count as DWORD;
+                  std::ptr::copy_nonoverlapping(
+                      name.as_ptr() as *const u8,
+                      buffer.as_mut_ptr().add(header_size),
+                      byte_count,
+                  );
+              }
+              // SAFETY: `source` is a live DELETE-capable handle and `buffer` remains
+              // valid for the synchronous rename call.
+              if unsafe {
+                  SetFileInformationByHandle(
+                      source.as_raw_handle() as HANDLE,
+                      FileRenameInfo,
+                      buffer.as_ptr() as *mut _,
+                      buffer_size as DWORD,
+                  )
+              } == FALSE
+              {
+                  return Err(io::Error::last_os_error());
+              }
+              Ok(())
+          }
+          '''
+          new = '''pub(super) fn rename_into_directory(
+              binding: &super::directory_binding::PrivateDirectoryBinding,
+              source: &std::fs::File,
+              destination: &OsStr,
+          ) -> io::Result<()> {
+              let destination_path = binding.path().join(destination);
+              let mut name = destination_path.as_os_str().encode_wide().collect::<Vec<_>>();
+              if name.is_empty() || name.contains(&0) {
+                  return Err(io::Error::new(
+                      io::ErrorKind::InvalidInput,
+                      "private destination name is invalid",
+                  ));
+              }
+              let byte_count = name
+                  .len()
+                  .checked_mul(size_of::<u16>())
                   .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
-          ''',
-          )
-          replace_once(
-              private_files,
-              '''            buffer.as_mut_ptr().add(header_size),
-          ''',
-              '''            buffer.as_mut_ptr().add(filename_offset),
-          ''',
-          )
+              name.push(0);
+              let filename_offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+              let payload_size = name
+                  .len()
+                  .checked_mul(size_of::<u16>())
+                  .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+              let buffer_size = filename_offset
+                  .checked_add(payload_size)
+                  .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+              let word_size = size_of::<usize>();
+              let allocation_size = buffer_size
+                  .checked_add(word_size - 1)
+                  .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+              let mut buffer = vec![0usize; allocation_size / word_size];
+              let buffer_ptr = buffer.as_mut_ptr() as *mut u8;
+              // SAFETY: `Vec<usize>` provides at least the alignment required by
+              // FILE_RENAME_INFO on Windows. The allocation includes the full
+              // absolute UTF-16 path and its trailing NUL; FileNameLength excludes
+              // that terminator as required by SetFileInformationByHandle.
+              unsafe {
+                  let info = buffer_ptr as *mut FILE_RENAME_INFO;
+                  (*info).ReplaceIfExists = TRUE;
+                  (*info).RootDirectory = null_mut();
+                  (*info).FileNameLength = byte_count as DWORD;
+                  std::ptr::copy_nonoverlapping(
+                      name.as_ptr() as *const u8,
+                      buffer_ptr.add(filename_offset),
+                      payload_size,
+                  );
+              }
+              // SAFETY: `source` is a live DELETE-capable handle and `buffer`
+              // remains valid for this synchronous rename call.
+              if unsafe {
+                  SetFileInformationByHandle(
+                      source.as_raw_handle() as HANDLE,
+                      FileRenameInfo,
+                      buffer_ptr as *mut _,
+                      buffer_size as DWORD,
+                  )
+              } == FALSE
+              {
+                  return Err(io::Error::last_os_error());
+              }
+              Ok(())
+          }
+          '''
+          replace_once(private_files, old, new)
 
           lease_tests = Path('rust/crates/guard-runtime/src/managed_resident_lease_tests.rs')
           replace_once(
@@ -102,7 +191,6 @@ jobs:
           cargo fmt --manifest-path rust/Cargo.toml --all
           cargo fmt --manifest-path rust/Cargo.toml --all -- --check
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
-
           $env:RUST_BACKTRACE = '1'
           cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime approval::approval_v4::tests::ed25519_assertion_validates_and_persists_counter_zero_and_one -- --nocapture --test-threads=1
           cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_resident::restart_budget::tests::repeated_updates_replace_budget_without_leaving_temporary_state -- --nocapture --test-threads=1
