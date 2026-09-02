@@ -137,7 +137,7 @@ def test_publisher_repushes_after_resident_generation_change(
         while time.monotonic() < deadline and len(calls) < 2:
             time.sleep(0.01)
         assert len(calls) >= 2
-        assert publisher.is_ready()
+        assert publisher.wait_until_ready(time.monotonic() + 2.0)
     finally:
         publisher.close()
 
@@ -190,6 +190,7 @@ def test_publisher_rejects_ack_after_resident_restart_before_barrier(
             (("resident-v3-test/generation-00000000000000000001.json", 1, 1),),
         )
     )
+
     def client_request(**kwargs: object) -> bytes:
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)

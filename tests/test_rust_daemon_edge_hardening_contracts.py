@@ -40,6 +40,16 @@ def test_native_io_failures_have_stable_non_integrity_classes() -> None:
         assert reason in source
 
 
+def test_windows_resident_acl_application_does_not_assign_owner() -> None:
+    source = (ROOT / "rust/crates/guard-runtime/src/resident_state_windows.rs").read_text(encoding="utf-8")
+    application = source.split("SetNamedSecurityInfo(", maxsplit=1)[1].split(")\n    .map_err", maxsplit=1)[0]
+    assert "SecurityInformation::Dacl | SecurityInformation::ProtectedDacl" in application
+    assert "SecurityInformation::Owner" not in application
+    assert "Some(owner.as_ref())" not in application
+    assert "WRITE_OWNER" not in source
+    assert "verify_windows_path(path, &owner)" in source
+
+
 def test_doctor_reports_aggregate_admission_without_payloads() -> None:
     source = (ROOT / "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py").read_text(encoding="utf-8")
     assert "native_resident_admission_snapshot" in source
