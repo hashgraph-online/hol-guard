@@ -45,12 +45,15 @@ def _compact_hook_event_name(event_name: str) -> str:
     return event_name.strip().lower().replace("_", "").replace("-", "")
 
 
-_LIFECYCLE_OBSERVE_COMPACT = frozenset(_compact_hook_event_name(name) for name in LIFECYCLE_OBSERVE_EVENTS)
-_LIFECYCLE_CANONICAL_BY_COMPACT = {_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS}
+_LIFECYCLE_CANONICAL_BY_COMPACT = {
+    **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    "userpromptsubmitted": "UserPromptSubmit",
+    "subagentend": "SubagentStop",
+}
 
 
 def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    return _compact_hook_event_name(event_name) in _LIFECYCLE_OBSERVE_COMPACT
+    return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
 
 
 def availability_harness_response(

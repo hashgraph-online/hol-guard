@@ -408,6 +408,23 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason="native unavailable",
     )
     assert subagent["decision"] == "allow"
+    submitted = availability_harness_response(
+        {"hook_event_name": "UserPromptSubmitted"},
+        harness="grok",
+        event_name="UserPromptSubmitted",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert submitted["decision"] == "allow"
+    assert submitted["policy_action"] == "allow"
+    compact = availability_harness_response(
+        {"hook_event_name": " userpromptsubmit "},
+        harness="grok",
+        event_name=" userpromptsubmit ",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert compact["decision"] == "allow"
     withheld = availability_harness_response(
         {"hook_event_name": "PostToolUse", "tool_name": "Read"},
         harness="cursor",
