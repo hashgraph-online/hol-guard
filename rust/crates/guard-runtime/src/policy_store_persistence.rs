@@ -3,9 +3,11 @@ use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac};
 use serde_json::Value;
 #[cfg(windows)]
 use std::ffi::OsStr;
+use std::fs;
 #[cfg(unix)]
 use std::fs::File;
-use std::fs::{self, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -79,7 +81,7 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
             guard_runtime_windows_process::delete_private_file_handle(&file)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     {
@@ -108,8 +110,8 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
             fs::remove_file(candidate)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         }
+        Ok(())
     }
-    Ok(())
 }
 
 pub(super) fn read_generation_floor(
@@ -459,7 +461,7 @@ mod windows_recovery_tests {
             &target,
             AUTHORITY_RECORD_MAX_BYTES,
             "authority",
-            root,
+            &root,
         )
         .unwrap()
         .is_some());
@@ -467,7 +469,7 @@ mod windows_recovery_tests {
             &backup,
             AUTHORITY_RECORD_MAX_BYTES,
             "authority",
-            root,
+            &root,
         )
         .unwrap()
         .is_none());

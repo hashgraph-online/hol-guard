@@ -8105,19 +8105,16 @@ class GuardDaemonServer:
             if serve_thread is None:
                 self._server.server_close()
         _ = self._finish_service()
-        remaining_serve_thread = self._join_service_thread(
-            serve_thread,
-            deadline=time.monotonic() + 5,
-        )
-        if remaining_serve_thread is None and self._thread is serve_thread:
+        if self._join_service_thread(
+            serve_thread, deadline=time.monotonic() + 5
+        ) is None and self._thread is serve_thread:
             self._thread = None
 
     def _begin_service(self) -> None:
         begin_service(self)
 
     def _begin_owned_service(self, generation: int | None = None) -> None:
-        if generation is None:
-            generation = self._active_start_generation
+        generation = generation if generation is not None else self._active_start_generation
         with self._lifecycle_lock:
             if generation != self._lifecycle_generation or self._shutdown_started.is_set():
                 raise RuntimeError("Guard daemon stopped during startup")

@@ -1,4 +1,6 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
+#[cfg(not(windows))]
+use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
 #[cfg(windows)]
@@ -99,7 +101,7 @@ pub(crate) fn private_file(
     let _ = private_root;
     #[cfg(windows)]
     {
-        let mut file = match windows_security::create_private_file(path, private_root) {
+        let file = match windows_security::create_private_file(path, private_root) {
             Ok(file) => file,
             Err(error) if create_new && error.kind() == std::io::ErrorKind::AlreadyExists => {
                 // CREATE_NEW is intentionally non-mutating: do not open,
@@ -154,7 +156,7 @@ pub(crate) fn private_lock_file(
         .parent()
         .ok_or_else(|| "native_resident_lock_open_failed".to_owned())?;
     let binding = windows_security::bind_windows_existing_directory(parent, private_root)?;
-    let mut file = match windows_security::create_private_file(path, private_root) {
+    let file = match windows_security::create_private_file(path, private_root) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let mut file = windows_security::open_private_file(path, private_root)
@@ -269,52 +271,41 @@ pub(crate) fn ensure_private_directory_under(
         if !resolved.starts_with(profile) {
             return Err("native_resident_state_dir_outside_user_profile".to_owned());
         }
-        return Ok(resolved);
+        Ok(resolved)
     }
 
     #[cfg(not(windows))]
-    let _ = (private_root, protect_windows);
-    #[cfg(not(windows))]
-    let created = match fs::create_dir(path) {
-        Ok(()) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
-        Err(_) => return Err("native_resident_state_dir_create_failed".to_owned()),
-    };
-    #[cfg(not(windows))]
-    let _ = created;
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err("native_resident_state_dir_invalid".to_owned());
-    }
-    #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-                .map_err(|_| "native_resident_state_dir_permissions_failed".to_owned())?;
-        }
-        let updated = fs::symlink_metadata(path)
+        let _ = (private_root, protect_windows);
+        let created = match fs::create_dir(path) {
+            Ok(()) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
+            Err(_) => return Err("native_resident_state_dir_create_failed".to_owned()),
+        };
+        let _ = created;
+        let metadata = fs::symlink_metadata(path)
             .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
-        if updated.permissions().mode() & 0o077 != 0 {
-            return Err("native_resident_state_dir_not_private".to_owned());
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err("native_resident_state_dir_invalid".to_owned());
         }
-    }
-    let resolved = path
-        .canonicalize()
-        .map_err(|_| "native_resident_state_dir_resolve_failed".to_owned())?;
-    #[cfg(windows)]
-    {
-        let profile = std::env::var_os("USERPROFILE")
-            .map(PathBuf::from)
-            .ok_or_else(|| "native_resident_user_profile_missing".to_owned())?
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o077 != 0 {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+                    .map_err(|_| "native_resident_state_dir_permissions_failed".to_owned())?;
+            }
+            let updated = fs::symlink_metadata(path)
+                .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
+            if updated.permissions().mode() & 0o077 != 0 {
+                return Err("native_resident_state_dir_not_private".to_owned());
+            }
+        }
+        let resolved = path
             .canonicalize()
-            .map_err(|_| "native_resident_user_profile_invalid".to_owned())?;
-        if !resolved.starts_with(profile) {
-            return Err("native_resident_state_dir_outside_user_profile".to_owned());
-        }
+            .map_err(|_| "native_resident_state_dir_resolve_failed".to_owned())?;
+        Ok(resolved)
     }
-    Ok(resolved)
 }
 
 #[cfg(test)]

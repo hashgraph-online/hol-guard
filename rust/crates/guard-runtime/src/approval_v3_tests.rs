@@ -11,6 +11,7 @@ use guard_policy_snapshot::{
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
+#[cfg(not(windows))]
 use std::fs;
 use std::path::{Path, PathBuf};
 

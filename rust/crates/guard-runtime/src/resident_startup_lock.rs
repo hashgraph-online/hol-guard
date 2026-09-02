@@ -6,8 +6,10 @@ use super::{
     MAX_STARTUP_LOCK_BYTES,
 };
 #[cfg(not(windows))]
+use std::fs;
+use std::fs::File;
+#[cfg(not(windows))]
 use std::fs::OpenOptions;
-use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::SystemTime;

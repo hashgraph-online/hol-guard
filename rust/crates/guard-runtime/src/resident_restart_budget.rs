@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
+#[cfg(not(windows))]
+use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -314,6 +316,8 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    use std::fs;
 
     #[test]
     fn repeated_updates_replace_budget_without_leaving_temporary_state() {

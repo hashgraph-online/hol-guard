@@ -5,6 +5,7 @@ the original import path and pytest collection contract.
 """
 
 from . import native_policy_snapshot_windows_handles as _windows_handle_tests
+from . import native_policy_snapshot_windows_storage as _windows_storage_tests
 from . import test_native_policy_snapshot_contract as _contract_tests
 from . import test_native_policy_snapshot_persistence as _persistence_tests
 from . import test_native_policy_snapshot_publisher as _publisher_tests
@@ -68,7 +69,7 @@ test_windows_cache_read_rejects_ancestor_reparse_before_open = (
     _windows_tests.test_windows_cache_read_rejects_ancestor_reparse_before_open
 )
 test_windows_snapshot_write_holds_parent_binding_across_commit = (
-    _windows_tests.test_windows_snapshot_write_holds_parent_binding_across_commit
+    _windows_storage_tests.test_windows_snapshot_write_holds_parent_binding_across_commit
 )
 test_windows_directory_binding_fails_closed_on_reparse_parent = (
     _windows_tests.test_windows_directory_binding_fails_closed_on_reparse_parent
@@ -83,7 +84,7 @@ test_windows_atomic_writer_cleans_temp_on_precommit_failure = (
     _windows_tests.test_windows_atomic_writer_cleans_temp_on_precommit_failure
 )
 test_windows_verifier_key_provisioning_holds_state_binding = (
-    _windows_tests.test_windows_verifier_key_provisioning_holds_state_binding
+    _windows_storage_tests.test_windows_verifier_key_provisioning_holds_state_binding
 )
 test_windows_cache_reader_closes_handle_on_all_failures = (
     _windows_tests.test_windows_cache_reader_closes_handle_on_all_failures
@@ -107,10 +108,14 @@ test_windows_private_descriptor_deduplicates_system_owner_ace = (
     _windows_handle_tests.test_windows_private_descriptor_deduplicates_system_owner_ace
 )
 test_windows_snapshot_cache_read_holds_state_binding = (
-    _windows_tests.test_windows_snapshot_cache_read_holds_state_binding
+    _windows_storage_tests.test_windows_snapshot_cache_read_holds_state_binding
 )
-test_windows_generation_read_holds_state_binding = _windows_tests.test_windows_generation_read_holds_state_binding
-test_windows_pending_cleanup_uses_bound_file_handle = _windows_tests.test_windows_pending_cleanup_uses_bound_file_handle
+test_windows_generation_read_holds_state_binding = (
+    _windows_storage_tests.test_windows_generation_read_holds_state_binding
+)
+test_windows_pending_cleanup_uses_bound_file_handle = (
+    _windows_storage_tests.test_windows_pending_cleanup_uses_bound_file_handle
+)
 
 __all__ = [
     "test_auto_hook_uses_barrier_without_loading_config_per_request",

@@ -23,6 +23,7 @@ pub(crate) use resident_startup_lock::{
     acquire_startup_lock, clear_stale_startup_lock, StartupLock,
 };
 #[cfg(windows)]
+#[allow(unused_imports)]
 pub(crate) use resident_state_files::{
     bind_windows_existing_directory, bind_windows_private_directory, open_private_read,
     protect_windows_private_path, remove_windows_private_file, replace_windows_private_file,

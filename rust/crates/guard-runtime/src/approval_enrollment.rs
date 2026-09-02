@@ -38,6 +38,14 @@ const TRANSITION_LOCK_FILE_NAME: &str = "approval-authority-transition.v1.lock";
 /// The inode is retained; the OS lock, not a writable PID/same-UID marker, supplies ownership.
 pub(crate) struct TransitionLock {
     _file: File,
+    #[cfg(windows)]
+    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
+}
+
+struct OpenedTransitionLock {
+    file: File,
+    #[cfg(windows)]
+    directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 fn transition_lock_path(state_base: &Path) -> Result<std::path::PathBuf, String> {
@@ -88,12 +96,20 @@ fn validate_transition_lock(path: &Path, file: &File) -> Result<(), String> {
     Ok(())
 }
 
-fn open_transition_lock(path: &Path) -> Result<File, String> {
+fn open_transition_lock(path: &Path) -> Result<OpenedTransitionLock, String> {
     let private_root = path
         .parent()
         .ok_or_else(|| "native_approval_authority_lock_invalid".to_owned())
         .and_then(crate::resident_state::private_root_for_state_base)?;
-    crate::resident_state::private_lock_file(path, &private_root)
+    #[cfg(windows)]
+    let (file, directory_binding) = crate::resident_state::private_lock_file(path, &private_root)?;
+    #[cfg(not(windows))]
+    let file = crate::resident_state::private_lock_file(path, &private_root)?;
+    Ok(OpenedTransitionLock {
+        file,
+        #[cfg(windows)]
+        directory_binding,
+    })
 }
 
 pub(crate) fn with_transition_lock<T, F>(state_base: &Path, operation: F) -> Result<T, String>
@@ -101,16 +117,20 @@ where
     F: FnOnce() -> Result<T, String>,
 {
     let path = transition_lock_path(state_base)?;
-    let file = open_transition_lock(&path)?;
-    validate_transition_lock(&path, &file)?;
-    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+    let opened = open_transition_lock(&path)?;
+    validate_transition_lock(&path, &opened.file)?;
+    fs2::FileExt::try_lock_exclusive(&opened.file).map_err(|error| {
         if crate::resident_state::is_lock_contention(&error) {
             "native_approval_authority_busy".to_owned()
         } else {
             "native_approval_authority_lock_failed".to_owned()
         }
     })?;
-    let _lock = TransitionLock { _file: file };
+    let _lock = TransitionLock {
+        _file: opened.file,
+        #[cfg(windows)]
+        _directory_binding: opened.directory_binding,
+    };
     operation()
 }
 
@@ -445,15 +465,15 @@ mod tests {
     fn transition_lock_rejects_concurrent_owner_and_recovers_on_release() {
         let root = test_root();
         let path = transition_lock_path(&root).unwrap();
-        let file = open_transition_lock(&path).unwrap();
-        validate_transition_lock(&path, &file).unwrap();
-        fs2::FileExt::try_lock_exclusive(&file).unwrap();
+        let opened = open_transition_lock(&path).unwrap();
+        validate_transition_lock(&path, &opened.file).unwrap();
+        fs2::FileExt::try_lock_exclusive(&opened.file).unwrap();
 
         assert_eq!(
             with_transition_lock(&root, || Ok::<(), String>(())).unwrap_err(),
             "native_approval_authority_busy"
         );
-        drop(file);
+        drop(opened);
         with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
     }
 }
