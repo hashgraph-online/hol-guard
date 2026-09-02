@@ -21,8 +21,14 @@ def _write_frame_nonblocking(
     non-blocking file descriptor; callers use the stoppable worker fallback
     for that case. A boolean result is a completed or deadline-bounded
     write attempt.
+
+    Windows anonymous pipes are not sockets. ``select()`` rejects them with
+    WSAENOTSOCK after ``fileno()`` and ``set_blocking()`` already succeeded,
+    so the selector path must not run there.
     """
 
+    if os.name == "nt":
+        return None
     fileno = getattr(stdin, "fileno", None)
     if not callable(fileno):
         return None

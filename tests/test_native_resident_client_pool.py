@@ -46,6 +46,28 @@ def test_client_reader_keeps_response_binding_with_the_captured_generation_queue
     assert active_queue.empty()
 
 
+def test_client_frame_write_skips_selector_on_windows_pipes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_resident_transport as transport
+
+    class PipeStdin:
+        def fileno(self) -> int:
+            raise AssertionError("Windows pipes must not enter the selector path")
+
+        def write(self, frame: bytes) -> int:
+            self.written = frame
+            return len(frame)
+
+        def flush(self) -> None:
+            return
+
+    stdin = PipeStdin()
+    monkeypatch.setattr(transport.os, "name", "nt")
+    assert transport.write_frame(stdin, b"frame", deadline_monotonic=time.monotonic() + 1)
+    assert stdin.written == b"frame"
+
+
 def test_client_frame_write_is_bounded_when_pipe_writer_blocks() -> None:
     class BlockingStdin:
         def __init__(self) -> None:

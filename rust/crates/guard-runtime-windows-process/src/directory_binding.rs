@@ -27,7 +27,6 @@ pub struct PrivateDirectoryBinding {
     path: PathBuf,
     handles: Vec<std::fs::File>,
     created_final: bool,
-    private_final: bool,
 }
 
 impl PrivateDirectoryBinding {
@@ -195,7 +194,6 @@ where
     let mut handles = Vec::new();
     let mut created_indices = Vec::new();
     let mut created_final = false;
-    let mut private_final = false;
     for (index, component) in path.components().enumerate() {
         match component {
             Component::Prefix(prefix) => current.push(prefix.as_os_str()),
@@ -257,7 +255,6 @@ where
                 };
                 if is_target {
                     created_final = created;
-                    private_final = is_private;
                 }
                 if let Err(error) = verify(&mut handle, is_target, created, is_private) {
                     if is_private && !created {
@@ -294,7 +291,6 @@ where
         path,
         handles,
         created_final,
-        private_final,
     })
 }
 
