@@ -2598,11 +2598,9 @@ def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tup
 
 
 def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
-    fingerprint = payload.get("runtime_fingerprint")
-    compatible = payload.get("compatibility_version") == GUARD_DAEMON_COMPATIBILITY_VERSION
-    current = fingerprint == _current_guard_daemon_runtime_fingerprint()
-    peer = payload.get("package_version") == __version__
-    return compatible and isinstance(fingerprint, str) and bool(fingerprint.strip()) and (current or peer)
+    from .runtime_peer import daemon_state_matches_current_runtime
+
+    return daemon_state_matches_current_runtime(payload)
 
 
 def _current_guard_daemon_source_root() -> str:

@@ -15,6 +15,7 @@ from .manager import (
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
+from .runtime_peer import daemon_source_is_desktop_core
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 
@@ -30,6 +31,14 @@ def _verified_live_runtime(
     except InvalidVersion:
         return None
     return version, version_text, runtime_fingerprint
+
+
+def _retained_runtime_status(daemon_version: Version, current_version: Version) -> str:
+    if daemon_version == current_version:
+        return "current"
+    if daemon_version > current_version:
+        return "retained_newer_runtime"
+    return "retained_desktop_runtime"
 
 
 def repair_guard_daemon_runtime(
@@ -50,11 +59,12 @@ def repair_guard_daemon_runtime(
             current_version = Version(__version__)
         except InvalidVersion as error:
             raise RuntimeError("Installed Guard package version is invalid.") from error
-        if verified_runtime is not None and verified_runtime[0] >= current_version:
+        desktop_sidecar = identity is not None and daemon_source_is_desktop_core(identity.get("source_root"))
+        if verified_runtime is not None and (verified_runtime[0] >= current_version or desktop_sidecar):
             daemon_version, daemon_version_text, _ = verified_runtime
             return {
                 **result,
-                "runtime_status": "current" if daemon_version == current_version else "retained_newer_runtime",
+                "runtime_status": _retained_runtime_status(daemon_version, current_version),
                 "daemon_version": daemon_version_text,
                 "cli_version": __version__,
             }

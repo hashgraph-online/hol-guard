@@ -139,6 +139,42 @@ def test_repair_retains_equal_version_peer_runtime(
     assert result["cli_version"] == "3.0.34"
 
 
+def test_repair_retains_older_desktop_core_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    source_root = "Library/Application Support/org.hol.guard.desktop/core/versions/3.0.45/hol-guard"
+    monkeypatch.setattr(
+        runtime_repair,
+        "verified_live_guard_daemon_identity",
+        lambda _home: {
+            "package_version": "3.0.45",
+            "runtime_fingerprint": "desktop-sidecar",
+            "source_root": source_root,
+        },
+    )
+    monkeypatch.setattr(runtime_repair, "__version__", "3.0.46")
+    monkeypatch.setattr(
+        runtime_repair,
+        "repair_approval_center_locator",
+        lambda _home: {"repaired": True, "cleared": []},
+    )
+    monkeypatch.setattr(
+        runtime_repair,
+        "retire_all_guard_daemons_for_home",
+        lambda _home: (_ for _ in ()).throw(AssertionError("desktop sidecar must remain active")),
+    )
+
+    result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
+
+    assert result["runtime_status"] == "retained_desktop_runtime"
+    assert result["daemon_version"] == "3.0.45"
+    assert result["cli_version"] == "3.0.46"
+
+
 def test_repair_restarts_when_authenticated_state_is_absent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
