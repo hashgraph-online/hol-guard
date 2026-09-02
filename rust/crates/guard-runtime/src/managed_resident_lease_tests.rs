@@ -90,15 +90,19 @@ fn initial_lease_lock_retries_until_the_current_holder_releases() {
     let held = acquire_directory_lock(&directory)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
+    let (busy_sender, busy_receiver) = std::sync::mpsc::channel();
+    LOCK_BUSY_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(busy_sender));
     let releaser = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(15));
+        busy_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("retry path should observe the held lock");
         drop(held);
     });
 
-    let acquired = acquire_directory_lock_with_retry(&directory, Duration::from_millis(100))
-        .expect("bounded retry should acquire after release");
-    drop(acquired);
+    let acquired = acquire_directory_lock_with_retry(&directory, Duration::from_millis(100));
     releaser.join().expect("lock releaser should exit cleanly");
+    let acquired = acquired.expect("bounded retry should acquire after release");
+    drop(acquired);
     fs::remove_dir_all(directory).expect("test directory should be removable");
 }
 

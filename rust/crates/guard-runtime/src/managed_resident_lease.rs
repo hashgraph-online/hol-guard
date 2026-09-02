@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+#[cfg(test)]
+use std::{cell::RefCell, sync::mpsc::Sender};
 
 use crate::resident_state::{ensure_private_directory, process_start_marker};
 
@@ -29,6 +31,20 @@ const LEASE_ACQUIRE_RETRY_BUDGET: Duration = Duration::from_millis(200);
 const LEASE_CLEANUP_RETRY_BUDGET: Duration = Duration::from_millis(100);
 const LEASE_ACQUIRE_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(1);
 const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
+
+#[cfg(test)]
+thread_local! {
+    static LOCK_BUSY_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn notify_lock_busy_for_test() {
+    LOCK_BUSY_NOTIFICATION.with(|notification| {
+        if let Some(sender) = notification.borrow_mut().take() {
+            let _ = sender.send(());
+        }
+    });
+}
 
 pub(super) struct ClientLease {
     directory: PathBuf,
@@ -72,7 +88,11 @@ fn acquire_directory_lock(directory: &Path) -> Result<Option<LeaseDirectoryLock>
     let file = crate::resident_state::private_lock_file(&path)?;
     match fs2::FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(Some(LeaseDirectoryLock { file })),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            #[cfg(test)]
+            notify_lock_busy_for_test();
+            Ok(None)
+        }
         Err(_) => Err("native_resident_lease_lock_failed".to_owned()),
     }
 }
