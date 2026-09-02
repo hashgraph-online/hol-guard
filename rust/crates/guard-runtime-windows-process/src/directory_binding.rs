@@ -305,7 +305,42 @@ fn normalize_absolute_path(path: &Path) -> io::Result<PathBuf> {
             Component::RootDir | Component::Normal(_) => normalized.push(component.as_os_str()),
         }
     }
-    Ok(normalized)
+    // Windows can represent the same path with different prefixes (for
+    // example, `C:\\...` versus the `\\\\?\\C:\\...` form returned by
+    // `canonicalize`). Resolve the existing portion of every input so the
+    // boundary check compares equivalent path representations. The final
+    // private directory may not exist yet, so retain any missing tail.
+    canonicalize_existing_prefix(&normalized)
+}
+
+fn canonicalize_existing_prefix(path: &Path) -> io::Result<PathBuf> {
+    let mut existing = path.to_owned();
+    let mut missing_tail = Vec::new();
+
+    let canonical_existing = loop {
+        match existing.canonicalize() {
+            Ok(canonical) => break canonical,
+            Err(error) => {
+                let Some(name) = existing.file_name() else {
+                    return Err(error);
+                };
+                missing_tail.push(name.to_owned());
+                let Some(parent) = existing.parent() else {
+                    return Err(error);
+                };
+                if parent == existing {
+                    return Err(error);
+                }
+                existing = parent.to_owned();
+            }
+        }
+    };
+
+    let mut canonical = canonical_existing;
+    for component in missing_tail.iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
 }
 
 fn validate_boundary(path: &Path, trusted_base: &Path, private_root: &Path) -> io::Result<()> {
