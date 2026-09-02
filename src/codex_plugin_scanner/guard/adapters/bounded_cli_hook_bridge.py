@@ -113,11 +113,29 @@ def bounded_cli_hook_command(
     )
 
 
-def _bounded_stdin() -> str | None:
+_EVENT_ALIASES = {
+    "permissionrequest": "PermissionRequest",
+    "pretooluse": "PreToolUse",
+    "userpromptsubmit": "UserPromptSubmit",
+    "posttooluse": "PostToolUse",
+    "sessionstart": "SessionStart",
+    "notification": "Notification",
+    "stop": "Stop",
+}
+_EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName")
+
+
+def _read_bounded_stdin() -> tuple[str | None, str]:
     raw = sys.stdin.buffer.read(_MAX_HOOK_INPUT_BYTES + 1)
+    prefix = raw[:_MAX_HOOK_INPUT_BYTES].decode("utf-8", errors="replace")
     if len(raw) > _MAX_HOOK_INPUT_BYTES:
-        return None
-    return raw.decode("utf-8", errors="replace")
+        return None, prefix
+    return prefix, prefix
+
+
+def _bounded_stdin() -> str | None:
+    text, _prefix = _read_bounded_stdin()
+    return text
 
 
 def _validated_frozen_cli_args(
@@ -178,23 +196,33 @@ def _json_object(text: str) -> dict[str, object] | None:
     return payload
 
 
+def _canonical_event_token(value: str) -> str | None:
+    stripped = value.strip()
+    if not stripped:
+        return None
+    normalized = stripped.replace("_", "").replace("-", "").lower()
+    return _EVENT_ALIASES.get(normalized, stripped)
+
+
 def _event_name(input_text: str) -> str:
     payload = _json_object(input_text or "{}")
-    if payload is None:
-        return "PreToolUse"
-    for key in ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized = value.replace("_", "").replace("-", "").lower()
-            return {
-                "permissionrequest": "PermissionRequest",
-                "pretooluse": "PreToolUse",
-                "userpromptsubmit": "UserPromptSubmit",
-                "posttooluse": "PostToolUse",
-                "sessionstart": "SessionStart",
-                "notification": "Notification",
-                "stop": "Stop",
-            }.get(normalized, value.strip())
+    if payload is not None:
+        for key in _EVENT_NAME_KEYS:
+            value = payload.get(key)
+            if isinstance(value, str):
+                named = _canonical_event_token(value)
+                if named is not None:
+                    return named
+    for key in _EVENT_NAME_KEYS:
+        token = f'"{key}"'
+        start = input_text.find(token)
+        colon = input_text.find(":", start + len(token)) if start >= 0 else -1
+        quote = input_text.find('"', colon + 1) if colon >= 0 else -1
+        end = input_text.find('"', quote + 1) if quote >= 0 else -1
+        if 0 <= quote < end:
+            named = _canonical_event_token(input_text[quote + 1 : end])
+            if named is not None:
+                return named
     return "PreToolUse"
 
 
@@ -247,7 +275,7 @@ def _failure_payload(
     input_text: str = "",
     guard_home: Path | None = None,
 ) -> tuple[dict[str, object], int]:
-    if event_name == "PreToolUse" and guard_home is not None and _guard_home_is_recording_only(guard_home):
+    if guard_home is not None and _guard_home_is_recording_only(guard_home):
         return _watch_continue_payload(harness, event_name), 0
     payload = _json_object(input_text or "{}")
     if event_name == "PreToolUse" and isinstance(payload, dict) and hook_action_is_emergency_safe(payload):
@@ -627,13 +655,13 @@ def main_from_argv(argv: Sequence[str]) -> int:
     config = _json_object(argv[0]) if len(argv) == 1 else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
-    input_text = _bounded_stdin()
+    input_text, stdin_prefix = _read_bounded_stdin()
     if input_text is None:
         guard_home_value = config.get("guard_home") if config is not None else None
         guard_home = Path(guard_home_value) if isinstance(guard_home_value, str) else None
         return _emit_failure(
             harness=harness,
-            input_text="{}",
+            input_text=stdin_prefix or "{}",
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
             guard_home=guard_home,
         )

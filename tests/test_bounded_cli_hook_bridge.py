@@ -565,7 +565,7 @@ def test_oversized_input_uses_configured_harness_native_deny(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path, harness="copilot")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_bounded_stdin", lambda: None)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda: (None, "{}"))
     output = io.StringIO()
 
     with redirect_stdout(output):

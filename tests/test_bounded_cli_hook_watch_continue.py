@@ -156,7 +156,7 @@ def test_oversized_input_allows_grok_when_watch(
         'protection_posture = "watch"\nmode = "observe"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_bounded_stdin", lambda: None)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda: (None, "{}"))
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(config)])
@@ -164,3 +164,30 @@ def test_oversized_input_allows_grok_when_watch(
     payload = _json_object(output.getvalue())
     assert returncode == 0
     assert payload == {"decision": "allow"}
+
+
+def test_oversized_input_preserves_kimi_event_when_watch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, harness="kimi")
+    guard_home = Path(str(config["guard_home"]))
+    (guard_home / "config.toml").write_text(
+        'protection_posture = "watch"\nmode = "observe"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "_read_bounded_stdin",
+        lambda: (None, '{"hook_event_name":"UserPromptSubmit"'),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(config)])
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["hookEventName"] == "UserPromptSubmit"
+    assert hook_output["permissionDecision"] == "allow"
