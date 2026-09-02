@@ -1,0 +1,263 @@
+name: Temporary CI repair
+
+on:
+  push:
+    branches:
+      - fix/native-runtime-process-lifecycle
+    paths:
+      - .github/workflows/temporary-ci-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/native-runtime-process-lifecycle
+          fetch-depth: 0
+      - name: Apply guarded source repairs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import re
+          import textwrap
+          from pathlib import Path
+
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+
+          def write(path: str, content: str) -> None:
+              Path(path).write_text(content, encoding="utf-8")
+
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              content = read(path)
+              count = content.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one guarded match, found {count}")
+              write(path, content.replace(old, new, 1))
+
+
+          def regex_replace_once(path: str, pattern: str, replacement: str) -> None:
+              content = read(path)
+              updated, count = re.subn(pattern, replacement, content, count=1, flags=re.DOTALL)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one guarded regex match, found {count}")
+              write(path, updated)
+
+
+          windows_io = "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_io.py"
+          replace_once(
+              windows_io,
+              "    directory: bool,\n    create_new: bool = False,\n    descriptor: Any | None = None,\n",
+              "    directory: bool,\n    create_new: bool = False,\n    share_write: bool = False,\n    descriptor: Any | None = None,\n",
+          )
+          replace_once(
+              windows_io,
+              "        share_mode = _WINDOWS_FILE_SHARE_READ\n    if descriptor is not None:\n",
+              "        share_mode = _WINDOWS_FILE_SHARE_READ\n        if share_write:\n            share_mode |= _WINDOWS_FILE_SHARE_WRITE\n    if descriptor is not None:\n",
+          )
+
+          storage = "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py"
+          replace_once(
+              storage,
+              """                kernel32, handle, _information = api._windows_open_handle(
+                    path,
+                    directory=False,
+                    descriptor=security_descriptor,
+                )
+""",
+              """                kernel32, handle, _information = api._windows_open_handle(
+                    path,
+                    directory=False,
+                    share_write=True,
+                    descriptor=security_descriptor,
+                )
+""",
+          )
+
+          windows_tests = "tests/test_native_policy_snapshot_windows.py"
+          replace_once(
+              windows_tests,
+              """    hardened = snapshot_module._windows_open_handle(
+        Path("C:/Guard/snapshot.json"),
+        directory=False,
+        descriptor=descriptor,
+    )
+""",
+              """    hardened = snapshot_module._windows_open_handle(
+        Path("C:/Guard/snapshot.json"),
+        directory=False,
+        share_write=True,
+        descriptor=descriptor,
+    )
+""",
+          )
+          replace_once(
+              windows_tests,
+              """    assert create_arguments[1][1] == snapshot_module._WINDOWS_GENERIC_READ | snapshot_module._WINDOWS_WRITE_DAC
+    assert create_arguments[1][1] & snapshot_module._WINDOWS_WRITE_OWNER == 0
+""",
+              """    assert create_arguments[1][1] == snapshot_module._WINDOWS_GENERIC_READ | snapshot_module._WINDOWS_WRITE_DAC
+    assert create_arguments[1][1] & snapshot_module._WINDOWS_WRITE_OWNER == 0
+    assert create_arguments[1][2] == (
+        snapshot_module._WINDOWS_FILE_SHARE_READ | snapshot_module._WINDOWS_FILE_SHARE_WRITE
+    )
+""",
+          )
+
+          state_files = "rust/crates/guard-runtime/src/resident_state_files.rs"
+          replace_once(
+              state_files,
+              """#[cfg(windows)]
+#[path = "resident_state_windows.rs"]
+mod windows_security;
+""",
+              """#[cfg(windows)]
+#[path = "resident_state_windows.rs"]
+mod windows_security;
+
+pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::WouldBlock {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        const ERROR_LOCK_VIOLATION: i32 = 33;
+        return matches!(
+            error.raw_os_error(),
+            Some(ERROR_SHARING_VIOLATION) | Some(ERROR_LOCK_VIOLATION)
+        );
+    }
+    #[cfg(not(windows))]
+    false
+}
+""",
+          )
+          state_files_content = read(state_files)
+          if "fn windows_lock_violations_are_contention" in state_files_content:
+              raise RuntimeError("resident_state_files.rs: contention tests already present")
+          write(
+              state_files,
+              state_files_content.rstrip()
+              + """
+
+#[cfg(test)]
+mod tests {
+    use super::is_lock_contention;
+
+    #[test]
+    fn would_block_is_lock_contention() {
+        let error = std::io::Error::from(std::io::ErrorKind::WouldBlock);
+        assert!(is_lock_contention(&error));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lock_violations_are_contention() {
+        assert!(is_lock_contention(&std::io::Error::from_raw_os_error(32)));
+        assert!(is_lock_contention(&std::io::Error::from_raw_os_error(33)));
+        assert!(!is_lock_contention(&std::io::Error::from_raw_os_error(5)));
+    }
+}
+""",
+          )
+
+          state_module = "rust/crates/guard-runtime/src/resident_state.rs"
+          replace_once(
+              state_module,
+              "pub(crate) use resident_state_files::{ensure_private_directory, private_file, private_lock_file};\n",
+              """pub(crate) use resident_state_files::{
+    ensure_private_directory, is_lock_contention, private_file, private_lock_file,
+};
+""",
+          )
+
+          lease = "rust/crates/guard-runtime/src/managed_resident_lease.rs"
+          replace_once(
+              lease,
+              "Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {",
+              "Err(error) if crate::resident_state::is_lock_contention(&error) => {",
+          )
+
+          lease_tests = "rust/crates/guard-runtime/src/managed_resident_lease_tests.rs"
+          replace_once(
+              lease_tests,
+              "    let mut file = fs::File::create(&path).expect(\"malformed fixture should be created\");\n",
+              """    let mut file = crate::resident_state::private_file(&path, true)
+        .expect("malformed fixture should be created");
+""",
+          )
+
+          approval = "rust/crates/guard-runtime/src/approval_enrollment.rs"
+          replace_once(approval, "use std::fs::{File, OpenOptions};\n", "use std::fs::File;\n")
+          regex_replace_once(
+              approval,
+              r"fn open_transition_lock\(path: &Path\) -> Result<File, String> \{.*?\n\}\n\npub\(crate\) fn with_transition_lock",
+              """fn open_transition_lock(path: &Path) -> Result<File, String> {
+    crate::resident_state::private_lock_file(path)
+}
+
+pub(crate) fn with_transition_lock""",
+          )
+          replace_once(
+              approval,
+              "if error.kind() == std::io::ErrorKind::WouldBlock {",
+              "if crate::resident_state::is_lock_contention(&error) {",
+          )
+
+          resident_client = "rust/crates/guard-runtime/src/resident_client.rs"
+          client_content = read(resident_client)
+          marker = "\n#[cfg(test)]\nmod tests {\n"
+          module_start = client_content.rfind(marker)
+          if module_start < 0:
+              raise RuntimeError("resident_client.rs: test module marker not found")
+          body_start = module_start + len(marker)
+          module_end = client_content.rfind("\n}")
+          if module_end <= body_start or client_content[module_end + 2 :].strip():
+              raise RuntimeError("resident_client.rs: test module is not the final item")
+          test_body = textwrap.dedent(client_content[body_start:module_end]).strip() + "\n"
+          if not test_body.startswith("use super::*;"):
+              raise RuntimeError("resident_client.rs: unexpected test module body")
+          write(
+              "rust/crates/guard-runtime/src/resident_client_tests.rs",
+              test_body,
+          )
+          write(
+              resident_client,
+              client_content[:module_start].rstrip()
+              + """
+
+#[cfg(test)]
+#[path = "resident_client_tests.rs"]
+mod tests;
+""",
+          )
+
+          if len(read(resident_client).splitlines()) > 500:
+              raise RuntimeError("resident_client.rs still exceeds 500 lines")
+          PY
+      - name: Validate and commit repairs
+        shell: bash
+        run: |
+          rm .github/workflows/temporary-ci-repair.yml
+          cargo fmt --manifest-path rust/Cargo.toml --all
+          git diff --check
+          python -m compileall -q \
+            src/codex_plugin_scanner/guard/native_policy_snapshot_windows_io.py \
+            src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py \
+            tests/test_native_policy_snapshot_windows.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ci): restore Windows runtime invariants"
+          git push origin HEAD:fix/native-runtime-process-lifecycle
