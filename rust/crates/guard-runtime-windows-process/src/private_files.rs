@@ -134,10 +134,9 @@ pub(super) fn open_directory_bound(
     Ok(file)
 }
 
-/// Open a directory with delete sharing withheld so its checked ancestry
-/// cannot be renamed or removed while the binding remains alive. Existing
-/// bindings never request DELETE themselves, allowing independent readers to
-/// hold the same rename barrier without a Windows sharing violation.
+/// Open a directory while keeping checked ancestry from being renamed away.
+/// Ancestor components withhold delete sharing. The file-adding directory
+/// shares delete so relative child create and replace can use that handle.
 pub(super) fn open_raw_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
@@ -154,7 +153,12 @@ pub(super) fn open_raw_directory_bound(
     if allow_delete {
         access |= DELETE;
     }
-    open_raw_with_access(path, true, FILE_SHARE_READ | FILE_SHARE_WRITE, access)
+    let share_mode = if allow_add_file {
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+    } else {
+        FILE_SHARE_READ | FILE_SHARE_WRITE
+    };
+    open_raw_with_access(path, true, share_mode, access)
 }
 
 pub(super) fn open_raw(

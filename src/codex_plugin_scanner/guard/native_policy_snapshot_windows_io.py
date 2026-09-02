@@ -110,11 +110,14 @@ def _windows_open_configuration(
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
         # Only the private directory used as FILE_RENAME_INFO.RootDirectory
-        # needs FILE_ADD_FILE and FILE_TRAVERSE. Ancestor volume paths stay read-only.
+        # needs FILE_ADD_FILE, FILE_TRAVERSE, and delete sharing. Ancestor
+        # volume paths stay read-only.
         desired_access = _WINDOWS_GENERIC_READ
         if add_file:
             desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
+        if add_file:
+            share_mode |= _WINDOWS_FILE_SHARE_DELETE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)
         if create_new or rename_source:
