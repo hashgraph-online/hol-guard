@@ -103,6 +103,28 @@ def test_guard_daemon_state_rejects_empty_fingerprint_desktop_sidecar() -> None:
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
+def test_guard_daemon_state_rejects_incompatible_desktop_sidecar() -> None:
+    payload = {
+        "compatibility_version": "not-current",
+        "package_version": "0.0.1",
+        "source_root": "Library/Application Support/org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_embedded_desktop_marker() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "opt/hol-guard/evil-org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
 def test_healthz_details_require_compatible_same_release_peer() -> None:
     compatible = {
         "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,

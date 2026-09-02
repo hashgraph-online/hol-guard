@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_DESKTOP_CORE_MARKER = "org.hol.guard.desktop/core/versions/"
+_DESKTOP_CORE_PARTS = ("org.hol.guard.desktop", "core", "versions")
 
 
 def daemon_source_is_desktop_core(source_root: object) -> bool:
@@ -10,11 +10,13 @@ def daemon_source_is_desktop_core(source_root: object) -> bool:
 
     if not isinstance(source_root, str) or not source_root.strip():
         return False
-    return _DESKTOP_CORE_MARKER in source_root.replace("\\", "/").lower()
+    parts = tuple(part.lower() for part in source_root.replace("\\", "/").split("/") if part)
+    marker_len = len(_DESKTOP_CORE_PARTS)
+    return any(parts[index : index + marker_len] == _DESKTOP_CORE_PARTS for index in range(len(parts) - marker_len + 1))
 
 
 def daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
-    """Accept the live daemon when identity, version, or Desktop sidecar matches."""
+    """Accept the live current-protocol daemon when identity or Desktop Core matches."""
 
     from .manager import (
         GUARD_DAEMON_COMPATIBILITY_VERSION,
