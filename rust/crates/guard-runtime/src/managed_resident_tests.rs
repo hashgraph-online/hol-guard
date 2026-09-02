@@ -225,6 +225,63 @@ fn stale_process_identity_errors_are_platform_scoped() {
     ));
 }
 
+#[test]
+fn stale_transport_retry_allowlist_preserves_auth_and_integrity_failures() {
+    let retryable_codes = [
+        "native_client_connect_failed",
+        "native_resident_process_identity_unavailable",
+        "native_resident_process_identity_mismatch",
+    ];
+    for code in retryable_codes {
+        assert!(is_retryable_live_request_error(
+            &crate::resident_client::ResidentClientError {
+                code: code.to_owned(),
+                retryable_teardown: false,
+            }
+        ));
+    }
+
+    let terminal_codes = [
+        "native_client_frame_read_failed",
+        "native_client_frame_write_failed",
+        "native_client_auth_rejected",
+        "native_client_peer_identity_mismatch",
+        "native_client_response_binding_failed",
+        "native_client_response_digest_mismatch",
+    ];
+    for code in terminal_codes {
+        assert!(!is_retryable_live_request_error(
+            &crate::resident_client::ResidentClientError {
+                code: code.to_owned(),
+                retryable_teardown: false,
+            }
+        ));
+    }
+    for code in [
+        "native_client_frame_read_failed",
+        "native_client_frame_write_failed",
+    ] {
+        assert!(is_retryable_live_request_error(
+            &crate::resident_client::ResidentClientError {
+                code: code.to_owned(),
+                retryable_teardown: true,
+            }
+        ));
+    }
+    assert!(is_retryable_live_request_error(
+        &crate::resident_client::ResidentClientError {
+            code: "native_client_auth_nonce_failed".to_owned(),
+            retryable_teardown: true,
+        }
+    ));
+    assert!(!is_retryable_live_request_error(
+        &crate::resident_client::ResidentClientError {
+            code: "native_client_auth_nonce_failed".to_owned(),
+            retryable_teardown: false,
+        }
+    ));
+}
+
 #[cfg(unix)]
 #[test]
 fn managed_owner_lock_is_exclusive_for_resident_lifetime() {

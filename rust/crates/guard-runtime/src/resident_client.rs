@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use sha2::{Digest, Sha256};
+use std::io;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 #[cfg(unix)]
 use std::path::Path;
@@ -19,17 +20,52 @@ pub(crate) struct ExpectedProcessIdentity<'a> {
     pub(crate) digest: Option<&'a str>,
 }
 
-fn read_exact(stream: &mut dyn crate::ResidentStream, output: &mut [u8]) -> Result<(), String> {
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ResidentClientError {
+    pub(crate) code: String,
+    pub(crate) retryable_teardown: bool,
+}
+
+impl ResidentClientError {
+    fn fatal(code: String) -> Self {
+        Self {
+            code,
+            retryable_teardown: false,
+        }
+    }
+}
+
+impl From<String> for ResidentClientError {
+    fn from(code: String) -> Self {
+        Self::fatal(code)
+    }
+}
+
+fn is_retryable_teardown_io_error(error: &io::Error) -> bool {
+    matches!(
+        crate::hardening::classify_io_error(error),
+        crate::hardening::IoFailureClass::ClientAbort
+            | crate::hardening::IoFailureClass::NetworkChange
+    )
+}
+
+fn read_exact(
+    stream: &mut dyn crate::ResidentStream,
+    output: &mut [u8],
+) -> Result<(), ResidentClientError> {
     stream
         .read_exact(output)
-        .map_err(|_| "native_client_frame_read_failed".to_owned())
+        .map_err(|error| ResidentClientError {
+            code: "native_client_frame_read_failed".to_owned(),
+            retryable_teardown: is_retryable_teardown_io_error(&error),
+        })
 }
 
 fn authenticate(
     stream: &mut dyn crate::ResidentStream,
     token: &[u8],
     timeout: Duration,
-) -> Result<[u8; AUTH_NONCE_BYTES], String> {
+) -> Result<[u8; AUTH_NONCE_BYTES], ResidentClientError> {
     stream
         .set_resident_read_timeout(Some(timeout.min(AUTH_TIMEOUT)))
         .map_err(|_| "native_client_auth_timeout_failed".to_owned())?;
@@ -41,12 +77,21 @@ fn authenticate(
     getrandom::fill(&mut nonce).map_err(|_| "native_client_random_failed".to_owned())?;
     stream
         .write_all(&nonce)
-        .map_err(|_| "native_client_auth_nonce_failed".to_owned())?;
+        .map_err(|error| ResidentClientError {
+            code: "native_client_auth_nonce_failed".to_owned(),
+            retryable_teardown: is_retryable_teardown_io_error(&error),
+        })?;
     let mut server_proof = [0u8; AUTH_PROOF_BYTES];
-    read_exact(stream, &mut server_proof)?;
+    // A server-proof read happens after the client has sent its nonce.  Even
+    // an EOF that looks like a transport teardown at this phase is not safe
+    // to replay: the peer has not completed authentication.
+    read_exact(stream, &mut server_proof).map_err(|error| ResidentClientError {
+        code: error.code,
+        retryable_teardown: false,
+    })?;
     let expected = hmac_sha256(token, SERVER_PROOF_LABEL, &nonce);
     if !constant_time_eq(&server_proof, &expected) {
-        return Err("native_client_auth_rejected".to_owned());
+        return Err("native_client_auth_rejected".to_owned().into());
     }
     Ok(nonce)
 }
@@ -191,9 +236,9 @@ fn write_request(
     token: &[u8],
     nonce: &[u8; AUTH_NONCE_BYTES],
     payload: &[u8],
-) -> Result<[u8; FRAME_REQUEST_ID_BYTES], String> {
+) -> Result<[u8; FRAME_REQUEST_ID_BYTES], ResidentClientError> {
     if payload.is_empty() || payload.len() > crate::MAX_NATIVE_REQUEST_BYTES {
-        return Err("native_client_request_too_large".to_owned());
+        return Err("native_client_request_too_large".to_owned().into());
     }
     let mut request_id = [0u8; FRAME_REQUEST_ID_BYTES];
     getrandom::fill(&mut request_id).map_err(|_| "native_client_random_failed".to_owned())?;
@@ -208,20 +253,23 @@ fn write_request(
     stream
         .write_all(&frame)
         .and_then(|()| stream.flush())
-        .map_err(|_| "native_client_frame_write_failed".to_owned())?;
+        .map_err(|error| ResidentClientError {
+            code: "native_client_frame_write_failed".to_owned(),
+            retryable_teardown: is_retryable_teardown_io_error(&error),
+        })?;
     Ok(request_id)
 }
 
 fn read_response(
     stream: &mut dyn crate::ResidentStream,
     request_id: &[u8; FRAME_REQUEST_ID_BYTES],
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, ResidentClientError> {
     let mut header = [0u8; FRAME_HEADER_BYTES];
     read_exact(stream, &mut header)?;
     if !constant_time_eq(&header[..4], RESPONSE_MAGIC)
         || !constant_time_eq(&header[4..4 + FRAME_REQUEST_ID_BYTES], request_id)
     {
-        return Err("native_client_response_binding_failed".to_owned());
+        return Err("native_client_response_binding_failed".to_owned().into());
     }
     let digest_start = 4 + FRAME_REQUEST_ID_BYTES;
     let digest = &header[digest_start..digest_start + FRAME_DIGEST_BYTES];
@@ -231,14 +279,47 @@ fn read_response(
             .map_err(|_| "native_client_frame_invalid".to_owned())?,
     ) as usize;
     if length == 0 || length > MAX_NATIVE_RESPONSE_BYTES {
-        return Err("native_client_response_too_large".to_owned());
+        return Err("native_client_response_too_large".to_owned().into());
     }
     let mut response = vec![0u8; length];
     read_exact(stream, &mut response)?;
     if !constant_time_eq(&Sha256::digest(&response), digest) {
-        return Err("native_client_response_digest_mismatch".to_owned());
+        return Err("native_client_response_digest_mismatch".to_owned().into());
     }
     Ok(response)
+}
+
+pub(crate) fn send_request_for_digest_detailed(
+    transport: &str,
+    endpoint: &str,
+    token: &[u8],
+    payload: &[u8],
+    timeout: Duration,
+    identity: &ExpectedProcessIdentity<'_>,
+) -> Result<Vec<u8>, ResidentClientError> {
+    let started = std::time::Instant::now();
+    let mut stream =
+        connect(transport, endpoint, timeout, identity).map_err(ResidentClientError::fatal)?;
+    let remaining = timeout.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Err("native_client_deadline_exceeded".to_owned().into());
+    }
+    let nonce = authenticate(&mut *stream, token, remaining)?;
+    let remaining = timeout.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Err("native_client_deadline_exceeded".to_owned().into());
+    }
+    stream
+        .set_resident_read_timeout(Some(remaining))
+        .map_err(|_| "native_client_timeout_failed".to_owned())?;
+    stream
+        .set_resident_write_timeout(Some(remaining))
+        .map_err(|_| "native_client_timeout_failed".to_owned())?;
+    let request_id = write_request(&mut *stream, token, &nonce, payload)?;
+    if started.elapsed() >= timeout {
+        return Err("native_client_deadline_exceeded".to_owned().into());
+    }
+    read_response(&mut *stream, &request_id)
 }
 
 pub(crate) fn send_request_for_digest(
@@ -249,28 +330,8 @@ pub(crate) fn send_request_for_digest(
     timeout: Duration,
     identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<Vec<u8>, String> {
-    let started = std::time::Instant::now();
-    let mut stream = connect(transport, endpoint, timeout, identity)?;
-    let remaining = timeout.saturating_sub(started.elapsed());
-    if remaining.is_zero() {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    let nonce = authenticate(&mut *stream, token, remaining)?;
-    let remaining = timeout.saturating_sub(started.elapsed());
-    if remaining.is_zero() {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    stream
-        .set_resident_read_timeout(Some(remaining))
-        .map_err(|_| "native_client_timeout_failed".to_owned())?;
-    stream
-        .set_resident_write_timeout(Some(remaining))
-        .map_err(|_| "native_client_timeout_failed".to_owned())?;
-    let request_id = write_request(&mut *stream, token, &nonce, payload)?;
-    if started.elapsed() >= timeout {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    read_response(&mut *stream, &request_id)
+    send_request_for_digest_detailed(transport, endpoint, token, payload, timeout, identity)
+        .map_err(|error| error.code)
 }
 
 #[cfg(test)]
@@ -314,9 +375,9 @@ mod tests {
             server.write_all(response).unwrap();
         });
         let error = read_response(&mut client, &expected_request_id).unwrap_err();
-        assert_eq!(error, "native_client_response_binding_failed");
+        assert_eq!(error.code, "native_client_response_binding_failed");
+        assert!(!error.retryable_teardown);
     }
-
     #[cfg(unix)]
     #[test]
     fn rejects_response_digest_mismatch() {
@@ -337,6 +398,103 @@ mod tests {
             server.write_all(response).unwrap();
         });
         let error = read_response(&mut client, &request_id).unwrap_err();
-        assert_eq!(error, "native_client_response_digest_mismatch");
+        assert_eq!(error.code, "native_client_response_digest_mismatch");
+        assert!(!error.retryable_teardown);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_socket_during_auth_nonce_write_carries_teardown_evidence() {
+        use std::io::{self, Read, Write};
+
+        struct ClosedSocket;
+
+        impl Read for ClosedSocket {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                unreachable!("the nonce write must fail before reading");
+            }
+        }
+
+        impl Write for ClosedSocket {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                Err(io::Error::from(io::ErrorKind::BrokenPipe))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        impl crate::ResidentStream for ClosedSocket {
+            fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        let mut client = ClosedSocket;
+        let error = authenticate(
+            &mut client,
+            &[0u8; crate::AUTH_TOKEN_BYTES],
+            Duration::from_millis(100),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "native_client_auth_nonce_failed");
+        assert!(error.retryable_teardown);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn truncated_server_proof_is_never_retryable() {
+        use std::io::{self, Read, Write};
+
+        struct TruncatedProofSocket;
+
+        impl Read for TruncatedProofSocket {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        impl Write for TruncatedProofSocket {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        impl crate::ResidentStream for TruncatedProofSocket {
+            fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        let mut client = TruncatedProofSocket;
+        let error = authenticate(
+            &mut client,
+            &[0u8; crate::AUTH_TOKEN_BYTES],
+            Duration::from_millis(100),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "native_client_frame_read_failed");
+        assert!(!error.retryable_teardown);
     }
 }

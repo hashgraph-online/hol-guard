@@ -117,6 +117,12 @@ fn is_stale_process_identity_error(error: &str) -> bool {
     )
 }
 
+fn is_retryable_live_request_error(error: &crate::resident_client::ResidentClientError) -> bool {
+    error.retryable_teardown
+        || error.code == "native_client_connect_failed"
+        || is_stale_process_identity_error(&error.code)
+}
+
 fn try_home_states(
     state_base: &Path,
     payload: &[u8],
@@ -150,7 +156,7 @@ fn try_home_states(
             start_marker: &state.process_start_marker,
             digest: (!same_runtime).then_some(&state.runtime_sha256),
         };
-        match crate::resident_client::send_request_for_digest(
+        match crate::resident_client::send_request_for_digest_detailed(
             &state.transport,
             &state.endpoint,
             &token,
@@ -159,9 +165,7 @@ fn try_home_states(
             &identity,
         ) {
             Ok(response) => return Ok(Some(response)),
-            Err(error)
-                if error == "native_client_connect_failed"
-                    || is_stale_process_identity_error(&error) => {}
+            Err(error) if is_retryable_live_request_error(&error) => {}
             Err(_) => return Err("native_resident_live_request_failed".to_owned()),
         }
     }
