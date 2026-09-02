@@ -354,6 +354,8 @@ Hermes gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/her
 Guard injects the managed overlay paths through `HERMES_GUARD_MCP_OVERLAY_PATH` and `HERMES_GUARD_PRETOOL_PATH` when
 you launch Hermes through Guard.
 
+Hermes local installs only cover launch-time artifacts; runtime shell enforcement requires a Guard Cloud pairing.
+
 OpenClaw gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/openclaw/` with:
 
 - `overlay.json`

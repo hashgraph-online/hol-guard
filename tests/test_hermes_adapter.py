@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -11,10 +12,13 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hermes import (
+    _HERMES_LOCAL_MODE_NOTE,
+    _HERMES_MANAGED_INSTALL_INCOMPLETE_NOTE,
     HermesHarnessAdapter,
     _extract_env_mentions,
     _looks_like_secret,
 )
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
@@ -38,6 +42,22 @@ def _write(path: Path, content: str) -> None:
 
 
 def _seed_cloud_profile(context: HarnessContext, runtime: str = "hermes") -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    GuardStore(context.guard_home).set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="oauth_refresh_token_fixture",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant_123",
+        machine_id="machine_123",
+        workspace_id="workspace_ops",
+        runtime_id="runtime_123",
+        runtime_label="Hermes Telegram agent",
+        access_token="oauth_access_token_fixture",
+        now="2026-05-05T00:00:00.000Z",
+    )
     GuardStore(context.guard_home).set_sync_payload(
         "service_runtime_profile",
         {
@@ -501,6 +521,60 @@ def test_launch_environment_recomputes_cloud_identity_hints(tmp_path: Path):
     env = HermesHarnessAdapter().launch_environment(context)
 
     assert "HERMES_GUARD_CLOUD_WORKSPACE" not in env
+
+
+def test_install_warns_when_local_mode_has_no_cloud_pairing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    hermes = bin_dir / "hermes"
+    hermes.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    hermes.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(context)
+    diagnostics = adapter.diagnostics(context)
+
+    assert any(
+        "runtime shell enforcement requires a Guard Cloud pairing" in note
+        for note in manifest["notes"]
+    )
+    assert any(
+        "runtime shell enforcement requires a Guard Cloud pairing" in warning
+        for warning in diagnostics["warnings"]
+    )
+
+
+def test_diagnostic_warns_when_managed_install_is_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    hermes = bin_dir / "hermes"
+    hermes.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    hermes.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+    manifest = adapter.install(context)
+    Path(str(manifest["mcp_overlay_path"])).unlink()
+    Path(str(manifest["pretool_hook_path"])).unlink()
+
+    diagnostics = adapter.diagnostics(context)
+
+    assert _HERMES_LOCAL_MODE_NOTE in diagnostics["warnings"]
+    assert _HERMES_MANAGED_INSTALL_INCOMPLETE_NOTE in diagnostics["warnings"]
 
 
 def test_install_stringifies_typed_env_values_in_managed_manifest(tmp_path: Path):

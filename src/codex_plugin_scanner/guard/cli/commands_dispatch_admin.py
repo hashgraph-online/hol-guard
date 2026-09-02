@@ -360,6 +360,16 @@ def _run_guard_doctor_command(
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    runtime_probe = payload.get("runtime_probe")
+    if (
+        args.harness == "hermes"
+        and isinstance(runtime_probe, dict)
+        and runtime_probe.get("cloud_agent_identity_configured") is False
+    ):
+        from ..adapters.hermes import _HERMES_LOCAL_MODE_NOTE
+
+        payload["protection_label"] = "launch-review only"
+        payload["protection_help"] = _HERMES_LOCAL_MODE_NOTE
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 
