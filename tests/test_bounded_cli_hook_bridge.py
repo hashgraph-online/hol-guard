@@ -117,6 +117,61 @@ def test_timeout_allows_emergency_safe_read(
     assert hook_output["permissionDecision"] == "allow"
 
 
+def test_timeout_allows_grok_when_watch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(None, "", False, True)),
+    )
+    config = _config(tmp_path, harness="grok")
+    guard_home = Path(str(config["guard_home"]))
+    (guard_home / "config.toml").write_text(
+        'protection_posture = "watch"\nmode = "observe"\n',
+        encoding="utf-8",
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            config,
+            input_text=json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Write",
+                    "tool_input": {"path": "foo.txt", "contents": "x"},
+                }
+            ),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    assert payload == {"decision": "allow"}
+
+
+def test_pretty_printed_hook_json_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pretty = json.dumps({"decision": "allow", "policy_action": "warn"}, indent=2) + "\n"
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(0, pretty, False, False)),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="grok"),
+            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    assert payload == {"decision": "allow", "policy_action": "warn"}
+
+
 @pytest.mark.parametrize("harness", ["kimi", "zcode"])
 def test_claude_shaped_timeout_emits_deny_and_block_exit(
     monkeypatch: pytest.MonkeyPatch,
@@ -358,6 +413,7 @@ def test_frozen_fallback_runs_supported_cli_subcommand_without_python_flags(
         str(tmp_path / "guard-home"),
         "--harness",
         "grok",
+        "--json",
     ]
 
 
@@ -412,6 +468,7 @@ def test_live_frozen_runtime_ignores_forged_config_mode_and_executable(
         str((tmp_path / "guard-home").resolve()),
         "--harness",
         "grok",
+        "--json",
     ]
 
 
@@ -465,6 +522,7 @@ def test_frozen_fallback_accepts_equivalent_noncanonical_guard_home(
         str((tmp_path / "guard-home").resolve()),
         "--harness",
         "grok",
+        "--json",
     ]
 
 

@@ -296,8 +296,7 @@ def _validated_frozen_cli_args(
     if tuple(cli_args[4:6]) != ("--harness", harness):
         return None
     tail = cli_args[6:]
-    json_output = bool(tail and tail[-1] == "--json")
-    if json_output:
+    if tail and tail[-1] == "--json":
         tail = tail[:-1]
     if len(tail) % 2 != 0:
         return None
@@ -309,17 +308,15 @@ def _validated_frozen_cli_args(
         if not Path(value).is_absolute():
             return None
         seen_flags.add(flag)
-    command: tuple[str, ...] = (
+    return (
         "hook",
         "--guard-home",
         str(expected_guard_home),
         "--harness",
         harness,
         *tail,
+        "--json",
     )
-    if json_output:
-        command = (*command, "--json")
-    return command
 
 
 def _json_object(text: str) -> dict[str, object] | None:
@@ -357,11 +354,44 @@ def _event_name(input_text: str) -> str:
 
 
 def _has_json_object_line(output: str) -> bool:
+    stripped = output.strip()
+    if stripped and _json_object(stripped) is not None:
+        return True
     for line in reversed(output.splitlines()):
         if not line.strip():
             continue
         return _json_object(line.strip()) is not None
     return False
+
+
+def _cli_args_with_json(cli_args: Sequence[str]) -> list[str]:
+    if cli_args and cli_args[-1] == "--json":
+        return list(cli_args)
+    return [*cli_args, "--json"]
+
+
+def _guard_home_is_recording_only(guard_home: Path) -> bool:
+    try:
+        from ..config import load_guard_config
+        from ..protection_posture import protection_is_off
+
+        config = load_guard_config(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+
+
+def _watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
+    if harness == "copilot":
+        return {"permissionDecision": "allow"}
+    if harness in {"grok", "hermes", "openclaw"}:
+        return {"decision": "allow"}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "permissionDecision": "allow",
+        }
+    }
 
 
 def _failure_payload(
@@ -370,7 +400,10 @@ def _failure_payload(
     event_name: str,
     reason: str,
     input_text: str = "",
+    guard_home: Path | None = None,
 ) -> tuple[dict[str, object], int]:
+    if event_name == "PreToolUse" and guard_home is not None and _guard_home_is_recording_only(guard_home):
+        return _watch_continue_payload(harness, event_name), 0
     payload = _json_object(input_text or "{}")
     if event_name == "PreToolUse" and isinstance(payload, dict) and hook_action_is_emergency_safe(payload):
         if harness == "copilot":
@@ -424,12 +457,19 @@ def _failure_payload(
     }, 0
 
 
-def _emit_failure(*, harness: str, input_text: str, reason: str = _FAILURE_REASON) -> int:
+def _emit_failure(
+    *,
+    harness: str,
+    input_text: str,
+    reason: str = _FAILURE_REASON,
+    guard_home: Path | None = None,
+) -> int:
     payload, returncode = _failure_payload(
         harness=harness,
         event_name=_event_name(input_text),
         reason=reason,
         input_text=input_text,
+        guard_home=guard_home,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
@@ -685,15 +725,15 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
         )
         if direct_cli_args is None:
-            return _emit_failure(harness=harness, input_text=input_text)
+            return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
         command = (sys.executable, *direct_cli_args)
     elif frozen_launcher:
-        return _emit_failure(harness=harness, input_text=input_text)
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
     else:
         command = isolated_guard_cli_command(
             python_executable,
             package_root,
-            cli_args,
+            _cli_args_with_json(cli_args),
         )
     daemon_result = _try_daemon_hook(
         guard_home=guard_home,
@@ -716,18 +756,22 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         timeout_seconds=float(timeout_seconds),
     )
     if result.timed_out:
-        return _emit_failure(harness=harness, input_text=input_text)
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
     if result.output_limit_exceeded:
         return _emit_failure(
             harness=harness,
             input_text=input_text,
             reason="HOL Guard blocked this action because hook output exceeded the safe size limit.",
+            guard_home=guard_home,
         )
     if result.returncode is None:
-        return _emit_failure(harness=harness, input_text=input_text)
-    if not _has_json_object_line(result.stdout):
-        return _emit_failure(harness=harness, input_text=input_text)
-    if result.stdout:
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+    compact_payload = _json_object(result.stdout.strip())
+    if compact_payload is None and not _has_json_object_line(result.stdout):
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+    if compact_payload is not None:
+        _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
+    elif result.stdout:
         _ = sys.stdout.write(result.stdout)
     return result.returncode
 

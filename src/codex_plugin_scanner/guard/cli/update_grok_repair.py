@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
+from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..adapters.grok import GrokHarnessAdapter
@@ -24,7 +26,7 @@ def repair_grok_install(
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Rewrite Grok PreToolUse hooks when the baked timeout is stale."""
+    """Rewrite Grok PreToolUse hooks when the baked launcher is stale."""
 
     try:
         managed_install = store.get_managed_install("grok")
@@ -64,7 +66,36 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
     timeout = _pretool_timeout(payload)
     command = _pretool_command(payload)
     marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
-    return timeout == GROK_PRETOOL_HOOK_TIMEOUT_SECONDS and marker in command.replace(" ", "")
+    if timeout != GROK_PRETOOL_HOOK_TIMEOUT_SECONDS or marker not in command.replace(" ", ""):
+        return False
+    hook_config = _hook_config_from_command(command)
+    if hook_config is None:
+        return False
+    executable = hook_config.get("python_executable")
+    cli_args = hook_config.get("cli_args")
+    if not isinstance(executable, str) or not executable.strip():
+        return False
+    executable_path = Path(executable)
+    if not executable_path.exists():
+        return False
+    try:
+        if executable_path.resolve() != Path(sys.executable).resolve():
+            return False
+    except OSError:
+        return False
+    return isinstance(cli_args, list) and "--json" in cli_args
+
+
+def _hook_config_from_command(command: str) -> dict[str, object] | None:
+    start = command.find("{")
+    end = command.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        parsed = json.loads(command[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _pretool_timeout(payload: object) -> int | None:

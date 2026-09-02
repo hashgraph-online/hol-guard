@@ -136,6 +136,32 @@ def test_guard_daemon_state_rejects_desktop_marker_without_version_child() -> No
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
+def test_guard_daemon_state_rejects_missing_absolute_desktop_core_tree(tmp_path: Path) -> None:
+    missing = tmp_path / "org.hol.guard.desktop" / "core" / "versions" / "0.0.1" / "hol-guard"
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": str(missing),
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_matches_existing_absolute_desktop_core_tree(tmp_path: Path) -> None:
+    sidecar = tmp_path / "org.hol.guard.desktop" / "core" / "versions" / "0.0.1" / "hol-guard"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text("placeholder", encoding="utf-8")
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": str(sidecar),
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
 def test_healthz_details_require_compatible_same_release_peer() -> None:
     compatible = {
         "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,

@@ -350,6 +350,7 @@ class GrokHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
+        guard_args.append("--json")
         return bounded_cli_hook_command(
             python_executable=sys.executable,
             package_root=Path(__file__).resolve().parents[3],

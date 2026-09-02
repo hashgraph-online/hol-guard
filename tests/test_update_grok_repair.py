@@ -110,3 +110,62 @@ def test_update_repair_rewrites_stale_grok_hooks(tmp_path: Path) -> None:
     assert any(item.get("harness") == "grok" for item in repaired)
     payload = json.loads(hook_path.read_text(encoding="utf-8"))
     assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == GROK_PRETOOL_HOOK_TIMEOUT_SECONDS
+
+
+def _replace_hook_config(hook_path: Path, **updates: object) -> None:
+    payload = json.loads(hook_path.read_text(encoding="utf-8"))
+    command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    start = command.find("{")
+    end = command.rfind("}")
+    config = json.loads(command[start : end + 1])
+    config.update(updates)
+    payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
+        command[:start] + json.dumps(config, separators=(",", ":")) + command[end + 1 :]
+    )
+    hook_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def test_grok_repair_rewrites_missing_hook_executable(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-08-17T00:00:00+00:00"
+    hook_path = _seed_grok_install(context, store, now)
+    _replace_hook_config(hook_path, python_executable=str(tmp_path / "missing-hol-guard"))
+
+    repaired, warning = repair_grok_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now=now,
+    )
+
+    assert warning is None
+    assert isinstance(repaired, dict)
+    command = json.loads(hook_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert "missing-hol-guard" not in command
+
+
+def test_grok_repair_rewrites_hooks_without_json_flag(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-08-17T00:00:00+00:00"
+    hook_path = _seed_grok_install(context, store, now)
+    payload = json.loads(hook_path.read_text(encoding="utf-8"))
+    command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    start = command.find("{")
+    end = command.rfind("}")
+    config = json.loads(command[start : end + 1])
+    config["cli_args"] = [item for item in config["cli_args"] if item != "--json"]
+    _replace_hook_config(hook_path, cli_args=config["cli_args"])
+
+    repaired, warning = repair_grok_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now=now,
+    )
+
+    assert warning is None
+    assert isinstance(repaired, dict)
+    command = json.loads(hook_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert '"--json"' in command.replace(" ", "")
