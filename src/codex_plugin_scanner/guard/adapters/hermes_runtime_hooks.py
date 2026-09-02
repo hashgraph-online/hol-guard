@@ -8,17 +8,24 @@ from __future__ import annotations
 
 import json
 import shlex
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from .hermes_file_inspection import inspect_hermes_config
 
 _PRETOOL_EVENT = "pre_tool_call"
+_GUARD_HOOK_ID = "hol-guard-pretool"
 _GUARD_HOOK_MARKERS = ("__guard-bounded-hook", "bounded_cli_hook_bridge")
 _ALLOWLIST_NAME = "shell-hooks-allowlist.json"
 _BLOCK_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
+_MALFORMED_ALLOWLIST = (
+    "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can "
+    "allowlist its pre_tool_call command."
+)
+_MISSING_HOOK_COMMAND = "Hermes Guard hook command is missing; runtime protection was not registered."
 
 
 def hermes_hook_command_string(command: Sequence[str]) -> str:
@@ -27,14 +34,22 @@ def hermes_hook_command_string(command: Sequence[str]) -> str:
     return shlex.join([str(part) for part in command])
 
 
-def is_guard_pretool_command(command: object) -> bool:
-    if not isinstance(command, str) or not command.strip():
+def is_guard_pretool_entry(entry: object, *, expected_command: str | None = None) -> bool:
+    if not isinstance(entry, Mapping):
         return False
-    return any(marker in command for marker in _GUARD_HOOK_MARKERS)
+    if entry.get("id") == _GUARD_HOOK_ID:
+        return True
+    command = entry.get("command")
+    return isinstance(expected_command, str) and bool(expected_command) and command == expected_command
+
+
+def _legacy_guard_pretool_command(command: object) -> bool:
+    return isinstance(command, str) and all(marker in command for marker in _GUARD_HOOK_MARKERS)
 
 
 def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:
     return {
+        "id": _GUARD_HOOK_ID,
         "matcher": ".*",
         "command": hermes_hook_command_string(command),
         "timeout": timeout_seconds,
@@ -49,7 +64,12 @@ def _pretool_entries(hooks: Mapping[str, object]) -> list[object]:
     return []
 
 
-def guard_pretool_hook_registered(config: Mapping[str, object] | None) -> bool:
+def guard_pretool_hook_registered(
+    config: Mapping[str, object] | None,
+    *,
+    expected_command: str | None = None,
+    allowlist_path: Path | None = None,
+) -> bool:
     if not isinstance(config, Mapping):
         return False
     hooks = config.get("hooks")
@@ -60,8 +80,16 @@ def guard_pretool_hook_registered(config: Mapping[str, object] | None) -> bool:
             continue
         if entry.get("fail_closed") is not True and entry.get("failClosed") is not True:
             continue
-        if is_guard_pretool_command(entry.get("command")):
-            return True
+        if entry.get("matcher") != ".*":
+            continue
+        if not is_guard_pretool_entry(entry, expected_command=expected_command):
+            continue
+        command = entry.get("command")
+        if not isinstance(command, str) or not command.strip():
+            continue
+        if allowlist_path is not None and not _allowlist_has_command(allowlist_path, command):
+            continue
+        return True
     return False
 
 
@@ -70,11 +98,11 @@ def merge_guard_pretool_hook(
     *,
     command: Sequence[str],
     timeout_seconds: int,
-) -> bool:
+) -> tuple[bool, list[str]]:
     """Insert or replace Guard's pre_tool_call entry. Preserve user hooks.
 
-    Returns False when an existing ``hooks`` value is not a mapping, so the
-    caller can leave the file unchanged rather than destroy user config.
+    Returns ``(False, [])`` when an existing ``hooks`` value is not a mapping,
+    so the caller can leave the file unchanged rather than destroy user config.
     """
 
     hooks = config.get("hooks")
@@ -82,15 +110,22 @@ def merge_guard_pretool_hook(
         hooks = {}
         config["hooks"] = hooks
     if not isinstance(hooks, dict):
-        return False
-    preserved = [
-        entry
-        for entry in _pretool_entries(hooks)
-        if not (isinstance(entry, Mapping) and is_guard_pretool_command(entry.get("command")))
-    ]
+        return False, []
+    expected = hermes_hook_command_string(command)
+    preserved: list[object] = []
+    removed: list[str] = []
+    for entry in _pretool_entries(hooks):
+        if is_guard_pretool_entry(entry, expected_command=expected) or (
+            isinstance(entry, Mapping) and _legacy_guard_pretool_command(entry.get("command"))
+        ):
+            old_command = entry.get("command") if isinstance(entry, Mapping) else None
+            if isinstance(old_command, str) and old_command.strip():
+                removed.append(old_command)
+            continue
+        preserved.append(entry)
     preserved.append(guard_pretool_hook_entry(command=command, timeout_seconds=timeout_seconds))
     hooks[_PRETOOL_EVENT] = preserved
-    return True
+    return True, removed
 
 
 def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
@@ -100,8 +135,10 @@ def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
     removed: list[str] = []
     preserved: list[object] = []
     for entry in _pretool_entries(hooks):
-        if isinstance(entry, Mapping) and is_guard_pretool_command(entry.get("command")):
-            command = entry.get("command")
+        if is_guard_pretool_entry(entry) or (
+            isinstance(entry, Mapping) and _legacy_guard_pretool_command(entry.get("command"))
+        ):
+            command = entry.get("command") if isinstance(entry, Mapping) else None
             if isinstance(command, str) and command.strip():
                 removed.append(command)
             continue
@@ -115,17 +152,27 @@ def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
     return removed
 
 
-def merge_guard_hook_allowlist(allowlist_path: Path, *, command: Sequence[str]) -> None:
+def merge_guard_hook_allowlist(
+    allowlist_path: Path,
+    *,
+    command: Sequence[str],
+    retire_commands: Sequence[str] = (),
+) -> None:
     """Approve only Guard's (event, command) pair without auto-accepting other hooks."""
 
     command_string = hermes_hook_command_string(command)
     payload = _read_allowlist(allowlist_path)
     if payload is None:
-        return
-    approvals = [item for item in payload.get("approvals", []) if isinstance(item, dict)]
-    if any(item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string for item in approvals):
-        return
-    approvals.append({"event": _PRETOOL_EVENT, "command": command_string})
+        raise ValueError(_MALFORMED_ALLOWLIST)
+    retired = {item for item in retire_commands if item and item != command_string}
+    approvals = [
+        item
+        for item in payload.get("approvals", [])
+        if isinstance(item, dict)
+        and not (item.get("event") == _PRETOOL_EVENT and item.get("command") in retired)
+    ]
+    if not any(item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string for item in approvals):
+        approvals.append({"event": _PRETOOL_EVENT, "command": command_string})
     allowlist_path.parent.mkdir(parents=True, exist_ok=True)
     allowlist_path.write_text(
         json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
@@ -190,9 +237,19 @@ def hermes_bridge_response(
     policy_action, reason = _policy_from_response(daemon_response)
     payload = hermes_native_decision(policy_action=policy_action, reason=reason)
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    if hermes_should_exit_block(policy_action):
-        return stdout, reason, 2
-    return stdout, "", 0
+    return stdout, "", 2 if hermes_should_exit_block(policy_action) else 0
+
+
+def emit_hermes_hook_response(
+    *,
+    policy_action: str,
+    reason: str,
+    output_stream: TextIO | None = None,
+) -> None:
+    stream = output_stream if output_stream is not None else sys.stdout
+    payload = hermes_native_decision(policy_action=policy_action, reason=reason)
+    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    stream.flush()
 
 
 def apply_hermes_doctor_protection_label(payload: dict[str, object]) -> None:
@@ -211,7 +268,10 @@ def hermes_runtime_hook_registered(config_yaml_path: Path) -> bool:
     inspection = inspect_hermes_config(config_yaml_path, syntax="yaml")
     if not inspection.complete or inspection.payload is None:
         return False
-    return guard_pretool_hook_registered(inspection.payload)
+    return guard_pretool_hook_registered(
+        inspection.payload,
+        allowlist_path=hermes_allowlist_path(config_yaml_path.parent),
+    )
 
 
 def hermes_runtime_hook_warning(runtime_probe: dict[str, object] | None) -> str | None:
@@ -235,12 +295,18 @@ def sync_guard_runtime_hooks(
     hermes_home: Path,
 ) -> None:
     if not isinstance(command, list):
-        return
+        raise ValueError(_MISSING_HOOK_COMMAND)
     hook_command = [str(part) for part in command if isinstance(part, str)]
     if not hook_command:
-        return
-    if merge_guard_pretool_hook(config, command=hook_command, timeout_seconds=timeout_seconds):
-        merge_guard_hook_allowlist(hermes_allowlist_path(hermes_home), command=hook_command)
+        raise ValueError(_MISSING_HOOK_COMMAND)
+    merged, removed = merge_guard_pretool_hook(config, command=hook_command, timeout_seconds=timeout_seconds)
+    if not merged:
+        raise ValueError("Hermes hooks config is not a mapping; runtime protection was not registered.")
+    merge_guard_hook_allowlist(
+        hermes_allowlist_path(hermes_home),
+        command=hook_command,
+        retire_commands=removed,
+    )
 
 
 def unsync_guard_runtime_hooks(config: dict[str, Any], *, hermes_home: Path) -> None:
@@ -299,3 +365,13 @@ def _read_allowlist(path: Path) -> dict[str, Any] | None:
     if not isinstance(approvals, list):
         return None
     return raw
+
+
+def _allowlist_has_command(path: Path, command: str) -> bool:
+    payload = _read_allowlist(path)
+    if payload is None:
+        return False
+    return any(
+        isinstance(item, dict) and item.get("event") == _PRETOOL_EVENT and item.get("command") == command
+        for item in payload.get("approvals", [])
+    )

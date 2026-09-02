@@ -692,17 +692,16 @@ def _init_notification_summary(payload: dict[str, object]) -> str:
 
 
 def _protection_display_name(payload: dict[str, object], fallback: str) -> str:
-    label = payload.get("runtime_protection_label") or payload.get("protection_label")
-    if isinstance(label, str) and label.strip():
-        return label.strip()
+    for key in ("runtime_protection_label", "protection_label"):
+        label = payload.get(key)
+        if isinstance(label, str) and label.strip():
+            return label.strip()
     return fallback
 
 
 def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[str, bool]:
-    raw = payload.get("protection") or payload.get("protection_posture") or fallback
-    protection = str(raw)
-    protection_off = bool(payload.get("protection_off")) or protection == "watch"
-    return _protection_display_name(payload, protection), protection_off
+    protection = str(payload.get("protection") or payload.get("protection_posture") or fallback)
+    return _protection_display_name(payload, protection), bool(payload.get("protection_off")) or protection == "watch"
 
 
 def _render_status(console: Console, payload: dict[str, object]) -> None:

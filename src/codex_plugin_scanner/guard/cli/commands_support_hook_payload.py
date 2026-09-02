@@ -169,16 +169,8 @@ def _emit_native_hook_response(
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
-    if event_name == "PostToolUse" and policy_action in {
-        "review",
-        "require-reapproval",
-        "sandbox-required",
-        "block",
-    }:
-        payload["decision"] = "block"
-        payload["reason"] = reason
-        payload["continue"] = False
-        payload["stopReason"] = reason
+    if event_name == "PostToolUse" and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
+        payload.update({"decision": "block", "reason": reason, "continue": False, "stopReason": reason})
         _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
@@ -190,7 +182,17 @@ def _emit_native_hook_response(
         if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
-    _write_json_line(payload, output_stream=output_stream)
+    _write_json_line(
+        _hermes_native_or_payload(harness, policy_action, reason, payload),
+        output_stream=output_stream,
+    )
+
+def _hermes_native_or_payload(harness: str, policy_action: str, reason: str, payload: dict[str, object]) -> dict[str, object]:
+    if _canonical_harness_name(harness) != "hermes":
+        return payload
+    from ..adapters.hermes_runtime_hooks import hermes_native_decision
+    return hermes_native_decision(policy_action=policy_action, reason=reason)
+
 
 def _emit_native_hook_block_stderr(reason: str) -> None:
     print(reason, file=sys.stderr)
@@ -471,20 +473,8 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
     {
-        "codex",
-        "cline",
-        "claude-code",
-        "opencode",
-        "copilot",
-        "gemini",
-        "hermes",
-        "openclaw",
-        "cursor",
-        "grok",
-        "kimi",
-        "pi",
-        "omp",
-        "zcode",
+        "codex", "cline", "claude-code", "opencode", "copilot", "gemini", "hermes",
+        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode",
     }
 )
 
