@@ -169,3 +169,60 @@ def test_grok_repair_rewrites_hooks_without_json_flag(tmp_path: Path) -> None:
     assert isinstance(repaired, dict)
     command = json.loads(hook_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert '"--json"' in command.replace(" ", "")
+
+
+def _sample_hook_config(tmp_path: Path) -> dict[str, object]:
+    return {
+        "python_executable": str(tmp_path / "o'brien" / "python"),
+        "package_root": str(tmp_path),
+        "guard_home": str(tmp_path / "guard-home"),
+        "cli_args": ["guard", "hook", "--harness", "grok", "--json"],
+        "harness": "grok",
+        "timeout_seconds": 25,
+        "frozen_launcher": True,
+    }
+
+
+def test_hook_config_from_desktop_proxy_command_ignores_script_braces(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.base import _shell_command
+    from codex_plugin_scanner.guard.adapters.desktop_hook_proxy import _DESKTOP_PROXY_LAUNCH_SCRIPT
+    from codex_plugin_scanner.guard.cli.update_grok_repair import _hook_config_from_command
+
+    config = _sample_hook_config(tmp_path)
+    command = _shell_command(
+        (
+            "/bin/sh",
+            "-c",
+            _DESKTOP_PROXY_LAUNCH_SCRIPT,
+            "hol-guard-desktop-proxy",
+            str(tmp_path / "proxy"),
+            "TEAMID",
+            str(tmp_path / "HOL Guard.app"),
+            json.dumps(config, separators=(",", ":")),
+            str(tmp_path / "core"),
+        ),
+        windows=False,
+    )
+    parsed = _hook_config_from_command(command)
+    assert parsed is not None
+    assert parsed["python_executable"] == config["python_executable"]
+    assert parsed["cli_args"] == config["cli_args"]
+
+
+def test_hook_config_from_windows_shell_escaped_json(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.base import _shell_command
+    from codex_plugin_scanner.guard.cli.update_grok_repair import _hook_config_from_command
+
+    config = _sample_hook_config(tmp_path)
+    command = _shell_command(
+        (
+            str(tmp_path / "python.exe"),
+            "__guard-bounded-hook",
+            json.dumps(config, separators=(",", ":")),
+        ),
+        windows=True,
+    )
+    parsed = _hook_config_from_command(command)
+    assert parsed is not None
+    assert parsed["python_executable"] == config["python_executable"]
+    assert "--json" in parsed["cli_args"]

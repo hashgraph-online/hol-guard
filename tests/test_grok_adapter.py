@@ -115,10 +115,8 @@ class TestGrokInstallUninstall:
         managed_text = managed_config.read_text(encoding="utf-8")
         assert "Read(**/.grok/auth/**)" in managed_text
         assert "Read(~/" not in managed_text
-        assert "[[hooks.PreToolUse]]" in managed_text
-        assert "[[hooks.SessionStart]]" in managed_text
-        pretool_command = pretool_entries[0]["hooks"][0]["command"]
-        assert '"--json"' in pretool_command.replace(" ", "")
+        assert "[[hooks.PreToolUse]]" in managed_text and "[[hooks.SessionStart]]" in managed_text
+        assert '"--json"' in pretool_entries[0]["hooks"][0]["command"].replace(" ", "")
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

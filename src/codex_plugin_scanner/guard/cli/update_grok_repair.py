@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sqlite3
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
@@ -87,15 +89,54 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:
-    start = command.find("{")
-    end = command.rfind("}")
-    if start < 0 or end <= start:
-        return None
+    for posix in (True, False):
+        parsed = _hook_config_from_argv(_split_hook_command(command, posix=posix))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _split_hook_command(command: str, *, posix: bool) -> list[str]:
     try:
-        parsed = json.loads(command[start : end + 1])
+        return shlex.split(command, posix=posix)
+    except ValueError:
+        return []
+
+
+def _hook_config_from_argv(argv: Sequence[str]) -> dict[str, object] | None:
+    for index, argument in enumerate(argv):
+        if argument == "__guard-bounded-hook" and index + 1 < len(argv):
+            parsed = _hook_config_payload(argv[index + 1])
+            if parsed is not None:
+                return parsed
+        parsed = _hook_config_payload(argument)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _hook_config_payload(raw: str) -> dict[str, object] | None:
+    for candidate in (raw, raw.replace('\\"', '"')):
+        parsed = _parse_grok_hook_config(candidate)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _parse_grok_hook_config(raw: str) -> dict[str, object] | None:
+    try:
+        parsed = json.loads(raw)
     except json.JSONDecodeError:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    if not isinstance(parsed, dict):
+        return None
+    if parsed.get("harness") != "grok":
+        return None
+    if not isinstance(parsed.get("python_executable"), str):
+        return None
+    if not isinstance(parsed.get("cli_args"), list):
+        return None
+    return parsed
 
 
 def _pretool_timeout(payload: object) -> int | None:

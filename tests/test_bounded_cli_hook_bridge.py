@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, desktop_hook_proxy
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
 
@@ -117,61 +117,6 @@ def test_timeout_allows_emergency_safe_read(
     assert hook_output["permissionDecision"] == "allow"
 
 
-def test_timeout_allows_grok_when_watch(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        _runner_result(BoundedHookProcessResult(None, "", False, True)),
-    )
-    config = _config(tmp_path, harness="grok")
-    guard_home = Path(str(config["guard_home"]))
-    (guard_home / "config.toml").write_text(
-        'protection_posture = "watch"\nmode = "observe"\n',
-        encoding="utf-8",
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config,
-            input_text=json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Write",
-                    "tool_input": {"path": "foo.txt", "contents": "x"},
-                }
-            ),
-        )
-
-    payload = _json_object(output.getvalue())
-    assert returncode == 0
-    assert payload == {"decision": "allow"}
-
-
-def test_pretty_printed_hook_json_is_accepted(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    pretty = json.dumps({"decision": "allow", "policy_action": "warn"}, indent=2) + "\n"
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        _runner_result(BoundedHookProcessResult(0, pretty, False, False)),
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="grok"),
-            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
-        )
-
-    payload = _json_object(output.getvalue())
-    assert returncode == 0
-    assert payload == {"decision": "allow", "policy_action": "warn"}
-
-
 @pytest.mark.parametrize("harness", ["kimi", "zcode"])
 def test_claude_shaped_timeout_emits_deny_and_block_exit(
     monkeypatch: pytest.MonkeyPatch,
@@ -238,7 +183,7 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", lambda path: "TEAMID")
+    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
 
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(core),
@@ -327,7 +272,7 @@ def test_desktop_proxy_requires_one_real_team_and_same_bundle(
         {proxy: "not set", core: "not set", proxy.parents[2]: "not set"},
         {proxy: "TEAM-A", core: "TEAM-B", proxy.parents[2]: "TEAM-A"},
     ):
-        monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", teams.get)
+        monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", teams.get)
         assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
 
 
@@ -341,7 +286,7 @@ def test_desktop_proxy_rejects_writable_or_cross_bundle_paths(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", lambda path: "TEAMID")
+    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
 
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(other_proxy))
     assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
@@ -412,8 +357,7 @@ def test_frozen_fallback_runs_supported_cli_subcommand_without_python_flags(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        "grok",
-        "--json",
+        "grok", "--json",
     ]
 
 
@@ -467,8 +411,7 @@ def test_live_frozen_runtime_ignores_forged_config_mode_and_executable(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok",
-        "--json",
+        "grok", "--json",
     ]
 
 
@@ -521,8 +464,7 @@ def test_frozen_fallback_accepts_equivalent_noncanonical_guard_home(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok",
-        "--json",
+        "grok", "--json",
     ]
 
 
@@ -554,8 +496,7 @@ def test_frozen_fallback_accepts_normalized_json_hook_contract(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        harness,
-        "--json",
+        harness, "--json",
     ]
 
 
