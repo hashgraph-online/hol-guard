@@ -206,9 +206,11 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
         lock: bool = False,
         rename_source: bool = False,
         add_file: bool = False,
+        share_delete: bool = False,
     ) -> tuple[object, object, object]:
         assert not rename_source
         _ = add_file
+        _ = share_delete
         events.append(("open", (path, directory, create_new, descriptor, repair, lock)))
         return object(), handle, object()
 

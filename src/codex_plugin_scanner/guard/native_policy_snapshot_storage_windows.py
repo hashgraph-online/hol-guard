@@ -28,7 +28,11 @@ def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
 
     api = _snapshot_api()
     try:
-        kernel32, handle, information = api._windows_open_handle(path, directory=False)
+        kernel32, handle, information = api._windows_open_handle(
+            path,
+            directory=False,
+            share_delete=True,
+        )
     except FileNotFoundError:
         return None
     try:
@@ -82,7 +86,11 @@ def _windows_read_generation_state_bytes(path: Path) -> bytes | None:
 
     api = _snapshot_api()
     try:
-        kernel32, handle, information = api._windows_open_handle(path, directory=False)
+        kernel32, handle, information = api._windows_open_handle(
+            path,
+            directory=False,
+            share_delete=True,
+        )
     except FileNotFoundError:
         return None
     try:

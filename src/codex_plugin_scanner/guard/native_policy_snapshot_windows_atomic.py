@@ -128,6 +128,7 @@ def _windows_commit_private_file_handle(
             target_path,
             directory=False,
             repair=True,
+            share_delete=True,
         )
     except FileNotFoundError:
         target_handle = None
@@ -157,6 +158,7 @@ def _windows_commit_private_file_handle(
         committed_kernel32, committed_handle, committed_information = api._windows_open_handle(
             target_path,
             directory=False,
+            share_delete=True,
         )
     except (FileNotFoundError, NativePolicySnapshotError) as error:
         raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed") from error
@@ -275,6 +277,7 @@ def _windows_delete_private_child(
             parent_path / name,
             directory=False,
             rename_source=True,
+            share_delete=True,
         )
     except FileNotFoundError:
         return

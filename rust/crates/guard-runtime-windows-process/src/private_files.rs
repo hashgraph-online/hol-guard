@@ -129,7 +129,7 @@ pub(super) fn open_raw_directory_bound(
 ) -> io::Result<std::fs::File> {
     let mut access = GENERIC_READ;
     if allow_acl_repair {
-        access |= WRITE_DAC;
+        access |= GENERIC_WRITE | WRITE_DAC;
     }
     if allow_add_file {
         access |= FILE_ADD_FILE;

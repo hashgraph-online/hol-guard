@@ -20,6 +20,7 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS,
     _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT,
     _WINDOWS_FILE_FLAG_WRITE_THROUGH,
+    _WINDOWS_FILE_SHARE_DELETE,
     _WINDOWS_FILE_SHARE_READ,
     _WINDOWS_FILE_SHARE_WRITE,
     _WINDOWS_FILE_TYPE_DISK,
@@ -99,6 +100,7 @@ def _windows_open_configuration(
     lock: bool,
     rename_source: bool,
     add_file: bool,
+    share_delete: bool,
 ) -> _WindowsOpenConfiguration:
     import ctypes
     from ctypes import wintypes
@@ -115,6 +117,8 @@ def _windows_open_configuration(
         if create_new or rename_source:
             desired_access |= _WINDOWS_DELETE
         share_mode = _WINDOWS_FILE_SHARE_READ
+        if share_delete:
+            share_mode |= _WINDOWS_FILE_SHARE_DELETE
     if descriptor is not None or repair:
         # Existing objects are repaired only after an owner-only check. A
         # creation descriptor is carried by SECURITY_ATTRIBUTES and never
@@ -200,6 +204,7 @@ def _windows_open_handle(
     lock: bool = False,
     rename_source: bool = False,
     add_file: bool = False,
+    share_delete: bool = False,
 ) -> tuple[Any, Any, Any]:
     """Open/create one non-reparse Windows object while denying deletion."""
 
@@ -217,6 +222,7 @@ def _windows_open_handle(
         lock=lock,
         rename_source=rename_source,
         add_file=add_file,
+        share_delete=share_delete,
     )
     handle = functions.create_file(
         str(path),

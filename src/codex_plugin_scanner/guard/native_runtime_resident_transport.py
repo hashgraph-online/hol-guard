@@ -450,4 +450,3 @@ def retire_unusable_resident_supervisor(session: Any) -> None:
             session._stop_event.set()
             session._auth_token = None
             session._thread = None
-    thread.join(timeout=2.0)
