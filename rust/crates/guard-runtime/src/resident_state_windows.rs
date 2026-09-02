@@ -138,12 +138,12 @@ pub(super) fn bind_windows_existing_directory_under(
     .map_err(|error| error.to_string())
 }
 
-fn with_existing_directory<T, F>(path: &Path, private_root: &Path, action: F) -> Result<T, String>
+fn with_existing_directory<T, F>(path: &Path, private_root: &Path, action: F) -> io::Result<T>
 where
     F: FnOnce(&guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
 {
-    let owner =
-        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    let owner = current_process_sid()
+        .map_err(|_| io::Error::other("native_resident_windows_owner_sid_failed"))?;
     guard_runtime_windows_process::bind_directory(
         path,
         private_root,
@@ -157,7 +157,6 @@ where
         },
     )
     .and_then(|binding| action(&binding))
-    .map_err(|error| error.to_string())
 }
 
 pub(super) fn ensure_private_directory_path_under(
@@ -196,7 +195,6 @@ pub(super) fn create_private_file(path: &Path, private_root: &Path) -> io::Resul
         }
         Ok(file)
     })
-    .map_err(io::Error::other)
 }
 
 #[allow(dead_code)]
@@ -216,7 +214,6 @@ pub(super) fn open_private_file(path: &Path, private_root: &Path) -> io::Result<
     with_existing_directory(parent, private_root, |binding| {
         binding.open_private_file(name)
     })
-    .map_err(io::Error::other)
 }
 
 #[allow(dead_code)]
@@ -225,7 +222,6 @@ pub(super) fn open_private_directory(path: &Path, private_root: &Path) -> io::Re
         let handle = binding.handle();
         handle.try_clone()
     })
-    .map_err(io::Error::other)
 }
 
 pub(super) fn replace_private_file(
@@ -252,6 +248,7 @@ pub(super) fn replace_private_file(
         verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
         binding.replace_private_file(&source, destination_name)
     })
+    .map_err(|error| error.to_string())
 }
 
 pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bool, String> {
@@ -269,6 +266,7 @@ pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bo
         };
         guard_runtime_windows_process::delete_private_file_handle(&file).map(|()| true)
     })
+    .map_err(|error| error.to_string())
 }
 
 pub(super) fn verify_private_file(file: &File) -> Result<(), String> {
