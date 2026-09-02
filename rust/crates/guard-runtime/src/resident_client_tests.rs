@@ -1,4 +1,91 @@
 use super::*;
+use std::io::{self, Read, Write};
+
+#[derive(Default)]
+struct TestStream {
+    eof: bool,
+    read_error: Option<io::ErrorKind>,
+    write_error: Option<io::ErrorKind>,
+    flush_error: Option<io::ErrorKind>,
+    partial_write: bool,
+}
+
+impl TestStream {
+    fn eof() -> Self {
+        Self {
+            eof: true,
+            ..Self::default()
+        }
+    }
+
+    fn read_error(kind: io::ErrorKind) -> Self {
+        Self {
+            read_error: Some(kind),
+            ..Self::default()
+        }
+    }
+
+    fn write_error(kind: io::ErrorKind) -> Self {
+        Self {
+            write_error: Some(kind),
+            ..Self::default()
+        }
+    }
+
+    fn partial_write_error(kind: io::ErrorKind) -> Self {
+        Self {
+            partial_write: true,
+            ..Self::write_error(kind)
+        }
+    }
+
+    fn flush_error(kind: io::ErrorKind) -> Self {
+        Self {
+            flush_error: Some(kind),
+            ..Self::default()
+        }
+    }
+}
+
+impl Read for TestStream {
+    fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+        if self.eof {
+            return Ok(0);
+        }
+        self.read_error
+            .map_or(Ok(0), |kind| Err(io::Error::from(kind)))
+    }
+}
+
+impl Write for TestStream {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        if self.partial_write {
+            self.partial_write = false;
+            return Ok(1.min(buffer.len()));
+        }
+        self.write_error
+            .map_or(Ok(buffer.len()), |kind| Err(io::Error::from(kind)))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.flush_error
+            .map_or(Ok(()), |kind| Err(io::Error::from(kind)))
+    }
+}
+
+impl crate::ResidentStream for TestStream {
+    fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
 
 #[test]
 fn rejects_non_loopback_tcp_endpoint() {
@@ -20,7 +107,6 @@ fn rejects_non_loopback_tcp_endpoint() {
 #[cfg(unix)]
 #[test]
 fn rejects_response_bound_to_another_request() {
-    use std::io::Write as _;
     use std::os::unix::net::UnixStream;
     use std::thread;
 
@@ -217,4 +303,34 @@ fn truncated_server_proof_is_never_retryable() {
     .unwrap_err();
     assert_eq!(error.code, "native_client_frame_read_failed");
     assert!(!error.retryable_teardown);
+}
+
+#[test]
+fn response_eof_and_reset_are_never_retryable() {
+    for mut client in [
+        TestStream::eof(),
+        TestStream::read_error(io::ErrorKind::ConnectionReset),
+    ] {
+        let error = read_response(&mut client, &[0u8; FRAME_REQUEST_ID_BYTES]).unwrap_err();
+        assert_eq!(error.code, "native_client_frame_read_failed");
+        assert!(!error.retryable_teardown);
+    }
+}
+
+#[test]
+fn partial_or_flush_request_write_is_never_retryable() {
+    for mut client in [
+        TestStream::partial_write_error(io::ErrorKind::BrokenPipe),
+        TestStream::flush_error(io::ErrorKind::ConnectionReset),
+    ] {
+        let error = write_request(
+            &mut client,
+            &[0u8; crate::AUTH_TOKEN_BYTES],
+            &[0u8; AUTH_NONCE_BYTES],
+            b"{}",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "native_client_frame_write_failed");
+        assert!(!error.retryable_teardown);
+    }
 }

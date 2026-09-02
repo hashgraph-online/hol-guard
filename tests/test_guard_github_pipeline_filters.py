@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
         "gh api user | jq '[.env, .import, .include, {env: .value}, \"env\"]'",
         (
             "gh api -H 'Accept: application/vnd.github.raw+json' "
-            "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+            "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=release/3.0' "
             "| jq '{tests: .tests, total: .total}'"
         ),
     ),
@@ -38,7 +38,7 @@ def test_proven_github_reads_with_safe_output_filters_are_prompt_free(tmp_path: 
 def test_static_github_content_read_with_safe_jq_filter_is_explicitly_benign(tmp_path: Path) -> None:
     command = (
         "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=release/3.0' "
         "| jq '{tests: .tests, total: .total}'"
     )
 

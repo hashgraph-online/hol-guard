@@ -8,9 +8,11 @@
 //! resident account; Python and cloud persistence have no write path.
 
 use super::approval_v4_assertion_state::AssertionBinding;
+use super::approval_v4_secure_state::{
+    secure_state_matches_record, SecureState, SECURE_STATE_SCHEMA, SECURE_STATE_VERSION,
+};
 use guard_contracts::{ApprovalAuthorityV4, NATIVE_APPROVAL_V4_ENROLLMENT_DOMAIN};
 use guard_policy_snapshot::canonical_json_bytes;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 #[cfg(test)]
@@ -20,24 +22,6 @@ use std::sync::{Arc, Mutex};
 
 pub(super) const AUTHORITY_FILE_NAME: &str = "approval-authority-v4.json";
 const AUTHORITY_MAX_BYTES: u64 = 32 * 1024;
-const SECURE_STATE_SCHEMA: &str = "guard-native-approval-webauthn-secure-state.v1";
-const SECURE_STATE_VERSION: u16 = 1;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SecureState {
-    schema: String,
-    version: u16,
-    record_digest: String,
-    enrollment_generation: u64,
-    key_id: String,
-    rp_id: String,
-    origin: String,
-    credential_id: String,
-    cose_public_key: String,
-    algorithm: i32,
-    sign_count: u32,
-}
 #[derive(Debug, Clone)]
 pub(crate) struct ApprovalV4Authority {
     pub(crate) credential_id: Vec<u8>,
@@ -231,30 +215,15 @@ fn read_secure_state(state_base: &Path, authority: &ApprovalV4Authority) -> Resu
     Ok(state.sign_count)
 }
 
-fn secure_state_matches_record(
-    state: &SecureState,
-    record: &ApprovalAuthorityV4,
-    record_digest: &str,
-    credential_id: &[u8],
-    cose_public_key: &[u8],
-) -> bool {
-    state.schema == SECURE_STATE_SCHEMA
-        && state.version == SECURE_STATE_VERSION
-        && state.record_digest == record_digest
-        && state.enrollment_generation == record.enrollment_generation
-        && state.key_id == record.key_id
-        && state.rp_id == record.rp_id
-        && state.origin == record.origin
-        && state.credential_id == hex::encode(credential_id)
-        && state.cose_public_key == hex::encode(cose_public_key)
-        && state.algorithm == record.algorithm
-}
-
-fn read_record(path: &Path) -> Result<Option<(ApprovalAuthorityV4, Vec<u8>)>, String> {
+fn read_record(
+    path: &Path,
+    private_root: &Path,
+) -> Result<Option<(ApprovalAuthorityV4, Vec<u8>)>, String> {
     let Some((value, bytes)) = super::policy_store_persistence::read_private_json(
         path,
         AUTHORITY_MAX_BYTES,
         "approval_authority_v4",
+        private_root,
     )?
     else {
         return Ok(None);
@@ -276,7 +245,8 @@ pub(crate) fn load(state_base: &Path) -> Result<Option<ApprovalV4Authority>, Str
 
 fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String> {
     let path = state_base.join(AUTHORITY_FILE_NAME);
-    let Some((record, bytes)) = read_record(&path)? else {
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    let Some((record, bytes)) = read_record(&path, &private_root)? else {
         return Ok(None);
     };
     let (credential_id, cose_public_key) = validate_record(&record)?;
@@ -314,11 +284,12 @@ fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String>
 pub(crate) fn install_record(state_base: &Path, record_path: &Path) -> Result<(), String> {
     super::approval_enrollment::with_transition_lock(state_base, || {
         super::validate_private_directory(state_base)?;
-        let Some((candidate, bytes)) = read_record(record_path)? else {
+        let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+        let Some((candidate, bytes)) = read_record(record_path, &private_root)? else {
             return Err("native_approval_v4_authority_missing".to_owned());
         };
         let target = state_base.join(AUTHORITY_FILE_NAME);
-        let current = read_record(&target)?;
+        let current = read_record(&target, &private_root)?;
         let (candidate_credential_id, candidate_cose) = validate_record(&candidate)?;
         let candidate_digest = guard_policy_snapshot::digest_bytes(&bytes);
         if let Some((current, current_bytes)) = current.as_ref() {
@@ -455,6 +426,7 @@ pub(crate) fn install_record(state_base: &Path, record_path: &Path) -> Result<()
             &bytes,
             AUTHORITY_MAX_BYTES,
             "approval_authority_v4",
+            &private_root,
         )?;
         Ok(())
     })

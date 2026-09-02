@@ -55,6 +55,27 @@ fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
     value
 }
 
+fn fixture_directory(path: &Path) {
+    #[cfg(windows)]
+    {
+        crate::resident_state::ensure_private_directory(path, true).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::create_dir(path).unwrap();
+}
+
+fn fixture_file(path: &Path, bytes: &[u8]) {
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let private_root = path.parent().unwrap_or(path);
+        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        file.write_all(bytes).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::write(path, bytes).unwrap();
+}
+
 fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
@@ -101,29 +122,19 @@ fn test_root(label: &str) -> PathBuf {
         std::process::id(),
         now_ms().unwrap()
     ));
-    fs::create_dir(&root).unwrap();
+    fixture_directory(&root);
     #[cfg(unix)]
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-    #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&root, true).unwrap();
     root
 }
 
 fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
     let key = [value; VERIFIER_KEY_BYTES];
     let path = root.join(VERIFIER_KEY_FILE_NAME);
-    fs::write(&path, key).unwrap();
+    fixture_file(&path, &key);
     #[cfg(unix)]
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&path, false).unwrap();
     key
-}
-
-fn protect_test_file(path: &Path) {
-    let _ = path;
-    #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(path, false).unwrap();
 }
 
 #[cfg(windows)]

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ctypes
+import inspect
+import json
 import types
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,6 +14,11 @@ import pytest
 import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_acl as windows_acl
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_support as windows_support
+import codex_plugin_scanner.guard.native_policy_snapshot_storage as storage_module
+import codex_plugin_scanner.guard.native_policy_snapshot_windows_atomic as windows_atomic
+import codex_plugin_scanner.guard.native_policy_snapshot_windows_key as windows_key
+import codex_plugin_scanner.guard.native_policy_snapshot_windows_state as windows_state
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME
 
 from .native_policy_snapshot_test_fixtures import _fake_windows_snapshot_kernel
 
@@ -298,3 +305,317 @@ def test_windows_cache_read_rejects_ancestor_reparse_before_open(
 
     with pytest.raises(snapshot_module.NativePolicySnapshotError, match="cache_invalid"):
         snapshot_module._read_v3_snapshot_file(Path("C:/Guard/snapshot.json"))
+
+
+def test_windows_snapshot_write_holds_parent_binding_across_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(storage_module.os, "name", "nt")
+    monkeypatch.setattr(storage_module, "snapshot_bytes_v3", lambda _snapshot: b"payload")
+    binding = types.SimpleNamespace(path=tmp_path, handle=object())
+    events: list[tuple[str, object]] = []
+    active = False
+
+    @contextmanager
+    def private_state_binding(_guard_home: Path):
+        nonlocal active
+        active = True
+        events.append(("bind", binding.handle))
+        try:
+            yield binding
+        finally:
+            active = False
+            events.append(("unbind", binding.handle))
+
+    def atomic_writer(**kwargs: object) -> None:
+        assert active
+        events.append(("commit", kwargs["parent_handle"]))
+        assert kwargs["parent_path"] == tmp_path
+        assert kwargs["destination_name"] == "target-state"
+        assert isinstance(kwargs["temporary_name"], str)
+        assert kwargs["temporary_name"].startswith(".policy-snapshot-publisher-v3.json.")
+
+    monkeypatch.setattr(snapshot_module, "_windows_private_state_binding", private_state_binding)
+    monkeypatch.setattr(snapshot_module, "_windows_write_private_file_atomic", atomic_writer)
+    monkeypatch.setattr(
+        storage_module,
+        "_runtime_state_directory",
+        lambda _home: (_ for _ in ()).throw(AssertionError()),
+    )
+    monkeypatch.setattr(storage_module.os, "replace", lambda *_args: (_ for _ in ()).throw(AssertionError()))
+
+    assert storage_module._write_v3_snapshot_file(tmp_path / "guard", "target-state", {}) == b"payload"
+    assert events == [("bind", binding.handle), ("commit", binding.handle), ("unbind", binding.handle)]
+
+
+def test_windows_snapshot_cache_read_holds_state_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(storage_module.os, "name", "nt")
+    binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=object())
+    active = False
+    observed: list[tuple[Path, bool]] = []
+
+    @contextmanager
+    def private_state_binding(_guard_home: Path):
+        nonlocal active
+        active = True
+        try:
+            yield binding
+        finally:
+            active = False
+
+    def read_file(path: Path, *, verifier_key: bytes | None = None):
+        assert verifier_key == b"key"
+        observed.append((path, active))
+        return ({"generation": 1}, b"payload")
+
+    monkeypatch.setattr(snapshot_module, "_windows_private_state_binding", private_state_binding)
+    monkeypatch.setattr(storage_module, "_read_v3_snapshot_file", read_file)
+    monkeypatch.setattr(
+        storage_module,
+        "_snapshot_cache_path_v3",
+        lambda _home: (_ for _ in ()).throw(AssertionError("path lookup must stay inside binding")),
+    )
+
+    result = storage_module._read_v3_snapshot_cache(tmp_path / "guard", verifier_key=b"key")
+
+    assert result == ({"generation": 1}, b"payload")
+    assert observed == [(binding.path / snapshot_module.NATIVE_POLICY_SNAPSHOT_CACHE_NAME, True)]
+    assert not active
+
+
+def test_windows_generation_read_holds_state_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(storage_module.os, "name", "nt")
+    binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=object())
+    active = False
+    observed: list[tuple[Path, bool]] = []
+    value = {
+        "generation": 1,
+        "policy_digest": "a" * 64,
+        "schema": storage_module._V3_GENERATION_SCHEMA,
+    }
+    payload = json.dumps(value, separators=(",", ":"), sort_keys=True).encode()
+
+    @contextmanager
+    def private_state_binding(_guard_home: Path):
+        nonlocal active
+        active = True
+        try:
+            yield binding
+        finally:
+            active = False
+
+    def read_file(path: Path) -> bytes:
+        observed.append((path, active))
+        return payload
+
+    monkeypatch.setattr(snapshot_module, "_windows_private_state_binding", private_state_binding)
+    monkeypatch.setattr(storage_module, "_windows_read_generation_state_bytes", read_file)
+
+    result = storage_module._read_v3_generation_state(tmp_path / "guard")
+
+    assert result == (1, "a" * 64)
+    assert observed == [(binding.path.parent / storage_module._V3_GENERATION_STATE_NAME, True)]
+    assert not active
+
+
+def test_windows_pending_cleanup_uses_bound_file_handle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(storage_module.os, "name", "nt")
+    binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=ctypes.c_void_p(79))
+    active = False
+    observed: list[tuple[object, object, bool]] = []
+
+    @contextmanager
+    def private_state_binding(_guard_home: Path):
+        nonlocal active
+        active = True
+        try:
+            yield binding
+        finally:
+            active = False
+
+    def delete_child(**kwargs: object) -> None:
+        assert active
+        observed.append((kwargs["parent_path"], kwargs["parent_handle"], active))
+
+    monkeypatch.setattr(snapshot_module, "_windows_private_state_binding", private_state_binding)
+    monkeypatch.setattr(snapshot_module, "_windows_delete_private_child", delete_child)
+    monkeypatch.setattr(
+        storage_module,
+        "_snapshot_pending_path_v3",
+        lambda _home: (_ for _ in ()).throw(AssertionError("pending path must not be unlinked")),
+    )
+
+    storage_module._clear_v3_snapshot_pending(tmp_path / "guard")
+
+    assert observed == [(binding.path, binding.handle, True)]
+    assert not active
+
+
+def test_windows_directory_binding_fails_closed_on_reparse_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = snapshot_module.NativePolicySnapshotError("native_policy_windows_path_invalid")
+    api = types.SimpleNamespace(
+        _windows_open_handle=lambda *_args, **_kwargs: (_ for _ in ()).throw(expected),
+    )
+    monkeypatch.setattr(windows_state, "_windows_create_directory", lambda *_args: False)
+
+    with pytest.raises(snapshot_module.NativePolicySnapshotError, match="path_invalid"):
+        windows_state._windows_bind_directory_component(
+            Path("C:/Guard/foreign-parent"),
+            api=api,
+            descriptor=object(),
+            dacl=object(),
+            owner_sid="S-1-5-21-1",
+            private=False,
+        )
+
+
+def test_windows_commit_rejects_foreign_owner_before_acl_or_rename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_handle = object()
+    target_handle = object()
+    events: list[str] = []
+
+    def verify_dacl(handle: object, *, owner_sid: str, directory: bool) -> None:
+        del owner_sid, directory
+        events.append("verify-dacl-source" if handle is source_handle else "verify-dacl-target")
+
+    def reject_foreign_owner(_handle: object, *, owner_sid: str) -> None:
+        del owner_sid
+        events.append("verify-owner")
+        raise snapshot_module.NativePolicySnapshotError("foreign-owner")
+
+    api = types.SimpleNamespace(
+        _windows_verify_private_dacl=verify_dacl,
+        _windows_open_handle=lambda *_args, **_kwargs: (object(), target_handle, types.SimpleNamespace()),
+        _windows_verify_private_owner=reject_foreign_owner,
+        _windows_apply_private_dacl=lambda *_args: events.append("apply-dacl"),
+        _windows_close_handle=lambda *_args: events.append("close-target"),
+    )
+    monkeypatch.setattr(
+        windows_atomic,
+        "_windows_rename_file_handle",
+        lambda *_args: events.append("rename"),
+    )
+
+    with pytest.raises(snapshot_module.NativePolicySnapshotError, match="foreign-owner"):
+        windows_atomic._windows_commit_private_file_handle(
+            api=api,
+            kernel32=object(),
+            source_handle=source_handle,
+            source_information=types.SimpleNamespace(),
+            parent_path=Path("C:/Guard"),
+            parent_handle=object(),
+            destination_name="target-state",
+            descriptor=object(),
+            dacl=object(),
+            owner_sid="S-1-5-21-1",
+            kind="cache",
+        )
+
+    assert events == ["verify-dacl-source", "verify-owner", "close-target"]
+
+
+def test_windows_storage_writer_has_no_path_replace_in_native_branch() -> None:
+    source = inspect.getsource(storage_module._write_v3_snapshot_file)
+    native_branch = source.split('if os.name == "nt":', maxsplit=1)[1].split("return payload", maxsplit=1)[0]
+    assert "os.replace" not in native_branch
+    assert "_windows_write_private_file_atomic" in native_branch
+
+
+def test_windows_atomic_writer_cleans_temp_on_precommit_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    deleted: list[tuple[object, object]] = []
+    closed: list[tuple[object, object]] = []
+    kernel32 = object()
+    handle = object()
+
+    @contextmanager
+    def private_descriptor(_directory: bool):
+        yield object(), object(), object(), "S-1-5-21-1"
+
+    def reject_acl(*_args: object, **_kwargs: object) -> None:
+        raise snapshot_module.NativePolicySnapshotError("acl-failure")
+
+    monkeypatch.setattr(snapshot_module, "_windows_private_descriptor", private_descriptor)
+    monkeypatch.setattr(
+        snapshot_module,
+        "_windows_open_handle",
+        lambda *_args, **_kwargs: (kernel32, handle, types.SimpleNamespace()),
+    )
+    monkeypatch.setattr(snapshot_module, "_windows_verify_private_dacl", reject_acl)
+    monkeypatch.setattr(
+        windows_atomic,
+        "_windows_delete_file_handle",
+        lambda kernel, temporary: deleted.append((kernel, temporary)),
+    )
+    monkeypatch.setattr(
+        snapshot_module,
+        "_windows_close_handle",
+        lambda kernel, temporary: closed.append((kernel, temporary)),
+    )
+
+    with pytest.raises(snapshot_module.NativePolicySnapshotError, match="acl-failure"):
+        windows_atomic._windows_write_private_file_atomic(
+            parent_path=tmp_path,
+            parent_handle=object(),
+            temporary_name=".snapshot.tmp",
+            destination_name="snapshot.json",
+            payload=b"payload",
+            maximum_bytes=1024,
+            kind="cache",
+        )
+
+    assert deleted == [(kernel32, handle)]
+    assert closed == [(kernel32, handle)]
+
+
+def test_windows_verifier_key_provisioning_holds_state_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    active = False
+    calls: list[tuple[Path, bytes]] = []
+    binding = types.SimpleNamespace(path=tmp_path / "native-runtime", handle=object())
+
+    @contextmanager
+    def private_state_binding(guard_home: Path):
+        nonlocal active
+        assert guard_home == tmp_path / "guard-home"
+        active = True
+        try:
+            yield binding
+        finally:
+            active = False
+
+    def provision(path: Path, derived: bytes, **_kwargs: object) -> Path:
+        assert active
+        calls.append((path, derived))
+        return path
+
+    monkeypatch.setattr(windows_key.os, "name", "nt")
+    monkeypatch.setattr(windows_key, "_windows_private_state_binding", private_state_binding)
+    monkeypatch.setattr(windows_key, "_windows_provision_verifier_key", provision)
+
+    result = windows_key.provision_native_policy_verifier_key(
+        tmp_path / "guard-home",
+        b"m" * 32,
+    )
+
+    assert result == binding.path / NATIVE_POLICY_VERIFIER_KEY_NAME
+    assert calls == [(result, snapshot_module.derive_native_policy_verifier_key(b"m" * 32))]
+    assert not active

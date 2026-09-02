@@ -22,12 +22,15 @@ mod resident_state_files;
 pub(crate) use resident_startup_lock::{
     acquire_startup_lock, clear_stale_startup_lock, StartupLock,
 };
-pub(crate) use resident_state_files::{
-    ensure_private_directory, is_lock_contention, private_file, private_lock_file,
-};
 #[cfg(windows)]
 pub(crate) use resident_state_files::{
-    open_private_read, protect_windows_private_path, verify_windows_private_path,
+    bind_windows_existing_directory, bind_windows_private_directory, open_private_read,
+    protect_windows_private_path, remove_windows_private_file, replace_windows_private_file,
+    verify_windows_private_file, verify_windows_private_path,
+};
+pub(crate) use resident_state_files::{
+    ensure_private_directory, ensure_private_directory_under, is_lock_contention, private_file,
+    private_lock_file,
 };
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
@@ -114,8 +117,36 @@ pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> 
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("native_resident_runtime_digest_invalid".to_owned());
     }
-    let base = ensure_private_directory(base, false)?;
-    ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+    let private_root = private_root_for_state_base(base)?;
+    let base = ensure_private_directory_under(base, &private_root, false)?;
+    ensure_private_directory_under(
+        &base.join(format!("resident-v3-{}", &digest[..16])),
+        &private_root,
+        true,
+    )
+}
+
+/// Return the already-private guard-home root for a native runtime state base.
+/// Production state lives at `<guard-home>/native-runtime`; test fixtures may
+/// use the state base itself as their private root.
+pub(crate) fn private_root_for_state_base(state_base: &Path) -> Result<PathBuf, String> {
+    if state_base
+        .file_name()
+        .is_some_and(|name| name == "native-runtime")
+    {
+        return state_base
+            .parent()
+            .map(Path::to_owned)
+            .ok_or_else(|| "native_resident_private_root_missing".to_owned());
+    }
+    Ok(state_base.to_owned())
+}
+
+pub(crate) fn private_root_for_scope(scope: &Path) -> Result<PathBuf, String> {
+    let state_base = scope
+        .parent()
+        .ok_or_else(|| "native_resident_private_root_missing".to_owned())?;
+    private_root_for_state_base(state_base)
 }
 
 #[cfg(unix)]
@@ -226,10 +257,13 @@ fn validate_state(
     Ok(())
 }
 
-fn read_state_file_raw(path: &Path) -> Result<ResidentState, String> {
+fn read_state_file_raw(path: &Path, private_root: &Path) -> Result<ResidentState, String> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     #[cfg(windows)]
-    let file = resident_state_files::open_private_read(path, MAX_STATE_BYTES, "state")?
-        .ok_or_else(|| "native_resident_state_stat_failed".to_owned())?;
+    let file =
+        resident_state_files::open_private_read(path, MAX_STATE_BYTES, "state", private_root)?
+            .ok_or_else(|| "native_resident_state_stat_failed".to_owned())?;
     #[cfg(not(windows))]
     let file = {
         let metadata = fs::symlink_metadata(path)
@@ -275,7 +309,8 @@ fn read_state_file(
     scope: &Path,
     expected_digest: &str,
 ) -> Result<ResidentState, String> {
-    let state = read_state_file_raw(path)?;
+    let private_root = private_root_for_scope(scope)?;
+    let state = read_state_file_raw(path, &private_root)?;
     validate_state(scope, &state, expected_digest)?;
     Ok(state)
 }
@@ -338,7 +373,8 @@ pub(crate) fn publish_state(
     ));
     let encoded =
         serde_json::to_vec(&state).map_err(|_| "native_resident_state_encode_failed".to_owned())?;
-    let mut file = private_file(&path, true)?;
+    let private_root = private_root_for_scope(scope)?;
+    let mut file = private_file(&path, true, &private_root)?;
     file.write_all(&encoded)
         .and_then(|()| file.sync_all())
         .map_err(|_| "native_resident_state_write_failed".to_owned())?;
@@ -367,11 +403,17 @@ pub(crate) fn publish_state(
         if generation.is_some_and(|value| retained_generations.contains(&value)) {
             continue;
         }
-        let metadata = fs::symlink_metadata(&candidate)
-            .map_err(|_| "native_resident_state_stat_failed".to_owned())?;
-        if metadata.is_file() && !metadata.file_type().is_symlink() {
-            fs::remove_file(candidate)
-                .map_err(|_| "native_resident_state_prune_failed".to_owned())?;
+        #[cfg(windows)]
+        remove_windows_private_file(&candidate, &private_root)
+            .map_err(|_| "native_resident_state_prune_failed".to_owned())?;
+        #[cfg(not(windows))]
+        {
+            let metadata = fs::symlink_metadata(&candidate)
+                .map_err(|_| "native_resident_state_stat_failed".to_owned())?;
+            if metadata.is_file() && !metadata.file_type().is_symlink() {
+                fs::remove_file(candidate)
+                    .map_err(|_| "native_resident_state_prune_failed".to_owned())?;
+            }
         }
     }
     Ok(state)

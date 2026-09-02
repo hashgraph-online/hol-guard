@@ -1,18 +1,21 @@
 #![forbid(unsafe_code)]
 
-#[cfg(windows)]
-use super::verify_windows_private_path;
 use super::{
-    private_lock_file, process_start_marker, runtime_digest, validate_package_process_identity,
-    validate_runtime_process_identity, LOCK_STALE_AFTER, MAX_STARTUP_LOCK_BYTES,
+    private_lock_file, private_root_for_scope, process_start_marker, runtime_digest,
+    validate_package_process_identity, validate_runtime_process_identity, LOCK_STALE_AFTER,
+    MAX_STARTUP_LOCK_BYTES,
 };
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::SystemTime;
 
 pub(crate) struct StartupLock {
     file: File,
+    #[cfg(windows)]
+    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 impl Drop for StartupLock {
@@ -22,6 +25,9 @@ impl Drop for StartupLock {
 }
 
 pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, String> {
+    let private_root = private_root_for_scope(scope)?;
+    #[cfg(not(windows))]
+    let _ = &private_root;
     let path = scope.join("startup.lock");
     let mut nonce_bytes = [0u8; 32];
     getrandom::fill(&mut nonce_bytes).map_err(|_| "native_client_random_failed".to_owned())?;
@@ -32,7 +38,12 @@ pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, 
         "{process_id}:{start_marker}:{digest}:{}",
         super::hex_bytes(&nonce_bytes)
     );
-    let Ok(mut file) = private_lock_file(&path) else {
+    #[cfg(windows)]
+    let Ok((mut file, directory_binding)) = private_lock_file(&path, &private_root) else {
+        return Ok(None);
+    };
+    #[cfg(not(windows))]
+    let Ok(mut file) = private_lock_file(&path, &private_root) else {
         return Ok(None);
     };
     if fs2::FileExt::try_lock_exclusive(&file).is_err() {
@@ -47,43 +58,55 @@ pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, 
     {
         return Err("native_resident_lock_write_failed".to_owned());
     }
-    Ok(Some(StartupLock { file }))
+    Ok(Some(StartupLock {
+        file,
+        #[cfg(windows)]
+        _directory_binding: directory_binding,
+    }))
 }
 
 pub(crate) fn clear_stale_startup_lock(
     scope: &Path,
     expected_digest: &str,
 ) -> Result<bool, String> {
+    let private_root = private_root_for_scope(scope)?;
+    #[cfg(not(windows))]
+    let _ = &private_root;
     let path = scope.join("startup.lock");
-    let mut options = OpenOptions::new();
-    options.read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
     #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        options
-            .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
-            .custom_flags(0x0020_0000);
-    }
-    let mut file = match options.open(&path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(_) => return Err("native_resident_lock_stat_failed".to_owned()),
+    let mut file = {
+        match super::open_private_read(&path, MAX_STARTUP_LOCK_BYTES, "startup_lock", &private_root)
+            .map_err(|_| "native_resident_lock_stat_failed".to_owned())?
+        {
+            Some(file) => file,
+            None => return Ok(false),
+        }
     };
-    #[cfg(windows)]
-    verify_windows_private_path(&path, false)?;
+    #[cfg(not(windows))]
+    let mut file = {
+        let mut options = OpenOptions::new();
+        options.read(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+        match options.open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(_) => return Err("native_resident_lock_stat_failed".to_owned()),
+        }
+    };
     let metadata = file
         .metadata()
         .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err("native_resident_lock_invalid".to_owned());
     }
+    #[cfg(not(windows))]
     let path_metadata =
         fs::symlink_metadata(&path).map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
+    #[cfg(not(windows))]
     if path_metadata.file_type().is_symlink() || !path_metadata.is_file() {
         return Err("native_resident_lock_not_private".to_owned());
     }
@@ -98,7 +121,7 @@ pub(crate) fn clear_stale_startup_lock(
             return Err("native_resident_lock_not_private".to_owned());
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(all(not(unix), not(windows)))]
     if path_metadata.len() != metadata.len() {
         return Err("native_resident_lock_not_private".to_owned());
     }

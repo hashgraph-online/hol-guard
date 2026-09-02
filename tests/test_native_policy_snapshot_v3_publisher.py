@@ -4,6 +4,7 @@ The test groups are split by responsibility while this historical module keeps
 the original import path and pytest collection contract.
 """
 
+from . import native_policy_snapshot_windows_handles as _windows_handle_tests
 from . import test_native_policy_snapshot_contract as _contract_tests
 from . import test_native_policy_snapshot_persistence as _persistence_tests
 from . import test_native_policy_snapshot_publisher as _publisher_tests
@@ -66,21 +67,50 @@ test_same_generation_retries_reuse_exact_signed_snapshot_bytes = (
 test_windows_cache_read_rejects_ancestor_reparse_before_open = (
     _windows_tests.test_windows_cache_read_rejects_ancestor_reparse_before_open
 )
+test_windows_snapshot_write_holds_parent_binding_across_commit = (
+    _windows_tests.test_windows_snapshot_write_holds_parent_binding_across_commit
+)
+test_windows_directory_binding_fails_closed_on_reparse_parent = (
+    _windows_tests.test_windows_directory_binding_fails_closed_on_reparse_parent
+)
+test_windows_commit_rejects_foreign_owner_before_acl_or_rename = (
+    _windows_tests.test_windows_commit_rejects_foreign_owner_before_acl_or_rename
+)
+test_windows_storage_writer_has_no_path_replace_in_native_branch = (
+    _windows_tests.test_windows_storage_writer_has_no_path_replace_in_native_branch
+)
+test_windows_atomic_writer_cleans_temp_on_precommit_failure = (
+    _windows_tests.test_windows_atomic_writer_cleans_temp_on_precommit_failure
+)
+test_windows_verifier_key_provisioning_holds_state_binding = (
+    _windows_tests.test_windows_verifier_key_provisioning_holds_state_binding
+)
 test_windows_cache_reader_closes_handle_on_all_failures = (
     _windows_tests.test_windows_cache_reader_closes_handle_on_all_failures
 )
 test_windows_cache_reader_verifies_and_reads_one_handle = (
     _windows_tests.test_windows_cache_reader_verifies_and_reads_one_handle
 )
+test_windows_create_new_validation_failure_deletes_before_close = (
+    _windows_handle_tests.test_windows_create_new_validation_failure_deletes_before_close
+)
 test_windows_open_handle_uses_disk_nonreparse_read_contract = (
-    _windows_tests.test_windows_open_handle_uses_disk_nonreparse_read_contract
+    _windows_handle_tests.test_windows_open_handle_uses_disk_nonreparse_read_contract
 )
 test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle = (
+    _windows_handle_tests.test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle
+)
+test_windows_existing_directory_reapplies_private_dacl_on_same_handle = (
     _windows_tests.test_windows_existing_directory_reapplies_private_dacl_on_same_handle
 )
 test_windows_private_descriptor_deduplicates_system_owner_ace = (
-    _windows_tests.test_windows_private_descriptor_deduplicates_system_owner_ace
+    _windows_handle_tests.test_windows_private_descriptor_deduplicates_system_owner_ace
 )
+test_windows_snapshot_cache_read_holds_state_binding = (
+    _windows_tests.test_windows_snapshot_cache_read_holds_state_binding
+)
+test_windows_generation_read_holds_state_binding = _windows_tests.test_windows_generation_read_holds_state_binding
+test_windows_pending_cleanup_uses_bound_file_handle = _windows_tests.test_windows_pending_cleanup_uses_bound_file_handle
 
 __all__ = [
     "test_auto_hook_uses_barrier_without_loading_config_per_request",
@@ -102,11 +132,21 @@ __all__ = [
     "test_same_generation_retries_reuse_exact_signed_snapshot_bytes",
     "test_snapshot_transaction_recovers_each_persistence_boundary",
     "test_v3_builder_derives_and_provisions_verifier_before_snapshot_push",
+    "test_windows_atomic_writer_cleans_temp_on_precommit_failure",
     "test_windows_cache_read_rejects_ancestor_reparse_before_open",
     "test_windows_cache_reader_closes_handle_on_all_failures",
     "test_windows_cache_reader_verifies_and_reads_one_handle",
+    "test_windows_commit_rejects_foreign_owner_before_acl_or_rename",
+    "test_windows_create_new_validation_failure_deletes_before_close",
+    "test_windows_directory_binding_fails_closed_on_reparse_parent",
     "test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle",
+    "test_windows_existing_directory_reapplies_private_dacl_on_same_handle",
+    "test_windows_generation_read_holds_state_binding",
     "test_windows_open_handle_uses_disk_nonreparse_read_contract",
+    "test_windows_pending_cleanup_uses_bound_file_handle",
     "test_windows_private_descriptor_deduplicates_system_owner_ace",
     "test_windows_scope_aliases_share_one_digest_identity",
+    "test_windows_snapshot_write_holds_parent_binding_across_commit",
+    "test_windows_storage_writer_has_no_path_replace_in_native_branch",
+    "test_windows_verifier_key_provisioning_holds_state_binding",
 ]

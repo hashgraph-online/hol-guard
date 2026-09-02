@@ -25,6 +25,7 @@ from . import native_policy_snapshot_generation as _generation
 from . import native_policy_snapshot_policy as _policy
 from . import native_policy_snapshot_storage as _storage
 from . import native_policy_snapshot_windows_acl as _windows_acl
+from . import native_policy_snapshot_windows_atomic as _windows_atomic
 from . import native_policy_snapshot_windows_io as _windows_io
 from . import native_policy_snapshot_windows_key as _windows_key
 from . import native_policy_snapshot_windows_state as _windows_state
@@ -78,8 +79,17 @@ _windows_path_has_reparse_component = _windows_support._windows_path_has_reparse
 _windows_close_handle = _windows_io._windows_close_handle
 _windows_open_handle = _windows_io._windows_open_handle
 _windows_apply_private_dacl = _windows_io._windows_apply_private_dacl
+_windows_open_private_fd = _windows_io._windows_open_private_fd
+_windows_repair_private_file = _windows_io._windows_repair_private_file
+_windows_verify_private_file = _windows_io._windows_verify_private_file
+_windows_write_private_bytes = _windows_io._windows_write_private_bytes
+_windows_delete_private_child = _windows_atomic._windows_delete_private_child
+_windows_write_private_file_atomic = _windows_atomic._windows_write_private_file_atomic
+_windows_verify_private_owner = _windows_acl._windows_verify_private_owner
 _windows_verify_private_dacl = _windows_acl._windows_verify_private_dacl
 _windows_ensure_private_directory = _windows_state._windows_ensure_private_directory
+_windows_private_directory_binding = _windows_state._windows_private_directory_binding
+_windows_private_state_binding = _windows_state._windows_private_state_binding
 _v3_generation_for_policy = _generation._v3_generation_for_policy
 _merge_effective_native_policies = _policy._merge_effective_native_policies
 _normalize_scope_text_v3 = _policy._normalize_scope_text_v3
@@ -124,8 +134,9 @@ def _policy_digest(*, config_digest: str, rule_digest: str) -> str:
 
 
 def _private_guard_home(guard_home: Path) -> None:
-    if os.name == "nt" and _windows_path_has_reparse_component(guard_home):
-        raise NativePolicySnapshotError("native_policy_generation_home_invalid")
+    if os.name == "nt":
+        _windows_ensure_private_directory(guard_home)
+        return
     try:
         metadata = guard_home.lstat()
     except FileNotFoundError:

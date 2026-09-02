@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 //! OS-protected enrollment state for the external approval authority.
-//!
 //! This module stores enrollment provenance and per-install/device bindings only; it contains no replay secret.
 //! Request replay state lives in the resident process and is invalidated by its random epoch.
 
@@ -36,8 +35,7 @@ const MAX_SECRET_TEXT_BYTES: usize = 16 * 1024;
 const TRANSITION_LOCK_FILE_NAME: &str = "approval-authority-transition.v1.lock";
 
 /// Owner-private inter-process fence for enrollment and authority changes.
-/// The inode is retained permanently; ownership is provided by the OS lock,
-/// not by a writable PID or a same-UID marker.
+/// The inode is retained; the OS lock, not a writable PID/same-UID marker, supplies ownership.
 pub(crate) struct TransitionLock {
     _file: File,
 }
@@ -81,13 +79,21 @@ fn validate_transition_lock(path: &Path, file: &File) -> Result<(), String> {
         if opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             return Err("native_approval_authority_lock_invalid".to_owned());
         }
-        crate::resident_state::verify_windows_private_path(path, false)?;
+        let private_root = path
+            .parent()
+            .ok_or_else(|| "native_approval_authority_lock_invalid".to_owned())
+            .and_then(crate::resident_state::private_root_for_state_base)?;
+        crate::resident_state::verify_windows_private_path(path, false, &private_root)?;
     }
     Ok(())
 }
 
 fn open_transition_lock(path: &Path) -> Result<File, String> {
-    crate::resident_state::private_lock_file(path)
+    let private_root = path
+        .parent()
+        .ok_or_else(|| "native_approval_authority_lock_invalid".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
+    crate::resident_state::private_lock_file(path, &private_root)
 }
 
 pub(crate) fn with_transition_lock<T, F>(state_base: &Path, operation: F) -> Result<T, String>
@@ -116,9 +122,8 @@ pub(crate) struct SecureApprovalState {
     pub(crate) key_id: String,
     pub(crate) status: String,
     pub(crate) pending: bool,
-    /// Digest of the exact canonical, root-signed authority record awaiting
-    /// installation. It makes an interrupted transition retryable only for
-    /// the same authenticated candidate.
+    /// Digest of the exact canonical, root-signed authority record awaiting installation.
+    /// It makes interrupted transitions retryable only for the same authenticated candidate.
     pub(crate) pending_record_digest: String,
 }
 
@@ -266,9 +271,7 @@ fn load_or_create_device_binding() -> Result<String, String> {
     Ok(binding_for_secret(DEVICE_BINDING_DOMAIN, &secret))
 }
 
-/// Begin an enrollment ceremony. The returned bindings are public ceremony
-/// inputs; the underlying random identities never enter Python or the state
-/// directory.
+/// Begin an enrollment ceremony; public bindings leave the random identities outside Python and the state directory.
 pub(crate) fn prepare_enrollment(state_base: &Path) -> Result<(String, String), String> {
     with_transition_lock(state_base, || prepare_enrollment_unlocked(state_base))
 }
@@ -434,7 +437,7 @@ mod tests {
             fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         }
         #[cfg(windows)]
-        crate::resident_state::protect_windows_private_path(&root, true).unwrap();
+        crate::resident_state::protect_windows_private_path(&root, true, &root).unwrap();
         root
     }
 

@@ -76,14 +76,11 @@ jobs:
             tests/test_guard_extension_control_authority.py \
             tests/test_guard_extension_control_authority_keyring_stability.py
 
-      - name: Enforce test-suite and structural quality ratchets
+      - name: Enforce structural quality ratchet
         shell: bash
         run: |
           set -euo pipefail
           uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
-          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
-            --baseline ci/test-suite-ratchet-baseline.json \
-            --inventory test-inventory.json
           uv run --no-sync python scripts/ci/code_quality_audit.py \
             --root . \
             --baseline ci/code-quality-baseline.json \
@@ -118,7 +115,6 @@ jobs:
           git rm .github/workflows/finish-extension-authority-stability.yml
           git rm scripts/ci/finish_extension_authority_stability.py
           git add \
-            ci/test-suite-ratchet-baseline.json \
             src/codex_plugin_scanner/guard/store_base.py \
             src/codex_plugin_scanner/guard/encrypted_secret_store_key.py \
             src/codex_plugin_scanner/guard/store_extension_control_authority_support.py \

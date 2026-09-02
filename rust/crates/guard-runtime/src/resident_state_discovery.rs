@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::{
-    ensure_private_directory, read_state_file_raw, validate_state, ResidentState, MAX_STATE_FILES,
-    STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
+    ensure_private_directory_under, private_root_for_state_base, read_state_file_raw,
+    validate_state, ResidentState, MAX_STATE_FILES, STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
 };
 
 const MAX_SCOPES: usize = 16;
@@ -22,7 +22,8 @@ pub(crate) fn discover_home_states_prefer(
     base: &Path,
     preferred_digest: Option<&str>,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
-    let base = ensure_private_directory(base, false)?;
+    let private_root = private_root_for_state_base(base)?;
+    let base = ensure_private_directory_under(base, &private_root, false)?;
     let preferred_prefix = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .map(|digest| &digest[..16]);
@@ -66,7 +67,12 @@ pub(crate) fn discover_home_states_prefer(
     let scopes = preferred_candidate
         .into_iter()
         .chain(fallback_candidates)
-        .map(|(path, digest_prefix)| Ok((ensure_private_directory(&path, true)?, digest_prefix)))
+        .map(|(path, digest_prefix)| {
+            Ok((
+                ensure_private_directory_under(&path, &private_root, true)?,
+                digest_prefix,
+            ))
+        })
         .collect::<Result<Vec<_>, String>>()?;
     let preferred_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -74,7 +80,7 @@ pub(crate) fn discover_home_states_prefer(
     for (scope, digest_prefix) in scopes {
         let paths = state_paths(&scope)?;
         for path in paths {
-            let Ok(state) = read_state_file_raw(&path) else {
+            let Ok(state) = read_state_file_raw(&path, &private_root) else {
                 continue;
             };
             let digest = state.runtime_sha256.clone();

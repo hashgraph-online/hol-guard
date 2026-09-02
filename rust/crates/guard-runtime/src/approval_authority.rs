@@ -138,9 +138,14 @@ fn verify_enrollment(record: &ApprovalAuthorityRecordV1) -> Result<[u8; 32], Str
 
 fn read_authority_record(
     path: &Path,
+    private_root: &Path,
 ) -> Result<Option<(ApprovalAuthorityRecordV1, Vec<u8>, String)>, String> {
-    let Some((value, bytes)) =
-        super::read_private_json(path, APPROVAL_AUTHORITY_MAX_BYTES, "approval_authority")?
+    let Some((value, bytes)) = super::read_private_json(
+        path,
+        APPROVAL_AUTHORITY_MAX_BYTES,
+        "approval_authority",
+        private_root,
+    )?
     else {
         return Ok(None);
     };
@@ -167,7 +172,8 @@ pub(super) fn load(state_base: &Path) -> Result<Option<ApprovalAuthority>, Strin
 
 fn load_locked(state_base: &Path) -> Result<Option<ApprovalAuthority>, String> {
     let path = state_base.join(APPROVAL_AUTHORITY_FILE_NAME);
-    let Some((record, bytes, fingerprint)) = read_authority_record(&path)? else {
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    let Some((record, bytes, fingerprint)) = read_authority_record(&path, &private_root)? else {
         // An unenrolled installation must not probe or mutate the platform
         // secure store during ordinary resident startup. Enrollment state is
         // consulted only after a signed public authority record exists; this
@@ -281,11 +287,12 @@ pub(crate) fn install_record(state_base: &Path, record_path: &Path) -> Result<()
 
 fn install_record_locked(state_base: &Path, record_path: &Path) -> Result<(), String> {
     super::validate_private_directory(state_base)?;
-    let Some((candidate, bytes, _)) = read_authority_record(record_path)? else {
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    let Some((candidate, bytes, _)) = read_authority_record(record_path, &private_root)? else {
         return Err("native_approval_authority_missing".to_owned());
     };
     let target = state_base.join(APPROVAL_AUTHORITY_FILE_NAME);
-    let existing = read_authority_record(&target)?;
+    let existing = read_authority_record(&target, &private_root)?;
     let secure = super::approval_enrollment::load_unlocked(state_base)?;
     let Some(secure) = secure else {
         return Err("native_approval_enrollment_required".to_owned());
@@ -367,6 +374,7 @@ fn install_record_locked(state_base: &Path, record_path: &Path) -> Result<(), St
         &bytes,
         APPROVAL_AUTHORITY_MAX_BYTES,
         "approval_authority",
+        &private_root,
     )?;
     super::approval_enrollment::complete_transition_unlocked(
         state_base,
@@ -475,7 +483,7 @@ pub(crate) fn write_test_record(state_base: &Path, public_key: &[u8; 32], genera
         .unwrap();
     }
     #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&path, false).unwrap();
+    crate::resident_state::protect_windows_private_path(&path, false, state_base).unwrap();
 }
 
 #[cfg(test)]

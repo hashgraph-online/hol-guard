@@ -1,6 +1,38 @@
 use super::*;
 use std::fs;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+fn fixture_file(path: &Path, bytes: &[u8]) {
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let private_root = path.parent().unwrap_or(path);
+        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        file.write_all(bytes).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::write(path, bytes).unwrap();
+}
+
+fn fixture_directory(path: &Path) {
+    #[cfg(windows)]
+    {
+        crate::resident_state::ensure_private_directory(path, true).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::create_dir(path).unwrap();
+}
+
+fn fixture_file_handle(path: &Path) -> fs::File {
+    #[cfg(windows)]
+    {
+        let private_root = path.parent().unwrap_or(path);
+        return crate::resident_state::private_file(path, true, private_root).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::File::create(path).unwrap()
+}
 
 fn test_directory(label: &str) -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
@@ -11,7 +43,7 @@ fn test_directory(label: &str) -> PathBuf {
             .expect("system clock must be after the Unix epoch")
             .as_nanos()
     ));
-    fs::create_dir(&directory).expect("test directory should be unique");
+    fixture_directory(&directory);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -26,7 +58,7 @@ fn dropping_owned_malformed_lease_removes_the_owned_artifact() {
     let root = test_directory("malformed-owned");
     let lease = acquire(&root).expect("lease acquisition should succeed");
     let path = lease.path.clone();
-    fs::write(&path, b"partial lease").expect("lease should be corruptible for the fixture");
+    fixture_file(&path, b"partial lease");
 
     drop(lease);
 
@@ -57,8 +89,7 @@ fn stale_malformed_lease_is_removed_by_liveness_cleanup() {
     let root = test_directory("malformed-stale");
     let directory = lease_directory(&root).expect("lease directory should be available");
     let path = directory.join("client-malformed.lease");
-    let mut file = crate::resident_state::private_file(&path, true)
-        .expect("malformed fixture should be created");
+    let mut file = fixture_file_handle(&path);
     file.write_all(b"partial lease")
         .expect("fixture should be written");
     file.set_modified(
@@ -79,8 +110,7 @@ fn stale_malformed_lease_is_removed_by_liveness_cleanup() {
 fn uninspectable_lease_path_retains_the_resident() {
     let root = test_directory("uninspectable");
     let directory = lease_directory(&root).expect("lease directory should be available");
-    fs::create_dir(directory.join("client-uninspectable.lease"))
-        .expect("uninspectable lease fixture should be created");
+    fixture_directory(&directory.join("client-uninspectable.lease"));
 
     assert!(any_live_for_home(&root));
 
@@ -90,7 +120,7 @@ fn uninspectable_lease_path_retains_the_resident() {
 #[test]
 fn initial_lease_lock_retries_until_the_current_holder_releases() {
     let directory = test_directory("eventual");
-    let held = acquire_directory_lock(&directory)
+    let held = acquire_directory_lock(&directory, &directory)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
     let (busy_sender, busy_receiver) = std::sync::mpsc::channel();
@@ -102,7 +132,8 @@ fn initial_lease_lock_retries_until_the_current_holder_releases() {
         drop(held);
     });
 
-    let acquired = acquire_directory_lock_with_retry(&directory, Duration::from_millis(100));
+    let acquired =
+        acquire_directory_lock_with_retry(&directory, &directory, Duration::from_millis(100));
     releaser.join().expect("lock releaser should exit cleanly");
     let acquired = acquired.expect("bounded retry should acquire after release");
     drop(acquired);
@@ -112,15 +143,21 @@ fn initial_lease_lock_retries_until_the_current_holder_releases() {
 #[test]
 fn initial_lease_lock_returns_busy_at_the_retry_deadline() {
     let directory = test_directory("bounded");
-    let held = acquire_directory_lock(&directory)
+    let held = acquire_directory_lock(&directory, &directory)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
+    let (deadline_sender, deadline_receiver) = std::sync::mpsc::channel();
+    LOCK_RETRY_DEADLINE_NOTIFICATION
+        .with(|notification| *notification.borrow_mut() = Some(deadline_sender));
     let releaser = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(100));
+        deadline_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("retry path should reach its deadline");
         drop(held);
     });
 
-    let result = acquire_directory_lock_with_retry(&directory, Duration::from_millis(20));
+    let result =
+        acquire_directory_lock_with_retry(&directory, &directory, Duration::from_millis(20));
     assert!(matches!(
         result,
         Err(error) if error == "native_resident_lease_busy"
@@ -133,7 +170,7 @@ fn initial_lease_lock_returns_busy_at_the_retry_deadline() {
 fn busy_lease_directory_is_retained_as_live() {
     let root = test_directory("busy-liveness");
     let directory = lease_directory(&root).expect("lease directory should be available");
-    let held = acquire_directory_lock(&directory)
+    let held = acquire_directory_lock(&directory, &directory)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
 
@@ -147,10 +184,9 @@ fn busy_lease_directory_is_retained_as_live() {
 fn lease_directory_entry_overflow_is_retained_as_live() {
     let root = test_directory("entry-overflow");
     let directory = lease_directory(&root).expect("lease directory should be available");
-    fs::write(directory.join("client-valid.lease"), []).expect("lease fixture should write");
+    fixture_file(&directory.join("client-valid.lease"), &[]);
     for index in 0..LEASE_MAX_DIRECTORY_ENTRIES {
-        fs::write(directory.join(format!("unrelated-{index:03}")), [])
-            .expect("unrelated fixture should write");
+        fixture_file(&directory.join(format!("unrelated-{index:03}")), &[]);
     }
 
     assert!(any_live_for_home(&root));

@@ -23,90 +23,162 @@ pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
 }
 
 #[cfg(windows)]
-pub(crate) fn protect_windows_private_path(path: &Path, directory: bool) -> Result<(), String> {
+pub(crate) fn protect_windows_private_path(
+    path: &Path,
+    directory: bool,
+    private_root: &Path,
+) -> Result<(), String> {
+    let _binding = windows_security::bind_windows_existing_directory(
+        path.parent().unwrap_or(path),
+        private_root,
+    )?;
     windows_security::protect_windows_path(path, directory)
 }
 
 #[cfg(windows)]
-pub(crate) fn verify_windows_private_path(path: &Path, _directory: bool) -> Result<(), String> {
+pub(crate) fn verify_windows_private_path(
+    path: &Path,
+    _directory: bool,
+    private_root: &Path,
+) -> Result<(), String> {
     use windows_permissions::utilities::current_process_sid;
 
+    let _binding = windows_security::bind_windows_existing_directory(
+        path.parent().unwrap_or(path),
+        private_root,
+    )?;
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
     windows_security::verify_windows_path(path, owner.as_ref())
 }
 
-pub(crate) fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).create_new(create_new);
-    if !create_new {
-        options.truncate(true);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        const FILE_SHARE_DELETE: u32 = 0x0000_0004;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        options
-            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
-    }
-    let file = options
-        .open(path)
-        .map_err(|_| "native_resident_state_write_failed".to_owned())?;
-    #[cfg(windows)]
-    if let Err(error) = windows_security::protect_windows_path(path, false) {
-        if create_new {
-            let _ = guard_runtime_windows_process::remove_file_if_same(path, &file);
-        }
-        return Err(error);
-    }
-    Ok(file)
+#[cfg(windows)]
+pub(crate) fn replace_windows_private_file(
+    temporary: &Path,
+    path: &Path,
+    private_root: &Path,
+) -> Result<(), String> {
+    windows_security::replace_private_file(temporary, path, private_root)
 }
 
-pub(crate) fn private_lock_file(path: &Path) -> Result<File, String> {
-    #[cfg(windows)]
-    let (file, created) = {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        const FILE_SHARE_DELETE: u32 = 0x0000_0004;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        let share_mode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+#[cfg(windows)]
+pub(crate) fn remove_windows_private_file(
+    path: &Path,
+    private_root: &Path,
+) -> Result<bool, String> {
+    windows_security::remove_private_file(path, private_root)
+}
 
-        let mut create_options = OpenOptions::new();
-        create_options
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .share_mode(share_mode)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-        match create_options.open(path) {
-            Ok(file) => (file, true),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let mut existing_options = OpenOptions::new();
-                existing_options
-                    .read(true)
-                    .write(true)
-                    .share_mode(share_mode)
-                    .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-                let file = existing_options
-                    .open(path)
-                    .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
-                (file, false)
-            }
-            Err(_) => return Err("native_resident_lock_open_failed".to_owned()),
-        }
-    };
+#[cfg(windows)]
+pub(crate) fn bind_windows_private_directory(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    windows_security::bind_windows_private_directory(path, private_root)
+}
+
+#[cfg(windows)]
+pub(crate) fn bind_windows_existing_directory(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    windows_security::bind_windows_existing_directory(path, private_root)
+}
+
+#[cfg(windows)]
+pub(crate) fn verify_windows_private_file(file: &File) -> Result<(), String> {
+    windows_security::verify_private_file(file)
+}
+
+pub(crate) fn private_file(
+    path: &Path,
+    create_new: bool,
+    private_root: &Path,
+) -> Result<File, String> {
     #[cfg(not(windows))]
-    let (file, _created) = {
+    let _ = private_root;
+    #[cfg(windows)]
+    {
+        let mut file = match windows_security::create_private_file(path, private_root) {
+            Ok(file) => file,
+            Err(error) if create_new && error.kind() == std::io::ErrorKind::AlreadyExists => {
+                // CREATE_NEW is intentionally non-mutating: do not open,
+                // repair, or truncate an object that already exists.
+                return Err("native_resident_state_write_failed".to_owned());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let mut file = windows_security::open_private_file(path, private_root)
+                    .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                windows_security::repair_private_file(&mut file)?;
+                if !create_new {
+                    file.set_len(0)
+                        .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                }
+                file
+            }
+            Err(_) if create_new => {
+                return Err("native_resident_state_write_failed".to_owned());
+            }
+            Err(_) => return Err("native_resident_state_write_failed".to_owned()),
+        };
+        // CREATE_NEW already created an empty file; the existing-object case
+        // returned above before opening or mutating it.
+        return Ok(file);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).create_new(create_new);
+        if !create_new {
+            options.truncate(true);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let file = options
+            .open(path)
+            .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+        Ok(file)
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn private_lock_file(
+    path: &Path,
+    private_root: &Path,
+) -> Result<(File, guard_runtime_windows_process::PrivateDirectoryBinding), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "native_resident_lock_open_failed".to_owned())?;
+    let binding = windows_security::bind_windows_existing_directory(parent, private_root)?;
+    let mut file = match windows_security::create_private_file(path, private_root) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let mut file = windows_security::open_private_file(path, private_root)
+                .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
+            windows_security::repair_private_file(&mut file)
+                .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
+            file
+        }
+        Err(_) => return Err("native_resident_lock_open_failed".to_owned()),
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("native_resident_lock_invalid".to_owned());
+    }
+    Ok((file, binding))
+}
+
+#[cfg(not(windows))]
+pub(crate) fn private_lock_file(path: &Path, private_root: &Path) -> Result<File, String> {
+    let _ = private_root;
+    #[cfg(not(windows))]
+    {
         let mut options = OpenOptions::new();
         options.read(true).write(true).create(true);
         #[cfg(unix)]
@@ -119,36 +191,29 @@ pub(crate) fn private_lock_file(path: &Path) -> Result<File, String> {
         let file = options
             .open(path)
             .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
-        (file, false)
-    };
-    let metadata = file
-        .metadata()
-        .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err("native_resident_lock_invalid".to_owned());
-    }
-    #[cfg(windows)]
-    if created {
-        protect_windows_private_path(path, false)?;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let path_metadata = fs::symlink_metadata(path)
+        let metadata = file
+            .metadata()
             .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
-        if path_metadata.file_type().is_symlink()
-            || !path_metadata.is_file()
-            || path_metadata.dev() != metadata.dev()
-            || path_metadata.ino() != metadata.ino()
-            || metadata.nlink() != 1
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err("native_resident_lock_not_private".to_owned());
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("native_resident_lock_invalid".to_owned());
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            let path_metadata = fs::symlink_metadata(path)
+                .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
+            if path_metadata.file_type().is_symlink()
+                || !path_metadata.is_file()
+                || path_metadata.dev() != metadata.dev()
+                || path_metadata.ino() != metadata.ino()
+                || metadata.nlink() != 1
+                || metadata.permissions().mode() & 0o077 != 0
+            {
+                return Err("native_resident_lock_not_private".to_owned());
+            }
+        }
+        Ok(file)
     }
-    #[cfg(windows)]
-    verify_windows_private_path(path, false)?;
-    Ok(file)
 }
 
 /// Open a private state file through one Windows handle, then validate the
@@ -160,22 +225,9 @@ pub(crate) fn open_private_read(
     path: &Path,
     maximum_bytes: u64,
     kind: &str,
+    private_root: &Path,
 ) -> Result<Option<File>, String> {
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-    use windows_permissions::utilities::current_process_sid;
-
-    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
-    const FILE_SHARE_READ: u32 = 0x0000_0001;
-    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-
-    let mut options = OpenOptions::new();
-    options
-        .read(true)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    let file = match options.open(path) {
+    let file = match windows_security::open_private_file(path, private_root) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(format!("native_resident_{kind}_read_failed")),
@@ -183,14 +235,11 @@ pub(crate) fn open_private_read(
     let metadata = file
         .metadata()
         .map_err(|_| format!("native_resident_{kind}_invalid"))?;
-    if !metadata.is_file()
-        || metadata.len() > maximum_bytes
-        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    {
+    if !metadata.is_file() || metadata.len() > maximum_bytes {
         return Err(format!("native_resident_{kind}_invalid"));
     }
-    let owner =
-        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    let owner = windows_permissions::utilities::current_process_sid()
+        .map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
     windows_security::verify_windows_handle(&file, owner.as_ref())?;
     Ok(Some(file))
 }
@@ -199,8 +248,33 @@ pub(crate) fn ensure_private_directory(
     path: &Path,
     protect_windows: bool,
 ) -> Result<PathBuf, String> {
+    let private_root = crate::resident_state::private_root_for_state_base(path)?;
+    ensure_private_directory_under(path, &private_root, protect_windows)
+}
+
+pub(crate) fn ensure_private_directory_under(
+    path: &Path,
+    private_root: &Path,
+    protect_windows: bool,
+) -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let resolved =
+            windows_security::ensure_private_directory_path(path, private_root, protect_windows)?;
+        let profile = std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .ok_or_else(|| "native_resident_user_profile_missing".to_owned())?
+            .canonicalize()
+            .map_err(|_| "native_resident_user_profile_invalid".to_owned())?;
+        if !resolved.starts_with(profile) {
+            return Err("native_resident_state_dir_outside_user_profile".to_owned());
+        }
+        return Ok(resolved);
+    }
+
     #[cfg(not(windows))]
-    let _ = protect_windows;
+    let _ = (private_root, protect_windows);
+    #[cfg(not(windows))]
     let created = match fs::create_dir(path) {
         Ok(()) => true,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
@@ -212,17 +286,6 @@ pub(crate) fn ensure_private_directory(
         .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err("native_resident_state_dir_invalid".to_owned());
-    }
-    #[cfg(windows)]
-    if protect_windows {
-        if created {
-            windows_security::protect_windows_path(path, true)?;
-        } else {
-            use windows_permissions::utilities::current_process_sid;
-            let owner = current_process_sid()
-                .map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-            windows_security::verify_windows_path(path, owner.as_ref())?;
-        }
     }
     #[cfg(unix)]
     {

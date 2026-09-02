@@ -1,6 +1,8 @@
 use super::*;
 use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac};
 use serde_json::Value;
+#[cfg(windows)]
+use std::ffi::OsStr;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::{self, OpenOptions};
@@ -16,49 +18,96 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())?;
-    let target_exists = fs::symlink_metadata(path).is_ok();
-    #[cfg(not(windows))]
-    let _ = target_exists;
     #[cfg(windows)]
     {
+        // Keep one handle-bound ancestry proof alive for the complete
+        // recovery transaction. Every candidate is opened relative to this
+        // binding, so a pathname replacement cannot switch parent identity
+        // between enumeration, validation, and mutation.
+        let private_root = crate::resident_state::private_root_for_state_base(parent)
+            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+        let binding = crate::resident_state::bind_windows_existing_directory(parent, &private_root)
+            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         let file_name = path
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("policy-snapshot-v3.json");
-        let backup = parent.join(format!(".{file_name}.previous"));
-        let backup_exists = fs::symlink_metadata(&backup).is_ok();
+        let target_name = OsStr::new(file_name);
+        let backup_name = format!(".{file_name}.previous");
+        let open_candidate = |name: &OsStr| {
+            let file = match binding.open_private_file(name) {
+                Ok(file) => file,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(_) => return Err("native_policy_snapshot_authority_recovery_failed".to_owned()),
+            };
+            let metadata = file
+                .metadata()
+                .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            if metadata.len() > AUTHORITY_RECORD_MAX_BYTES {
+                return Err("native_policy_snapshot_authority_recovery_failed".to_owned());
+            }
+            Ok(Some(file))
+        };
+        let target_exists = open_candidate(target_name)?.is_some();
+        let backup_exists = open_candidate(OsStr::new(&backup_name))?.is_some();
         if !target_exists && backup_exists {
-            fs::rename(&backup, path)
+            let source = open_candidate(OsStr::new(&backup_name))?
+                .ok_or_else(|| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            binding
+                .replace_private_file(&source, target_name)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         } else if target_exists && backup_exists {
-            fs::remove_file(&backup)
+            let backup = open_candidate(OsStr::new(&backup_name))?
+                .ok_or_else(|| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            guard_runtime_windows_process::delete_private_file_handle(&backup)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         }
+        let prefix = format!(".{file_name}.");
+        for entry in fs::read_dir(parent)
+            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?
+        {
+            let entry =
+                entry.map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            let name = entry.file_name();
+            let name_text = name.to_string_lossy();
+            if !name_text.starts_with(&prefix) || !name_text.ends_with(".tmp") {
+                continue;
+            }
+            let Some(file) = open_candidate(&name)? else {
+                continue;
+            };
+            guard_runtime_windows_process::delete_private_file_handle(&file)
+                .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+        }
+        return Ok(());
     }
-    let prefix = format!(
-        ".{}.",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("policy-snapshot-v3.json")
-    );
-    for entry in fs::read_dir(parent)
-        .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?
+    #[cfg(not(windows))]
     {
-        let entry =
-            entry.map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
-        let candidate = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if !name.starts_with(&prefix) || !name.ends_with(".tmp") {
-            continue;
+        let prefix = format!(
+            ".{}.",
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("policy-snapshot-v3.json")
+        );
+        for entry in fs::read_dir(parent)
+            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?
+        {
+            let entry =
+                entry.map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            let candidate = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if !name.starts_with(&prefix) || !name.ends_with(".tmp") {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(&candidate)
+                .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err("native_policy_snapshot_authority_recovery_failed".to_owned());
+            }
+            fs::remove_file(candidate)
+                .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         }
-        let metadata = fs::symlink_metadata(&candidate)
-            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err("native_policy_snapshot_authority_recovery_failed".to_owned());
-        }
-        fs::remove_file(candidate)
-            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
     }
     Ok(())
 }
@@ -67,7 +116,12 @@ pub(super) fn read_generation_floor(
     path: &Path,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<Option<GenerationFloorV1>, String> {
-    let Some((value, bytes)) = read_private_json(path, MAX_FLOOR_BYTES, "floor")? else {
+    let private_root = path
+        .parent()
+        .ok_or_else(|| "native_policy_snapshot_floor_parent_missing".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
+    let Some((value, bytes)) = read_private_json(path, MAX_FLOOR_BYTES, "floor", &private_root)?
+    else {
         return Ok(None);
     };
     let floor: GenerationFloorV1 = serde_json::from_value(value.clone())
@@ -95,6 +149,10 @@ pub(super) fn persist_authority(
     snapshot: Option<&PolicySnapshotV3>,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<(), String> {
+    let private_root = path
+        .parent()
+        .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
     if generation_floor == 0
         || !is_lower_hex(policy_digest, 64)
         || snapshot.is_some_and(|candidate| {
@@ -113,7 +171,13 @@ pub(super) fn persist_authority(
     let value = serde_json::to_value(record)
         .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;
     let bytes = canonical_json_bytes(&value).map_err(snapshot_error)?;
-    persist_private_bytes(path, &bytes, AUTHORITY_RECORD_MAX_BYTES, "authority")
+    persist_private_bytes(
+        path,
+        &bytes,
+        AUTHORITY_RECORD_MAX_BYTES,
+        "authority",
+        &private_root,
+    )
 }
 
 pub(super) fn is_lower_hex(value: &str, length: usize) -> bool {
@@ -149,14 +213,18 @@ pub(super) fn read_private_json(
     path: &Path,
     maximum_bytes: u64,
     kind: &str,
+    private_root: &Path,
 ) -> Result<Option<(Value, Vec<u8>)>, String> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     #[cfg(windows)]
-    let mut file = match crate::resident_state::open_private_read(path, maximum_bytes, kind)
-        .map_err(|error| map_private_read_error(kind, error))?
-    {
-        Some(file) => file,
-        None => return Ok(None),
-    };
+    let mut file =
+        match crate::resident_state::open_private_read(path, maximum_bytes, kind, private_root)
+            .map_err(|error| map_private_read_error(kind, error))?
+        {
+            Some(file) => file,
+            None => return Ok(None),
+        };
     #[cfg(not(windows))]
     let mut file = {
         let metadata = match fs::symlink_metadata(path) {
@@ -222,6 +290,7 @@ pub(super) fn persist_private_bytes(
     bytes: &[u8],
     maximum_bytes: u64,
     kind: &str,
+    private_root: &Path,
 ) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() as u64 > maximum_bytes {
         return Err(format!("native_policy_snapshot_{kind}_too_large"));
@@ -242,13 +311,26 @@ pub(super) fn persist_private_bytes(
         std::process::id(),
         stamp
     ));
+    #[cfg(not(windows))]
     let mut options = OpenOptions::new();
+    #[cfg(not(windows))]
     options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
     }
+    #[cfg(windows)]
+    let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
+        crate::resident_state::private_file(&temporary, true, private_root)
+            .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+    }) {
+        Ok(file) => file,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    #[cfg(not(windows))]
     let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
         options
             .open(&temporary)
@@ -260,12 +342,6 @@ pub(super) fn persist_private_bytes(
             return Err(error);
         }
     };
-    #[cfg(windows)]
-    if let Err(error) = crate::resident_state::protect_windows_private_path(&temporary, false) {
-        drop(file);
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
     let write_result = persistence_fault(PersistBoundary::Write)
         .and_then(|()| {
             file.write_all(bytes)
@@ -276,14 +352,36 @@ pub(super) fn persist_private_bytes(
             file.sync_all()
                 .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
         });
+    if let Err(error) = write_result {
+        #[cfg(windows)]
+        let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
+        #[cfg(not(windows))]
+        {
+            drop(file);
+            let _ = fs::remove_file(&temporary);
+        }
+        return Err(error);
+    }
+    #[cfg(not(windows))]
     drop(file);
-    let result = write_result.and_then(|()| {
-        persistence_fault(PersistBoundary::Rename)?;
-        replace_temporary(&temporary, path, kind)
-    });
-    if result.is_err() {
+    if let Err(error) = persistence_fault(PersistBoundary::Rename) {
+        #[cfg(windows)]
+        let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
+        #[cfg(not(windows))]
         let _ = fs::remove_file(&temporary);
-        return result;
+        return Err(error);
+    }
+    let result = replace_temporary(&temporary, path, kind, private_root);
+    #[cfg(windows)]
+    drop(file);
+    if let Err(error) = result {
+        #[cfg(not(windows))]
+        let _ = fs::remove_file(&temporary);
+        // On Windows the replacement helper may have committed the rename
+        // before a post-commit identity/ACL check failed.  Leave the source
+        // candidate for the bounded startup recovery pass instead of
+        // deleting through a pathname that may now designate the target.
+        return Err(error);
     }
     #[cfg(unix)]
     {
@@ -303,35 +401,90 @@ pub(super) fn persist_private_bytes(
 }
 
 #[cfg(not(windows))]
-pub(super) fn replace_temporary(temporary: &Path, path: &Path, kind: &str) -> Result<(), String> {
+pub(super) fn replace_temporary(
+    temporary: &Path,
+    path: &Path,
+    kind: &str,
+    _private_root: &Path,
+) -> Result<(), String> {
     fs::rename(temporary, path).map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
 }
 
 #[cfg(windows)]
-pub(super) fn replace_temporary(temporary: &Path, path: &Path, kind: &str) -> Result<(), String> {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("policy-state");
-    let backup = path.with_file_name(format!(".{file_name}.previous"));
-    if fs::symlink_metadata(&backup).is_ok() {
-        fs::remove_file(&backup)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))?;
+pub(super) fn replace_temporary(
+    temporary: &Path,
+    path: &Path,
+    kind: &str,
+    private_root: &Path,
+) -> Result<(), String> {
+    crate::resident_state::replace_windows_private_file(temporary, path, private_root)
+        .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
+}
+
+#[cfg(all(test, windows))]
+mod windows_recovery_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn test_root(label: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "hol-guard-policy-recovery-{label}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        crate::resident_state::ensure_private_directory(&root, true).unwrap();
+        root
     }
-    if let Ok(metadata) = fs::symlink_metadata(path) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(format!("native_policy_snapshot_{kind}_replace_failed"));
-        }
-        fs::rename(path, &backup)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))?;
+
+    fn private_bytes(path: &Path, bytes: &[u8]) {
+        let private_root = path.parent().unwrap_or(path);
+        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        file.write_all(bytes).unwrap();
+        file.sync_all().unwrap();
     }
-    if fs::rename(temporary, path).is_err() {
-        let _ = fs::rename(&backup, path);
-        return Err(format!("native_policy_snapshot_{kind}_replace_failed"));
+
+    #[test]
+    fn authority_recovery_replaces_only_valid_private_backup() {
+        let root = test_root("backup");
+        let target = root.join("policy-snapshot-v3.json");
+        let backup = root.join(".policy-snapshot-v3.json.previous");
+        private_bytes(&backup, b"previous");
+
+        recover_authority_replacement(&target).unwrap();
+
+        assert!(crate::resident_state::open_private_read(
+            &target,
+            AUTHORITY_RECORD_MAX_BYTES,
+            "authority",
+            root,
+        )
+        .unwrap()
+        .is_some());
+        assert!(crate::resident_state::open_private_read(
+            &backup,
+            AUTHORITY_RECORD_MAX_BYTES,
+            "authority",
+            root,
+        )
+        .unwrap()
+        .is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
-    if fs::symlink_metadata(&backup).is_ok() {
-        fs::remove_file(&backup)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))?;
+
+    #[test]
+    fn authority_recovery_rejects_non_file_backup() {
+        let root = test_root("reparse-or-directory");
+        let target = root.join("policy-snapshot-v3.json");
+        let backup = root.join(".policy-snapshot-v3.json.previous");
+        crate::resident_state::ensure_private_directory(&backup, true).unwrap();
+
+        assert_eq!(
+            recover_authority_replacement(&target).unwrap_err(),
+            "native_policy_snapshot_authority_recovery_failed"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
-    crate::resident_state::verify_windows_private_path(path, false)
 }

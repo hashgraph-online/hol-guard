@@ -12,7 +12,9 @@ use std::time::{Duration, Instant, SystemTime};
 #[cfg(test)]
 use std::{cell::RefCell, sync::mpsc::Sender};
 
-use crate::resident_state::{ensure_private_directory, process_start_marker};
+use crate::resident_state::{
+    ensure_private_directory_under, private_root_for_state_base, process_start_marker,
+};
 
 #[path = "managed_resident_lease_identity.rs"]
 mod identity;
@@ -35,6 +37,7 @@ const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
 #[cfg(test)]
 thread_local! {
     static LOCK_BUSY_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
+    static LOCK_RETRY_DEADLINE_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
 }
 
 #[cfg(test)]
@@ -46,9 +49,19 @@ fn notify_lock_busy_for_test() {
     });
 }
 
+#[cfg(test)]
+fn notify_lock_retry_deadline_for_test() {
+    LOCK_RETRY_DEADLINE_NOTIFICATION.with(|notification| {
+        if let Some(sender) = notification.borrow_mut().take() {
+            let _ = sender.send(());
+        }
+    });
+}
+
 pub(super) struct ClientLease {
     directory: PathBuf,
     path: PathBuf,
+    private_root: PathBuf,
     identity: LeaseIdentity,
     stopped: Arc<AtomicBool>,
     heartbeat: Option<thread::JoinHandle<()>>,
@@ -60,9 +73,11 @@ impl Drop for ClientLease {
         if let Some(heartbeat) = self.heartbeat.take() {
             let _ = heartbeat.join();
         }
-        if let Ok(_lock) =
-            acquire_directory_lock_with_retry(&self.directory, LEASE_CLEANUP_RETRY_BUDGET)
-        {
+        if let Ok(_lock) = acquire_directory_lock_with_retry(
+            &self.directory,
+            &self.private_root,
+            LEASE_CLEANUP_RETRY_BUDGET,
+        ) {
             let _ = self.identity.remove_if_same(&self.path);
         }
     }
@@ -70,6 +85,8 @@ impl Drop for ClientLease {
 
 struct LeaseDirectoryLock {
     file: File,
+    #[cfg(windows)]
+    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 impl Drop for LeaseDirectoryLock {
@@ -79,15 +96,26 @@ impl Drop for LeaseDirectoryLock {
 }
 
 fn lease_directory(state_base: &Path) -> Result<PathBuf, String> {
-    let base = ensure_private_directory(state_base, false)?;
-    ensure_private_directory(&base.join(LEASE_DIRECTORY), true)
+    let private_root = private_root_for_state_base(state_base)?;
+    let base = ensure_private_directory_under(state_base, &private_root, false)?;
+    ensure_private_directory_under(&base.join(LEASE_DIRECTORY), &private_root, true)
 }
 
-fn acquire_directory_lock(directory: &Path) -> Result<Option<LeaseDirectoryLock>, String> {
+fn acquire_directory_lock(
+    directory: &Path,
+    private_root: &Path,
+) -> Result<Option<LeaseDirectoryLock>, String> {
     let path = directory.join(LEASE_LOCK_FILE);
-    let file = crate::resident_state::private_lock_file(&path)?;
+    #[cfg(windows)]
+    let (file, directory_binding) = crate::resident_state::private_lock_file(&path, private_root)?;
+    #[cfg(not(windows))]
+    let file = crate::resident_state::private_lock_file(&path, private_root)?;
     match fs2::FileExt::try_lock_exclusive(&file) {
-        Ok(()) => Ok(Some(LeaseDirectoryLock { file })),
+        Ok(()) => Ok(Some(LeaseDirectoryLock {
+            file,
+            #[cfg(windows)]
+            _directory_binding: directory_binding,
+        })),
         Err(error) if crate::resident_state::is_lock_contention(&error) => {
             #[cfg(test)]
             notify_lock_busy_for_test();
@@ -99,16 +127,19 @@ fn acquire_directory_lock(directory: &Path) -> Result<Option<LeaseDirectoryLock>
 
 fn acquire_directory_lock_with_retry(
     directory: &Path,
+    private_root: &Path,
     retry_budget: Duration,
 ) -> Result<LeaseDirectoryLock, String> {
     let deadline = Instant::now() + retry_budget;
     let mut delay = LEASE_ACQUIRE_RETRY_INITIAL_DELAY;
     loop {
-        if let Some(lock) = acquire_directory_lock(directory)? {
+        if let Some(lock) = acquire_directory_lock(directory, private_root)? {
             return Ok(lock);
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
+            #[cfg(test)]
+            notify_lock_retry_deadline_for_test();
             return Err("native_resident_lease_busy".to_owned());
         }
         thread::sleep(delay.min(remaining));
@@ -117,8 +148,10 @@ fn acquire_directory_lock_with_retry(
 }
 
 pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
+    let private_root = private_root_for_state_base(state_base)?;
     let directory = lease_directory(state_base)?;
-    let _lock = acquire_directory_lock_with_retry(&directory, LEASE_ACQUIRE_RETRY_BUDGET)?;
+    let _lock =
+        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_ACQUIRE_RETRY_BUDGET)?;
     let process_id = std::process::id();
     let start_marker = process_start_marker(process_id)?;
     let digest = crate::resident_state::runtime_digest()?;
@@ -127,7 +160,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let nonce = crate::resident_state_encoding::hex_bytes(&nonce);
     let path = directory.join(format!("{LEASE_PREFIX}{process_id}-{nonce}{LEASE_SUFFIX}"));
     let contents = format!("{process_id}\n{start_marker}\n{digest}\n");
-    let mut file = crate::resident_state::private_file(&path, true)?;
+    let mut file = crate::resident_state::private_file(&path, true, &private_root)?;
     let identity = match LeaseIdentity::from_file(&file) {
         Ok(identity) => identity,
         Err(error) => {
@@ -147,6 +180,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let heartbeat_stopped = Arc::clone(&stopped);
     let heartbeat_directory = directory.clone();
     let heartbeat_path = path.clone();
+    let heartbeat_private_root = private_root.clone();
     let heartbeat_contents = contents.clone();
     let heartbeat = thread::spawn(move || {
         while !heartbeat_stopped.load(Ordering::Acquire) {
@@ -154,9 +188,14 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
             if heartbeat_stopped.load(Ordering::Acquire) {
                 break;
             }
-            if let Ok(Some(_lock)) = acquire_directory_lock(&heartbeat_directory) {
-                let Ok(mut file) = crate::resident_state::private_file(&heartbeat_path, false)
-                else {
+            if let Ok(Some(_lock)) =
+                acquire_directory_lock(&heartbeat_directory, &heartbeat_private_root)
+            {
+                let Ok(mut file) = crate::resident_state::private_file(
+                    &heartbeat_path,
+                    false,
+                    &heartbeat_private_root,
+                ) else {
                     break;
                 };
                 if file
@@ -172,6 +211,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     Ok(ClientLease {
         directory,
         path,
+        private_root,
         identity,
         stopped,
         heartbeat: Some(heartbeat),
@@ -195,9 +235,12 @@ enum LeaseFileOpenError {
     Unavailable,
 }
 
-fn open_lease_file(path: &Path) -> Result<LeaseFile, LeaseFileOpenError> {
+fn open_lease_file(path: &Path, private_root: &Path) -> Result<LeaseFile, LeaseFileOpenError> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     #[cfg(windows)]
-    let file = match crate::resident_state::open_private_read(path, u64::MAX, "lease") {
+    let file = match crate::resident_state::open_private_read(path, u64::MAX, "lease", private_root)
+    {
         Ok(Some(file)) => file,
         Ok(None) => return Err(LeaseFileOpenError::Missing),
         Err(_) => return Err(LeaseFileOpenError::Unavailable),
@@ -293,8 +336,8 @@ enum LeaseReadError {
     Malformed(LeaseFile),
 }
 
-fn read_lease(path: &Path) -> Result<LeaseRecord, LeaseReadError> {
-    let file = open_lease_file(path).map_err(|error| match error {
+fn read_lease(path: &Path, private_root: &Path) -> Result<LeaseRecord, LeaseReadError> {
+    let file = open_lease_file(path, private_root).map_err(|error| match error {
         LeaseFileOpenError::Missing => LeaseReadError::Missing,
         LeaseFileOpenError::Unavailable => LeaseReadError::Unavailable,
     })?;
@@ -315,8 +358,8 @@ fn read_lease(path: &Path) -> Result<LeaseRecord, LeaseReadError> {
     })
 }
 
-fn lease_is_live(path: &Path, expected_digest: Option<&str>) -> bool {
-    let record = match read_lease(path) {
+fn lease_is_live(path: &Path, expected_digest: Option<&str>, private_root: &Path) -> bool {
+    let record = match read_lease(path, private_root) {
         Ok(record) => record,
         Err(LeaseReadError::Missing) => return false,
         Err(LeaseReadError::Unavailable) => return true,
@@ -333,8 +376,8 @@ fn lease_is_live(path: &Path, expected_digest: Option<&str>) -> bool {
     process_start_marker(record.process_id).is_ok_and(|actual| actual == record.start_marker)
 }
 
-fn remove_stale_lease(path: &Path) -> bool {
-    let record = match read_lease(path) {
+fn remove_stale_lease(path: &Path, private_root: &Path) -> bool {
+    let record = match read_lease(path, private_root) {
         Ok(record) => record,
         Err(LeaseReadError::Missing | LeaseReadError::Unavailable) => return false,
         Err(LeaseReadError::Malformed(file)) => {
@@ -359,10 +402,13 @@ fn remove_stale_lease(path: &Path) -> bool {
 }
 
 fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> bool {
+    let Ok(private_root) = private_root_for_state_base(state_base) else {
+        return true;
+    };
     let Ok(directory) = lease_directory(state_base) else {
         return true;
     };
-    let _lock = match acquire_directory_lock(&directory) {
+    let _lock = match acquire_directory_lock(&directory, &private_root) {
         Ok(Some(lock)) => lock,
         // A client may be updating its lease while this liveness probe runs.
         // Retain the resident until a later probe can inspect the directory.
@@ -397,10 +443,10 @@ fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> boo
     }
     paths.sort_unstable();
     paths.into_iter().fold(false, |found_live, path| {
-        if lease_is_live(&path, expected_digest) {
+        if lease_is_live(&path, expected_digest, &private_root) {
             true
         } else {
-            let _ = remove_stale_lease(&path);
+            let _ = remove_stale_lease(&path, &private_root);
             found_live
         }
     })

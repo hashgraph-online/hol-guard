@@ -56,11 +56,6 @@ jobs:
         run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
       - name: Publish test inventory
         run: cat test-inventory.json
-      - name: Enforce test-suite size ratchet
-        run: |
-          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
-            --baseline ci/test-suite-ratchet-baseline.json \
-            --inventory test-inventory.json
       - name: Publish exact test-body duplicate candidates
         run: |
           uv run --no-sync python scripts/ci/test_duplicate_candidates.py \

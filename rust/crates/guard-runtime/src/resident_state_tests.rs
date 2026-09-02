@@ -1,5 +1,30 @@
 use super::*;
 
+fn fixture_directory(path: &Path) {
+    #[cfg(windows)]
+    {
+        ensure_private_directory(path, true).unwrap();
+    }
+    #[cfg(not(windows))]
+    {
+        fs::create_dir(path).unwrap();
+    }
+}
+
+fn fixture_file(path: &Path, bytes: &[u8]) {
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let private_root = path.parent().unwrap_or(path);
+        let mut file = private_file(path, true, private_root).unwrap();
+        file.write_all(bytes).unwrap();
+    }
+    #[cfg(not(windows))]
+    {
+        fs::write(path, bytes).unwrap();
+    }
+}
+
 fn test_scope(label: &str) -> PathBuf {
     let unique = format!(
         "hol-guard-resident-{label}-{}-{}",
@@ -7,7 +32,7 @@ fn test_scope(label: &str) -> PathBuf {
         now_ms().unwrap()
     );
     let path = std::env::temp_dir().join(unique);
-    fs::create_dir(&path).unwrap();
+    fixture_directory(&path);
     path
 }
 
@@ -69,8 +94,6 @@ fn publishing_generations_retires_superseded_state() {
 #[test]
 fn preferred_runtime_scope_is_found_after_the_fallback_scope_bound() {
     let base = test_scope("preferred-scope");
-    #[cfg(windows)]
-    protect_windows_private_path(&base, true).unwrap();
     let digest = runtime_digest().unwrap();
     let preferred_prefix = &digest[..16];
     let mut fallback_prefixes = Vec::new();
@@ -117,7 +140,7 @@ fn preferred_runtime_scope_is_found_after_the_fallback_scope_bound() {
 fn home_state_discovery_allows_nonmatching_entries_within_bound() {
     let base = test_scope("scope-entry-bound");
     for index in 0..64 {
-        fs::create_dir(base.join(format!("unrelated-{index:03}"))).unwrap();
+        fixture_directory(&base.join(format!("unrelated-{index:03}")));
     }
 
     assert!(discover_home_states(&base).unwrap().is_empty());
@@ -128,7 +151,7 @@ fn home_state_discovery_allows_nonmatching_entries_within_bound() {
 fn home_state_discovery_fails_closed_on_total_entry_overflow() {
     let base = test_scope("scope-entry-overflow");
     for index in 0..=64 {
-        fs::create_dir(base.join(format!("unrelated-{index:03}"))).unwrap();
+        fixture_directory(&base.join(format!("unrelated-{index:03}")));
     }
 
     assert_eq!(
@@ -160,11 +183,10 @@ fn home_state_discovery_fails_closed_on_many_state_entries() {
         ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
             .unwrap();
     for generation in 0..=MAX_STATE_FILES {
-        fs::write(
-            scope.join(format!("generation-{generation:020}.json")),
+        fixture_file(
+            &scope.join(format!("generation-{generation:020}.json")),
             b"{}",
-        )
-        .unwrap();
+        );
     }
 
     assert_eq!(
@@ -179,7 +201,7 @@ fn publishing_fails_closed_when_scope_entry_bound_is_exceeded() {
     let scope = test_scope("state-prune-entry-overflow");
     let digest = runtime_digest().unwrap();
     for index in 0..64 {
-        fs::write(scope.join(format!("unrelated-{index:03}")), b"marker").unwrap();
+        fixture_file(&scope.join(format!("unrelated-{index:03}")), b"marker");
     }
 
     let token = [7u8; crate::AUTH_TOKEN_BYTES];
@@ -225,9 +247,14 @@ fn startup_lock_holds_advisory_lock_until_drop() {
     let scope = test_scope("startup-lock-ownership");
     let path = scope.join("startup.lock");
     let lock = acquire_startup_lock(&scope).unwrap().unwrap();
-    let contender = private_lock_file(&path).unwrap();
+    #[cfg(windows)]
+    let (contender, contender_binding) = private_lock_file(&path, &scope).unwrap();
+    #[cfg(not(windows))]
+    let contender = private_lock_file(&path, &scope).unwrap();
     assert!(fs2::FileExt::try_lock_exclusive(&contender).is_err());
     drop(contender);
+    #[cfg(windows)]
+    drop(contender_binding);
     assert!(path.exists());
 
     drop(lock);
@@ -239,12 +266,53 @@ fn startup_lock_holds_advisory_lock_until_drop() {
     fs::remove_dir_all(scope).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn startup_lock_retains_directory_binding_until_drop() {
+    let scope = test_scope("startup-lock-directory-binding");
+    let renamed = scope.with_file_name(format!(
+        "{}-renamed",
+        scope.file_name().unwrap().to_string_lossy()
+    ));
+    let lock = acquire_startup_lock(&scope).unwrap().unwrap();
+
+    assert!(fs::rename(&scope, &renamed).is_err());
+
+    drop(lock);
+    fs::rename(&scope, &renamed).unwrap();
+    fs::remove_dir_all(renamed).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn newly_created_directory_binding_denies_rename_until_drop() {
+    let scope = std::env::temp_dir().join(format!(
+        "hol-guard-resident-created-binding-{}-{}",
+        std::process::id(),
+        now_ms().unwrap()
+    ));
+    let renamed = scope.with_file_name(format!(
+        "{}-renamed",
+        scope.file_name().unwrap().to_string_lossy()
+    ));
+    let binding = bind_windows_private_directory(&scope, &scope).unwrap();
+
+    assert!(fs::rename(&scope, &renamed).is_err());
+
+    drop(binding);
+    fs::rename(&scope, &renamed).unwrap();
+    fs::remove_dir_all(renamed).unwrap();
+}
+
 #[test]
 fn stale_startup_lock_recovery_preserves_lockfile_for_reuse() {
     let scope = test_scope("startup-lock-recovery");
     let path = scope.join("startup.lock");
     let digest = runtime_digest().unwrap();
-    let mut stale = private_lock_file(&path).unwrap();
+    #[cfg(windows)]
+    let (mut stale, stale_binding) = private_lock_file(&path, &scope).unwrap();
+    #[cfg(not(windows))]
+    let mut stale = private_lock_file(&path, &scope).unwrap();
     stale
         .write_all(format!("4294967295:stale:{digest}:{}", "0".repeat(64)).as_bytes())
         .unwrap();
@@ -257,6 +325,8 @@ fn stale_startup_lock_recovery_preserves_lockfile_for_reuse() {
         )
         .unwrap();
     drop(stale);
+    #[cfg(windows)]
+    drop(stale_binding);
     let before = fs::metadata(&path).unwrap();
     assert!(before.len() <= MAX_STARTUP_LOCK_BYTES);
 
@@ -321,4 +391,33 @@ fn windows_state_scope_and_token_state_are_owner_private() {
     .unwrap();
     assert_eq!(discover_states(&scope, &digest).unwrap().len(), 1);
     fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_create_new_rejects_existing_file_without_mutating_it() {
+    let scope = test_scope("create-new-existing");
+    let path = scope.join("existing-state");
+    fixture_file(&path, b"must-remain-byte-for-byte");
+
+    assert!(private_file(&path, true, &scope).is_err());
+    assert_eq!(fs::read(&path).unwrap(), b"must-remain-byte-for-byte");
+
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn private_lock_file_rejects_a_private_root_outside_the_target_scope() {
+    let scope = test_scope("private-lock-root-boundary");
+    let wrong_root = test_scope("private-lock-wrong-root");
+    let path = scope.join("private.lock");
+
+    assert!(private_lock_file(&path, &wrong_root).is_err());
+    let (file, binding) = private_lock_file(&path, &scope).unwrap();
+    drop(file);
+    drop(binding);
+
+    fs::remove_dir_all(scope).unwrap();
+    fs::remove_dir_all(wrong_root).unwrap();
 }

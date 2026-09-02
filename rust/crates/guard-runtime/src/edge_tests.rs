@@ -2,6 +2,18 @@ use super::*;
 
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+fn write_fixture_file(path: &std::path::Path, bytes: &[u8]) {
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let private_root = path.parent().unwrap_or(path);
+        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        file.write_all(bytes).unwrap();
+    }
+    #[cfg(not(windows))]
+    std::fs::write(path, bytes).unwrap();
+}
+
 fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
     let digest = "a".repeat(64);
     let guard_home = std::env::temp_dir().join(format!(
@@ -9,24 +21,21 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
         std::process::id(),
         EDGE_FIXTURE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
     #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&guard_home, true)
-        .expect("protect edge generation fixture root");
+    let guard_home = crate::resident_state::ensure_private_directory(&guard_home, true)
+        .expect("create edge generation fixture");
+    #[cfg(not(windows))]
+    std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
     let generation_path = guard_home.join("native-policy-generation.json");
-    std::fs::write(
+    write_fixture_file(
         &generation_path,
-        serde_json::to_vec(&serde_json::json!({
+        &serde_json::to_vec(&serde_json::json!({
             "schema": "hol-guard-native-policy-generation.v1",
             "generation": 1,
             "policy_digest": digest.clone(),
         }))
         .expect("encode edge generation fixture"),
-    )
-    .expect("write edge generation fixture");
-    #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&generation_path, false)
-        .expect("protect edge generation fixture");
+    );
     GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: Some("edge-test".to_owned()),

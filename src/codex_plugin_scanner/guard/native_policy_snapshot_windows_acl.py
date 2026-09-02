@@ -301,6 +301,56 @@ def _verify_acl_entry(
     return sid
 
 
+def _windows_verify_private_owner(handle: Any, *, owner_sid: str) -> None:
+    """Reject a foreign owner before changing an existing object's DACL."""
+
+    from ctypes import wintypes
+
+    api = _snapshot_api()
+    advapi32 = api._windows_dll("advapi32")
+    descriptor = ctypes.c_void_p()
+    owner = ctypes.c_void_p()
+    get_security_info = advapi32.GetSecurityInfo
+    get_security_info.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    get_security_info.restype = wintypes.DWORD
+    if (
+        int(
+            get_security_info(
+                handle,
+                _WINDOWS_SE_FILE_OBJECT,
+                _WINDOWS_OWNER_SECURITY_INFORMATION,
+                ctypes.byref(owner),
+                None,
+                None,
+                None,
+                ctypes.byref(descriptor),
+            )
+        )
+        != 0
+        or not descriptor
+        or not owner
+    ):
+        raise NativePolicySnapshotError("native_policy_windows_acl_verify_failed")
+    kernel32 = api._windows_dll("kernel32")
+    local_free = kernel32.LocalFree
+    local_free.argtypes = [ctypes.c_void_p]
+    local_free.restype = ctypes.c_void_p
+    try:
+        convert_sid = _sid_converter(advapi32, ctypes, wintypes)
+        _verify_owner(owner, owner_sid, convert_sid, local_free, ctypes, wintypes)
+    finally:
+        local_free(descriptor)
+
+
 def _windows_verify_private_dacl(handle: Any, *, owner_sid: str, directory: bool) -> None:
     """Require a protected DACL containing only the current principal and SYSTEM."""
 

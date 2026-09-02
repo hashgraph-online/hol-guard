@@ -8,6 +8,47 @@
 
 use std::path::Path;
 
+use guard_contracts::ApprovalAuthorityV4;
+use serde::{Deserialize, Serialize};
+
+pub(super) const SECURE_STATE_SCHEMA: &str = "guard-native-approval-webauthn-secure-state.v1";
+pub(super) const SECURE_STATE_VERSION: u16 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SecureState {
+    pub(super) schema: String,
+    pub(super) version: u16,
+    pub(super) record_digest: String,
+    pub(super) enrollment_generation: u64,
+    pub(super) key_id: String,
+    pub(super) rp_id: String,
+    pub(super) origin: String,
+    pub(super) credential_id: String,
+    pub(super) cose_public_key: String,
+    pub(super) algorithm: i32,
+    pub(super) sign_count: u32,
+}
+
+pub(super) fn secure_state_matches_record(
+    state: &SecureState,
+    record: &ApprovalAuthorityV4,
+    record_digest: &str,
+    credential_id: &[u8],
+    cose_public_key: &[u8],
+) -> bool {
+    state.schema == SECURE_STATE_SCHEMA
+        && state.version == SECURE_STATE_VERSION
+        && state.record_digest == record_digest
+        && state.enrollment_generation == record.enrollment_generation
+        && state.key_id == record.key_id
+        && state.rp_id == record.rp_id
+        && state.origin == record.origin
+        && state.credential_id == hex::encode(credential_id)
+        && state.cose_public_key == hex::encode(cose_public_key)
+        && state.algorithm == record.algorithm
+}
+
 #[cfg(not(test))]
 use super::approval_enrollment::{read_platform_secret_for_v4, write_platform_secret_for_v4};
 
@@ -69,6 +110,7 @@ pub(super) fn store(state_base: &Path, value: &str) -> Result<(), String> {
             value.as_bytes(),
             MAX_SECRET_TEXT_BYTES as u64,
             "v4_secure_state",
+            state_base,
         )
         .map_err(|_| "native_approval_v4_secure_state_unavailable".to_owned())?;
         Ok(())

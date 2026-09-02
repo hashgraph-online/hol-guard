@@ -21,8 +21,10 @@ pub use windows::ManagedChild;
 
 #[cfg(windows)]
 pub use windows::{
-    process_start_marker, remove_file_if_same, terminate_process, terminate_process_verified,
-    wait_for_process_exit,
+    bind_directory, bind_private_directory, create_private_directory, create_private_file,
+    delete_private_file_handle, open_private_directory, open_private_file, process_start_marker,
+    remove_file_if_same, terminate_process, terminate_process_verified, wait_for_process_exit,
+    PrivateDirectoryBinding,
 };
 
 #[cfg(windows)]

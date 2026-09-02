@@ -13,14 +13,11 @@ use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(test)]
 use winapi::um::fileapi::GetFileType;
-use winapi::um::fileapi::{
-    CreateFileW, GetFileInformationByHandle, SetFileInformationByHandle,
-    BY_HANDLE_FILE_INFORMATION, FILE_DISPOSITION_INFO, OPEN_EXISTING,
-};
+use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
 #[cfg(test)]
 use winapi::um::handleapi::GetHandleInformation;
 use winapi::um::handleapi::{SetHandleInformation, INVALID_HANDLE_VALUE};
-use winapi::um::minwinbase::{FileDispositionInfo, SECURITY_ATTRIBUTES};
+use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::namedpipeapi::CreatePipe;
 use winapi::um::processthreadsapi::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
@@ -36,13 +33,21 @@ use winapi::um::winbase::{
     CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT,
     STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
 };
-use winapi::um::winnt::{
-    DELETE, FILE_ATTRIBUTE_NORMAL, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, GENERIC_WRITE,
-};
+use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
+#[path = "directory_binding.rs"]
+mod directory_binding;
+#[path = "private_files.rs"]
+mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
+pub use directory_binding::{
+    bind_directory, bind_private_directory, create_private_directory, PrivateDirectoryBinding,
+};
+pub use private_files::{
+    create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
+    remove_file_if_same,
+};
 pub use process_lifecycle::{
     process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
 };
@@ -52,67 +57,6 @@ pub use process_lifecycle::{
 
 // PROC_THREAD_ATTRIBUTE_HANDLE_LIST is missing from winapi 0.3.9's constants.
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
-const FILE_FLAG_OPEN_REPARSE_POINT: DWORD = 0x0020_0000;
-
-/// Delete the path's currently opened object only when it is the same object
-/// as `expected`. Comparison and deletion both use owned handles, preventing a
-/// same-user pathname replacement from redirecting cleanup to a new file.
-pub fn remove_file_if_same(path: &Path, expected: &std::fs::File) -> io::Result<bool> {
-    let path_w = wide_path(path)?;
-    // SAFETY: NUL-terminated path; a successful handle is wrapped exactly once.
-    let raw = unsafe {
-        CreateFileW(
-            path_w.as_ptr(),
-            DELETE | FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            null_mut(),
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-            null_mut(),
-        )
-    };
-    if raw == INVALID_HANDLE_VALUE {
-        let error = io::Error::last_os_error();
-        if error.kind() == io::ErrorKind::NotFound {
-            return Ok(false);
-        }
-        return Err(error);
-    }
-    // SAFETY: CreateFileW returned this handle exactly once.
-    let current = unsafe { OwnedHandle::from_raw_handle(raw as RawHandle) };
-    if file_information(expected.as_raw_handle() as HANDLE)?
-        != file_information(current.as_raw_handle() as HANDLE)?
-    {
-        return Ok(false);
-    }
-    let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
-    // SAFETY: `current` owns a DELETE-capable handle; the disposition buffer is initialized.
-    if unsafe {
-        SetFileInformationByHandle(
-            current.as_raw_handle() as HANDLE,
-            FileDispositionInfo,
-            &mut disposition as *mut FILE_DISPOSITION_INFO as *mut _,
-            size_of::<FILE_DISPOSITION_INFO>() as DWORD,
-        )
-    } == FALSE
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(true)
-}
-
-fn file_information(handle: HANDLE) -> io::Result<(DWORD, DWORD, DWORD)> {
-    // SAFETY: BY_HANDLE_FILE_INFORMATION is a plain output struct; handle stays owned during query.
-    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
-    if unsafe { GetFileInformationByHandle(handle, &mut information) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
-    Ok((
-        information.dwVolumeSerialNumber,
-        information.nFileIndexHigh,
-        information.nFileIndexLow,
-    ))
-}
 
 fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
     if process_id == 0 {

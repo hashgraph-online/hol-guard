@@ -44,11 +44,11 @@ def _windows_path_has_reparse_component(path: Path) -> bool:
 
 def _runtime_state_directory(guard_home: Path) -> Path:
     api = _snapshot_api()
+    if os.name == "nt":
+        with api._windows_private_state_binding(guard_home) as binding:
+            return binding.path
     api._private_guard_home(guard_home)
     state_dir = guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
-    if os.name == "nt":
-        api._windows_ensure_private_directory(state_dir)
-        return state_dir
     try:
         metadata = state_dir.lstat()
     except FileNotFoundError:

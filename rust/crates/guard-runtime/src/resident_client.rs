@@ -55,10 +55,7 @@ fn read_exact(
 ) -> Result<(), ResidentClientError> {
     stream
         .read_exact(output)
-        .map_err(|error| ResidentClientError {
-            code: "native_client_frame_read_failed".to_owned(),
-            retryable_teardown: is_retryable_teardown_io_error(&error),
-        })
+        .map_err(|_| ResidentClientError::fatal("native_client_frame_read_failed".to_owned()))
 }
 
 fn authenticate(
@@ -253,10 +250,7 @@ fn write_request(
     stream
         .write_all(&frame)
         .and_then(|()| stream.flush())
-        .map_err(|error| ResidentClientError {
-            code: "native_client_frame_write_failed".to_owned(),
-            retryable_teardown: is_retryable_teardown_io_error(&error),
-        })?;
+        .map_err(|_| ResidentClientError::fatal("native_client_frame_write_failed".to_owned()))?;
     Ok(request_id)
 }
 

@@ -118,9 +118,9 @@ fn is_stale_process_identity_error(error: &str) -> bool {
 }
 
 fn is_retryable_live_request_error(error: &crate::resident_client::ResidentClientError) -> bool {
-    error.retryable_teardown
-        || error.code == "native_client_connect_failed"
+    error.code == "native_client_connect_failed"
         || is_stale_process_identity_error(&error.code)
+        || (error.code == "native_client_auth_nonce_failed" && error.retryable_teardown)
 }
 
 fn try_home_states(

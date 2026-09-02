@@ -81,7 +81,7 @@ fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
     )
     .unwrap();
     #[cfg(windows)]
-    crate::resident_state::protect_windows_private_path(&foreign, false).unwrap();
+    crate::resident_state::protect_windows_private_path(&foreign, false, &root).unwrap();
     assert!(lease::any_live_for_home(&root));
     drop(first);
     assert!(lease::any_live(&root, &digest));
@@ -126,9 +126,11 @@ fn stale_lease_cleanup_requires_a_dead_process_identity() {
     .unwrap();
     #[cfg(windows)]
     {
-        crate::resident_state::protect_windows_private_path(&directory, true).unwrap();
-        crate::resident_state::protect_windows_private_path(&current_process_lease, false).unwrap();
-        crate::resident_state::protect_windows_private_path(&dead_process_lease, false).unwrap();
+        crate::resident_state::protect_windows_private_path(&directory, true, &root).unwrap();
+        crate::resident_state::protect_windows_private_path(&current_process_lease, false, &root)
+            .unwrap();
+        crate::resident_state::protect_windows_private_path(&dead_process_lease, false, &root)
+            .unwrap();
     }
     std::thread::sleep(lease::LEASE_EXPIRY + Duration::from_millis(100));
     assert!(!lease::any_live_for_home(&root));
@@ -159,10 +161,11 @@ fn lease_directory_overflow_fails_closed_without_unbounded_collection() {
     }
     #[cfg(windows)]
     {
-        crate::resident_state::protect_windows_private_path(&root, true).unwrap();
+        crate::resident_state::protect_windows_private_path(&root, true, &root).unwrap();
         crate::resident_state::protect_windows_private_path(
             &root.join("resident-client-leases.v1"),
             true,
+            &root,
         )
         .unwrap();
     }
@@ -174,7 +177,7 @@ fn lease_directory_overflow_fails_closed_without_unbounded_collection() {
         #[cfg(unix)]
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         #[cfg(windows)]
-        crate::resident_state::protect_windows_private_path(&path, false).unwrap();
+        crate::resident_state::protect_windows_private_path(&path, false, &root).unwrap();
     }
     assert!(lease::any_live_for_home(&root));
     fs::remove_dir_all(root).unwrap();
@@ -249,24 +252,15 @@ fn stale_transport_retry_allowlist_preserves_auth_and_integrity_failures() {
         "native_client_response_binding_failed",
         "native_client_response_digest_mismatch",
     ];
-    for code in terminal_codes {
-        assert!(!is_retryable_live_request_error(
-            &crate::resident_client::ResidentClientError {
-                code: code.to_owned(),
-                retryable_teardown: false,
-            }
-        ));
-    }
-    for code in [
-        "native_client_frame_read_failed",
-        "native_client_frame_write_failed",
-    ] {
-        assert!(is_retryable_live_request_error(
-            &crate::resident_client::ResidentClientError {
-                code: code.to_owned(),
-                retryable_teardown: true,
-            }
-        ));
+    for retryable_teardown in [false, true] {
+        for code in terminal_codes {
+            assert!(!is_retryable_live_request_error(
+                &crate::resident_client::ResidentClientError {
+                    code: code.to_owned(),
+                    retryable_teardown,
+                }
+            ));
+        }
     }
     assert!(is_retryable_live_request_error(
         &crate::resident_client::ResidentClientError {
