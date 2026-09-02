@@ -23,7 +23,7 @@ use winapi::um::winbase::{
 use winapi::um::winnt::{
     DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+    FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
 };
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
@@ -127,7 +127,7 @@ pub(super) fn open_raw_directory_bound(
     allow_add_file: bool,
     allow_delete: bool,
 ) -> io::Result<std::fs::File> {
-    let mut access = GENERIC_READ;
+    let mut access = GENERIC_READ | FILE_TRAVERSE;
     if allow_acl_repair {
         access |= GENERIC_WRITE | WRITE_DAC;
     }
