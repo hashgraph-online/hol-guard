@@ -12,7 +12,7 @@ def daemon_source_is_desktop_core(source_root: object) -> bool:
         return False
     parts = tuple(part.lower() for part in source_root.replace("\\", "/").split("/") if part)
     marker_len = len(_DESKTOP_CORE_PARTS)
-    return any(parts[index : index + marker_len] == _DESKTOP_CORE_PARTS for index in range(len(parts) - marker_len + 1))
+    return any(parts[index : index + marker_len] == _DESKTOP_CORE_PARTS for index in range(len(parts) - marker_len))
 
 
 def daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:

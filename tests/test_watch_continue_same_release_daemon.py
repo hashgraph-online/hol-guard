@@ -125,6 +125,17 @@ def test_guard_daemon_state_rejects_embedded_desktop_marker() -> None:
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
+def test_guard_daemon_state_rejects_desktop_marker_without_version_child() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "Library/Application Support/org.hol.guard.desktop/core/versions",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
 def test_healthz_details_require_compatible_same_release_peer() -> None:
     compatible = {
         "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
