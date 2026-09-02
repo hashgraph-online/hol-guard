@@ -629,10 +629,13 @@ def main_from_argv(argv: Sequence[str]) -> int:
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     input_text = _bounded_stdin()
     if input_text is None:
+        guard_home_value = config.get("guard_home") if config is not None else None
+        guard_home = Path(guard_home_value) if isinstance(guard_home_value, str) else None
         return _emit_failure(
             harness=harness,
             input_text="{}",
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
+            guard_home=guard_home,
         )
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)
