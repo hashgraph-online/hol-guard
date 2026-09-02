@@ -92,6 +92,56 @@ def _host_only(value: str) -> str | None:
 ''',
     "network host",
 )
+text = replace_once(
+    text,
+    '''    target, target_kind, sensitivity = _target_label(rule.target_strategy, input, executable, args)
+    confidence = rule.confidence if rule.confidence in {"exact", "derived", "limited"} else "limited"
+''',
+    '''    target, target_kind, sensitivity = _target_label(rule.target_strategy, input, executable, args)
+    if rule.action_kind == "download":
+        output_target = _download_output_target(args)
+        if output_target is not None:
+            # Keep the action classified as a network operation while projecting only
+            # a coarse local destination. Never surface the raw output path in Everyday.
+            target = output_target
+    confidence = rule.confidence if rule.confidence in {"exact", "derived", "limited"} else "limited"
+''',
+    "download output projection",
+)
+text = replace_once(
+    text,
+    '''def _normalize_executable(value: str | None) -> str:
+''',
+    '''def _download_output_target(arguments: Sequence[str]) -> str | None:
+    output: str | None = None
+    index = 0
+    while index < len(arguments):
+        raw = arguments[index].strip()
+        folded = raw.casefold()
+        if raw in {"-o", "-O"} or folded in {"--output", "-outfile"}:
+            if index + 1 < len(arguments):
+                output = arguments[index + 1]
+            break
+        if folded.startswith("--output=") or folded.startswith("-outfile="):
+            output = raw.split("=", 1)[1]
+            break
+        index += 1
+    if not output:
+        return None
+    normalized = output.strip().replace("\\\\", "/").casefold()
+    if normalized == "~/downloads" or normalized.startswith("~/downloads/"):
+        return "a file in your downloads"
+    if normalized == "~/desktop" or normalized.startswith("~/desktop/"):
+        return "a file on your desktop"
+    if normalized == "~/documents" or normalized.startswith("~/documents/"):
+        return "a file in your documents"
+    return "a file on your device"
+
+
+def _normalize_executable(value: str | None) -> str:
+''',
+    "download output helper",
+)
 semantic.write_text(text)
 
 builder = Path("src/codex_plugin_scanner/guard/runtime/action_explanation_builder.py")
@@ -161,6 +211,21 @@ def test_ipv6_network_host_strips_brackets_and_port() -> None:
     label = explanation.everyday.targets[0].label
     assert label == "the service at ::1"
     assert ":8080" not in label
+
+
+def test_curl_terminal_download_output_uses_coarse_local_bucket() -> None:
+    explanation = explain_command(
+        CommandSemanticInput(
+            action_identity="curl-download-output",
+            canonical_identity="curl-download-output",
+            actor_label="an AI app",
+            executable="curl",
+            arguments=("-L", "-o", "~/Downloads/tool.tar.gz", "https://example.com/tool.tar.gz"),
+        )
+    )
+    assert explanation.kind == "download"
+    assert explanation.everyday.targets[0].label == "a file in your downloads"
+    assert "tool.tar.gz" not in explanation.everyday.summary
 '''
 semantic_tests.write_text(text)
 
