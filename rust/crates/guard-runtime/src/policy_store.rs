@@ -1,11 +1,5 @@
 #![forbid(unsafe_code)]
 
-//! Native resident policy-snapshot state.
-//!
-//! The store is intentionally owned by the resident process. Hook requests
-//! can only compare their envelope to this already-installed snapshot; they
-//! cannot install or mutate policy while a decision is in flight.
-
 use guard_policy_snapshot::{
     snapshot_bytes, validate_v3, PolicySnapshotAckV1, PolicySnapshotPushV1, PolicySnapshotV3,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION, POLICY_SNAPSHOT_MAX_BYTES,

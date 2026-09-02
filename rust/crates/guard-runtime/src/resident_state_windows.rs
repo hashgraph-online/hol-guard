@@ -467,6 +467,8 @@ mod tests {
             administrators.as_ref(),
         ));
     }
+}
+
 fn verify_windows_owner(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
     let system = "S-1-5-18"
         .parse::<LocalBox<Sid>>()
