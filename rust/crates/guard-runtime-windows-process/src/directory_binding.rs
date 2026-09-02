@@ -9,10 +9,10 @@ use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use windows_permissions::SecurityDescriptor;
 
 use super::private_files::{
-    create_private_file, file_information, mark_handle_for_delete, open_directory_bound,
-    open_existing_bound, open_raw_directory_bound, rename_into_directory, validate_handle,
-    verify_private_file,
+    file_information, mark_handle_for_delete, open_directory_bound, open_raw_directory_bound,
+    rename_into_directory, validate_handle, verify_private_file,
 };
+use super::relative_child::{create_relative_private_file, open_relative_private_file};
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
 
@@ -53,14 +53,14 @@ impl PrivateDirectoryBinding {
         name: &OsStr,
         security_descriptor: &SecurityDescriptor,
     ) -> io::Result<std::fs::File> {
-        let path = self.child_path(name)?;
-        create_private_file(&path, security_descriptor)
+        let _ = self.child_path(name)?;
+        create_relative_private_file(self.handle(), name, security_descriptor)
     }
 
     /// Open a regular child file while this directory ancestry is held.
     pub fn open_private_file(&self, name: &OsStr) -> io::Result<std::fs::File> {
-        let path = self.child_path(name)?;
-        let file = open_existing_bound(&path, false)?;
+        let _ = self.child_path(name)?;
+        let file = open_relative_private_file(self.handle(), name)?;
         verify_private_file(&file)?;
         Ok(file)
     }
@@ -75,16 +75,16 @@ impl PrivateDirectoryBinding {
         source: &std::fs::File,
         destination: &OsStr,
     ) -> io::Result<()> {
-        let destination_path = self.child_path(destination)?;
+        self.child_path(destination)?;
         validate_handle(source, false)?;
         verify_private_file(source)?;
-        match open_existing_bound(&destination_path, false) {
-            Ok(existing) => verify_private_file(&existing)?,
+        match self.open_private_file(destination) {
+            Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
         }
         rename_into_directory(self, source, destination)?;
-        let committed = open_existing_bound(&destination_path, false)?;
+        let committed = self.open_private_file(destination)?;
         if file_information(source.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
             != file_information(committed.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
         {

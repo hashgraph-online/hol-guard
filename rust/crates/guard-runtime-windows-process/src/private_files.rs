@@ -140,17 +140,6 @@ pub(super) fn open_raw_directory_bound(
     open_raw_with_access(path, true, FILE_SHARE_READ | FILE_SHARE_WRITE, access)
 }
 
-pub(super) fn open_existing_bound(path: &Path, directory: bool) -> io::Result<std::fs::File> {
-    let file = open_raw(
-        path,
-        directory,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        true,
-    )?;
-    validate_handle(&file, directory)?;
-    Ok(file)
-}
-
 fn open_raw(
     path: &Path,
     directory: bool,
