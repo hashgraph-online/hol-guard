@@ -421,3 +421,12 @@ fn private_lock_file_rejects_a_private_root_outside_the_target_scope() {
     fs::remove_dir_all(scope).unwrap();
     fs::remove_dir_all(wrong_root).unwrap();
 }
+
+#[cfg(windows)]
+#[test]
+fn verify_windows_private_directory_accepts_the_configured_root() {
+    let scope = test_scope("verify-private-root");
+    verify_windows_private_path(&scope, true, &scope).unwrap();
+    protect_windows_private_path(&scope, true, &scope).unwrap();
+    fs::remove_dir_all(scope).unwrap();
+}

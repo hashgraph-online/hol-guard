@@ -25,13 +25,24 @@ pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
 }
 
 #[cfg(windows)]
+fn windows_bind_target(path: &Path, directory: bool) -> &Path {
+    if directory {
+        path
+    } else {
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(path)
+    }
+}
+
+#[cfg(windows)]
 pub(crate) fn protect_windows_private_path(
     path: &Path,
     directory: bool,
     private_root: &Path,
 ) -> Result<(), String> {
     let _binding = windows_security::bind_windows_existing_directory(
-        path.parent().unwrap_or(path),
+        windows_bind_target(path, directory),
         private_root,
     )?;
     windows_security::protect_windows_path(path, directory)
@@ -40,13 +51,13 @@ pub(crate) fn protect_windows_private_path(
 #[cfg(windows)]
 pub(crate) fn verify_windows_private_path(
     path: &Path,
-    _directory: bool,
+    directory: bool,
     private_root: &Path,
 ) -> Result<(), String> {
     use windows_permissions::utilities::current_process_sid;
 
     let _binding = windows_security::bind_windows_existing_directory(
-        path.parent().unwrap_or(path),
+        windows_bind_target(path, directory),
         private_root,
     )?;
     let owner =

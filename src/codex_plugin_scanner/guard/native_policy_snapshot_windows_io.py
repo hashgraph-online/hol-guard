@@ -98,6 +98,7 @@ def _windows_open_configuration(
     repair: bool,
     lock: bool,
     rename_source: bool,
+    add_file: bool,
 ) -> _WindowsOpenConfiguration:
     import ctypes
     from ctypes import wintypes
@@ -105,11 +106,9 @@ def _windows_open_configuration(
     flags = _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
-        # A directory used as FILE_RENAME_INFO.RootDirectory needs
-        # FILE_ADD_FILE in addition to read access. Keep the handle's
-        # delete-sharing lock while granting only the directory operation
-        # required by the handle-bound rename.
-        desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_FILE_ADD_FILE if lock else 0)
+        # Only the private directory used as FILE_RENAME_INFO.RootDirectory
+        # needs FILE_ADD_FILE. Ancestor volume paths must stay read-only.
+        desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_FILE_ADD_FILE if add_file else 0)
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)
@@ -200,6 +199,7 @@ def _windows_open_handle(
     repair: bool = False,
     lock: bool = False,
     rename_source: bool = False,
+    add_file: bool = False,
 ) -> tuple[Any, Any, Any]:
     """Open/create one non-reparse Windows object while denying deletion."""
 
@@ -216,6 +216,7 @@ def _windows_open_handle(
         repair=repair,
         lock=lock,
         rename_source=rename_source,
+        add_file=add_file,
     )
     handle = functions.create_file(
         str(path),

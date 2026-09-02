@@ -74,6 +74,7 @@ def _windows_bind_directory_component(
         directory=True,
         repair=private and not created,
         lock=True,
+        add_file=private,
     )
     try:
         if private:

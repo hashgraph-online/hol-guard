@@ -134,6 +134,41 @@ def test_startup_timeout_signals_new_resident_for_containment(
     assert not thread.is_alive()
 
 
+def test_ensure_started_replaces_supervisor_after_external_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
+        root = Path(short_tmp)
+        service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+            executable=root / "runtime",
+            identity_sha256="e" * 64,
+            guard_home=root,
+            environment={},
+        )
+        stale = threading.Thread(daemon=True)
+        stale.is_alive = lambda: True  # type: ignore[method-assign]
+        stale.join = lambda timeout=None: None  # type: ignore[method-assign]
+        service._thread = stale  # pyright: ignore[reportPrivateUsage]
+        service._auth_token = b"\x01" * 32  # pyright: ignore[reportPrivateUsage]
+        replacement = threading.Thread(daemon=True)
+        replacement.is_alive = lambda: True  # type: ignore[method-assign]
+        started = (b"\x02" * 32, threading.Event(), 2)
+
+        def fake_start() -> tuple[threading.Thread, tuple[bytes, threading.Event, int]]:
+            assert service._thread is not stale  # pyright: ignore[reportPrivateUsage]
+            assert service._stop_event.is_set()  # pyright: ignore[reportPrivateUsage]
+            service._thread = replacement  # pyright: ignore[reportPrivateUsage]
+            return replacement, started
+
+        monkeypatch.setattr(service, "_transport_configured", lambda: True)
+        monkeypatch.setattr(service, "_transport_accepts_authenticated_connections", lambda **_kwargs: False)
+        monkeypatch.setattr(service, "_start_thread_if_needed", fake_start)
+        monkeypatch.setattr(service, "_wait_until_ready", lambda **_kwargs: True)
+
+        assert service._ensure_started(timeout_seconds=1.0) is True  # pyright: ignore[reportPrivateUsage]
+        assert service._thread is replacement  # pyright: ignore[reportPrivateUsage]
+
+
 def test_close_retains_tracking_until_resident_thread_stops(
     tmp_path: Path,
 ) -> None:
