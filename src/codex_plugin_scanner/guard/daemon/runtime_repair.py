@@ -10,7 +10,6 @@ from ...version import __version__
 from .live_identity import verified_live_guard_daemon_identity
 from .manager import (
     clear_guard_daemon_state,
-    current_guard_daemon_runtime_fingerprint,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     repair_approval_center_locator,
@@ -51,11 +50,7 @@ def repair_guard_daemon_runtime(
             current_version = Version(__version__)
         except InvalidVersion as error:
             raise RuntimeError("Installed Guard package version is invalid.") from error
-        current_fingerprint = current_guard_daemon_runtime_fingerprint()
-        if verified_runtime is not None and (
-            verified_runtime[0] > current_version
-            or (verified_runtime[0] == current_version and verified_runtime[2] == current_fingerprint)
-        ):
+        if verified_runtime is not None and verified_runtime[0] >= current_version:
             daemon_version, daemon_version_text, _ = verified_runtime
             return {
                 **result,

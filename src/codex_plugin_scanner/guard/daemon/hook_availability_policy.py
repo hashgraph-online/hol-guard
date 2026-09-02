@@ -23,7 +23,9 @@ _CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
 
 # Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
 # only: fail-closing them freezes the conversation without adding an enforcement
-# boundary. PostToolUse and PermissionRequest stay withheld/paused.
+# boundary. Protected/Extra careful keep PostToolUse withheld and high-impact
+# PreToolUse paused when native review cannot complete. Watch records those
+# actions and continues them.
 LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
         "UserPromptSubmit",
@@ -56,6 +58,60 @@ def lifecycle_event_is_observe_only(event_name: str) -> bool:
     return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
 
 
+def hook_review_is_recording_only(
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    recording_only: bool = False,
+) -> bool:
+    """True when Watch/observe must record without stopping the harness."""
+
+    if recording_only:
+        return True
+    if guard_home is None:
+        return False
+    try:
+        from ..config import load_guard_config
+        from ..protection_posture import protection_is_off
+
+        config = load_guard_config(guard_home, workspace=workspace)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+
+
+_DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw", "pi", "omp"})
+
+
+def recording_only_pre_tool_response(
+    harness: str,
+    *,
+    reason_code: str,
+    reason: str,
+) -> dict[str, object]:
+    """Continue a PreToolUse hook in Watch without changing Protected fail-closed JSON."""
+
+    from .hook_worker_responses import harness_json_from_native_pre_tool
+
+    if harness.strip().lower().replace("_", "-") in _DECISION_HOOK_HARNESSES:
+        return {
+            "decision": "allow",
+            "policy_action": "warn",
+            "reason_code": reason_code,
+            "reason": reason,
+        }
+    return harness_json_from_native_pre_tool(
+        harness,
+        {
+            "decision": "allow",
+            "minimum_action": "warn",
+            "policy_action": "warn",
+            "reason_code": reason_code,
+            "reason": reason,
+        },
+    )
+
+
 def availability_harness_response(
     payload: Mapping[str, object],
     *,
@@ -65,6 +121,8 @@ def availability_harness_response(
     reason: str,
     workspace: Path | None = None,
     home_dir: Path | None = None,
+    guard_home: Path | None = None,
+    recording_only: bool = False,
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
@@ -80,6 +138,23 @@ def availability_harness_response(
             harness,
             event_name=canonical_lifecycle,
             reason_code=reason_code,
+        )
+    watch_only = hook_review_is_recording_only(
+        guard_home=guard_home,
+        workspace=workspace,
+        recording_only=recording_only,
+    )
+    if watch_only:
+        if event_name != "PreToolUse":
+            return observe_lifecycle_fail_safe_response(
+                harness,
+                event_name=event_name,
+                reason_code=reason_code,
+            )
+        return recording_only_pre_tool_response(
+            harness,
+            reason_code=reason_code,
+            reason=reason,
         )
     if event_name != "PreToolUse":
         return post_tool_fail_safe_response(harness, reason=reason, reason_code=reason_code)
@@ -116,12 +191,20 @@ def cursor_fallback_permission(
     hook_event_name: str,
     workspace: Path | None = None,
     home_dir: Path | None = None,
+    guard_home: Path | None = None,
+    recording_only: bool = False,
 ) -> tuple[dict[str, object], int]:
     """Return Cursor hook stdout when daemon or native review cannot complete."""
 
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
+    if hook_review_is_recording_only(
+        guard_home=guard_home,
+        workspace=workspace,
+        recording_only=recording_only,
+    ):
+        return {"permission": "allow"}, 0
     if compact in {"beforewritefile", "beforemcpexecution"}:
         return dict(_CURSOR_UNAVAILABLE_DENY), 2
     if hook_action_is_emergency_safe(payload, workspace=workspace, home_dir=home_dir):
@@ -142,5 +225,7 @@ __all__ = [
     "availability_harness_response",
     "cursor_fallback_permission",
     "hook_action_is_emergency_safe",
+    "hook_review_is_recording_only",
     "lifecycle_event_is_observe_only",
+    "recording_only_pre_tool_response",
 ]

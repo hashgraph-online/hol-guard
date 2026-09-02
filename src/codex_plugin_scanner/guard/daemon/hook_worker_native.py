@@ -8,19 +8,41 @@ from pathlib import Path
 from typing import Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..config import load_guard_config
 from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus
-from ..protection_posture import protection_is_off
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-from .hook_availability_policy import availability_harness_response
+from .hook_availability_policy import (
+    availability_harness_response,
+    hook_review_is_recording_only,
+    recording_only_pre_tool_response,
+)
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
     harness_json_from_native_pre_tool,
     post_tool_fail_safe_response,
 )
+
+
+def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
+    rewritten = dict(native)
+    if str(rewritten.get("minimum_action") or "") == "allow" and rewritten.get("decision") == "allow":
+        return rewritten
+    rewritten["decision"] = "allow"
+    rewritten["minimum_action"] = "warn"
+    rewritten["policy_action"] = "warn"
+    return rewritten
+
+
+def _watch_native_post_tool_result(native: Mapping[str, object]) -> dict[str, object]:
+    rewritten = dict(native)
+    if rewritten.get("decision") == "allow" and rewritten.get("model_output_action") == "allow_original":
+        return rewritten
+    rewritten["decision"] = "allow"
+    rewritten["model_output_action"] = "allow_original"
+    rewritten["policy_action"] = "warn"
+    return rewritten
 
 
 class PythonOracle(Protocol):
@@ -51,6 +73,45 @@ class _HookWorkerNativeHost(Protocol):
     _review_raw_hook_native: Callable[..., dict[str, object] | None]
     _record_post_tool_activity: Callable[..., None]
     _record_native_decision_receipt: Callable[[object], None]
+
+
+def _record_unavailable_native(
+    host: _HookWorkerNativeHost,
+    payload: dict[str, object],
+    *,
+    harness: str,
+    event_name: str,
+    reason_code: str,
+    workspace: Path | None,
+    home_dir: Path,
+    guard_home: Path,
+    recording_only: bool,
+) -> dict[str, object]:
+    response = availability_harness_response(
+        payload,
+        harness=harness,
+        event_name=event_name,
+        reason_code=reason_code,
+        reason="HOL Guard could not complete the native hook decision safely.",
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        recording_only=recording_only,
+    )
+    route = "native_degraded" if response.get("reason_code") == "native_degraded_emergency_safe" else "native_fail_safe"
+    host.metrics.record_route(route)
+    if event_name == "PreToolUse":
+        writer = host.activity_writer
+        submit = getattr(writer, "submit_command_activity", None)
+        if callable(submit):
+            with suppress(Exception):
+                _ = submit(
+                    harness=harness,
+                    event=event_name,
+                    payload=payload,
+                    succeeded=str(response.get("policy_action") or "") != "block",
+                )
+    return response
 
 
 class HookWorkerNativeMixin:
@@ -96,17 +157,36 @@ class HookWorkerNativeMixin:
         command = pre_tool_command(payload)
         if command is None:
             raise HookWorkerUnsupported("fast path PreToolUse requires a command")
-        config = load_guard_config(guard_home, workspace=workspace)
-        recording_only = protection_is_off(posture=config.protection_posture, mode=config.mode)
+        recording_only = hook_review_is_recording_only(guard_home=guard_home, workspace=workspace)
         native = self._review_pre_tool_native(command, guard_home=guard_home, cwd=workspace, home_dir=home_dir)
         if native is not None:
-            action = str(native.get("minimum_action") or "")
-            if action == "review" or (recording_only and action != "allow"):
-                record_python_semantic_hook_route()
-                raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
+            if recording_only:
+                action = str(native.get("minimum_action") or "")
+                if action != "allow" or native.get("decision") != "allow":
+                    native = _watch_native_pre_tool_result(native)
+                    return recording_only_pre_tool_response(
+                        harness,
+                        reason_code=str(native.get("reason_code") or "watch_recording_only"),
+                        reason=str(native.get("reason") or "Watch recorded this action without stopping it."),
+                    )
+            else:
+                action = str(native.get("minimum_action") or "")
+                if action == "review":
+                    record_python_semantic_hook_route()
+                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return harness_json_from_native_pre_tool(harness, native)
         if recording_only:
-            raise HookWorkerUnsupported("observe PreToolUse uses CLI recording")
+            return _record_unavailable_native(
+                self,
+                payload,
+                harness=harness,
+                event_name="PreToolUse",
+                reason_code="watch_recording_only",
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=True,
+            )
         status = self._native_runtime_status()
         if status.mode == "off":
             raise HookWorkerUnsupported("native PreToolUse runtime is off")
@@ -131,7 +211,9 @@ class HookWorkerNativeMixin:
         deadline: float | None,
     ) -> dict[str, object]:
         policy_snapshot = self._native_policy_snapshot(workspace)
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        recording_only = hook_review_is_recording_only(guard_home=guard_home, workspace=workspace) or (
+            policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        )
         edge = self._review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -155,46 +237,47 @@ class HookWorkerNativeMixin:
                 "PostToolUse": "native_post_tool_unavailable",
                 "PreToolUse": "native_pre_tool_unavailable",
             }.get(event_name, "native_hook_event_unavailable")
-            response = availability_harness_response(
+            return _record_unavailable_native(
+                self,
                 payload,
                 harness=harness,
                 event_name=event_name,
                 reason_code=reason_code,
-                reason="HOL Guard could not complete the native hook decision safely.",
                 workspace=workspace,
                 home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=recording_only,
             )
-            route = (
-                "native_degraded"
-                if response.get("reason_code") == "native_degraded_emergency_safe"
-                else "native_fail_safe"
-            )
-            self.metrics.record_route(route)
-            return response
         native_event = str(edge["event_name"])
         native_harness = str(edge["harness"])
         native_result = edge["result"]
         if not isinstance(native_result, Mapping):
-            response = availability_harness_response(
+            return _record_unavailable_native(
+                self,
                 payload,
                 harness=harness,
                 event_name=event_name,
                 reason_code="native_hook_edge_invalid_response",
-                reason="HOL Guard could not complete the native hook decision safely.",
                 workspace=workspace,
                 home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=recording_only,
             )
-            route = (
-                "native_degraded"
-                if response.get("reason_code") == "native_degraded_emergency_safe"
-                else "native_fail_safe"
-            )
-            self.metrics.record_route(route)
-            return response
         self._record_native_decision_receipt(edge.get("receipt"))
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
+            if recording_only:
+                action = str(native_result.get("minimum_action") or "")
+                if action != "allow" or native_result.get("decision") != "allow":
+                    native_result = _watch_native_pre_tool_result(native_result)
+                    return recording_only_pre_tool_response(
+                        native_harness,
+                        reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
+                        reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
+                    )
             return harness_json_from_native_pre_tool(native_harness, native_result)
+        if recording_only:
+            native_result = _watch_native_post_tool_result(native_result)
         self._record_post_tool_activity(
             harness=native_harness,
             payload=payload,

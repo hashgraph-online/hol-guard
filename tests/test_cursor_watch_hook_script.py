@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import io
+import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
 
-def _cursor_permission(tmp_path: Path, config_text: str) -> Callable[..., Any]:
+def _cursor_permission(tmp_path: Path, config_text: str) -> Callable[..., object]:
     guard_home = tmp_path / "guard"
     guard_home.mkdir()
     (guard_home / "config.toml").write_text(config_text, encoding="utf-8")
@@ -21,6 +25,8 @@ def _cursor_permission(tmp_path: Path, config_text: str) -> Callable[..., Any]:
     )
     source = cursor_hook_script_source(context)
     assert "load_guard_config" in source
+    assert "workspace=workspace_path" in source
+    assert "_LAST_HOOK_EVENT_NAME" in source
     script_globals: dict[str, object] = {"__name__": "cursor_hook"}
     exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
     permission = script_globals["_cursor_permission"]
@@ -53,3 +59,37 @@ def test_generated_cursor_hook_ignores_nested_observe_keys(tmp_path: Path) -> No
         'mode = "observe"\nprotection_posture = "watch"\n',
     )
     assert permission("block", {}) == "deny"
+
+
+def test_generated_cursor_watch_after_shell_exception_prints_empty(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\n',
+        encoding="utf-8",
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace_dir=tmp_path,
+    )
+    script_globals: dict[str, object] = {"__name__": "cursor_hook"}
+    exec(compile(cursor_hook_script_source(context), "hol-guard-cursor-hook.py", "exec"), script_globals)
+
+    def _raise_daemon_hook(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("daemon hook unavailable")
+
+    script_globals["_daemon_hook_result"] = _raise_daemon_hook
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"hook_event_name": "afterShellExecution", "command": "true"})),
+    )
+    main = script_globals["main"]
+    assert callable(main)
+    assert main() == 0
+    assert capsys.readouterr().out.strip() == "{}"

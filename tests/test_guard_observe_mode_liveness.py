@@ -56,34 +56,11 @@ def _review_request(
     return payload
 
 
-@pytest.mark.parametrize(
-    ("endpoint", "expected"),
-    (
-        (
-            "pi",
-            {
-                "decision": "allow",
-                "reason_code": _DEADLINE_REASON,
-                "observed_review_failure": True,
-            },
-        ),
-        (
-            "claude-code",
-            {
-                "reason_code": _DEADLINE_REASON,
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                },
-            },
-        ),
-    ),
-)
+@pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
 def test_observe_mode_does_not_block_failed_local_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     endpoint: str,
-    expected: dict[str, object],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
@@ -108,7 +85,13 @@ def test_observe_mode_does_not_block_failed_local_review(
     finally:
         daemon.stop()
 
-    assert payload == expected
+    if endpoint == "pi":
+        assert payload["decision"] == "allow"
+        return
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["hookEventName"] == "PreToolUse"
+    assert hook_output["permissionDecision"] == "allow"
 
 
 @pytest.mark.parametrize(

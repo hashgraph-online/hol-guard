@@ -1110,10 +1110,10 @@ def _daemon_healthz_details_match_guard_home(
 
 
 def _daemon_healthz_details_match_current_runtime(payload: dict[str, object]) -> bool:
-    return (
-        payload.get("package_version") == __version__
-        and payload.get("runtime_fingerprint") == _current_guard_daemon_runtime_fingerprint()
-    )
+    """Match live daemon identity including protocol compatibility."""
+
+    # Same-release peers still require a current compatibility version.
+    return _guard_daemon_state_matches_current_runtime(payload)
 
 
 def _guard_daemon_url_port(url: str) -> int | None:
@@ -2584,11 +2584,11 @@ def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tup
 
 
 def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
-    compatibility_version = payload.get("compatibility_version")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
-        return False
-    runtime_fingerprint = payload.get("runtime_fingerprint")
-    return isinstance(runtime_fingerprint, str) and runtime_fingerprint == _current_guard_daemon_runtime_fingerprint()
+    fingerprint = payload.get("runtime_fingerprint")
+    compatible = payload.get("compatibility_version") == GUARD_DAEMON_COMPATIBILITY_VERSION
+    current = fingerprint == _current_guard_daemon_runtime_fingerprint()
+    peer = payload.get("package_version") == __version__
+    return compatible and isinstance(fingerprint, str) and bool(fingerprint.strip()) and (current or peer)
 
 
 def _current_guard_daemon_source_root() -> str:
