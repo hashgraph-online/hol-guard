@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 _STATE_SCHEMA = "hol-guard-native-policy-generation.v1"
 _STATE_NAME = "native-policy-generation.json"
 _LOCK_NAME = "native-policy-generation.lock"
@@ -46,7 +48,7 @@ NATIVE_POLICY_SNAPSHOT_CACHE_NAME = "policy-snapshot-publisher-v3.json"
 _NATIVE_POLICY_SNAPSHOT_PENDING_NAME = "policy-snapshot-publisher-v3.pending.json"
 _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
-_PUBLISH_TIMEOUT_SECONDS = 2.0
+_PUBLISH_TIMEOUT_SECONDS = 4.0 if sys.platform == "win32" else 2.0
 _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0

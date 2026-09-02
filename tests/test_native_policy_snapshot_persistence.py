@@ -199,6 +199,32 @@ def test_floor_recovery_requires_exact_typed_ack(
         publisher.close()
 
 
+def test_publisher_surfaces_resident_start_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    master = b"s" * 32
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+
+    def client_request(**_kwargs: object) -> bytes:
+        return b'{"error":"native_resident_start_timeout","retryable":false}'
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store,
+        status_provider=_status,
+        client_request=client_request,
+        poll_interval_seconds=0.05,
+    )
+    try:
+        publisher._publish_once()
+        assert not publisher.is_ready()
+        assert publisher.last_error == "native_resident_start_timeout"
+    finally:
+        publisher.close()
+
+
 def test_publisher_process_restart_reuses_cached_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

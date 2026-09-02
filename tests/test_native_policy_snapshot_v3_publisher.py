@@ -24,6 +24,9 @@ test_floor_only_ack_materializes_strictly_new_generation = (
     _persistence_tests.test_floor_only_ack_materializes_strictly_new_generation
 )
 test_floor_recovery_requires_exact_typed_ack = _persistence_tests.test_floor_recovery_requires_exact_typed_ack
+test_publisher_surfaces_resident_start_timeout = (
+    _persistence_tests.test_publisher_surfaces_resident_start_timeout
+)
 test_lost_ack_retries_identical_payload = _persistence_tests.test_lost_ack_retries_identical_payload
 test_publisher_process_restart_reuses_cached_payload = (
     _persistence_tests.test_publisher_process_restart_reuses_cached_payload
@@ -131,6 +134,7 @@ __all__ = [
     "test_publisher_rejects_mutated_ack_without_opening_barrier",
     "test_publisher_repushes_after_resident_generation_change",
     "test_publisher_startup_ack_and_mutation_push",
+    "test_publisher_surfaces_resident_start_timeout",
     "test_renewal_failure_keeps_barrier_closed_at_expiry",
     "test_renewal_materializes_higher_generation_before_expiry",
     "test_renewal_retry_reuses_candidate_with_bounded_backoff",

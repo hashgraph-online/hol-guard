@@ -51,10 +51,7 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
         let response =
             match super::client_request_with_lease(state_base, &payload, timeout, &client_lease) {
                 Ok(response) => response,
-                Err(_) => crate::resident_protocol::error_response(
-                    "native_client_stream_request_failed",
-                    false,
-                ),
+                Err(error) => crate::resident_protocol::safe_error_response(&error, false),
             };
         write_frame(&mut output, &response)?;
     }

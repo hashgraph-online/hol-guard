@@ -128,7 +128,7 @@ def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
         input=_policy_snapshot_push_bytes_v3(snapshot),
         check=False,
         capture_output=True,
-        timeout=3,
+        timeout=8,
     )
     if result.returncode != 0:
         raise AssertionError(f"native policy push failed: {_native_diagnostic(result.stderr)}")

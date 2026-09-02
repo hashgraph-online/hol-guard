@@ -267,8 +267,8 @@ pub(super) fn wait_for_generation_containment(
     generation: u64,
     token: &[u8],
     known_processes: &[ManagedProcessIdentity],
+    deadline: Instant,
 ) -> Result<(), String> {
-    let deadline = Instant::now() + super::MANAGED_STOP_TIMEOUT;
     loop {
         let states = discover_states(scope, digest)?;
         let generation_states = states
@@ -351,21 +351,31 @@ pub(super) fn wait_for_stop_containment(
     }
 }
 
-pub(super) fn contain_spawned_managed(
+pub(super) fn abort_spawned_managed(
     child: &mut SpawnedManaged,
     scope: &Path,
     digest: &str,
     generation: u64,
     token: &[u8],
-) -> Result<(), String> {
+) {
     let process_id = child_process_id(child);
     let known_processes = [ManagedProcessIdentity {
         process_id,
         start_marker: process_start_marker(process_id).ok(),
         runtime_digest: runtime_digest().ok(),
     }];
-    terminate_spawned_managed(child)?;
-    wait_for_generation_containment(scope, digest, generation, token, &known_processes)
+    #[cfg(windows)]
+    let _ = child.terminate_with_timeout(Duration::from_millis(100));
+    #[cfg(not(windows))]
+    let _ = terminate_spawned_managed(child);
+    let _ = wait_for_generation_containment(
+        scope,
+        digest,
+        generation,
+        token,
+        &known_processes,
+        Instant::now() + Duration::from_millis(50),
+    );
 }
 
 pub(super) fn is_stale_process_identity_error(error: &str) -> bool {

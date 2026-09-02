@@ -42,7 +42,7 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
 }
 
 const CLIENT_START_TIMEOUT: Duration =
-    Duration::from_millis(if cfg!(windows) { 1_500 } else { 600 });
+    Duration::from_millis(if cfg!(windows) { 2_500 } else { 600 });
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 
 fn try_live_or_restart(
@@ -256,23 +256,23 @@ fn client_request_with_lease(
     match request_result {
         Ok(Some(response)) => Ok(response),
         Ok(None) => {
-            containment::contain_spawned_managed(
+            containment::abort_spawned_managed(
                 &mut spawned,
                 &scope,
                 &digest,
                 generation,
                 &token,
-            )?;
+            );
             Err("native_resident_start_timeout".to_owned())
         }
         Err(error) => {
-            containment::contain_spawned_managed(
+            containment::abort_spawned_managed(
                 &mut spawned,
                 &scope,
                 &digest,
                 generation,
                 &token,
-            )?;
+            );
             Err(error)
         }
     }
