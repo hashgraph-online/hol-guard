@@ -252,6 +252,22 @@ fn invalid_object(directory: bool) -> io::Error {
     )
 }
 
+fn trusted_private_owner(applied: &Sid, current: &Sid) -> bool {
+    if applied == current {
+        return true;
+    }
+    let Ok(system) = "S-1-5-18".parse::<LocalBox<Sid>>() else {
+        return false;
+    };
+    if applied == system.as_ref() {
+        return true;
+    }
+    let Ok(administrators) = "S-1-5-32-544".parse::<LocalBox<Sid>>() else {
+        return false;
+    };
+    applied == administrators.as_ref()
+}
+
 /// Verify the exact owner-private file policy before a handle participates in
 /// an atomic replacement. This check is intentionally inside the companion
 /// API; callers cannot accidentally replace a destination without validating
@@ -265,7 +281,13 @@ pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
         SecurityInformation::Dacl | SecurityInformation::Owner | SecurityInformation::ProtectedDacl,
     )
     .map_err(|_| io::Error::other("private file security descriptor unavailable"))?;
-    if applied.owner() != Some(owner.as_ref()) {
+    let Some(applied_owner) = applied.owner() else {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "private file owner is missing",
+        ));
+    };
+    if !trusted_private_owner(applied_owner, owner.as_ref()) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "private file owner does not match the current SID",
