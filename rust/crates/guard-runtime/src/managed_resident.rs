@@ -167,7 +167,21 @@ fn try_home_states(
             &identity,
         ) {
             Ok(response) => return Ok(Some(response)),
-            Err(error) if is_retryable_live_request_error(&error) => {}
+            Err(error)
+                if is_retryable_live_request_error(&error)
+                    || (same_runtime
+                        && validate_package_process_identity(
+                            state.process_id,
+                            &state.process_start_marker,
+                        )
+                        .is_err())
+                    || (!same_runtime
+                        && validate_runtime_process_identity(
+                            state.process_id,
+                            &state.process_start_marker,
+                            &state.runtime_sha256,
+                        )
+                        .is_err()) => {}
             Err(_) => return Err("native_resident_live_request_failed".to_owned()),
         }
     }

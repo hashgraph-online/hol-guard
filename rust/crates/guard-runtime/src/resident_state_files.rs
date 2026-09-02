@@ -180,17 +180,7 @@ pub(crate) fn private_lock_file(
         .parent()
         .ok_or_else(|| "native_resident_lock_open_failed".to_owned())?;
     let binding = windows_security::bind_windows_existing_directory(parent, private_root)?;
-    let file = match windows_security::create_private_file(path, private_root) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let mut file = windows_security::open_private_file(path, private_root)
-                .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
-            windows_security::repair_private_file(&mut file)
-                .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
-            file
-        }
-        Err(_) => return Err("native_resident_lock_open_failed".to_owned()),
-    };
+    let file = windows_security::create_or_open_private_child(&binding, path)?;
     let metadata = file
         .metadata()
         .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
