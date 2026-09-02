@@ -50,7 +50,7 @@ pub(crate) fn supervise_managed(
     state_base: &Path,
     generation: u64,
     expected_digest: &str,
-    owner_process_id: u32,
+    _owner_process_id: u32,
     token: &[u8],
 ) -> Result<(), String> {
     let executable =
@@ -62,7 +62,7 @@ pub(crate) fn supervise_managed(
         OsString::from("--generation"),
         OsString::from(generation.to_string()),
         OsString::from("--owner-process-id"),
-        OsString::from(owner_process_id.to_string()),
+        OsString::from(std::process::id().to_string()),
         OsString::from("--runtime-sha256"),
         OsString::from(expected_digest),
     ];

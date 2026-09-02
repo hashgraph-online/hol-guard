@@ -410,8 +410,13 @@ pub(crate) fn publish_state(
             continue;
         }
         #[cfg(windows)]
-        remove_windows_private_file(&candidate, &private_root)
-            .map_err(|_| "native_resident_state_prune_failed".to_owned())?;
+        if remove_windows_private_file(&candidate, &private_root).is_err() {
+            match fs::remove_file(&candidate) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("native_resident_state_prune_failed".to_owned()),
+            }
+        }
         #[cfg(not(windows))]
         {
             let metadata = fs::symlink_metadata(&candidate)

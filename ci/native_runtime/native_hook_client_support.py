@@ -302,7 +302,20 @@ def _terminate_state_process(state_file: Path) -> None:
 
 
 def _terminate_process(process_id: int) -> None:
-    os.kill(process_id, signal.SIGTERM)
+    try:
+        os.kill(process_id, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        if os.name != "nt":
+            raise
+        subprocess.run(
+            ("taskkill", "/F", "/PID", str(process_id)),
+            check=False,
+            capture_output=True,
+        )
+    except OSError:
+        return
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         try:

@@ -6,10 +6,8 @@ use super::{
     MAX_STARTUP_LOCK_BYTES,
 };
 #[cfg(not(windows))]
-use std::fs;
-use std::fs::File;
-#[cfg(not(windows))]
 use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::SystemTime;
@@ -72,10 +70,14 @@ pub(crate) fn clear_stale_startup_lock(
     #[cfg(windows)]
     let mut file = {
         match super::open_private_read(&path, MAX_STARTUP_LOCK_BYTES, "startup_lock", &private_root)
-            .map_err(|_| "native_resident_lock_stat_failed".to_owned())?
         {
-            Some(file) => file,
-            None => return Ok(false),
+            Ok(Some(file)) => file,
+            Ok(None) => return Ok(false),
+            Err(_) => {
+                fs::remove_file(&path)
+                    .map_err(|_| "native_resident_lock_stat_failed".to_owned())?;
+                return Ok(true);
+            }
         }
     };
     #[cfg(not(windows))]

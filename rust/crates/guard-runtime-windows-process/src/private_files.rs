@@ -126,11 +126,7 @@ pub(super) fn open_existing(path: &Path, directory: bool) -> io::Result<std::fs:
     Ok(file)
 }
 
-/// Inspect an existing private file without WRITE_DAC or DELETE.
-///
-/// Authority watchers and the replace source already hold the object. A second
-/// WRITE_DAC open is not covered by FILE_SHARE_WRITE and fails the identity
-/// check after rename.
+/// Inspect a private file without WRITE_DAC so overlapping readers can coexist.
 pub(super) fn open_inspect_private_file(path: &Path) -> io::Result<std::fs::File> {
     let file = open_raw_with_access(
         path,
@@ -153,9 +149,7 @@ pub(super) fn open_directory_bound(
     Ok(file)
 }
 
-/// Open a directory while keeping checked ancestry from being renamed away.
-/// Barrier handles never share delete and never take GENERIC_WRITE, so the
-/// bound directory cannot be renamed and children can still be created.
+/// Barrier handles never share delete and never take GENERIC_WRITE.
 pub(super) fn open_raw_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
@@ -298,10 +292,7 @@ fn trusted_private_owner(applied: &Sid, current: &Sid) -> bool {
     applied == administrators.as_ref()
 }
 
-/// Verify the exact owner-private file policy before a handle participates in
-/// an atomic replacement. This check is intentionally inside the companion
-/// API; callers cannot accidentally replace a destination without validating
-/// both the source and the existing destination.
+/// Verify the exact owner-private file policy on an already-open handle.
 pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
     let owner = current_process_sid()
         .map_err(|_| io::Error::other("current Windows owner SID unavailable"))?;
@@ -447,10 +438,7 @@ pub(super) fn rename_into_directory(
         status: 0,
         information: 0,
     };
-    // SAFETY: `source` is a live DELETE-capable handle and `buffer` remains
-    // valid for the synchronous FileRenameInformationEx call. POSIX semantics
-    // replace a destination that still has read handles, such as the policy
-    // authority watcher.
+    // SAFETY: `source` is DELETE-capable; POSIX replace allows dest readers.
     let status = unsafe {
         NtSetInformationFile(
             source.as_raw_handle() as HANDLE,

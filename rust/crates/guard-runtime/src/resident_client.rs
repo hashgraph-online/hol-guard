@@ -119,7 +119,7 @@ fn connect_loopback_with_digest(
         return Err("native_client_endpoint_invalid".to_owned());
     }
     validate_runtime_owner(identity)?;
-    let stream = TcpStream::connect_timeout(&address, timeout)
+    let stream = TcpStream::connect_timeout(&address, timeout.min(AUTH_TIMEOUT))
         .map_err(|_| "native_client_connect_failed".to_owned())?;
     validate_runtime_owner(identity)?;
     Ok(Box::new(stream))

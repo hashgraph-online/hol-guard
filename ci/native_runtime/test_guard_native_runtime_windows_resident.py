@@ -178,17 +178,17 @@ def test_windows_native_runtime_reuses_authenticated_resident_service(
             first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
             first_state = _rust_resident_state_signature(first_request.guard_home)
             second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
+            command_model = review_command_model_native(
+                "git status --short",
+                guard_home=first_request.guard_home,
+            )
         second_state = _rust_resident_state_signature(first_request.guard_home)
-        command_model = review_command_model_native(
-            "git status --short",
-            guard_home=first_request.guard_home,
-        )
         assert first is not None, native_resident_client_failure_code()
         assert first.decision == "allow"
         assert second is not None and second.decision == "allow"
         assert len(first_state) == 1
         assert second_state == first_state
-        assert command_model is not None
+        assert command_model is not None, native_resident_client_failure_code()
         assert command_model["confidence"] == "exact"
         assert command_model["segments"][0]["executable"] == "git"
     finally:
