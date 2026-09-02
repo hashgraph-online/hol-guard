@@ -57,7 +57,7 @@ fn validate_durable_policy_generation(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) static POLICY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
@@ -201,7 +201,7 @@ pub(crate) fn evaluate_pre_tool_request(
     crate::encode_response(&pre_tool_response(None, evaluate_pre_tool(request)?))
 }
 
-#[cfg(test)]
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
 mod tests {
     use super::*;
     use serde_json::json;

@@ -1,15 +1,34 @@
 use std::io;
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::time::Duration;
 
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
 use winapi::shared::winerror::{ERROR_INVALID_PARAMETER, WAIT_TIMEOUT};
-use winapi::um::processthreadsapi::{GetExitCodeProcess, GetProcessTimes, TerminateProcess};
+use winapi::um::processthreadsapi::{GetProcessTimes, TerminateProcess};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
 use winapi::um::winnt::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE};
 
-const STILL_ACTIVE: DWORD = 259;
+const MAX_FINITE_WAIT_MILLIS: DWORD = u32::MAX - 1;
+
+pub(super) fn duration_to_wait_millis(timeout: Duration) -> DWORD {
+    timeout.as_millis().min(u128::from(MAX_FINITE_WAIT_MILLIS)) as DWORD
+}
+
+pub(super) fn process_is_running(process: &OwnedHandle) -> io::Result<bool> {
+    // A process handle becomes signaled when the process exits.  This check is
+    // deliberately independent of its exit code: 259 (STILL_ACTIVE) is a
+    // valid application exit code and must not be mistaken for liveness.
+    // SAFETY: `process` owns a valid process handle until this call returns.
+    let wait = unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, 0) };
+    match wait {
+        WAIT_OBJECT_0 => Ok(false),
+        WAIT_TIMEOUT => Ok(true),
+        WAIT_FAILED => Err(io::Error::last_os_error()),
+        _ => Err(io::Error::other("unexpected process state result")),
+    }
+}
 
 pub(super) fn process_start_marker_for_handle(process: &OwnedHandle) -> io::Result<String> {
     let mut creation = winapi::shared::minwindef::FILETIME {
@@ -62,7 +81,7 @@ pub fn wait_for_process_exit(process_id: u32, timeout: std::time::Duration) -> i
             }
             Err(error) => return Err(error),
         };
-    let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
+    let millis = duration_to_wait_millis(timeout);
     // SAFETY: `process` owns a valid process handle until this call returns.
     let wait = unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, millis) };
     match wait {
@@ -99,18 +118,13 @@ pub fn terminate_process_verified(
             return Ok(false);
         }
     }
-    let mut exit_code = 0;
-    // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
-    if unsafe { GetExitCodeProcess(process.as_raw_handle() as HANDLE, &mut exit_code) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
-    if exit_code == STILL_ACTIVE {
+    if process_is_running(&process)? {
         // SAFETY: The process handle is owned and termination is followed by a wait.
         if unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) } == FALSE {
             return Err(io::Error::last_os_error());
         }
     }
-    let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
+    let millis = duration_to_wait_millis(timeout);
     // SAFETY: `process` owns a valid process handle until this call returns.
     let wait = unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, millis) };
     match wait {
@@ -121,5 +135,23 @@ pub fn terminate_process_verified(
         )),
         WAIT_FAILED => Err(io::Error::last_os_error()),
         _ => Err(io::Error::other("unexpected process wait result")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duration_to_wait_millis_never_uses_infinite_sentinel() {
+        assert_eq!(duration_to_wait_millis(Duration::ZERO), 0);
+        assert_eq!(
+            duration_to_wait_millis(Duration::from_millis(u64::MAX)),
+            u32::MAX - 1
+        );
+        assert_ne!(
+            duration_to_wait_millis(Duration::from_millis(u64::MAX)),
+            u32::MAX
+        );
     }
 }

@@ -4,7 +4,7 @@ use guard_contracts::{
     ApprovalConsumeRequestV4, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
     GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
     MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_APPROVAL_MAX_BYTES,
-    NATIVE_PROTOCOL_VERSION,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use guard_hook_core::review_post_tool;
 use serde::Deserialize;
@@ -176,11 +176,7 @@ pub(crate) fn evaluate_resident_bytes(
             })),
             ResidentOperationV1::Shutdown(_request) => {
                 crate::managed_resident::request_shutdown();
-                if crate::managed_resident::wait_for_shutdown() {
-                    encode_response(&serde_json::json!({"status": "stopped"}))
-                } else {
-                    Err("native_resident_stop_timeout".to_owned())
-                }
+                encode_response(&serde_json::json!({"status": "stopping"}))
             }
         },
         ResidentRequestV1::Hook(request) => {
@@ -216,10 +212,8 @@ pub(crate) fn error_response(code: &'static str, retryable: bool) -> Vec<u8> {
 }
 
 pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
-    if code.starts_with("native_policy_snapshot_")
-        || code.starts_with("native_resident_stop_")
+    if NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES.contains(&code)
         || NATIVE_APPROVAL_ERROR_CODES.contains(&code)
-        || code.starts_with("snapshot_")
     {
         return serde_json::to_vec(&serde_json::json!({
             "error": code,
@@ -248,6 +242,27 @@ mod tests {
         ))
         .expect("redacted approval error is JSON");
         assert_eq!(unknown["error"], "native_request_invalid_json");
+
+        let lifecycle: Value = serde_json::from_slice(&safe_error_response(
+            "native_resident_start_in_progress",
+            true,
+        ))
+        .expect("known lifecycle error is JSON");
+        assert_eq!(lifecycle["error"], "native_resident_start_in_progress");
+
+        let unknown_lifecycle: Value = serde_json::from_slice(&safe_error_response(
+            "native_resident_future_unregistered_code",
+            false,
+        ))
+        .expect("redacted lifecycle error is JSON");
+        assert_eq!(unknown_lifecycle["error"], "native_request_invalid_json");
+
+        let unknown_policy: Value = serde_json::from_slice(&safe_error_response(
+            "native_policy_snapshot_future_unregistered_code",
+            false,
+        ))
+        .expect("redacted policy error is JSON");
+        assert_eq!(unknown_policy["error"], "native_request_invalid_json");
     }
 
     #[test]

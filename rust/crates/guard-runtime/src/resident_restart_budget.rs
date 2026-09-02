@@ -8,6 +8,7 @@ const RESTART_WINDOW_MS: u64 = 60_000;
 const RESTART_CIRCUIT_MS: u64 = 30_000;
 const MAX_RESTARTS_PER_WINDOW: u32 = 3;
 const BUDGET_SCHEMA: &str = "hol-guard-resident-restart-budget.v1";
+const BUDGET_LOCK_FILE: &str = "restart-budget.lock";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,6 +17,30 @@ struct RestartBudget {
     window_start_ms: u64,
     attempts: u32,
     circuit_until_ms: u64,
+}
+
+struct RestartBudgetLock {
+    file: File,
+}
+
+impl Drop for RestartBudgetLock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.file);
+    }
+}
+
+fn acquire_budget_lock(scope: &Path) -> Result<RestartBudgetLock, String> {
+    let path = scope.join(BUDGET_LOCK_FILE);
+    let file = crate::resident_state::private_lock_file(&path)
+        .map_err(|_| "native_resident_restart_budget_lock_failed".to_owned())?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            "native_resident_restart_budget_busy".to_owned()
+        } else {
+            "native_resident_restart_budget_lock_failed".to_owned()
+        }
+    })?;
+    Ok(RestartBudgetLock { file })
 }
 
 fn now_ms() -> Result<u64, String> {
@@ -30,6 +55,10 @@ fn now_ms() -> Result<u64, String> {
 
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temporary = temporary_path(path)?;
+    if existing_private_file(&temporary)? {
+        fs::remove_file(&temporary)
+            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
+    }
     let mut options = OpenOptions::new();
     options.create_new(true).write(true);
     #[cfg(unix)]
@@ -40,6 +69,12 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = options
         .open(&temporary)
         .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
+    #[cfg(windows)]
+    if crate::resident_state::protect_windows_private_path(&temporary, false).is_err() {
+        drop(file);
+        let _ = fs::remove_file(&temporary);
+        return Err("native_resident_restart_budget_write_failed".to_owned());
+    }
     let write_result = file
         .write_all(bytes)
         .and_then(|()| file.sync_all())
@@ -58,6 +93,33 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     .and_then(|directory| directory.sync_all())
     .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
     Ok(())
+}
+
+fn existing_private_file(path: &Path) -> Result<bool, String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err("native_resident_restart_budget_stat_failed".to_owned()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
+        return Err("native_resident_restart_budget_invalid".to_owned());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let owner = path
+            .parent()
+            .and_then(|parent| fs::symlink_metadata(parent).ok())
+            .map(|parent| parent.uid());
+        if owner != Some(metadata.uid()) || metadata.permissions().mode() & 0o077 != 0 {
+            return Err("native_resident_restart_budget_invalid".to_owned());
+        }
+    }
+    #[cfg(windows)]
+    {
+        crate::resident_state::open_private_read(path, 4096, "restart_budget")?;
+    }
+    Ok(true)
 }
 
 #[cfg(not(windows))]
@@ -98,11 +160,9 @@ fn backup_path(path: &Path) -> PathBuf {
 #[cfg(windows)]
 fn recover_interrupted_replace(path: &Path) -> Result<(), String> {
     let backup = backup_path(path);
-    let path_exists = path
-        .try_exists()
+    let path_exists = existing_private_file(path)
         .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
-    let backup_exists = backup
-        .try_exists()
+    let backup_exists = existing_private_file(&backup)
         .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
     match (path_exists, backup_exists) {
         (false, true) => fs::rename(backup, path)
@@ -122,19 +182,71 @@ fn temporary_path(path: &Path) -> Result<PathBuf, String> {
 }
 
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
+    let _lock = acquire_budget_lock(scope)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path)?;
     let now = now_ms()?;
-    let mut budget = if path.exists() {
-        let metadata = fs::symlink_metadata(&path)
+    let budget_exists = match fs::symlink_metadata(&path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
+                return Err("native_resident_restart_budget_invalid".to_owned());
+            }
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => return Err("native_resident_restart_budget_stat_failed".to_owned()),
+    };
+    let mut budget = if budget_exists {
+        let mut bytes = Vec::new();
+        let file = {
+            #[cfg(windows)]
+            {
+                crate::resident_state::open_private_read(&path, 4096, "restart_budget")?
+                    .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
+            }
+            #[cfg(not(windows))]
+            {
+                let mut options = OpenOptions::new();
+                options.read(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+                }
+                options
+                    .open(&path)
+                    .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?
+            }
+        };
+        let metadata = file
+            .metadata()
             .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
         if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
             return Err("native_resident_restart_budget_invalid".to_owned());
         }
-        let mut bytes = Vec::new();
-        File::open(&path)
-            .and_then(|file| file.take(4097).read_to_end(&mut bytes))
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            let path_metadata = fs::symlink_metadata(&path)
+                .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
+            if path_metadata.file_type().is_symlink()
+                || !path_metadata.is_file()
+                || path_metadata.dev() != metadata.dev()
+                || path_metadata.ino() != metadata.ino()
+                || metadata.nlink() != 1
+                || path
+                    .parent()
+                    .and_then(|parent| fs::symlink_metadata(parent).ok())
+                    .map(|parent| parent.uid())
+                    != Some(metadata.uid())
+                || metadata.permissions().mode() & 0o077 != 0
+            {
+                return Err("native_resident_restart_budget_invalid".to_owned());
+            }
+        }
+        file.take(4097)
+            .read_to_end(&mut bytes)
             .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?;
         let value = crate::strict_json_value(&bytes)
             .map_err(|_| "native_resident_restart_budget_invalid".to_owned())?;

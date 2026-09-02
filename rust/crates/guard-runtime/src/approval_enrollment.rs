@@ -2,9 +2,8 @@
 
 //! OS-protected enrollment state for the external approval authority.
 //!
-//! This module stores only enrollment provenance and per-install/device
-//! bindings. It deliberately contains no replay secret: request replay state
-//! lives in the resident process and is invalidated by its random epoch.
+//! This module stores enrollment provenance and per-install/device bindings only; it contains no replay secret.
+//! Request replay state lives in the resident process and is invalidated by its random epoch.
 
 use guard_policy_snapshot::canonical_json_bytes;
 use serde::{Deserialize, Serialize};
@@ -27,6 +26,7 @@ pub(super) fn write_platform_secret_for_v4(account: &str, value: &str) -> Result
 }
 
 const STATE_VERSION: u16 = 4;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_NAME: &str = "org.hashgraphonline.hol-guard.native-approval-enrollment.v1";
 const ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-enrollment-account-v1\0";
 const DEVICE_ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-device-v1\0";
@@ -477,6 +477,8 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         }
+        #[cfg(windows)]
+        crate::resident_state::protect_windows_private_path(&root, true).unwrap();
         root
     }
 

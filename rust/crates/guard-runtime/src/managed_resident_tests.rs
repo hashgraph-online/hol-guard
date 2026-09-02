@@ -1,4 +1,7 @@
 use super::*;
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[test]
 fn generation_parser_rejects_zero_and_non_numeric() {
@@ -77,12 +80,103 @@ fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
         ),
     )
     .unwrap();
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&foreign, false).unwrap();
     assert!(lease::any_live_for_home(&root));
     drop(first);
     assert!(lease::any_live(&root, &digest));
     drop(second);
     assert!(!lease::any_live(&root, &digest));
     fs::remove_file(foreign).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stale_lease_cleanup_requires_a_dead_process_identity() {
+    use std::fs;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-stale-lease-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    let directory = root.join("resident-client-leases.v1");
+    fs::create_dir(&directory).unwrap();
+    let current_process_lease = directory.join("client-current.lease");
+    fs::write(
+        &current_process_lease,
+        format!(
+            "{}\n{}\n{}\n",
+            std::process::id(),
+            process_start_marker(std::process::id()).unwrap(),
+            "f".repeat(64)
+        ),
+    )
+    .unwrap();
+    let dead_process_lease = directory.join("client-dead.lease");
+    fs::write(
+        &dead_process_lease,
+        "4294967295\nstale\n".to_owned() + &"e".repeat(64) + "\n",
+    )
+    .unwrap();
+    #[cfg(windows)]
+    {
+        crate::resident_state::protect_windows_private_path(&directory, true).unwrap();
+        crate::resident_state::protect_windows_private_path(&current_process_lease, false).unwrap();
+        crate::resident_state::protect_windows_private_path(&dead_process_lease, false).unwrap();
+    }
+    std::thread::sleep(lease::LEASE_EXPIRY + Duration::from_millis(100));
+    assert!(!lease::any_live_for_home(&root));
+    assert!(current_process_lease.exists());
+    assert!(!dead_process_lease.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn lease_directory_overflow_fails_closed_without_unbounded_collection() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-lease-overflow-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(root.join("resident-client-leases.v1")).unwrap();
+    #[cfg(unix)]
+    {
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(
+            root.join("resident-client-leases.v1"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
+    }
+    #[cfg(windows)]
+    {
+        crate::resident_state::protect_windows_private_path(&root, true).unwrap();
+        crate::resident_state::protect_windows_private_path(
+            &root.join("resident-client-leases.v1"),
+            true,
+        )
+        .unwrap();
+    }
+    for index in 0..=64 {
+        let path = root
+            .join("resident-client-leases.v1")
+            .join(format!("client-{index:03}.lease"));
+        fs::write(&path, format!("4294967295\nstale\n{}\n", "e".repeat(64))).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        #[cfg(windows)]
+        crate::resident_state::protect_windows_private_path(&path, false).unwrap();
+    }
+    assert!(lease::any_live_for_home(&root));
     fs::remove_dir_all(root).unwrap();
 }
 

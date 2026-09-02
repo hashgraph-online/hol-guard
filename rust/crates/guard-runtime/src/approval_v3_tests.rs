@@ -49,6 +49,8 @@ pub(super) fn root(label: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, true).unwrap();
     path
 }
 
@@ -113,7 +115,10 @@ fn store_and_envelope_with_runtime(
 ) {
     let root = root(label);
     let key = [7u8; 32];
-    fs::write(root.join("policy-verifier.key"), key).unwrap();
+    let verifier_path = root.join("policy-verifier.key");
+    fs::write(&verifier_path, key).unwrap();
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&verifier_path, false).unwrap();
     let approval_seed = [17u8; 32];
     let approval_key = approval_public_key_for_tests(&approval_seed);
     crate::policy_store::approval_authority::write_test_record(&root, &approval_key, 1);

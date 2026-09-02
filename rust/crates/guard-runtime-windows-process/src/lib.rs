@@ -21,7 +21,8 @@ pub use windows::ManagedChild;
 
 #[cfg(windows)]
 pub use windows::{
-    process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
+    process_start_marker, remove_file_if_same, terminate_process, terminate_process_verified,
+    wait_for_process_exit,
 };
 
 #[cfg(windows)]

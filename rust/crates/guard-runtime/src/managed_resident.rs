@@ -32,7 +32,7 @@ mod restart_budget;
 const MANAGED_OWNER_LOCK_FILE_NAME: &str = owner_lock::MANAGED_OWNER_LOCK_FILE_NAME;
 
 use crate::resident_state::{
-    acquire_startup_lock, clear_stale_startup_lock, discover_home_states, next_generation,
+    acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     process_start_marker, runtime_digest, state_scope, token_from_state,
     validate_package_process_identity, validate_runtime_process_identity,
 };
@@ -121,13 +121,16 @@ fn try_home_states(
     state_base: &Path,
     payload: &[u8],
     deadline: Instant,
+    preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
-    for (_scope, _digest, state) in discover_home_states(state_base)?.into_iter().take(8) {
+    let runtime_digest = runtime_digest()?;
+    for (_scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
+    {
         let timeout = deadline.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
             return Ok(None);
         }
-        let same_runtime = runtime_digest().is_ok_and(|digest| digest == state.runtime_sha256);
+        let same_runtime = runtime_digest == state.runtime_sha256;
         if (same_runtime
             && validate_package_process_identity(state.process_id, &state.process_start_marker)
                 .is_err())
@@ -186,7 +189,7 @@ fn client_request_with_lease(
     let overall_deadline = Instant::now() + timeout;
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline)? {
+    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
         return Ok(response);
     }
     if Instant::now() >= overall_deadline {
@@ -203,7 +206,8 @@ fn client_request_with_lease(
     if lock.is_none() {
         let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
         while Instant::now() < deadline {
-            if let Some(response) = try_home_states(state_base, payload, overall_deadline)? {
+            if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)?
+            {
                 return Ok(response);
             }
             thread::sleep(CLIENT_RETRY_DELAY);
@@ -216,7 +220,7 @@ fn client_request_with_lease(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline)? {
+    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
         return Ok(response);
     }
     restart_budget::consume(&scope)?;
@@ -235,7 +239,7 @@ fn client_request_with_lease(
         if Instant::now() >= deadline {
             break Ok(None);
         }
-        match try_home_states(state_base, payload, overall_deadline) {
+        match try_home_states(state_base, payload, overall_deadline, &digest) {
             Ok(Some(response)) => break Ok(Some(response)),
             Ok(None) => {}
             Err(error) => break Err(error),
@@ -276,7 +280,10 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     let _ = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
-    let Some((scope, digest, state)) = discover_home_states(state_base)?.into_iter().next() else {
+    let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
+        .into_iter()
+        .next()
+    else {
         return Err("native_resident_stop_unavailable".to_owned());
     };
     let process_ids = containment::state_process_identities(std::slice::from_ref(&state));

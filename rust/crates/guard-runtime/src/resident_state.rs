@@ -3,20 +3,24 @@
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(windows))]
-use std::fs::OpenOptions;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[path = "resident_startup_lock.rs"]
+mod resident_startup_lock;
 #[path = "resident_state_discovery.rs"]
 mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
 
-pub(crate) use resident_state_files::{ensure_private_directory, private_file};
+#[allow(unused_imports)]
+pub(crate) use resident_startup_lock::{
+    acquire_startup_lock, clear_stale_startup_lock, StartupLock,
+};
+pub(crate) use resident_state_files::{ensure_private_directory, private_file, private_lock_file};
 #[cfg(windows)]
 pub(crate) use resident_state_files::{
     open_private_read, protect_windows_private_path, verify_windows_private_path,
@@ -31,8 +35,10 @@ const MAX_STATE_FILES: usize = 64;
 const RETAINED_STATE_FILES: usize = 8;
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
+const MAX_STARTUP_LOCK_BYTES: u64 = 4 * 1024;
 
-pub(crate) use resident_state_discovery::discover_home_states;
+#[allow(unused_imports)]
+pub(crate) use resident_state_discovery::{discover_home_states, discover_home_states_prefer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,22 +55,6 @@ pub(crate) struct ResidentState {
     pub(crate) token_hex: String,
     pub(crate) created_ms: u64,
     pub(crate) state_mac: String,
-}
-
-pub(crate) struct StartupLock {
-    path: PathBuf,
-    nonce: String,
-}
-
-impl Drop for StartupLock {
-    fn drop(&mut self) {
-        let Ok(contents) = fs::read_to_string(&self.path) else {
-            return;
-        };
-        if contents == self.nonce {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
 }
 
 fn now_ms() -> Result<u64, String> {
@@ -290,19 +280,7 @@ pub(crate) fn discover_states(
     scope: &Path,
     expected_digest: &str,
 ) -> Result<Vec<ResidentState>, String> {
-    let mut paths = Vec::new();
-    for entry in fs::read_dir(scope).map_err(|_| "native_resident_state_list_failed".to_owned())? {
-        let entry = entry.map_err(|_| "native_resident_state_list_failed".to_owned())?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with(STATE_FILE_PREFIX) && name.ends_with(STATE_FILE_SUFFIX) {
-            paths.push(entry.path());
-            if paths.len() > MAX_STATE_FILES {
-                paths.sort_unstable_by(|left, right| right.file_name().cmp(&left.file_name()));
-                paths.truncate(MAX_STATE_FILES);
-            }
-        }
-    }
+    let paths = resident_state_discovery::state_paths(scope)?;
     let mut states = Vec::new();
     for path in paths {
         if let Ok(state) = read_state_file(&path, scope, expected_digest) {
@@ -374,17 +352,7 @@ pub(crate) fn publish_state(
         .take(RETAINED_STATE_FILES)
         .map(|candidate| candidate.generation)
         .collect::<std::collections::HashSet<_>>();
-    let superseded = fs::read_dir(scope)
-        .map_err(|_| "native_resident_state_list_failed".to_owned())?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|candidate| {
-            candidate.file_name().is_some_and(|name| {
-                let name = name.to_string_lossy();
-                name.starts_with(STATE_FILE_PREFIX) && name.ends_with(STATE_FILE_SUFFIX)
-            })
-        })
-        .collect::<Vec<_>>();
+    let superseded = resident_state_discovery::state_paths(scope)?;
     for candidate in superseded {
         let generation = candidate
             .file_name()
@@ -403,65 +371,6 @@ pub(crate) fn publish_state(
         }
     }
     Ok(state)
-}
-
-pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, String> {
-    let path = scope.join("startup.lock");
-    let mut nonce_bytes = [0u8; 32];
-    getrandom::fill(&mut nonce_bytes).map_err(|_| "native_client_random_failed".to_owned())?;
-    let process_id = std::process::id();
-    let start_marker = process_start_marker(process_id)?;
-    let nonce = format!("{process_id}:{start_marker}:{}", hex_bytes(&nonce_bytes));
-    match private_file(&path, true) {
-        Ok(mut file) => {
-            file.write_all(nonce.as_bytes())
-                .and_then(|()| file.sync_all())
-                .map_err(|_| "native_resident_lock_write_failed".to_owned())?;
-            Ok(Some(StartupLock { path, nonce }))
-        }
-        Err(_) => Ok(None),
-    }
-}
-
-pub(crate) fn clear_stale_startup_lock(
-    scope: &Path,
-    _expected_digest: &str,
-) -> Result<bool, String> {
-    let path = scope.join("startup.lock");
-    let metadata = match fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(_) => return Err("native_resident_lock_stat_failed".to_owned()),
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err("native_resident_lock_invalid".to_owned());
-    }
-    let age = metadata
-        .modified()
-        .ok()
-        .and_then(|modified| SystemTime::now().duration_since(modified).ok());
-    if age.is_none_or(|age| age < LOCK_STALE_AFTER) {
-        return Ok(false);
-    }
-    let contents =
-        fs::read_to_string(&path).map_err(|_| "native_resident_lock_read_failed".to_owned())?;
-    let owner_identity = contents.split_once(':').and_then(|(process_id, rest)| {
-        let (start_marker, nonce) = rest.rsplit_once(':')?;
-        if start_marker.is_empty()
-            || nonce.len() != 64
-            || !nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
-        {
-            return None;
-        }
-        Some((process_id.parse::<u32>().ok()?, start_marker.to_owned()))
-    });
-    if owner_identity.is_some_and(|(process_id, start_marker)| {
-        process_id > 0 && validate_package_process_identity(process_id, &start_marker).is_ok()
-    }) {
-        return Ok(false);
-    }
-    fs::remove_file(path).map_err(|_| "native_resident_lock_recovery_failed".to_owned())?;
-    Ok(true)
 }
 
 #[cfg(test)]

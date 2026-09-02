@@ -13,11 +13,14 @@ use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(test)]
 use winapi::um::fileapi::GetFileType;
-use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
+use winapi::um::fileapi::{
+    CreateFileW, GetFileInformationByHandle, SetFileInformationByHandle,
+    BY_HANDLE_FILE_INFORMATION, FILE_DISPOSITION_INFO, OPEN_EXISTING,
+};
 #[cfg(test)]
 use winapi::um::handleapi::GetHandleInformation;
 use winapi::um::handleapi::{SetHandleInformation, INVALID_HANDLE_VALUE};
-use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
+use winapi::um::minwinbase::{FileDispositionInfo, SECURITY_ATTRIBUTES};
 use winapi::um::namedpipeapi::CreatePipe;
 use winapi::um::processthreadsapi::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
@@ -33,7 +36,10 @@ use winapi::um::winbase::{
     CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT,
     STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
 };
-use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
+use winapi::um::winnt::{
+    DELETE, FILE_ATTRIBUTE_NORMAL, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, GENERIC_WRITE,
+};
 
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
@@ -41,13 +47,72 @@ pub use process_lifecycle::{
     process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
 };
 
-// SAFETY: This module is the sole Win32 FFI boundary. Every borrowed handle is
-// valid for the duration of its call, and every newly owned handle is wrapped
-// exactly once in an RAII type before any fallible operation can return.
+// SAFETY: This module is the sole Win32 FFI boundary; borrowed handles remain valid
+// for each call, and newly owned handles are wrapped exactly once before returning.
 
 // PROC_THREAD_ATTRIBUTE_HANDLE_LIST is missing from winapi 0.3.9's constants.
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
-const STILL_ACTIVE: DWORD = 259;
+const FILE_FLAG_OPEN_REPARSE_POINT: DWORD = 0x0020_0000;
+
+/// Delete the path's currently opened object only when it is the same object
+/// as `expected`. Comparison and deletion both use owned handles, preventing a
+/// same-user pathname replacement from redirecting cleanup to a new file.
+pub fn remove_file_if_same(path: &Path, expected: &std::fs::File) -> io::Result<bool> {
+    let path_w = wide_path(path)?;
+    // SAFETY: NUL-terminated path; a successful handle is wrapped exactly once.
+    let raw = unsafe {
+        CreateFileW(
+            path_w.as_ptr(),
+            DELETE | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            null_mut(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+            null_mut(),
+        )
+    };
+    if raw == INVALID_HANDLE_VALUE {
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::NotFound {
+            return Ok(false);
+        }
+        return Err(error);
+    }
+    // SAFETY: CreateFileW returned this handle exactly once.
+    let current = unsafe { OwnedHandle::from_raw_handle(raw as RawHandle) };
+    if file_information(expected.as_raw_handle() as HANDLE)?
+        != file_information(current.as_raw_handle() as HANDLE)?
+    {
+        return Ok(false);
+    }
+    let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
+    // SAFETY: `current` owns a DELETE-capable handle; the disposition buffer is initialized.
+    if unsafe {
+        SetFileInformationByHandle(
+            current.as_raw_handle() as HANDLE,
+            FileDispositionInfo,
+            &mut disposition as *mut FILE_DISPOSITION_INFO as *mut _,
+            size_of::<FILE_DISPOSITION_INFO>() as DWORD,
+        )
+    } == FALSE
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(true)
+}
+
+fn file_information(handle: HANDLE) -> io::Result<(DWORD, DWORD, DWORD)> {
+    // SAFETY: BY_HANDLE_FILE_INFORMATION is a plain output struct; handle stays owned during query.
+    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
+    if unsafe { GetFileInformationByHandle(handle, &mut information) } == FALSE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok((
+        information.dwVolumeSerialNumber,
+        information.nFileIndexHigh,
+        information.nFileIndexLow,
+    ))
+}
 
 fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
     if process_id == 0 {
@@ -56,8 +121,7 @@ fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
             "process identifier must be non-zero",
         ));
     }
-    // SAFETY: The access mask and process identifier are plain values; the returned
-    // handle is wrapped exactly once before any fallible operation can return.
+    // SAFETY: Access mask and process ID are plain values; the returned handle is wrapped exactly once.
     let process = unsafe { OpenProcess(access, FALSE, process_id) };
     if process.is_null() {
         Err(io::Error::last_os_error())
@@ -100,7 +164,7 @@ impl ManagedChild {
     /// Wait for the child with an explicit finite timeout.
     pub fn wait_success_with_timeout(&self, timeout: std::time::Duration) -> io::Result<bool> {
         // SAFETY: `process` owns a live process handle until this method returns.
-        let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
+        let millis = process_lifecycle::duration_to_wait_millis(timeout);
         let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
         match wait {
             WAIT_OBJECT_0 => {}
@@ -130,20 +194,13 @@ impl ManagedChild {
 
     /// Terminate the child with an explicit finite timeout.
     pub fn terminate_with_timeout(&self, timeout: std::time::Duration) -> io::Result<()> {
-        let mut exit_code = 0;
-        // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
-        if unsafe { GetExitCodeProcess(self.process.as_raw_handle() as HANDLE, &mut exit_code) }
-            == FALSE
-        {
-            return Err(io::Error::last_os_error());
-        }
-        if exit_code == STILL_ACTIVE
+        if process_lifecycle::process_is_running(&self.process)? {
             // SAFETY: The process handle is owned and termination is followed by a wait.
-            && unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE
-        {
-            return Err(io::Error::last_os_error());
+            if unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE {
+                return Err(io::Error::last_os_error());
+            }
         }
-        let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
+        let millis = process_lifecycle::duration_to_wait_millis(timeout);
         // SAFETY: `process` owns a live process handle until this method returns.
         let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
         match wait {

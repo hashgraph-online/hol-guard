@@ -191,24 +191,37 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # ``TCPServer.__init__`` can call ``server_close`` when binding fails.
+        # Initialize the owned wakeup endpoints first so that rollback is safe
+        # even when construction stops before the socketpair is created.
+        self._guard_wakeup_reader: socket.socket | None = None
+        self._guard_wakeup_writer: socket.socket | None = None
         super().__init__(*args, **kwargs)
-        self._guard_stop_requested = threading.Event()
-        self._guard_serve_stopped = threading.Event()
-        self._guard_serve_stopped.set()
-        self._guard_wakeup_reader, self._guard_wakeup_writer = socket.socketpair()
-        self._guard_wakeup_reader.setblocking(False)
-        self._guard_wakeup_writer.setblocking(False)
-        capacity = _bounded_int(
-            "HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS",
-            _DEFAULT_ACTIVE_REQUESTS,
-            _MAX_ACTIVE_REQUESTS,
-        )
-        self._guard_slots = threading.BoundedSemaphore(capacity)
-        self._guard_socket_timeout = _bounded_float(
-            "HOL_GUARD_DAEMON_SOCKET_TIMEOUT_SECONDS",
-            _DEFAULT_SOCKET_TIMEOUT_SECONDS,
-            _MAX_SOCKET_TIMEOUT_SECONDS,
-        )
+        try:
+            self._guard_stop_requested = threading.Event()
+            self._guard_serve_stopped = threading.Event()
+            self._guard_serve_stopped.set()
+            self._guard_wakeup_reader, self._guard_wakeup_writer = socket.socketpair()
+            self._guard_wakeup_reader.setblocking(False)
+            self._guard_wakeup_writer.setblocking(False)
+            capacity = _bounded_int(
+                "HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS",
+                _DEFAULT_ACTIVE_REQUESTS,
+                _MAX_ACTIVE_REQUESTS,
+            )
+            self._guard_slots = threading.BoundedSemaphore(capacity)
+            self._guard_socket_timeout = _bounded_float(
+                "HOL_GUARD_DAEMON_SOCKET_TIMEOUT_SECONDS",
+                _DEFAULT_SOCKET_TIMEOUT_SECONDS,
+                _MAX_SOCKET_TIMEOUT_SECONDS,
+            )
+        except BaseException:
+            # Keep post-bind initialization transactional.  The listener and
+            # either wakeup endpoint may already exist when setup fails.
+            with suppress(Exception):
+                super().server_close()
+            self._guard_close_wakeup_sockets()
+            raise
 
     def request_serve_stop(self) -> None:
         """Request loop termination without waiting for loop entry.
@@ -218,8 +231,10 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         request flag is reset when its implementation starts.
         """
         self._guard_stop_requested.set()
-        with suppress(BlockingIOError, OSError):
-            self._guard_wakeup_writer.send(b"\x00")
+        writer = self._guard_wakeup_writer
+        if writer is not None:
+            with suppress(BlockingIOError, OSError):
+                writer.send(b"\x00")
 
     def serve_forever(self, poll_interval: float = 0.5) -> None:
         """Serve requests while polling the Guard-owned stop event.
@@ -232,7 +247,10 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(self, selectors.EVENT_READ, data="server")
-                selector.register(self._guard_wakeup_reader, selectors.EVENT_READ, data="wakeup")
+                reader = self._guard_wakeup_reader
+                if reader is None:
+                    return
+                selector.register(reader, selectors.EVENT_READ, data="wakeup")
                 while not self._guard_stop_requested.is_set():
                     try:
                         ready = selector.select(timeout=max(0.0, poll_interval))
@@ -243,7 +261,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                     for key, _mask in ready:
                         if key.data == "wakeup":
                             with suppress(BlockingIOError, OSError):
-                                self._guard_wakeup_reader.recv(4096)
+                                reader.recv(4096)
                             continue
                         self.handle_request()
                     self.service_actions()
@@ -257,9 +275,20 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         self._guard_serve_stopped.wait()
 
     def server_close(self) -> None:
-        super().server_close()
-        self._guard_wakeup_reader.close()
-        self._guard_wakeup_writer.close()
+        try:
+            super().server_close()
+        finally:
+            self._guard_close_wakeup_sockets()
+
+    def _guard_close_wakeup_sockets(self) -> None:
+        reader = self._guard_wakeup_reader
+        writer = self._guard_wakeup_writer
+        self._guard_wakeup_reader = None
+        self._guard_wakeup_writer = None
+        for endpoint in (reader, writer):
+            if endpoint is not None:
+                with suppress(Exception):
+                    endpoint.close()
 
     def verify_request(self, request: Any, client_address: Any) -> bool:
         if not _loopback(client_address):
@@ -290,7 +319,19 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self.shutdown_request(request)
             return False
         _METRICS.acquired()
-        request.settimeout(self._guard_socket_timeout)
+        try:
+            request.settimeout(self._guard_socket_timeout)
+        except Exception:
+            # Admission owns both the semaphore slot and the active metric
+            # until a worker takes the request.  A socket setup failure must
+            # release both before rejecting the request.
+            self._guard_release_request()
+            try:
+                self.shutdown_request(request)
+            except Exception:
+                with suppress(Exception):
+                    self.close_request(request)
+            return False
         return True
 
     def _guard_release_request(self) -> None:

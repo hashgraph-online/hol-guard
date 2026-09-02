@@ -12,6 +12,22 @@ pub(super) struct ManagedOwnerLock {
     pub(super) _directory: File,
 }
 
+impl Drop for ManagedOwnerLock {
+    fn drop(&mut self) {
+        // Explicitly release every advisory lock before the descriptors close.
+        // This matters on platforms where a lock on a renamed marker or a
+        // directory is not made immediately available by descriptor teardown.
+        for file in self._legacy_files.iter().rev() {
+            let _ = fs2::FileExt::unlock(file);
+        }
+        let _ = fs2::FileExt::unlock(&self._file);
+        #[cfg(unix)]
+        {
+            let _ = fs2::FileExt::unlock(&self._directory);
+        }
+    }
+}
+
 fn acquire_legacy_owner_locks(state_base: &Path) -> Result<Vec<File>, String> {
     let mut locks = Vec::new();
     let entries = std::fs::read_dir(state_base)
@@ -120,33 +136,63 @@ pub(super) fn acquire(scope: &Path) -> Result<ManagedOwnerLock, String> {
         directory
     };
     let path = scope.join(MANAGED_OWNER_LOCK_FILE_NAME);
-    let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
     #[cfg(windows)]
-    {
+    let (file, created) = {
         use std::os::windows::fs::OpenOptionsExt;
         const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
         const FILE_SHARE_READ: u32 = 0x0000_0001;
         const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        options
-            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        let share_mode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+
+        let mut create_options = OpenOptions::new();
+        create_options
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(share_mode)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    let file = options
-        .open(&path)
-        .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+        match create_options.open(&path) {
+            Ok(file) => (file, true),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let mut existing_options = OpenOptions::new();
+                existing_options
+                    .read(true)
+                    .write(true)
+                    .share_mode(share_mode)
+                    .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+                let file = existing_options
+                    .open(&path)
+                    .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+                (file, false)
+            }
+            Err(_) => return Err("native_resident_owner_lock_failed".to_owned()),
+        }
+    };
+    #[cfg(not(windows))]
+    let (file, _created) = {
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+        let file = options
+            .open(&path)
+            .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+        (file, false)
+    };
     let metadata = file
         .metadata()
         .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
     if !metadata.is_file() {
         return Err("native_resident_owner_lock_invalid".to_owned());
+    }
+    #[cfg(windows)]
+    if created {
+        crate::resident_state::protect_windows_private_path(&path, false)?;
     }
     #[cfg(unix)]
     {

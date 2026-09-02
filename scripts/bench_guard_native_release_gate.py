@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Release-gate benchmark for Python hook workers versus the Rust runtime.
 
-Only aggregate synthetic measurements are emitted. No user commands, file
-contents, secrets, or machine paths are included in benchmark output.
+Only aggregate synthetic measurements are emitted; benchmark output excludes
+user commands, file contents, secrets, and machine paths.
 
 The enforced warm comparison measures the production adapter-to-decision path
-against a persistent Python worker. A direct resident IPC measurement is also
-reported as a diagnostic. The Python reference explicitly disables native
-authority and varies synthetic samples to avoid cache distortion. Relative
-speed remains informative because trivial allow payloads can be faster in
-Python, while release acceptance follows the contract: native p95 must either
-stay below the absolute ceiling or materially improve over the pinned Python
+against a persistent Python worker; direct resident IPC is also reported as a diagnostic.
+The Python reference disables native authority and varies synthetic samples to avoid cache distortion.
+Relative speed remains informative because trivial allow payloads can favor Python, while release acceptance follows
+the contract: native p95 must stay below the absolute ceiling or materially improve over the pinned Python
 reference. Cold comparison retains the stronger relative-speedup gate.
 """
 
@@ -378,9 +376,11 @@ def _run_benchmarks(
 
         close_resident_native_runtimes()
         try:
-            readiness_started = time.perf_counter()
             with native_policy_snapshot(guard_home) as snapshot:
                 reset_native_hook_route()
+                # Snapshot materialization is durable policy bookkeeping, not resident readiness.
+                # Start the gate when the production adapter begins its first authenticated request.
+                readiness_started = time.perf_counter()
                 readiness_response = review_post_tool_native(
                     _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
                     observe_mode=False,

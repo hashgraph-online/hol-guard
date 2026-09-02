@@ -463,7 +463,8 @@ pub(crate) fn write_test_record(state_base: &Path, public_key: &[u8; 32], genera
         enrollment_signature_for_tests(public_key, generation, &test_enrollment_root_seed())
             .unwrap();
     let bytes = canonical_record_for_enrollment(public_key, generation, &signature).unwrap();
-    fs::write(state_base.join(APPROVAL_AUTHORITY_FILE_NAME), bytes).unwrap();
+    let path = state_base.join(APPROVAL_AUTHORITY_FILE_NAME);
+    fs::write(&path, bytes).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -473,6 +474,8 @@ pub(crate) fn write_test_record(state_base: &Path, public_key: &[u8; 32], genera
         )
         .unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, false).unwrap();
 }
 
 #[cfg(test)]

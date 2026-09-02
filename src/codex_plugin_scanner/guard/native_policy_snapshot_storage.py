@@ -12,6 +12,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, cast
 
+from . import native_policy_snapshot_storage_windows as _windows_storage
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _strict_json_loads_v3,
@@ -36,6 +37,9 @@ from .native_policy_snapshot_windows_support import (
     _windows_path_has_reparse_component,
 )
 
+_windows_read_generation_state_bytes = _windows_storage._windows_read_generation_state_bytes
+_windows_read_snapshot_bytes = _windows_storage._windows_read_snapshot_bytes
+
 
 def _snapshot_api() -> Any:
     """Resolve façade hooks lazily to preserve the legacy test seams."""
@@ -55,60 +59,6 @@ def _private_guard_home(guard_home: Path) -> None:
 
 def _snapshot_cache_path_v3(guard_home: Path) -> Path:
     return _runtime_state_directory(guard_home) / NATIVE_POLICY_SNAPSHOT_CACHE_NAME
-
-
-def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
-    """Read one cache object from a single verified non-reparse handle."""
-
-    import ctypes
-    from ctypes import wintypes
-
-    api = _snapshot_api()
-    try:
-        kernel32, handle, information = api._windows_open_handle(path, directory=False)
-    except FileNotFoundError:
-        return None
-    try:
-        owner_sid = api._windows_owner_sid()
-        api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-        expected_size = (int(information.nFileSizeHigh) << 32) | int(information.nFileSizeLow)
-        if expected_size <= 0 or expected_size > POLICY_SNAPSHOT_MAX_BYTES:
-            raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-        read_file = kernel32.ReadFile
-        read_file.argtypes = [
-            wintypes.HANDLE,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.DWORD),
-            ctypes.c_void_p,
-        ]
-        read_file.restype = wintypes.BOOL
-        buffer = (ctypes.c_ubyte * (POLICY_SNAPSHOT_MAX_BYTES + 1))()
-        total = 0
-        while total <= POLICY_SNAPSHOT_MAX_BYTES:
-            request_size = min(64 * 1024, POLICY_SNAPSHOT_MAX_BYTES + 1 - total)
-            if request_size <= 0:
-                break
-            count = wintypes.DWORD()
-            if not read_file(
-                handle,
-                ctypes.byref(buffer, total),
-                request_size,
-                ctypes.byref(count),
-                None,
-            ):
-                raise NativePolicySnapshotError("native_policy_snapshot_cache_read_failed")
-            chunk_size = int(count.value)
-            if chunk_size < 0 or chunk_size > request_size:
-                raise NativePolicySnapshotError("native_policy_snapshot_cache_read_failed")
-            if chunk_size == 0:
-                break
-            total += chunk_size
-        if total != expected_size or total > POLICY_SNAPSHOT_MAX_BYTES:
-            raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-        return bytes(buffer[:total])
-    finally:
-        api._windows_close_handle(kernel32, handle)
 
 
 def _read_v3_snapshot_file(
@@ -306,25 +256,51 @@ def _v3_generation_lock(guard_home: Path, *, deadline_monotonic: float | None) -
     path = guard_home / _V3_GENERATION_LOCK_NAME
     flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags, 0o600)
+        lock_fd = os.open(path, flags, 0o600)
     except OSError as error:
         raise NativePolicySnapshotError("native_policy_snapshot_generation_lock_invalid") from error
     try:
-        metadata = os.fstat(descriptor)
+        if os.name == "nt":
+            api = _snapshot_api()
+            if api._windows_path_has_reparse_component(path):
+                raise NativePolicySnapshotError("native_policy_snapshot_generation_lock_invalid")
+            with api._windows_private_descriptor(False) as (
+                _advapi32,
+                security_descriptor,
+                dacl,
+                owner_sid,
+            ):
+                kernel32, handle, _information = api._windows_open_handle(
+                    path,
+                    directory=False,
+                    descriptor=security_descriptor,
+                )
+                try:
+                    api._windows_apply_private_dacl(
+                        kernel32,
+                        handle,
+                        security_descriptor,
+                        dacl,
+                        False,
+                    )
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
+                finally:
+                    api._windows_close_handle(kernel32, handle)
+        metadata = os.fstat(lock_fd)
         if not stat.S_ISREG(metadata.st_mode):
             raise NativePolicySnapshotError("native_policy_snapshot_generation_lock_invalid")
         if os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077):
             raise NativePolicySnapshotError("native_policy_snapshot_generation_lock_invalid")
         if metadata.st_size == 0:
-            os.write(descriptor, b"0")
-            os.fsync(descriptor)
+            os.write(lock_fd, b"0")
+            os.fsync(lock_fd)
         deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 1.0
         if os.name != "nt":
             import fcntl
 
             while True:
                 try:
-                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError as error:
                     remaining = deadline - time.monotonic()
@@ -336,8 +312,8 @@ def _v3_generation_lock(guard_home: Path, *, deadline_monotonic: float | None) -
 
             while True:
                 try:
-                    os.lseek(descriptor, 0, os.SEEK_SET)
-                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                    os.lseek(lock_fd, 0, os.SEEK_SET)
+                    msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
                     break
                 except OSError as error:
                     remaining = deadline - time.monotonic()
@@ -345,42 +321,47 @@ def _v3_generation_lock(guard_home: Path, *, deadline_monotonic: float | None) -
                         raise NativePolicySnapshotError("native_policy_snapshot_generation_lock_timeout") from error
                     time.sleep(min(0.01, remaining))
         try:
-            yield descriptor
+            yield lock_fd
         finally:
             if os.name != "nt":
                 import fcntl
 
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
             else:
                 import msvcrt
 
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+                os.lseek(lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
     finally:
-        os.close(descriptor)
+        os.close(lock_fd)
 
 
 def _read_v3_generation_state(guard_home: Path) -> tuple[int, str] | None:
     path = guard_home / _V3_GENERATION_STATE_NAME
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except FileNotFoundError:
-        return None
-    except OSError as error:
-        raise NativePolicySnapshotError("native_policy_snapshot_generation_state_invalid") from error
-    try:
-        metadata = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_size <= 0
-            or metadata.st_size > _MAX_STATE_BYTES
-            or (os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077))
-        ):
-            raise NativePolicySnapshotError("native_policy_snapshot_generation_state_invalid")
-        payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
-    finally:
-        os.close(descriptor)
+    if os.name == "nt":
+        payload = _windows_read_generation_state_bytes(path)
+        if payload is None:
+            return None
+    else:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise NativePolicySnapshotError("native_policy_snapshot_generation_state_invalid") from error
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_size <= 0
+                or metadata.st_size > _MAX_STATE_BYTES
+                or (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077)
+            ):
+                raise NativePolicySnapshotError("native_policy_snapshot_generation_state_invalid")
+            payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
+        finally:
+            os.close(descriptor)
     value = _strict_json_loads_v3(payload)
     if not isinstance(value, dict) or set(value) != {"schema", "generation", "policy_digest"}:
         raise NativePolicySnapshotError("native_policy_snapshot_generation_state_invalid")
@@ -399,6 +380,7 @@ def _read_v3_generation_state(guard_home: Path) -> tuple[int, str] | None:
 
 
 def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_digest: str) -> None:
+    api = _snapshot_api()
     value = {"generation": generation, "policy_digest": policy_digest, "schema": _V3_GENERATION_SCHEMA}
     payload = _canonical_json_bytes_v3(value)
     path = guard_home / _V3_GENERATION_STATE_NAME
@@ -427,6 +409,21 @@ def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_dige
                 os.fsync(directory_descriptor)
             finally:
                 os.close(directory_descriptor)
+        else:
+            # ``os.replace`` creates a fresh object with default Windows ACLs.
+            # Reapply and verify the owner-private descriptor on the committed
+            # generation state before an ACK can observe it.
+            with api._windows_private_descriptor(False) as (_advapi32, descriptor, dacl, owner_sid):
+                kernel32, handle, _information = api._windows_open_handle(
+                    path,
+                    directory=False,
+                    descriptor=descriptor,
+                )
+                try:
+                    api._windows_apply_private_dacl(kernel32, handle, descriptor, dacl, False)
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
+                finally:
+                    api._windows_close_handle(kernel32, handle)
     except OSError as error:
         raise NativePolicySnapshotError("native_policy_snapshot_generation_state_write_failed") from error
     finally:

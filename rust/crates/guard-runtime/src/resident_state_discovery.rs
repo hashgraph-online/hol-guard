@@ -6,13 +6,36 @@ use super::{
     STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
 };
 
+const MAX_SCOPES: usize = 16;
+// Keep unrelated native-runtime files from causing a false overflow while
+// still bounding every home entry inspected by discovery.
+const MAX_SCOPE_ENTRIES: usize = 64;
+
+#[allow(dead_code)]
 pub(crate) fn discover_home_states(
     base: &Path,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
-    const MAX_SCOPES: usize = 16;
+    discover_home_states_prefer(base, None)
+}
+
+pub(crate) fn discover_home_states_prefer(
+    base: &Path,
+    preferred_digest: Option<&str>,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let base = ensure_private_directory(base, false)?;
-    let mut scopes = Vec::new();
-    for entry in fs::read_dir(&base).map_err(|_| "native_resident_state_list_failed".to_owned())? {
+    let preferred_prefix = preferred_digest
+        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .map(|digest| &digest[..16]);
+    let mut preferred_candidate = None;
+    let mut fallback_candidates = Vec::with_capacity(MAX_SCOPES);
+    let mut matching_scope_count = 0;
+    for (entry_count, entry) in fs::read_dir(&base)
+        .map_err(|_| "native_resident_state_list_failed".to_owned())?
+        .enumerate()
+    {
+        if entry_count >= MAX_SCOPE_ENTRIES {
+            return Err("native_resident_state_list_failed".to_owned());
+        }
         let entry = entry.map_err(|_| "native_resident_state_list_failed".to_owned())?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -23,12 +46,30 @@ pub(crate) fn discover_home_states(
         {
             continue;
         }
-        if scopes.len() >= MAX_SCOPES {
-            break;
+        matching_scope_count += 1;
+        if matching_scope_count > MAX_SCOPES {
+            return Err("native_resident_state_list_failed".to_owned());
         }
-        let scope = ensure_private_directory(&entry.path(), true)?;
-        scopes.push((scope, digest_prefix.to_owned()));
+        let candidate = (entry.path(), digest_prefix.to_owned());
+        if preferred_prefix.is_some_and(|prefix| digest_prefix.eq_ignore_ascii_case(prefix)) {
+            preferred_candidate = Some(candidate);
+            continue;
+        }
+        fallback_candidates.push(candidate);
     }
+    // A newer runtime can be hidden behind an arbitrary number of stale
+    // per-digest scopes. Sort the caller's exact digest prefix first, then
+    // keep the existing global cap for bounded inspection of fallback state.
+    fallback_candidates
+        .sort_unstable_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
+    fallback_candidates.truncate(MAX_SCOPES - usize::from(preferred_candidate.is_some()));
+    let scopes = preferred_candidate
+        .into_iter()
+        .chain(fallback_candidates)
+        .map(|(path, digest_prefix)| Ok((ensure_private_directory(&path, true)?, digest_prefix)))
+        .collect::<Result<Vec<_>, String>>()?;
+    let preferred_digest = preferred_digest
+        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
     let mut states = Vec::new();
     for (scope, digest_prefix) in scopes {
         let paths = state_paths(&scope)?;
@@ -39,7 +80,7 @@ pub(crate) fn discover_home_states(
             let digest = state.runtime_sha256.clone();
             if digest.len() != 64
                 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
-                || !digest.starts_with(&digest_prefix)
+                || !digest[..16].eq_ignore_ascii_case(&digest_prefix)
                 || validate_state(&scope, &state, &digest).is_err()
             {
                 continue;
@@ -47,22 +88,30 @@ pub(crate) fn discover_home_states(
             states.push((scope.clone(), digest, state));
         }
     }
-    states.sort_by_key(|(_, _, state)| std::cmp::Reverse(state.generation));
+    states.sort_unstable_by(|left, right| {
+        let left_preferred = preferred_digest.is_some_and(|digest| left.1 == digest);
+        let right_preferred = preferred_digest.is_some_and(|digest| right.1 == digest);
+        right_preferred
+            .cmp(&left_preferred)
+            .then_with(|| right.2.generation.cmp(&left.2.generation))
+    });
     Ok(states)
 }
 
-fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
+pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
     let mut paths = Vec::new();
-    for entry in fs::read_dir(scope).map_err(|_| "native_resident_state_list_failed".to_owned())? {
+    for (entry_count, entry) in fs::read_dir(scope)
+        .map_err(|_| "native_resident_state_list_failed".to_owned())?
+        .enumerate()
+    {
+        if entry_count >= MAX_STATE_FILES {
+            return Err("native_resident_state_list_failed".to_owned());
+        }
         let entry = entry.map_err(|_| "native_resident_state_list_failed".to_owned())?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if name.starts_with(STATE_FILE_PREFIX) && name.ends_with(STATE_FILE_SUFFIX) {
             paths.push(entry.path());
-            if paths.len() > MAX_STATE_FILES {
-                paths.sort_unstable_by(|left, right| right.file_name().cmp(&left.file_name()));
-                paths.truncate(MAX_STATE_FILES);
-            }
         }
     }
     Ok(paths)

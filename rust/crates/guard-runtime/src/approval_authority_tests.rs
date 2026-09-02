@@ -35,6 +35,8 @@ fn fresh_private_state_without_public_authority_is_unenrolled() {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&root, true).unwrap();
     assert!(load(&root).unwrap().is_none());
     let _ = fs::remove_dir_all(root);
 }

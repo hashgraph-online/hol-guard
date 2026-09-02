@@ -8,7 +8,6 @@ generation state, response binding, and resident lifecycle.
 from __future__ import annotations
 
 import atexit
-import re
 import struct
 import subprocess
 import threading
@@ -26,6 +25,7 @@ from .codex_hook_launch_runtime import (
 from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
+from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
 
 # Keep the former runner as a test seam. Production always uses the framed
 # stream below; tests can replace this binding with a bounded fake.
@@ -38,7 +38,6 @@ _CLIENT_CLOSE_TIMEOUT_SECONDS = 0.5
 _CLIENT_RETIRE_TIMEOUT_SECONDS = 2.5
 _MAX_PERSISTENT_CLIENTS = 16
 _MAX_FAILURE_CODE_LENGTH = 128
-_FAILURE_CODE_PATTERN = re.compile(r"native_[a-z0-9_]+")
 _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
     "native_resident_client_failure_code",
     default=None,
@@ -54,7 +53,7 @@ def native_resident_client_failure_code() -> str | None:
 
 def _allowlisted_failure_code(stderr: str) -> str | None:
     for line in stderr.splitlines():
-        if len(line) <= _MAX_FAILURE_CODE_LENGTH and _FAILURE_CODE_PATTERN.fullmatch(line):
+        if len(line) <= _MAX_FAILURE_CODE_LENGTH and line in NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES:
             return line
     return None
 

@@ -10,8 +10,12 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
         EDGE_FIXTURE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&guard_home, true)
+        .expect("protect edge generation fixture root");
+    let generation_path = guard_home.join("native-policy-generation.json");
     std::fs::write(
-        guard_home.join("native-policy-generation.json"),
+        &generation_path,
         serde_json::to_vec(&serde_json::json!({
             "schema": "hol-guard-native-policy-generation.v1",
             "generation": 1,
@@ -20,6 +24,9 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
         .expect("encode edge generation fixture"),
     )
     .expect("write edge generation fixture");
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&generation_path, false)
+        .expect("protect edge generation fixture");
     GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: Some("edge-test".to_owned()),

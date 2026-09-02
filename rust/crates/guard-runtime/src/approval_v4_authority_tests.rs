@@ -80,6 +80,8 @@ fn test_root() -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, true).unwrap();
     path
 }
 
@@ -123,6 +125,8 @@ fn write_candidate(root: &Path, name: &str, record: &ApprovalAuthorityV4) -> Pat
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, false).unwrap();
     path
 }
 
@@ -220,7 +224,8 @@ fn malformed_cose_and_missing_secure_state_never_load() {
     let valid_cose = cose_for(33);
     let valid = record(1, &valid_cose, 1, None, "active");
     let valid_bytes = test_record_bytes(&valid).unwrap();
-    fs::write(root.join(AUTHORITY_FILE_NAME), valid_bytes).unwrap();
+    let authority_path = root.join(AUTHORITY_FILE_NAME);
+    fs::write(&authority_path, valid_bytes).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -230,6 +235,8 @@ fn malformed_cose_and_missing_secure_state_never_load() {
         )
         .unwrap();
     }
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&authority_path, false).unwrap();
     assert_eq!(
         load(&root).unwrap_err(),
         "native_approval_v4_secure_state_unavailable"

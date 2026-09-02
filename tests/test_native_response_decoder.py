@@ -108,3 +108,11 @@ def test_decoder_requires_epoch_and_accepts_full_native_contract() -> None:
 def test_native_error_rejects_unregistered_approval_codes() -> None:
     assert native_error({"error": "native_approval_replay", "retryable": False}) == "native_approval_replay"
     assert native_error({"error": "native_approval_not_in_contract", "retryable": False}) is None
+
+
+def test_native_error_accepts_exact_lifecycle_codes_only() -> None:
+    assert native_error({"error": "native_resident_start_in_progress", "retryable": True}) == (
+        "native_resident_start_in_progress"
+    )
+    assert native_error({"error": "native_resident_start_in_progress:/private/request", "retryable": True}) is None
+    assert native_error({"error": "native_policy_snapshot_future_unregistered_code", "retryable": False}) is None

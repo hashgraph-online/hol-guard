@@ -209,6 +209,10 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "snapshot_expired",
 ];
 
+#[path = "approval_contracts_lifecycle_errors.rs"]
+mod lifecycle_error_codes;
+pub use lifecycle_error_codes::NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES;
+
 /// Typed native floor classification. A non-overridable floor is an
 /// intrinsic safety boundary and cannot be changed by a presentation-layer
 /// approval or by a policy value claiming a lower action.
