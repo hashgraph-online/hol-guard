@@ -384,15 +384,26 @@ pub(super) fn is_retryable_live_request_error(
         || (error.code == "native_client_auth_nonce_failed" && error.retryable_teardown)
 }
 
+pub(super) fn state_owner_is_live(state: &ResidentState) -> bool {
+    process_start_marker(state.owner_process_id)
+        .is_ok_and(|actual| actual == state.owner_process_start_marker)
+}
+
 pub(super) fn skip_failed_home_state_request(
     error: &crate::resident_client::ResidentClientError,
     same_runtime: bool,
-    process_id: u32,
-    start_marker: &str,
-    runtime_sha256: &str,
+    state: &ResidentState,
 ) -> bool {
     is_retryable_live_request_error(error)
-        || (same_runtime && validate_package_process_identity(process_id, start_marker).is_err())
+        || !state_owner_is_live(state)
+        || (same_runtime
+            && validate_package_process_identity(state.process_id, &state.process_start_marker)
+                .is_err())
         || (!same_runtime
-            && validate_runtime_process_identity(process_id, start_marker, runtime_sha256).is_err())
+            && validate_runtime_process_identity(
+                state.process_id,
+                &state.process_start_marker,
+                &state.runtime_sha256,
+            )
+            .is_err())
 }

@@ -154,13 +154,7 @@ fn try_home_states(
         ) {
             Ok(response) => return Ok(Some(response)),
             Err(error)
-                if containment::skip_failed_home_state_request(
-                    &error,
-                    same_runtime,
-                    state.process_id,
-                    &state.process_start_marker,
-                    &state.runtime_sha256,
-                ) => {}
+                if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
             Err(_) => return Err("native_resident_live_request_failed".to_owned()),
         }
     }

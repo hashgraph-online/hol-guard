@@ -188,7 +188,7 @@ where
                 let is_target = index == final_component;
                 let is_private = path_has_prefix(&current, &private_root);
                 let (mut handle, created) =
-                    match open_directory_bound(&current, is_target || is_private) {
+                    match open_directory_bound(&current, is_private, is_target) {
                         Ok(handle) => (handle, false),
                         Err(error) if error.kind() == io::ErrorKind::NotFound => {
                             let Some(descriptor) = security_descriptor else {
@@ -213,10 +213,8 @@ where
                                 match create_private_directory_handle(&current, descriptor) {
                                     Ok(result) => result,
                                     Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                                        match open_directory_bound(
-                                            &current,
-                                            is_target || is_private,
-                                        ) {
+                                        match open_directory_bound(&current, is_private, is_target)
+                                        {
                                             Ok(handle) => (handle, false),
                                             Err(error) => {
                                                 cleanup_created_components(
@@ -419,7 +417,7 @@ fn create_private_directory_handle(
         // A failed reopen has no verified handle to bind cleanup to. Retain
         // the owner-private directory for recovery; never issue a path-based
         // delete after creation, even while the parent binding is held.
-        let directory = open_raw_directory_bound(path, true)?;
+        let directory = open_raw_directory_bound(path, true, true, true)?;
         if let Err(error) = validate_handle(&directory, true) {
             // Once the handle exists, cleanup is handle-bound and cannot be
             // redirected by a pathname replacement.

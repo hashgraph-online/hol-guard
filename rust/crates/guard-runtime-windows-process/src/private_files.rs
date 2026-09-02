@@ -21,8 +21,9 @@ use winapi::um::winbase::{
     GetFileInformationByHandleEx, FILE_FLAG_BACKUP_SEMANTICS, FILE_TYPE_DISK,
 };
 use winapi::um::winnt::{
-    DELETE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT,
-    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+    DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
 };
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
@@ -109,24 +110,33 @@ pub(super) fn open_existing(path: &Path, directory: bool) -> io::Result<std::fs:
 pub(super) fn open_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
+    allow_add_file: bool,
 ) -> io::Result<std::fs::File> {
-    let file = open_raw_directory_bound(path, allow_acl_repair)?;
+    let file = open_raw_directory_bound(path, allow_acl_repair, allow_add_file, false)?;
     validate_handle(&file, true)?;
     Ok(file)
 }
 
 /// Open a directory with delete sharing withheld so its checked ancestry
-/// cannot be renamed or removed while the binding remains alive.
+/// cannot be renamed or removed while the binding remains alive. Existing
+/// bindings never request DELETE themselves, allowing independent readers to
+/// hold the same rename barrier without a Windows sharing violation.
 pub(super) fn open_raw_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
+    allow_add_file: bool,
+    allow_delete: bool,
 ) -> io::Result<std::fs::File> {
-    let access = GENERIC_READ
-        | if allow_acl_repair {
-            GENERIC_WRITE | WRITE_DAC | DELETE
-        } else {
-            0
-        };
+    let mut access = GENERIC_READ;
+    if allow_acl_repair {
+        access |= WRITE_DAC;
+    }
+    if allow_add_file {
+        access |= FILE_ADD_FILE;
+    }
+    if allow_delete {
+        access |= DELETE;
+    }
     open_raw_with_access(path, true, FILE_SHARE_READ | FILE_SHARE_WRITE, access)
 }
 

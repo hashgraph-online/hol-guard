@@ -23,6 +23,10 @@ fn private_descriptor(directory: bool) -> Result<LocalBox<SecurityDescriptor>, S
         .map_err(|_| "native_resident_windows_acl_build_failed".to_owned())
 }
 
+pub(super) fn private_file_descriptor() -> Result<LocalBox<SecurityDescriptor>, String> {
+    private_descriptor(false)
+}
+
 fn with_directory_binding<T, F>(
     path: &Path,
     private_root: &Path,
@@ -172,35 +176,6 @@ pub(super) fn ensure_private_directory_path(
     private: bool,
 ) -> Result<PathBuf, String> {
     ensure_private_directory_path_under(path, private_root, private)
-}
-
-pub(super) fn create_or_open_private_child(
-    binding: &guard_runtime_windows_process::PrivateDirectoryBinding,
-    path: &Path,
-) -> Result<File, String> {
-    let name = path
-        .file_name()
-        .ok_or_else(|| "native_resident_lock_open_failed".to_owned())?;
-    let descriptor = private_descriptor(false)?;
-    let owner =
-        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    match binding.create_private_file(name, &descriptor) {
-        Ok(file) => {
-            if let Err(error) = verify_windows_handle(&file, owner.as_ref()) {
-                let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
-                return Err(error);
-            }
-            Ok(file)
-        }
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            let mut file = binding
-                .open_private_file(name)
-                .map_err(|_| "native_resident_lock_open_failed".to_owned())?;
-            repair_private_file(&mut file)?;
-            Ok(file)
-        }
-        Err(_) => Err("native_resident_lock_open_failed".to_owned()),
-    }
 }
 
 pub(super) fn create_private_file(path: &Path, private_root: &Path) -> io::Result<File> {
