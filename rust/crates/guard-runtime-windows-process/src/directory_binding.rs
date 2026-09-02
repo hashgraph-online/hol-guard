@@ -79,11 +79,15 @@ impl PrivateDirectoryBinding {
         validate_handle(source, false)?;
         verify_private_file(source)?;
         match self.open_private_file(destination) {
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Ok(existing) => {
+                rename_into_directory(self, source, destination)?;
+                drop(existing);
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                rename_into_directory(self, source, destination)?;
+            }
             Err(error) => return Err(error),
         }
-        rename_into_directory(self, source, destination)?;
         let committed = self.open_private_file(destination)?;
         if file_information(source.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
             != file_information(committed.as_raw_handle() as winapi::shared::ntdef::HANDLE)?

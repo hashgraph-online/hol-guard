@@ -22,8 +22,8 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{
     DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD, FILE_SHARE_DELETE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
 };
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
@@ -132,10 +132,7 @@ pub(super) fn open_raw_directory_bound(
         access |= GENERIC_WRITE | WRITE_DAC;
     }
     if allow_add_file {
-        // ReplaceIfExists renames need FILE_ADD_FILE plus FILE_DELETE_CHILD on
-        // the parent. DELETE on the directory itself stays withheld so two
-        // bindings can share the rename barrier without a sharing violation.
-        access |= FILE_ADD_FILE | FILE_DELETE_CHILD;
+        access |= FILE_ADD_FILE;
     }
     if allow_delete {
         access |= DELETE;

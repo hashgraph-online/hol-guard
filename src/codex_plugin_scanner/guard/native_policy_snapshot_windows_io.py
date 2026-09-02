@@ -17,7 +17,6 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_FILE_ATTRIBUTE_DIRECTORY,
     _WINDOWS_FILE_ATTRIBUTE_NORMAL,
     _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT,
-    _WINDOWS_FILE_DELETE_CHILD,
     _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS,
     _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT,
     _WINDOWS_FILE_FLAG_WRITE_THROUGH,
@@ -111,10 +110,10 @@ def _windows_open_configuration(
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
         # Only the private directory used as FILE_RENAME_INFO.RootDirectory
-        # needs add/traverse/delete-child. Ancestor volume paths stay read-only.
+        # needs FILE_ADD_FILE and FILE_TRAVERSE. Ancestor volume paths stay read-only.
         desired_access = _WINDOWS_GENERIC_READ
         if add_file:
-            desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE | _WINDOWS_FILE_DELETE_CHILD
+            desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)

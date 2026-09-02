@@ -194,7 +194,7 @@ fn client_request_with_lease(
     let overall_deadline = Instant::now() + timeout;
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_live_or_restart(state_base, payload, overall_deadline, &digest)? {
+    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
         return Ok(response);
     }
     if Instant::now() >= overall_deadline {
