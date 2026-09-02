@@ -106,6 +106,17 @@ def _record_unavailable_native(
     )
     route = "native_degraded" if response.get("reason_code") == "native_degraded_emergency_safe" else "native_fail_safe"
     host.metrics.record_route(route)
+    if event_name == "PreToolUse":
+        writer = host.activity_writer
+        submit = getattr(writer, "submit_command_activity", None)
+        if callable(submit):
+            with suppress(Exception):
+                _ = submit(
+                    harness=harness,
+                    event=event_name,
+                    payload=payload,
+                    succeeded=str(response.get("policy_action") or "") != "block",
+                )
     return response
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,6 +13,8 @@ from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,
 )
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
 
 
@@ -146,3 +149,38 @@ def test_cursor_fallback_watch_allows_shell() -> None:
     )
     assert code == 0
     assert allow["permission"] == "allow"
+
+
+def test_watch_unavailable_pretool_records_command_activity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    writer = MagicMock()
+    worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
+        params={},
+        default_harness="grok",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "allow"
+    writer.submit_command_activity.assert_called_once()
+    recorded = writer.submit_command_activity.call_args.kwargs
+    assert recorded["event"] == "PreToolUse"
+    assert recorded["succeeded"] is True

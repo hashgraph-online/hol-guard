@@ -21,6 +21,7 @@ def _cursor_permission(tmp_path: Path, config_text: str) -> Callable[..., Any]:
     )
     source = cursor_hook_script_source(context)
     assert "load_guard_config" in source
+    assert "workspace=workspace_path" in source
     script_globals: dict[str, object] = {"__name__": "cursor_hook"}
     exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
     permission = script_globals["_cursor_permission"]

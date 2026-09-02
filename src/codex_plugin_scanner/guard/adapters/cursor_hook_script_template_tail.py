@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home() -> bool:
+HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home(workspace: str | None = None) -> bool:
     try:
         from codex_plugin_scanner.guard.config import load_guard_config
         from codex_plugin_scanner.guard.protection_posture import protection_is_off
 
-        config = load_guard_config(Path(GUARD_HOME))
+        workspace_path = Path(workspace) if workspace else None
+        config = load_guard_config(Path(GUARD_HOME), workspace=workspace_path)
         return protection_is_off(posture=config.protection_posture, mode=config.mode)
     except Exception:
         return False
 
 
-def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
+def _cursor_permission(policy_action: str, guard_payload: dict[str, object], workspace: str | None = None) -> str:
     del guard_payload
-    if _recording_only_from_guard_home():
+    if _recording_only_from_guard_home(workspace):
         return "allow"
     if policy_action not in GUARD_ACTIONS:
         return "deny"
@@ -31,8 +32,9 @@ def _emit_cursor_response(
     hook_event_name: str,
     policy_action: str,
     guard_payload: dict[str, object],
+    workspace: str | None = None,
 ) -> tuple[dict[str, object], int]:
-    permission = _cursor_permission(policy_action, guard_payload)
+    permission = _cursor_permission(policy_action, guard_payload, workspace)
     reason = _cursor_reason(guard_payload)
     if hook_event_name.strip().lower() == "beforereadfile":
         read_permission = "deny" if permission in {"deny", "ask"} else "allow"
@@ -248,10 +250,11 @@ def _cursor_availability_response(
             payload,
             hook_event_name=hook_event_name,
             workspace=workspace_path,
-            recording_only=_recording_only_from_guard_home(),
+            guard_home=Path(GUARD_HOME),
+            recording_only=_recording_only_from_guard_home(workspace),
         )
     except Exception:
-        if _recording_only_from_guard_home():
+        if _recording_only_from_guard_home(workspace):
             compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
             if compact in {"aftershellexecution", "aftermcpexecution"}:
                 return {}, 0
@@ -429,7 +432,7 @@ def _main_inner() -> int:
         return 0
     raw_policy_action = guard_payload.get("policy_action")
     if not isinstance(raw_policy_action, str) or raw_policy_action not in GUARD_ACTIONS:
-        if _recording_only_from_guard_home():
+        if _recording_only_from_guard_home(workspace):
             print(json.dumps({"permission": "allow"}))
             return 0
         response, exit_code = _cursor_availability_response(
@@ -452,6 +455,7 @@ def _main_inner() -> int:
         hook_event_name=hook_event_name,
         policy_action=policy_action,
         guard_payload=guard_payload,
+        workspace=workspace,
     )
     print(json.dumps(response))
     return exit_code

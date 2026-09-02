@@ -5927,12 +5927,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
         event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
         daemon_server = getattr(self, "server", None)
+        workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
+        guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
         try:
-            loaded = (
-                None
-                if daemon_server is None
-                else load_guard_config(cast(_GuardDaemonHttpServer, daemon_server).store.guard_home)
-            )
+            loaded = None if guard_home is None else load_guard_config(guard_home, workspace=workspace_path)
             observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
@@ -5954,7 +5952,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
         if event == "PreToolUse" or lifecycle_event_is_observe_only(event):
             payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
-            workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
             return availability_harness_response(
                 payload_dict,
                 harness=harness,
@@ -5963,6 +5960,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 reason=reason,
                 workspace=workspace_path,
                 home_dir=home_path,
+                guard_home=guard_home,
+                recording_only=observe_mode,
             )
         if harness in {"pi", "omp"}:
             return {
