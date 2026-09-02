@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+
+source_path = Path("rust/crates/guard-runtime/src/managed_resident.rs")
+source = source_path.read_text(encoding="utf-8")
+source, count = re.subn(
+    r"(?m)^        if \(same_runtime\)$",
+    "        if !containment::state_owner_is_live(&state)\n            || (same_runtime",
+    source,
+    count=1,
+)
+if count != 1:
+    raise RuntimeError(
+        f"managed_resident.rs: expected one live-state condition, found {count}"
+    )
+source_path.write_text(source, encoding="utf-8")
+
+storage_path = Path(
+    "src/codex_plugin_scanner/guard/native_policy_snapshot_storage_windows.py"
+)
+storage = storage_path.read_text(encoding="utf-8")
+old_storage_open = (
+    "        kernel32, handle, information = "
+    "api._windows_open_handle(path, directory=False)"
+)
+new_storage_open = """        kernel32, handle, information = api._windows_open_handle(
+            path,
+            directory=False,
+            share_delete=True,
+        )"""
+storage_count = storage.count(old_storage_open)
+if storage_count != 2:
+    raise RuntimeError(
+        "native_policy_snapshot_storage_windows.py: "
+        f"expected two guarded opens, found {storage_count}"
+    )
+storage_path.write_text(
+    storage.replace(old_storage_open, new_storage_open),
+    encoding="utf-8",
+)
+
+helper_path = Path(".github/temporary-pr2691-final-repair.py")
+helper = helper_path.read_text(encoding="utf-8")
+
+managed_start = (
+    '\nmanaged_resident = "rust/crates/guard-runtime/src/managed_resident.rs"\n'
+)
+managed_end = (
+    '\nconstants = "src/codex_plugin_scanner/guard/native_policy_snapshot_constants.py"\n'
+)
+managed_start_index = helper.index(managed_start)
+managed_end_index = helper.index(managed_end, managed_start_index)
+helper = helper[:managed_start_index] + helper[managed_end_index:]
+
+storage_start = (
+    '\nwindows_storage = '
+    '"src/codex_plugin_scanner/guard/native_policy_snapshot_storage_windows.py"\n'
+)
+storage_end = (
+    '\nwindows_atomic = '
+    '"src/codex_plugin_scanner/guard/native_policy_snapshot_windows_atomic.py"\n'
+)
+storage_start_index = helper.index(storage_start)
+storage_end_index = helper.index(storage_end, storage_start_index)
+helper = helper[:storage_start_index] + helper[storage_end_index:]
+
+helper_path.write_text(helper, encoding="utf-8")
