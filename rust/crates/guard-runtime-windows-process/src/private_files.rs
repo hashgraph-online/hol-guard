@@ -15,7 +15,7 @@ use winapi::um::fileapi::{
 };
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::minwinbase::{
-    FileAttributeTagInfo, FileDispositionInfo, FileRenameInfo, SECURITY_ATTRIBUTES,
+    FileAttributeTagInfo, FileDispositionInfo, SECURITY_ATTRIBUTES,
 };
 use winapi::um::winbase::{
     GetFileInformationByHandleEx, FILE_FLAG_BACKUP_SEMANTICS, FILE_TYPE_DISK,
@@ -37,6 +37,25 @@ const ERROR_ALREADY_EXISTS: i32 = 183;
 const ERROR_FILE_EXISTS: i32 = 80;
 const FILE_FLAG_OPEN_REPARSE_POINT: DWORD = 0x0020_0000;
 const FILE_FLAG_WRITE_THROUGH: DWORD = 0x8000_0000;
+const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
+
+#[repr(C)]
+struct IoStatusBlock {
+    status: isize,
+    information: usize,
+}
+
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtSetInformationFile(
+        file_handle: HANDLE,
+        io_status_block: *mut IoStatusBlock,
+        file_information: *mut u8,
+        length: u32,
+        file_information_class: u32,
+    ) -> i32;
+    fn RtlNtStatusToDosError(status: i32) -> u32;
+}
 
 /// Create one owner-private file with its security descriptor applied by the
 /// kernel as part of the create operation. The descriptor must remain valid
@@ -140,7 +159,7 @@ pub(super) fn open_raw_directory_bound(
     open_raw_with_access(path, true, FILE_SHARE_READ | FILE_SHARE_WRITE, access)
 }
 
-fn open_raw(
+pub(super) fn open_raw(
     path: &Path,
     directory: bool,
     share_mode: DWORD,
@@ -373,18 +392,26 @@ pub(super) fn rename_into_directory(
             byte_count,
         );
     }
+    let mut io_status = IoStatusBlock {
+        status: 0,
+        information: 0,
+    };
     // SAFETY: `source` is a live DELETE-capable handle and `buffer` remains
-    // valid for the synchronous rename call.
-    if unsafe {
-        SetFileInformationByHandle(
+    // valid for the synchronous FileRenameInformation call.
+    let status = unsafe {
+        NtSetInformationFile(
             source.as_raw_handle() as HANDLE,
-            FileRenameInfo,
-            buffer.as_ptr() as *mut _,
-            buffer_size as DWORD,
+            &mut io_status,
+            buffer.as_mut_ptr(),
+            buffer_size as u32,
+            FILE_RENAME_INFORMATION_CLASS,
         )
-    } == FALSE
-    {
-        return Err(io::Error::last_os_error());
+    };
+    if status < 0 {
+        // SAFETY: ntdll maps this NTSTATUS to a Win32 error code.
+        return Err(io::Error::from_raw_os_error(unsafe {
+            RtlNtStatusToDosError(status)
+        } as i32));
     }
     Ok(())
 }

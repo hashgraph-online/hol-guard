@@ -6,13 +6,14 @@ use std::path::{Component, Path, PathBuf};
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::um::fileapi::CreateDirectoryW;
 use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
+use winapi::um::winnt::{FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
 use windows_permissions::SecurityDescriptor;
 
 use super::private_files::{
-    file_information, mark_handle_for_delete, open_directory_bound, open_raw_directory_bound,
-    rename_into_directory, validate_handle, verify_private_file,
+    create_private_file as create_path_private_file, file_information, mark_handle_for_delete,
+    open_directory_bound, open_raw, open_raw_directory_bound, rename_into_directory,
+    validate_handle, verify_private_file,
 };
-use super::relative_child::{create_relative_private_file, open_relative_private_file};
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
 
@@ -53,14 +54,18 @@ impl PrivateDirectoryBinding {
         name: &OsStr,
         security_descriptor: &SecurityDescriptor,
     ) -> io::Result<std::fs::File> {
-        let _ = self.child_path(name)?;
-        create_relative_private_file(self.handle(), name, security_descriptor)
+        create_path_private_file(&self.child_path(name)?, security_descriptor)
     }
 
     /// Open a regular child file while this directory ancestry is held.
     pub fn open_private_file(&self, name: &OsStr) -> io::Result<std::fs::File> {
-        let _ = self.child_path(name)?;
-        let file = open_relative_private_file(self.handle(), name)?;
+        let file = open_raw(
+            &self.child_path(name)?,
+            false,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            true,
+        )?;
+        validate_handle(&file, false)?;
         verify_private_file(&file)?;
         Ok(file)
     }
