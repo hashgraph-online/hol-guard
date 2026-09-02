@@ -111,20 +111,6 @@ fn combine_liveness(
     combined
 }
 
-fn is_stale_process_identity_error(error: &str) -> bool {
-    matches!(
-        error,
-        "native_resident_process_identity_unavailable"
-            | "native_resident_process_identity_mismatch"
-    )
-}
-
-fn is_retryable_live_request_error(error: &crate::resident_client::ResidentClientError) -> bool {
-    error.code == "native_client_connect_failed"
-        || is_stale_process_identity_error(&error.code)
-        || (error.code == "native_client_auth_nonce_failed" && error.retryable_teardown)
-}
-
 fn try_home_states(
     state_base: &Path,
     payload: &[u8],
@@ -168,20 +154,13 @@ fn try_home_states(
         ) {
             Ok(response) => return Ok(Some(response)),
             Err(error)
-                if is_retryable_live_request_error(&error)
-                    || (same_runtime
-                        && validate_package_process_identity(
-                            state.process_id,
-                            &state.process_start_marker,
-                        )
-                        .is_err())
-                    || (!same_runtime
-                        && validate_runtime_process_identity(
-                            state.process_id,
-                            &state.process_start_marker,
-                            &state.runtime_sha256,
-                        )
-                        .is_err()) => {}
+                if containment::skip_failed_home_state_request(
+                    &error,
+                    same_runtime,
+                    state.process_id,
+                    &state.process_start_marker,
+                    &state.runtime_sha256,
+                ) => {}
             Err(_) => return Err("native_resident_live_request_failed".to_owned()),
         }
     }

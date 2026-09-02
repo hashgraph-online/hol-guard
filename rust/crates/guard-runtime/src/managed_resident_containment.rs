@@ -367,3 +367,32 @@ pub(super) fn contain_spawned_managed(
     terminate_spawned_managed(child)?;
     wait_for_generation_containment(scope, digest, generation, token, &known_processes)
 }
+
+pub(super) fn is_stale_process_identity_error(error: &str) -> bool {
+    matches!(
+        error,
+        "native_resident_process_identity_unavailable"
+            | "native_resident_process_identity_mismatch"
+    )
+}
+
+pub(super) fn is_retryable_live_request_error(
+    error: &crate::resident_client::ResidentClientError,
+) -> bool {
+    error.code == "native_client_connect_failed"
+        || is_stale_process_identity_error(&error.code)
+        || (error.code == "native_client_auth_nonce_failed" && error.retryable_teardown)
+}
+
+pub(super) fn skip_failed_home_state_request(
+    error: &crate::resident_client::ResidentClientError,
+    same_runtime: bool,
+    process_id: u32,
+    start_marker: &str,
+    runtime_sha256: &str,
+) -> bool {
+    is_retryable_live_request_error(error)
+        || (same_runtime && validate_package_process_identity(process_id, start_marker).is_err())
+        || (!same_runtime
+            && validate_runtime_process_identity(process_id, start_marker, runtime_sha256).is_err())
+}

@@ -1,3 +1,4 @@
+use super::containment::{is_retryable_live_request_error, is_stale_process_identity_error};
 use super::*;
 use std::fs;
 #[cfg(unix)]
