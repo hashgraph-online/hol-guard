@@ -72,21 +72,49 @@ def _windows_bind_directory_component(
     kernel32, handle, _information = api._windows_open_handle(
         path,
         directory=True,
-        repair=private and not created,
+        repair=False,
         lock=True,
         add_file=private,
     )
+    opened = True
     try:
         if private:
             if not created:
-                # Owner verification must precede any ACL repair.
                 api._windows_verify_private_owner(handle, owner_sid=owner_sid)
-                api._windows_apply_private_dacl(kernel32, handle, descriptor, dacl, True)
-            api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=True)
+                try:
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=True)
+                except NativePolicySnapshotError:
+                    api._windows_close_handle(kernel32, handle)
+                    opened = False
+                    kernel32, handle, _information = api._windows_open_handle(
+                        path,
+                        directory=True,
+                        repair=True,
+                        lock=True,
+                        add_file=private,
+                    )
+                    opened = True
+                    api._windows_verify_private_owner(handle, owner_sid=owner_sid)
+                    api._windows_apply_private_dacl(kernel32, handle, descriptor, dacl, True)
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=True)
+                    api._windows_close_handle(kernel32, handle)
+                    opened = False
+                    kernel32, handle, _information = api._windows_open_handle(
+                        path,
+                        directory=True,
+                        repair=False,
+                        lock=True,
+                        add_file=private,
+                    )
+                    opened = True
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=True)
+            else:
+                api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=True)
         return created, (kernel32, handle)
     except BaseException:
-        with suppress(BaseException):
-            api._windows_close_handle(kernel32, handle)
+        if opened:
+            with suppress(BaseException):
+                api._windows_close_handle(kernel32, handle)
         raise
 
 

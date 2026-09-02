@@ -16,8 +16,6 @@ use std::time::SystemTime;
 
 pub(crate) struct StartupLock {
     file: File,
-    #[cfg(windows)]
-    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 impl Drop for StartupLock {
@@ -41,7 +39,7 @@ pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, 
         super::hex_bytes(&nonce_bytes)
     );
     #[cfg(windows)]
-    let Ok((mut file, directory_binding)) = private_lock_file(&path, &private_root) else {
+    let Ok((mut file, _directory_binding)) = private_lock_file(&path, &private_root) else {
         return Ok(None);
     };
     #[cfg(not(windows))]
@@ -60,11 +58,7 @@ pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, 
     {
         return Err("native_resident_lock_write_failed".to_owned());
     }
-    Ok(Some(StartupLock {
-        file,
-        #[cfg(windows)]
-        _directory_binding: directory_binding,
-    }))
+    Ok(Some(StartupLock { file }))
 }
 
 pub(crate) fn clear_stale_startup_lock(

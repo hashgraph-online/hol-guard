@@ -111,17 +111,19 @@ def _windows_open_configuration(
     flags = _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
-        # Barrier directory handles withhold delete sharing so the bound
-        # directory cannot be renamed. Rename uses a separate parent handle.
         desired_access = _WINDOWS_GENERIC_READ
         if add_file:
             desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE
-        share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
-        if add_file:
-            share_mode |= _WINDOWS_FILE_SHARE_WRITE
+        # Barrier handles withhold delete sharing so the bound directory
+        # cannot be renamed. Write sharing stays enabled so a live resident
+        # can bind the same tree and create children. `lock` selects that
+        # no-delete barrier; it must not also deny FILE_SHARE_WRITE.
+        share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
         if rename_parent:
             desired_access = _WINDOWS_FILE_TRAVERSE | _WINDOWS_FILE_READ_ATTRIBUTES
             share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE
+        elif lock:
+            share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)
         if create_new or rename_source:

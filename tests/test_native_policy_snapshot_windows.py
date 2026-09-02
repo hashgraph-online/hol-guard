@@ -236,13 +236,12 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
             ("apply", (applied_handle, applied_descriptor, applied_dacl, directory))
         ),
     )
-    monkeypatch.setattr(
-        snapshot_module,
-        "_windows_verify_private_dacl",
-        lambda verified_handle, *, owner_sid, directory: events.append(
-            ("verify", (verified_handle, owner_sid, directory))
-        ),
-    )
+    def verify_dacl(verified_handle: object, *, owner_sid: str, directory: bool) -> None:
+        events.append(("verify", (verified_handle, owner_sid, directory)))
+        if sum(1 for event in events if event[0] == "verify") == 1:
+            raise snapshot_module.NativePolicySnapshotError("native_policy_windows_acl_not_private")
+
+    monkeypatch.setattr(snapshot_module, "_windows_verify_private_dacl", verify_dacl)
     monkeypatch.setattr(
         snapshot_module,
         "_windows_close_handle",
@@ -250,16 +249,23 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
     )
     monkeypatch.setattr(ctypes, "get_last_error", lambda: snapshot_module._WINDOWS_ERROR_ALREADY_EXISTS, raising=False)
 
-    snapshot_module._windows_ensure_private_directory(tmp_path / "native-runtime")
+    target = tmp_path / "native-runtime"
+    snapshot_module._windows_ensure_private_directory(target)
 
-    assert events[0] == ("create", "existing")
-    target_open = ("open", (tmp_path / "native-runtime", True, False, None, True, True))
-    assert target_open in events
-    target_index = events.index(target_open)
+    assert ("open", (target, True, False, None, False, True)) in events
+    assert ("open", (target, True, False, None, True, True)) in events
+    target_index = events.index(("open", (target, True, False, None, False, True)))
     assert events[target_index + 1] == ("owner", (handle, "S-1-5-21-1"))
-    assert events[target_index + 2] == ("apply", (handle, descriptor, dacl, True))
-    assert events[target_index + 3] == ("verify", (handle, "S-1-5-21-1", True))
-    assert events[target_index + 4] == ("close", handle)
+    assert events[target_index + 2] == ("verify", (handle, "S-1-5-21-1", True))
+    assert events[target_index + 3] == ("close", handle)
+    assert events[target_index + 4] == ("open", (target, True, False, None, True, True))
+    assert events[target_index + 5] == ("owner", (handle, "S-1-5-21-1"))
+    assert events[target_index + 6] == ("apply", (handle, descriptor, dacl, True))
+    assert events[target_index + 7] == ("verify", (handle, "S-1-5-21-1", True))
+    assert events[target_index + 8] == ("close", handle)
+    assert events[target_index + 9] == ("open", (target, True, False, None, False, True))
+    assert events[target_index + 10] == ("verify", (handle, "S-1-5-21-1", True))
+    assert events[target_index + 11] == ("close", handle)
 
 
 def test_windows_private_descriptor_deduplicates_system_owner_ace(

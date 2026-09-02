@@ -206,72 +206,82 @@ where
                 current.push(name);
                 let is_target = index == final_component;
                 let is_private = path_has_prefix(&current, &private_root);
-                let (mut handle, created) =
-                    match open_directory_bound(&current, is_private, is_target) {
-                        Ok(handle) => (handle, false),
-                        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                            let Some(descriptor) = security_descriptor else {
-                                cleanup_created_components(&handles, &created_indices, None);
-                                return Err(io::Error::new(
-                                    io::ErrorKind::NotFound,
-                                    if is_private {
-                                        "private directory ancestry is missing"
-                                    } else {
-                                        "trusted directory ancestry is missing"
-                                    },
-                                ));
-                            };
-                            if !is_private {
-                                cleanup_created_components(&handles, &created_indices, None);
-                                return Err(io::Error::new(
-                                    io::ErrorKind::NotFound,
-                                    "trusted directory ancestry is missing",
-                                ));
-                            }
-                            let (handle, created) =
-                                match create_private_directory_handle(&current, descriptor) {
-                                    Ok(result) => result,
-                                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                                        match open_directory_bound(&current, is_private, is_target)
-                                        {
-                                            Ok(handle) => (handle, false),
-                                            Err(error) => {
-                                                cleanup_created_components(
-                                                    &handles,
-                                                    &created_indices,
-                                                    None,
-                                                );
-                                                return Err(error);
-                                            }
+                let (mut handle, created) = match open_directory_bound(&current, false, is_target) {
+                    Ok(handle) => (handle, false),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        let Some(descriptor) = security_descriptor else {
+                            cleanup_created_components(&handles, &created_indices, None);
+                            return Err(io::Error::new(
+                                io::ErrorKind::NotFound,
+                                if is_private {
+                                    "private directory ancestry is missing"
+                                } else {
+                                    "trusted directory ancestry is missing"
+                                },
+                            ));
+                        };
+                        if !is_private {
+                            cleanup_created_components(&handles, &created_indices, None);
+                            return Err(io::Error::new(
+                                io::ErrorKind::NotFound,
+                                "trusted directory ancestry is missing",
+                            ));
+                        }
+                        let (handle, created) =
+                            match create_private_directory_handle(&current, descriptor) {
+                                Ok(result) => result,
+                                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                                    match open_directory_bound(&current, false, is_target) {
+                                        Ok(handle) => (handle, false),
+                                        Err(error) => {
+                                            cleanup_created_components(
+                                                &handles,
+                                                &created_indices,
+                                                None,
+                                            );
+                                            return Err(error);
                                         }
                                     }
-                                    Err(error) => {
-                                        cleanup_created_components(
-                                            &handles,
-                                            &created_indices,
-                                            None,
-                                        );
-                                        return Err(error);
-                                    }
-                                };
-                            (handle, created)
-                        }
-                        Err(error) => {
-                            cleanup_created_components(&handles, &created_indices, None);
-                            return Err(error);
-                        }
-                    };
+                                }
+                                Err(error) => {
+                                    cleanup_created_components(&handles, &created_indices, None);
+                                    return Err(error);
+                                }
+                            };
+                        (handle, created)
+                    }
+                    Err(error) => {
+                        cleanup_created_components(&handles, &created_indices, None);
+                        return Err(error);
+                    }
+                };
                 if is_target {
                     created_final = created;
                     private_final = is_private;
                 }
                 if let Err(error) = verify(&mut handle, is_target, created, is_private) {
-                    cleanup_created_components(
-                        &handles,
-                        &created_indices,
-                        created.then_some(&handle),
-                    );
-                    return Err(error);
+                    if is_private && !created {
+                        drop(handle);
+                        match durable_private_directory_handle(
+                            &current,
+                            is_target,
+                            is_private,
+                            &mut verify,
+                        ) {
+                            Ok(durable) => handle = durable,
+                            Err(error) => {
+                                cleanup_created_components(&handles, &created_indices, None);
+                                return Err(error);
+                            }
+                        }
+                    } else {
+                        cleanup_created_components(
+                            &handles,
+                            &created_indices,
+                            created.then_some(&handle),
+                        );
+                        return Err(error);
+                    }
                 }
                 if created {
                     created_indices.push(handles.len());
@@ -286,6 +296,37 @@ where
         created_final,
         private_final,
     })
+}
+
+fn verified_directory_handle<F>(
+    path: &Path,
+    allow_acl_repair: bool,
+    is_target: bool,
+    is_private: bool,
+    verify: &mut F,
+) -> io::Result<std::fs::File>
+where
+    F: FnMut(&mut std::fs::File, bool, bool, bool) -> io::Result<()>,
+{
+    let mut handle = open_directory_bound(path, allow_acl_repair, is_target)?;
+    verify(&mut handle, is_target, false, is_private)?;
+    Ok(handle)
+}
+
+/// Repair may require WRITE_DAC, but a live barrier must not keep that right.
+/// Overlapping client/serve binds fail closed when any handle still has it.
+fn durable_private_directory_handle<F>(
+    path: &Path,
+    is_target: bool,
+    is_private: bool,
+    verify: &mut F,
+) -> io::Result<std::fs::File>
+where
+    F: FnMut(&mut std::fs::File, bool, bool, bool) -> io::Result<()>,
+{
+    let repaired = verified_directory_handle(path, true, is_target, is_private, verify)?;
+    drop(repaired);
+    verified_directory_handle(path, false, is_target, is_private, verify)
 }
 
 /// Delete only directories created by this binding, in reverse ancestry order.

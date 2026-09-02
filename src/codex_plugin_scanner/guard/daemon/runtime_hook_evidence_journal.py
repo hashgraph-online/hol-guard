@@ -193,13 +193,18 @@ def recover_journal_records(path: Path, *, max_bytes: int) -> tuple[list[_Eviden
         return _read_journal_records_locked(path, max_bytes=max_bytes)
 
 
+def _apply_private_file_mode(descriptor: int) -> None:
+    if os.name != "nt" and hasattr(os, "fchmod"):
+        os.fchmod(descriptor, 0o600)
+
+
 def append_journal(path: Path, record: _EvidenceRecord) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with _journal_lock(path):
         descriptor = _open_journal(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY)
         original_size = os.fstat(descriptor).st_size
         try:
-            os.fchmod(descriptor, 0o600)
+            _apply_private_file_mode(descriptor)
             _write_all(descriptor, record.serialized())
             os.fsync(descriptor)
         except OSError:
@@ -246,7 +251,7 @@ def _journal_lock(path: Path) -> Iterator[None]:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
             raise OSError("evidence journal lock is not a private regular file")
-        os.fchmod(descriptor, 0o600)
+        _apply_private_file_mode(descriptor)
         if fcntl is not None:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             locked = True

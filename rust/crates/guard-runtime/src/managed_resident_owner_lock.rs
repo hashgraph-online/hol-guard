@@ -10,16 +10,12 @@ pub(super) const MANAGED_OWNER_LOCK_FILE_NAME: &str = "managed-resident-owner.v1
 pub(super) struct ManagedOwnerLock {
     pub(super) _file: File,
     pub(super) _legacy_files: Vec<File>,
-    #[cfg(windows)]
-    pub(super) _directory_bindings: Vec<guard_runtime_windows_process::PrivateDirectoryBinding>,
     #[cfg(unix)]
     pub(super) _directory: File,
 }
 
 struct LegacyOwnerLocks {
     files: Vec<File>,
-    #[cfg(windows)]
-    directory_bindings: Vec<guard_runtime_windows_process::PrivateDirectoryBinding>,
 }
 
 impl Drop for ManagedOwnerLock {
@@ -43,8 +39,6 @@ fn acquire_legacy_owner_locks(state_base: &Path) -> Result<LegacyOwnerLocks, Str
     #[cfg(not(windows))]
     let _ = &private_root;
     let mut locks = Vec::new();
-    #[cfg(windows)]
-    let mut directory_bindings = Vec::new();
     let entries = std::fs::read_dir(state_base)
         .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
     for entry in entries {
@@ -74,7 +68,6 @@ fn acquire_legacy_owner_locks(state_base: &Path) -> Result<LegacyOwnerLocks, Str
                 }
             })?;
             locks.push(file);
-            directory_bindings.push(binding);
             continue;
         }
         #[cfg(not(windows))]
@@ -126,20 +119,13 @@ fn acquire_legacy_owner_locks(state_base: &Path) -> Result<LegacyOwnerLocks, Str
             locks.push(file);
         }
     }
-    Ok(LegacyOwnerLocks {
-        files: locks,
-        #[cfg(windows)]
-        directory_bindings,
-    })
+    Ok(LegacyOwnerLocks { files: locks })
 }
 
 pub(super) fn acquire(scope: &Path) -> Result<ManagedOwnerLock, String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
     #[cfg(not(windows))]
     let _ = &private_root;
-    #[cfg(windows)]
-    let directory_binding =
-        crate::resident_state::bind_windows_existing_directory(scope, &private_root)?;
     #[cfg(unix)]
     let directory = {
         use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -174,6 +160,9 @@ pub(super) fn acquire(scope: &Path) -> Result<ManagedOwnerLock, String> {
         directory
     };
     let path = scope.join(MANAGED_OWNER_LOCK_FILE_NAME);
+    // Keep the locked file, not a live directory barrier. Holding
+    // `native-runtime` open without delete sharing stalls overlapping
+    // client binds until the publisher ACK deadline expires.
     #[cfg(windows)]
     let (file, lock_directory_binding) =
         crate::resident_state::private_lock_file(&path, &private_root)
@@ -228,17 +217,12 @@ pub(super) fn acquire(scope: &Path) -> Result<ManagedOwnerLock, String> {
             "native_resident_owner_lock_failed".to_owned()
         }
     })?;
+    #[cfg(windows)]
+    drop(lock_directory_binding);
     let legacy_locks = acquire_legacy_owner_locks(scope)?;
     Ok(ManagedOwnerLock {
         _file: file,
         _legacy_files: legacy_locks.files,
-        #[cfg(windows)]
-        _directory_bindings: {
-            let mut bindings = legacy_locks.directory_bindings;
-            bindings.push(directory_binding);
-            bindings.push(lock_directory_binding);
-            bindings
-        },
         #[cfg(unix)]
         _directory: directory,
     })

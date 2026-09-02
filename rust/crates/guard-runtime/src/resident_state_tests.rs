@@ -268,19 +268,12 @@ fn startup_lock_holds_advisory_lock_until_drop() {
 
 #[cfg(windows)]
 #[test]
-fn startup_lock_retains_directory_binding_until_drop() {
-    let scope = test_scope("startup-lock-directory-binding");
-    let renamed = scope.with_file_name(format!(
-        "{}-renamed",
-        scope.file_name().unwrap().to_string_lossy()
-    ));
+fn startup_lock_allows_overlapping_private_directory_binds() {
+    let scope = test_scope("startup-lock-directory-overlap");
     let lock = acquire_startup_lock(&scope).unwrap().unwrap();
-
-    assert!(fs::rename(&scope, &renamed).is_err());
-
+    bind_windows_existing_directory(&scope, &scope).unwrap();
     drop(lock);
-    fs::rename(&scope, &renamed).unwrap();
-    fs::remove_dir_all(renamed).unwrap();
+    fs::remove_dir_all(scope).unwrap();
 }
 
 #[cfg(windows)]

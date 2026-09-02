@@ -85,8 +85,6 @@ impl Drop for ClientLease {
 
 struct LeaseDirectoryLock {
     file: File,
-    #[cfg(windows)]
-    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 impl Drop for LeaseDirectoryLock {
@@ -107,15 +105,11 @@ fn acquire_directory_lock(
 ) -> Result<Option<LeaseDirectoryLock>, String> {
     let path = directory.join(LEASE_LOCK_FILE);
     #[cfg(windows)]
-    let (file, directory_binding) = crate::resident_state::private_lock_file(&path, private_root)?;
+    let (file, _directory_binding) = crate::resident_state::private_lock_file(&path, private_root)?;
     #[cfg(not(windows))]
     let file = crate::resident_state::private_lock_file(&path, private_root)?;
     match fs2::FileExt::try_lock_exclusive(&file) {
-        Ok(()) => Ok(Some(LeaseDirectoryLock {
-            file,
-            #[cfg(windows)]
-            _directory_binding: directory_binding,
-        })),
+        Ok(()) => Ok(Some(LeaseDirectoryLock { file })),
         Err(error) if crate::resident_state::is_lock_contention(&error) => {
             #[cfg(test)]
             notify_lock_busy_for_test();

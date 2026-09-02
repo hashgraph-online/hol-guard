@@ -169,14 +169,14 @@ def test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle(
 
     target_open = (
         "open",
-        (tmp_path / "native-runtime", True, False, None, True, True),
+        (tmp_path / "native-runtime", True, False, None, False, True),
     )
     assert target_open in events
     target_index = events.index(target_open)
     assert events[target_index + 1] == ("owner", (handle, "S-1-5-21-1"))
-    assert events[target_index + 2] == ("apply", (handle, descriptor, dacl, True))
-    assert events[target_index + 3] == ("verify", (handle, "S-1-5-21-1", True))
-    assert events[target_index + 4] == ("close", handle)
+    assert events[target_index + 2] == ("verify", (handle, "S-1-5-21-1", True))
+    assert events[target_index + 3] == ("close", handle)
+    assert ("apply", (handle, descriptor, dacl, True)) not in events
 
 
 def test_windows_private_descriptor_deduplicates_system_owner_ace(
