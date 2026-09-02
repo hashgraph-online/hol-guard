@@ -176,10 +176,16 @@ class HookWorkerNativeMixin:
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return harness_json_from_native_pre_tool(harness, native)
         if recording_only:
-            return recording_only_pre_tool_response(
-                harness,
+            return _record_unavailable_native(
+                self,
+                payload,
+                harness=harness,
+                event_name="PreToolUse",
                 reason_code="watch_recording_only",
-                reason="Watch recorded this action without stopping it.",
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=True,
             )
         status = self._native_runtime_status()
         if status.mode == "off":
