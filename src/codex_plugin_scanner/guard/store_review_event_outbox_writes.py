@@ -156,17 +156,27 @@ def append_request_snapshot_event(
     return max(0, int(cursor.rowcount or 0))
 
 
-def requeue_pending_request_events(connection: sqlite3.Connection, *, source: str, changed_at: str) -> int:
+def requeue_pending_request_events(
+    connection: sqlite3.Connection,
+    *,
+    source: str,
+    changed_at: str,
+    require_binding: bool = False,
+) -> int:
     connection.execute("begin immediate")
     current_binding = load_review_oauth_binding(connection, source)
-    if current_binding is None:
+    if require_binding and current_binding is None:
         return 0
     current_identity = (
-        source,
-        current_binding["oauth_subject_hash"],
-        current_binding["workspace_id"],
-        current_binding["machine_id"],
-        current_binding["machine_installation_id"],
+        (
+            source,
+            current_binding["oauth_subject_hash"],
+            current_binding["workspace_id"],
+            current_binding["machine_id"],
+            current_binding["machine_installation_id"],
+        )
+        if current_binding is not None
+        else None
     )
     rows = connection.execute(
         """
@@ -191,7 +201,7 @@ def requeue_pending_request_events(connection: sqlite3.Connection, *, source: st
             """,
             (request_id,),
         ).fetchone()
-        if existing_snapshot is not None and (
+        if existing_snapshot is not None and current_identity is not None and (
             str(existing_snapshot["binding_status"]) == "ready"
             and (
                 str(existing_snapshot["oauth_source"]),

@@ -386,8 +386,9 @@ def test_cloud_review_requeue_database_failure_is_retryable(
 ) -> None:
     store = _connected_store(tmp_path)
 
-    def fail_requeue(*, changed_at: str) -> int:
+    def fail_requeue(*, changed_at: str, require_binding: bool) -> int:
         del changed_at
+        assert require_binding is True
         raise sqlite3.OperationalError("database is busy")
 
     monkeypatch.setattr(store, "requeue_pending_review_events", fail_requeue)

@@ -35,7 +35,10 @@ def _refresh_cloud_review_worker(guard_home: Path) -> dict[str, object]:
 
 def _requeue_pending_cloud_review_requests(store: GuardStore) -> int:
     try:
-        return store.requeue_pending_review_events(changed_at=datetime.now(timezone.utc).isoformat())
+        return store.requeue_pending_review_events(
+            changed_at=datetime.now(timezone.utc).isoformat(),
+            require_binding=True,
+        )
     except sqlite3.Error as error:
         raise PendingReviewRequeueError from error
 
