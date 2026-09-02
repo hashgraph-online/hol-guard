@@ -26,7 +26,7 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
         {
             "path": "src/codex_plugin_scanner/guard/native_runtime_resident.py",
             "module": "codex_plugin_scanner.guard.native_runtime_resident",
-            "loc": 493,
+            "loc": 498,
             "source_importers": [],
             "package_excluded": True,
         }

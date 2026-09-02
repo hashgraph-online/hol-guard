@@ -41,10 +41,20 @@ pub(crate) fn protect_windows_private_path(
     directory: bool,
     private_root: &Path,
 ) -> Result<(), String> {
-    let _binding = windows_security::bind_windows_existing_directory(
+    use windows_permissions::utilities::current_process_sid;
+
+    let binding = windows_security::bind_windows_existing_directory(
         windows_bind_target(path, directory),
         private_root,
     )?;
+    if directory {
+        // Binding already repaired the private directory ACL through the held
+        // handle. Re-protecting by path while that handle withholds delete
+        // sharing fails with a sharing violation.
+        let owner = current_process_sid()
+            .map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+        return windows_security::verify_windows_handle(binding.handle(), owner.as_ref());
+    }
     windows_security::protect_windows_path(path, directory)
 }
 
@@ -56,12 +66,15 @@ pub(crate) fn verify_windows_private_path(
 ) -> Result<(), String> {
     use windows_permissions::utilities::current_process_sid;
 
-    let _binding = windows_security::bind_windows_existing_directory(
+    let binding = windows_security::bind_windows_existing_directory(
         windows_bind_target(path, directory),
         private_root,
     )?;
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    if directory {
+        return windows_security::verify_windows_handle(binding.handle(), owner.as_ref());
+    }
     windows_security::verify_windows_path(path, owner.as_ref())
 }
 

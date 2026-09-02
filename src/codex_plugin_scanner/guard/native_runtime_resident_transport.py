@@ -12,6 +12,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import Any
 
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -424,3 +425,28 @@ def _send_authenticated_unix_request(
             client.close()
         return None
     return _send_authenticated_request(client, token, payload, timeout_seconds=timeout_seconds)
+
+
+def retire_unusable_resident_supervisor(session: Any) -> None:
+    """Release a live supervisor that is no longer serving.
+
+    ``resident-stop`` kills the Rust process without joining this Python
+    supervisor. The next request must start a new generation instead of
+    waiting on the winding-down thread until the startup budget expires.
+    """
+
+    lock = session._lock
+    with lock:
+        if session._closed:
+            return
+        thread = session._thread
+        auth_token = session._auth_token
+    if thread is None or not thread.is_alive():
+        return
+    if auth_token is not None and session._transport_accepts_authenticated_connections(timeout_seconds=0.05):
+        return
+    with lock:
+        if session._thread is thread:
+            session._stop_event.set()
+            session._auth_token = None
+            session._thread = None

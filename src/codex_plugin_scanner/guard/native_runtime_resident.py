@@ -62,6 +62,7 @@ from .native_runtime_resident_transport import (
     _unix_socket_accepts_connections,
     _unlink_owned_socket,
     _unlink_socket_credential,
+    retire_unusable_resident_supervisor,
 )
 from .native_runtime_resident_transport import (
     _read_exact as _read_exact,
@@ -174,29 +175,6 @@ class _ResidentService:
             timeout_seconds=timeout_seconds,
         )
 
-    def _retire_unusable_supervisor(self) -> None:
-        """Release a live supervisor that is no longer serving.
-
-        ``resident-stop`` kills the Rust process without joining this Python
-        supervisor. The next request must start a new generation instead of
-        waiting on the winding-down thread until the startup budget expires.
-        """
-
-        with self._lock:
-            if self._closed:
-                return
-            thread = self._thread
-            auth_token = self._auth_token
-        if thread is None or not thread.is_alive():
-            return
-        if auth_token is not None and self._transport_accepts_authenticated_connections(timeout_seconds=0.05):
-            return
-        with self._lock:
-            if self._thread is thread:
-                self._stop_event.set()
-                self._auth_token = None
-                self._thread = None
-
     def _ensure_started(self, *, timeout_seconds: float) -> bool:
         if timeout_seconds <= 0:
             return False
@@ -219,7 +197,7 @@ class _ResidentService:
                     return False
                 if os.name != "nt" and self.socket_path is None:
                     return False
-            self._retire_unusable_supervisor()
+            retire_unusable_resident_supervisor(self)
             with self._lock:
                 if self._closed:
                     return False
