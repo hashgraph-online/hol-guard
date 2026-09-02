@@ -89,7 +89,7 @@ pub(super) fn spawn_managed_for_owner(
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
         let mut stdin = child.stdin.take().ok_or_else(|| {
-            let _ = terminate_spawned_managed(&mut child);
+            let _ = terminate_spawned_managed(&mut child, super::MANAGED_STOP_TIMEOUT);
             "native_resident_spawn_stdin_failed".to_owned()
         })?;
         let write_result = stdin
@@ -97,7 +97,7 @@ pub(super) fn spawn_managed_for_owner(
             .and_then(|()| stdin.write_all(b"\n"))
             .and_then(|()| stdin.flush());
         if write_result.is_err() {
-            let _ = terminate_spawned_managed(&mut child);
+            let _ = terminate_spawned_managed(&mut child, super::MANAGED_STOP_TIMEOUT);
             return Err("native_resident_spawn_auth_failed".to_owned());
         }
         Ok(child)
@@ -118,7 +118,11 @@ pub(super) fn child_process_id(child: &SpawnedManaged) -> u32 {
 }
 
 #[cfg(not(windows))]
-pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<(), String> {
+pub(super) fn terminate_spawned_managed(
+    child: &mut SpawnedManaged,
+    timeout: Duration,
+) -> Result<(), String> {
+    let _ = timeout;
     if child
         .try_wait()
         .map_err(|_| "native_resident_spawn_containment_failed".to_owned())?
@@ -159,9 +163,12 @@ pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<()
 }
 
 #[cfg(windows)]
-pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<(), String> {
+pub(super) fn terminate_spawned_managed(
+    child: &mut SpawnedManaged,
+    timeout: Duration,
+) -> Result<(), String> {
     child
-        .terminate_with_timeout(super::MANAGED_STOP_TIMEOUT)
+        .terminate_with_timeout(timeout)
         .map_err(|_| "native_resident_spawn_containment_failed".to_owned())
 }
 
@@ -364,10 +371,7 @@ pub(super) fn abort_spawned_managed(
         start_marker: process_start_marker(process_id).ok(),
         runtime_digest: runtime_digest().ok(),
     }];
-    #[cfg(windows)]
-    let _ = child.terminate_with_timeout(Duration::from_millis(100));
-    #[cfg(not(windows))]
-    let _ = terminate_spawned_managed(child);
+    let _ = terminate_spawned_managed(child, Duration::from_millis(100));
     let _ = wait_for_generation_containment(
         scope,
         digest,

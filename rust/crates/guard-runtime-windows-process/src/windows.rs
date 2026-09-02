@@ -30,8 +30,8 @@ use winapi::um::synchapi::WaitForSingleObject;
 #[cfg(test)]
 use winapi::um::winbase::FILE_TYPE_UNKNOWN;
 use winapi::um::winbase::{
-    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT,
-    STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
+    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
+    HANDLE_FLAG_INHERIT, STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
@@ -78,6 +78,7 @@ fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
 /// A managed child process whose standard streams cannot leak to descendants.
 pub struct ManagedChild {
     process: OwnedHandle,
+    job: Option<OwnedHandle>,
     stdin: Option<std::fs::File>,
 }
 
@@ -138,6 +139,9 @@ impl ManagedChild {
 
     /// Terminate the child with an explicit finite timeout.
     pub fn terminate_with_timeout(&self, timeout: std::time::Duration) -> io::Result<()> {
+        if let Some(job) = &self.job {
+            let _ = process_lifecycle::terminate_job(job);
+        }
         if process_lifecycle::process_is_running(&self.process)? {
             // SAFETY: The process handle is owned and termination is followed by a wait.
             if unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE {
@@ -202,7 +206,7 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
             null_mut(),
             null_mut(),
             TRUE,
-            CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
             null_mut(),
             null(),
             &mut startup.StartupInfo,
@@ -216,11 +220,27 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     // SAFETY: CreateProcessW returned each handle exactly once on success.
     let process = unsafe { OwnedHandle::from_raw_handle(process_info.hProcess as RawHandle) };
     // SAFETY: CreateProcessW returned the thread handle exactly once on success.
-    let _thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
+    let thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
+    let job = process_lifecycle::create_process_job()
+        .and_then(|job| {
+            process_lifecycle::assign_process_to_job(&job, &process)?;
+            Ok(job)
+        })
+        .ok();
+    if let Err(error) = process_lifecycle::resume_thread(&thread) {
+        if let Some(job) = &job {
+            let _ = process_lifecycle::terminate_job(job);
+        }
+        // SAFETY: The process is still suspended; terminate the abandoned child.
+        let _ = unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) };
+        return Err(error);
+    }
+    drop(thread);
     // SAFETY: `parent_stdin` is transferred exactly once into the File owner.
     let stdin = unsafe { std::fs::File::from_raw_handle(parent_stdin.into_raw_handle()) };
     Ok(ManagedChild {
         process,
+        job,
         stdin: Some(stdin),
     })
 }

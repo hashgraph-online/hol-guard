@@ -45,14 +45,11 @@ where
             private_root,
             private_root,
             &descriptor,
-            |handle, _is_target, created, is_private| {
-                if !is_private {
-                    return Ok(());
-                }
-                if created {
-                    verify_windows_handle(handle, owner.as_ref()).map_err(io::Error::other)
+            |handle, _is_target, _created, is_private| {
+                if is_private {
+                    ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
                 } else {
-                    repair_windows_handle(handle, true, owner.as_ref()).map_err(io::Error::other)
+                    Ok(())
                 }
             },
         )
@@ -63,7 +60,7 @@ where
             private_root,
             |handle, _is_target, _created, is_private| {
                 if is_private {
-                    repair_windows_handle(handle, true, owner.as_ref()).map_err(io::Error::other)
+                    ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
                 } else {
                     Ok(())
                 }
@@ -96,14 +93,11 @@ pub(super) fn bind_windows_private_directory_under(
         private_root,
         private_root,
         &descriptor,
-        |handle, _is_target, created, is_private| {
-            if !is_private {
-                return Ok(());
-            }
-            if created {
-                verify_windows_handle(handle, owner.as_ref()).map_err(io::Error::other)
+        |handle, _is_target, _created, is_private| {
+            if is_private {
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
             } else {
-                repair_windows_handle(handle, true, owner.as_ref()).map_err(io::Error::other)
+                Ok(())
             }
         },
     )
@@ -129,7 +123,7 @@ pub(super) fn bind_windows_existing_directory_under(
         private_root,
         |handle, _is_target, _created, is_private| {
             if is_private {
-                repair_windows_handle(handle, true, owner.as_ref()).map_err(io::Error::other)
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
             } else {
                 Ok(())
             }
@@ -150,7 +144,7 @@ where
         private_root,
         |handle, _is_target, _created, is_private| {
             if is_private {
-                repair_windows_handle(handle, true, owner.as_ref()).map_err(io::Error::other)
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
             } else {
                 Ok(())
             }
@@ -279,6 +273,14 @@ pub(super) fn repair_private_file(file: &mut File) -> Result<(), String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
     repair_windows_handle(file, false, owner.as_ref())
+}
+
+fn ensure_private_directory_acl(handle: &mut File, owner: &Sid) -> Result<(), String> {
+    // Shared binds must not rewrite a DACL that is already owner-private.
+    if verify_windows_handle(handle, owner).is_ok() {
+        return Ok(());
+    }
+    repair_windows_handle(handle, true, owner)
 }
 
 pub(super) fn repair_windows_handle<H: AsRawHandle>(

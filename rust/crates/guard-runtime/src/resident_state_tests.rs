@@ -430,3 +430,14 @@ fn verify_windows_private_directory_accepts_the_configured_root() {
     protect_windows_private_path(&scope, true, &scope).unwrap();
     fs::remove_dir_all(scope).unwrap();
 }
+
+#[cfg(windows)]
+#[test]
+fn already_private_directory_allows_overlapping_binds() {
+    let scope = test_scope("private-directory-overlap");
+    drop((
+        bind_windows_existing_directory(&scope, &scope).unwrap(),
+        bind_windows_existing_directory(&scope, &scope).unwrap(),
+    ));
+    fs::remove_dir_all(scope).unwrap();
+}

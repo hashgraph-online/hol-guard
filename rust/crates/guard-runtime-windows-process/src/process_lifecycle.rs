@@ -1,11 +1,13 @@
 use std::io;
-use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::ptr::null_mut;
 use std::time::Duration;
 
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
 use winapi::shared::winerror::{ERROR_INVALID_PARAMETER, WAIT_TIMEOUT};
-use winapi::um::processthreadsapi::{GetProcessTimes, TerminateProcess};
+use winapi::um::jobapi2::{AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject};
+use winapi::um::processthreadsapi::{GetProcessTimes, ResumeThread, TerminateProcess};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
 use winapi::um::winnt::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE};
@@ -135,6 +137,52 @@ pub fn terminate_process_verified(
         )),
         WAIT_FAILED => Err(io::Error::last_os_error()),
         _ => Err(io::Error::other("unexpected process wait result")),
+    }
+}
+
+pub(super) fn create_process_job() -> io::Result<OwnedHandle> {
+    // SAFETY: A NULL name and security descriptor create an anonymous job
+    // owned exactly once by the returned handle.
+    let job = unsafe { CreateJobObjectW(null_mut(), std::ptr::null()) };
+    if job.is_null() {
+        Err(io::Error::last_os_error())
+    } else {
+        // SAFETY: CreateJobObjectW returned this handle exactly once.
+        Ok(unsafe { OwnedHandle::from_raw_handle(job as RawHandle) })
+    }
+}
+
+pub(super) fn assign_process_to_job(job: &OwnedHandle, process: &OwnedHandle) -> io::Result<()> {
+    // SAFETY: Both handles remain owned and valid for the duration of the call.
+    if unsafe {
+        AssignProcessToJobObject(
+            job.as_raw_handle() as HANDLE,
+            process.as_raw_handle() as HANDLE,
+        )
+    } == FALSE
+    {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub(super) fn terminate_job(job: &OwnedHandle) -> io::Result<()> {
+    // SAFETY: `job` owns a live job handle until this call returns.
+    if unsafe { TerminateJobObject(job.as_raw_handle() as HANDLE, 1) } == FALSE {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub(super) fn resume_thread(thread: &OwnedHandle) -> io::Result<()> {
+    // SAFETY: `thread` owns a live thread handle until this call returns.
+    // ResumeThread returns the previous suspend count, or u32::MAX on failure.
+    if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == DWORD::MAX {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 
