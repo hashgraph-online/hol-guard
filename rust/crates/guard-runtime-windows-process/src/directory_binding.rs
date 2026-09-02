@@ -11,8 +11,8 @@ use windows_permissions::SecurityDescriptor;
 
 use super::private_files::{
     create_private_file as create_path_private_file, file_information, mark_handle_for_delete,
-    open_directory_bound, open_raw, open_raw_directory_bound, rename_into_directory,
-    validate_handle, verify_private_file,
+    open_directory_bound, open_raw, open_raw_directory_bound, open_rename_directory,
+    rename_into_directory, validate_handle, verify_private_file,
 };
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
@@ -27,6 +27,7 @@ pub struct PrivateDirectoryBinding {
     path: PathBuf,
     handles: Vec<std::fs::File>,
     created_final: bool,
+    private_final: bool,
 }
 
 impl PrivateDirectoryBinding {
@@ -72,11 +73,11 @@ impl PrivateDirectoryBinding {
 
     /// Atomically replace a child with an already-written private file.
     ///
-    /// The destination is inspected through the held parent before replacement
-    /// and again after replacement. Both source and destination security are
-    /// enforced here, so callers cannot accidentally omit the ACL check.
+    /// Windows cannot rename a child while this directory remains open without
+    /// delete sharing. The exclusive final handle is closed only for the
+    /// rename syscall, then the barrier is re-opened on the same path.
     pub fn replace_private_file(
-        &self,
+        &mut self,
         source: &std::fs::File,
         destination: &OsStr,
     ) -> io::Result<()> {
@@ -84,15 +85,21 @@ impl PrivateDirectoryBinding {
         validate_handle(source, false)?;
         verify_private_file(source)?;
         match self.open_private_file(destination) {
-            Ok(existing) => {
-                rename_into_directory(self, source, destination)?;
-                drop(existing);
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                rename_into_directory(self, source, destination)?;
-            }
+            Ok(existing) => drop(existing),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
         }
+        let rename_parent = open_rename_directory(&self.path)?;
+        drop(
+            self.handles
+                .pop()
+                .expect("a directory binding always contains its final component"),
+        );
+        let renamed = rename_into_directory(&rename_parent, source, destination);
+        drop(rename_parent);
+        self.handles
+            .push(open_directory_bound(&self.path, self.private_final, true)?);
+        renamed?;
         let committed = self.open_private_file(destination)?;
         if file_information(source.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
             != file_information(committed.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
@@ -186,6 +193,7 @@ where
     let mut handles = Vec::new();
     let mut created_indices = Vec::new();
     let mut created_final = false;
+    let mut private_final = false;
     for (index, component) in path.components().enumerate() {
         match component {
             Component::Prefix(prefix) => current.push(prefix.as_os_str()),
@@ -253,6 +261,7 @@ where
                     };
                 if is_target {
                     created_final = created;
+                    private_final = is_private;
                 }
                 if let Err(error) = verify(&mut handle, is_target, created, is_private) {
                     cleanup_created_components(
@@ -273,6 +282,7 @@ where
         path,
         handles,
         created_final,
+        private_final,
     })
 }
 

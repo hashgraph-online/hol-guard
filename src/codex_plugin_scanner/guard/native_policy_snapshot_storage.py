@@ -157,6 +157,7 @@ def _write_v3_snapshot_file(
                 api._windows_write_private_file_atomic(
                     parent_path=binding.path,
                     parent_handle=binding.handle,
+                    directory_handles=binding.handles,
                     temporary_name=temporary_name,
                     destination_name=name,
                     payload=payload,
@@ -397,6 +398,7 @@ def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_dige
                 api._windows_write_private_file_atomic(
                     parent_path=binding.path,
                     parent_handle=binding.handle,
+                    directory_handles=binding.handles,
                     temporary_name=temporary_name,
                     destination_name=_V3_GENERATION_STATE_NAME,
                     payload=payload,

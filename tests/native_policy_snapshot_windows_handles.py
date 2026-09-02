@@ -122,10 +122,12 @@ def test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle(
         rename_source: bool = False,
         add_file: bool = False,
         share_delete: bool = False,
+        rename_parent: bool = False,
     ) -> tuple[object, object, object]:
         assert not rename_source
         _ = add_file
         _ = share_delete
+        _ = rename_parent
         events.append(("open", (path, directory, create_new, descriptor, repair, lock)))
         return object(), handle, object()
 

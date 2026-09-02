@@ -24,7 +24,7 @@ def test_windows_snapshot_write_holds_parent_binding_across_commit(
 ) -> None:
     monkeypatch.setattr(storage_module.os, "name", "nt")
     monkeypatch.setattr(storage_module, "snapshot_bytes_v3", lambda _snapshot: b"payload")
-    binding = types.SimpleNamespace(path=tmp_path, handle=object())
+    binding = types.SimpleNamespace(path=tmp_path, handle=object(), handles=[])
     events: list[tuple[str, object]] = []
     active = False
 
@@ -178,7 +178,7 @@ def test_windows_verifier_key_provisioning_holds_state_binding(
 ) -> None:
     active = False
     calls: list[tuple[Path, bytes]] = []
-    binding = types.SimpleNamespace(path=tmp_path / "native-runtime", handle=object())
+    binding = types.SimpleNamespace(path=tmp_path / "native-runtime", handle=object(), handles=[])
 
     @contextmanager
     def private_state_binding(guard_home: Path):

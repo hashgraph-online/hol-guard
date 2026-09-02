@@ -75,6 +75,7 @@ def _windows_provision_verifier_key(
     *,
     parent_path: Path,
     parent_handle: Any,
+    directory_handles: list[tuple[Any, Any]] | None = None,
 ) -> Path:
     with suppress(FileNotFoundError):
         _windows_repair_private_file(path)
@@ -88,6 +89,7 @@ def _windows_provision_verifier_key(
         _windows_write_private_file_atomic(
             parent_path=parent_path,
             parent_handle=parent_handle,
+            directory_handles=directory_handles,
             temporary_name=temporary_name,
             destination_name=path.name,
             payload=derived,
@@ -128,6 +130,7 @@ def provision_native_policy_verifier_key(
                 derived,
                 parent_path=binding.path,
                 parent_handle=binding.handle,
+                directory_handles=binding.handles,
             )
     state_dir = _runtime_state_directory(guard_home)
     path = state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME

@@ -28,8 +28,9 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
         // between enumeration, validation, and mutation.
         let private_root = crate::resident_state::private_root_for_state_base(parent)
             .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
-        let binding = crate::resident_state::bind_windows_existing_directory(parent, &private_root)
-            .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
+        let mut binding =
+            crate::resident_state::bind_windows_existing_directory(parent, &private_root)
+                .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         let file_name = path
             .file_name()
             .and_then(|name| name.to_str())

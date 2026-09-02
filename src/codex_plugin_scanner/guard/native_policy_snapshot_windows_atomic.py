@@ -135,6 +135,7 @@ def _windows_commit_private_file_handle(
     kind: str,
     replace_existing: bool = True,
     rename_state: list[bool] | None = None,
+    directory_handles: list[tuple[Any, Any]] | None = None,
 ) -> None:
     """Validate the old target, then replace it through bound handles."""
 
@@ -168,11 +169,28 @@ def _windows_commit_private_file_handle(
             api._windows_close_handle(target_kernel32, target_handle)
             target_handle = None
             raise
+        api._windows_close_handle(target_kernel32, target_handle)
+        target_handle = None
+        target_kernel32 = None
+    rename_kernel32 = None
+    rename_handle = None
+    released = False
     try:
+        root_handle = parent_handle
+        if directory_handles is not None:
+            rename_kernel32, rename_handle, _rename_information = api._windows_open_handle(
+                parent_path,
+                directory=True,
+                rename_parent=True,
+            )
+            exclusive_kernel32, exclusive_handle = directory_handles.pop()
+            released = True
+            api._windows_close_handle(exclusive_kernel32, exclusive_handle)
+            root_handle = rename_handle
         _windows_rename_file_handle(
             kernel32,
             source_handle,
-            parent_handle,
+            root_handle,
             destination_name,
             replace_if_exists=replace_existing,
         )
@@ -194,6 +212,17 @@ def _windows_commit_private_file_handle(
         finally:
             api._windows_close_handle(committed_kernel32, committed_handle)
     finally:
+        if rename_handle is not None:
+            api._windows_close_handle(rename_kernel32, rename_handle)
+        if released and directory_handles is not None:
+            restored_kernel32, restored_handle, _restored = api._windows_open_handle(
+                parent_path,
+                directory=True,
+                lock=True,
+                add_file=True,
+                repair=True,
+            )
+            directory_handles.append((restored_kernel32, restored_handle))
         if target_handle is not None:
             api._windows_close_handle(target_kernel32, target_handle)
 
@@ -208,6 +237,7 @@ def _windows_write_private_file_atomic(
     maximum_bytes: int,
     kind: str,
     replace_existing: bool = True,
+    directory_handles: list[tuple[Any, Any]] | None = None,
 ) -> None:
     """Create, write, and commit a private file while parent handles remain held."""
 
@@ -276,6 +306,7 @@ def _windows_write_private_file_atomic(
                 kind=kind,
                 replace_existing=replace_existing,
                 rename_state=renamed,
+                directory_handles=directory_handles,
             )
         except BaseException:
             # The source remains at the temporary name until rename succeeds,

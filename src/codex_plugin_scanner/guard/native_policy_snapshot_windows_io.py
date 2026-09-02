@@ -20,6 +20,7 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS,
     _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT,
     _WINDOWS_FILE_FLAG_WRITE_THROUGH,
+    _WINDOWS_FILE_READ_ATTRIBUTES,
     _WINDOWS_FILE_SHARE_DELETE,
     _WINDOWS_FILE_SHARE_READ,
     _WINDOWS_FILE_SHARE_WRITE,
@@ -102,6 +103,7 @@ def _windows_open_configuration(
     rename_source: bool,
     add_file: bool,
     share_delete: bool,
+    rename_parent: bool,
 ) -> _WindowsOpenConfiguration:
     import ctypes
     from ctypes import wintypes
@@ -109,15 +111,15 @@ def _windows_open_configuration(
     flags = _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
-        # Only the private directory used as FILE_RENAME_INFO.RootDirectory
-        # needs FILE_ADD_FILE, FILE_TRAVERSE, and delete sharing. Ancestor
-        # volume paths stay read-only.
+        # Barrier directory handles withhold delete sharing so the bound
+        # directory cannot be renamed. Rename uses a separate parent handle.
         desired_access = _WINDOWS_GENERIC_READ
         if add_file:
             desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
-        if add_file:
-            share_mode |= _WINDOWS_FILE_SHARE_DELETE
+        if rename_parent:
+            desired_access = _WINDOWS_FILE_TRAVERSE | _WINDOWS_FILE_READ_ATTRIBUTES
+            share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)
         if create_new or rename_source:
@@ -125,7 +127,7 @@ def _windows_open_configuration(
         share_mode = _WINDOWS_FILE_SHARE_READ
         if share_delete:
             share_mode |= _WINDOWS_FILE_SHARE_DELETE
-    if descriptor is not None or repair:
+    if not rename_parent and (descriptor is not None or repair):
         # Existing objects are repaired only after an owner-only check. A
         # creation descriptor is carried by SECURITY_ATTRIBUTES and never
         # requires owner-write or owner-information access.
@@ -211,6 +213,7 @@ def _windows_open_handle(
     rename_source: bool = False,
     add_file: bool = False,
     share_delete: bool = False,
+    rename_parent: bool = False,
 ) -> tuple[Any, Any, Any]:
     """Open/create one non-reparse Windows object while denying deletion."""
 
@@ -229,6 +232,7 @@ def _windows_open_handle(
         rename_source=rename_source,
         add_file=add_file,
         share_delete=share_delete,
+        rename_parent=rename_parent,
     )
     handle = functions.create_file(
         str(path),

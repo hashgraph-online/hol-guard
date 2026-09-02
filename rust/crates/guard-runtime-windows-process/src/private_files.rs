@@ -20,8 +20,8 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{
     DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
 };
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
@@ -135,8 +135,8 @@ pub(super) fn open_directory_bound(
 }
 
 /// Open a directory while keeping checked ancestry from being renamed away.
-/// Ancestor components withhold delete sharing. The file-adding directory
-/// shares delete so relative child create and replace can use that handle.
+/// Barrier handles never share delete and never take GENERIC_WRITE, so the
+/// bound directory cannot be renamed and children can still be created.
 pub(super) fn open_raw_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
@@ -145,7 +145,7 @@ pub(super) fn open_raw_directory_bound(
 ) -> io::Result<std::fs::File> {
     let mut access = GENERIC_READ | FILE_TRAVERSE;
     if allow_acl_repair {
-        access |= GENERIC_WRITE | WRITE_DAC;
+        access |= WRITE_DAC;
     }
     if allow_add_file {
         access |= FILE_ADD_FILE;
@@ -153,12 +153,19 @@ pub(super) fn open_raw_directory_bound(
     if allow_delete {
         access |= DELETE;
     }
-    let share_mode = if allow_add_file {
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
-    } else {
-        FILE_SHARE_READ | FILE_SHARE_WRITE
-    };
-    open_raw_with_access(path, true, share_mode, access)
+    open_raw_with_access(path, true, FILE_SHARE_READ | FILE_SHARE_WRITE, access)
+}
+
+/// Open the rename parent used as FILE_RENAME_INFORMATION.RootDirectory.
+pub(super) fn open_rename_directory(path: &Path) -> io::Result<std::fs::File> {
+    let file = open_raw_with_access(
+        path,
+        true,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        FILE_TRAVERSE | FILE_READ_ATTRIBUTES,
+    )?;
+    validate_handle(&file, true)?;
+    Ok(file)
 }
 
 pub(super) fn open_raw(
@@ -381,7 +388,7 @@ pub(super) fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
 }
 
 pub(super) fn rename_into_directory(
-    binding: &super::directory_binding::PrivateDirectoryBinding,
+    parent: &std::fs::File,
     source: &std::fs::File,
     destination: &OsStr,
 ) -> io::Result<()> {
@@ -408,7 +415,7 @@ pub(super) fn rename_into_directory(
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
         (*info).ReplaceIfExists = TRUE;
-        (*info).RootDirectory = binding.handle().as_raw_handle() as HANDLE;
+        (*info).RootDirectory = parent.as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(
             name.as_ptr() as *const u8,

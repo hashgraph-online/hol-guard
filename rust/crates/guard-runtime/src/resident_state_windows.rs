@@ -34,7 +34,7 @@ fn with_directory_binding<T, F>(
     action: F,
 ) -> Result<T, String>
 where
-    F: FnOnce(&guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
+    F: FnOnce(&mut guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
 {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
@@ -71,7 +71,7 @@ where
         )
     };
     result
-        .and_then(|binding| action(&binding))
+        .and_then(|mut binding| action(&mut binding))
         .map_err(|error| error.to_string())
 }
 
@@ -140,7 +140,7 @@ pub(super) fn bind_windows_existing_directory_under(
 
 fn with_existing_directory<T, F>(path: &Path, private_root: &Path, action: F) -> io::Result<T>
 where
-    F: FnOnce(&guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
+    F: FnOnce(&mut guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
 {
     let owner = current_process_sid()
         .map_err(|_| io::Error::other("native_resident_windows_owner_sid_failed"))?;
@@ -156,7 +156,7 @@ where
             }
         },
     )
-    .and_then(|binding| action(&binding))
+    .and_then(|mut binding| action(&mut binding))
 }
 
 pub(super) fn ensure_private_directory_path_under(
