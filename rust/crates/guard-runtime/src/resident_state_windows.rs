@@ -130,15 +130,9 @@ mod tests {
         let owner = "S-1-5-21-1-2-3-1001".parse::<LocalBox<Sid>>().unwrap();
         let system = "S-1-5-18".parse::<LocalBox<Sid>>().unwrap();
         let administrators = "S-1-5-32-544".parse::<LocalBox<Sid>>().unwrap();
-        let unrelated = "S-1-5-21-4-5-6-1002"
-            .parse::<LocalBox<Sid>>()
-            .unwrap();
+        let unrelated = "S-1-5-21-4-5-6-1002".parse::<LocalBox<Sid>>().unwrap();
 
-        for applied_owner in [
-            owner.as_ref(),
-            system.as_ref(),
-            administrators.as_ref(),
-        ] {
+        for applied_owner in [owner.as_ref(), system.as_ref(), administrators.as_ref()] {
             assert!(windows_owner_is_trusted(
                 applied_owner,
                 owner.as_ref(),
