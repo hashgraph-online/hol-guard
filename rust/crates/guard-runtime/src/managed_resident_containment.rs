@@ -380,6 +380,7 @@ pub(super) fn is_retryable_live_request_error(
     error: &crate::resident_client::ResidentClientError,
 ) -> bool {
     error.code == "native_client_connect_failed"
+        || error.code == "native_client_auth_timeout_failed"
         || is_stale_process_identity_error(&error.code)
         || (error.code == "native_client_auth_nonce_failed" && error.retryable_teardown)
 }

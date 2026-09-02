@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::io;
-use std::mem::{size_of, zeroed};
+use std::mem::{offset_of, size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 use std::path::Path;
@@ -22,8 +22,8 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{
     DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
 };
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
@@ -132,7 +132,10 @@ pub(super) fn open_raw_directory_bound(
         access |= GENERIC_WRITE | WRITE_DAC;
     }
     if allow_add_file {
-        access |= FILE_ADD_FILE;
+        // ReplaceIfExists renames need FILE_ADD_FILE plus FILE_DELETE_CHILD on
+        // the parent. DELETE on the directory itself stays withheld so two
+        // bindings can share the rename barrier without a sharing violation.
+        access |= FILE_ADD_FILE | FILE_DELETE_CHILD;
     }
     if allow_delete {
         access |= DELETE;
@@ -349,7 +352,9 @@ pub(super) fn rename_into_directory(
             "private destination name is invalid",
         ));
     }
-    let header_size = size_of::<FILE_RENAME_INFO>() - size_of::<u16>();
+    // FILE_RENAME_INFO is padded after FileName[1]; copying at
+    // size_of - sizeof(WCHAR) overwrites the name by two bytes.
+    let header_size = offset_of!(FILE_RENAME_INFO, FileName);
     let byte_count = name
         .len()
         .checked_mul(size_of::<u16>())

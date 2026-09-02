@@ -43,6 +43,18 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
 
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
+
+fn try_live_or_restart(
+    state_base: &Path,
+    payload: &[u8],
+    deadline: Instant,
+    preferred_digest: &str,
+) -> Result<Option<Vec<u8>>, String> {
+    match try_home_states(state_base, payload, deadline, preferred_digest) {
+        Err(error) if error == "native_resident_live_request_failed" => Ok(None),
+        other => other,
+    }
+}
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MANAGED_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -182,7 +194,7 @@ fn client_request_with_lease(
     let overall_deadline = Instant::now() + timeout;
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
+    if let Some(response) = try_live_or_restart(state_base, payload, overall_deadline, &digest)? {
         return Ok(response);
     }
     if Instant::now() >= overall_deadline {
@@ -199,7 +211,8 @@ fn client_request_with_lease(
     if lock.is_none() {
         let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
         while Instant::now() < deadline {
-            if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)?
+            if let Some(response) =
+                try_live_or_restart(state_base, payload, overall_deadline, &digest)?
             {
                 return Ok(response);
             }
@@ -213,7 +226,7 @@ fn client_request_with_lease(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
+    if let Some(response) = try_live_or_restart(state_base, payload, overall_deadline, &digest)? {
         return Ok(response);
     }
     restart_budget::consume(&scope)?;
@@ -232,7 +245,7 @@ fn client_request_with_lease(
         if Instant::now() >= deadline {
             break Ok(None);
         }
-        match try_home_states(state_base, payload, overall_deadline, &digest) {
+        match try_live_or_restart(state_base, payload, overall_deadline, &digest) {
             Ok(Some(response)) => break Ok(Some(response)),
             Ok(None) => {}
             Err(error) => break Err(error),
@@ -296,7 +309,9 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     )
     .is_ok()
     {
-        return containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids);
+        containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+        let _ = restart_budget::clear(&scope);
+        return Ok(());
     }
     Err("native_resident_stop_unavailable".to_owned())
 }

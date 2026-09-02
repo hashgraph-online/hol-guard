@@ -233,6 +233,7 @@ fn stale_process_identity_errors_are_platform_scoped() {
 fn stale_transport_retry_allowlist_preserves_auth_and_integrity_failures() {
     let retryable_codes = [
         "native_client_connect_failed",
+        "native_client_auth_timeout_failed",
         "native_resident_process_identity_unavailable",
         "native_resident_process_identity_mismatch",
     ];

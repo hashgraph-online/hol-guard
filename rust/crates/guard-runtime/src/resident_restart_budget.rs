@@ -308,6 +308,23 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
     write_private(&path, &encoded, &private_root)
 }
 
+pub(super) fn clear(scope: &Path) -> Result<(), String> {
+    let private_root = crate::resident_state::private_root_for_scope(scope)?;
+    let _lock = acquire_budget_lock(scope)?;
+    let path = scope.join("restart-budget.json");
+    if !existing_private_file(&path, &private_root)? {
+        return Ok(());
+    }
+    let encoded = serde_json::to_vec(&RestartBudget {
+        schema: BUDGET_SCHEMA.to_owned(),
+        window_start_ms: now_ms()?,
+        attempts: 0,
+        circuit_until_ms: 0,
+    })
+    .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
+    write_private(&path, &encoded, &private_root)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,6 +357,28 @@ mod tests {
         );
 
         fs::remove_dir_all(scope).unwrap();
+    }
+
+    #[test]
+    fn authenticated_stop_clears_restart_attempts() {
+        let scope = std::env::temp_dir().join(format!(
+            "hol-guard-restart-budget-clear-{}-{}",
+            std::process::id(),
+            now_ms().unwrap()
+        ));
+        std::fs::create_dir(&scope).unwrap();
+
+        consume(&scope).unwrap();
+        consume(&scope).unwrap();
+        consume(&scope).unwrap();
+        assert_eq!(
+            consume(&scope).unwrap_err(),
+            "native_resident_restart_circuit_open"
+        );
+        clear(&scope).unwrap();
+        consume(&scope).unwrap();
+
+        std::fs::remove_dir_all(scope).unwrap();
     }
 
     #[cfg(windows)]
