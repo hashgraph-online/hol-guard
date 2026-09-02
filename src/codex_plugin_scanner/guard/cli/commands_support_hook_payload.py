@@ -187,7 +187,12 @@ def _emit_native_hook_response(
         output_stream=output_stream,
     )
 
-def _hermes_native_or_payload(harness: str, policy_action: str, reason: str, payload: dict[str, object]) -> dict[str, object]:
+def _hermes_native_or_payload(
+    harness: str,
+    policy_action: str,
+    reason: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
     if _canonical_harness_name(harness) != "hermes":
         return payload
     from ..adapters.hermes_runtime_hooks import hermes_native_decision
