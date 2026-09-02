@@ -40,6 +40,18 @@ if TYPE_CHECKING:
 
 _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
 _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS = 12.0
+_TRANSIENT_HOOK_STORAGE_TIMEOUTS = frozenset(
+    {
+        "Timed out waiting for Guard storage access.",
+        "Timed out waiting for the Guard schema migration lock.",
+    }
+)
+
+
+def _hook_process_error_is_transient(error: BaseException) -> bool:
+    return sqlite_error_is_busy_locked(error) or (
+        isinstance(error, TimeoutError) and str(error) in _TRANSIENT_HOOK_STORAGE_TIMEOUTS
+    )
 
 
 def hook_worker_main(connection: Connection, configured_guard_home: str | None) -> None:
@@ -204,7 +216,9 @@ def _hook_evaluator_loop(
             )
         except BaseException as error:
             reason_code = (
-                "daemon_hook_process_not_ready" if sqlite_error_is_busy_locked(error) else "daemon_hook_process_failed"
+                "daemon_hook_process_not_ready"
+                if _hook_process_error_is_transient(error)
+                else "daemon_hook_process_failed"
             )
             response = {"payload": None, "reason_code": reason_code}
         try:

@@ -190,6 +190,17 @@ def _error_codes(text: str, marker: str) -> frozenset[str]:
     return frozenset(re.findall(r'"(native_[a-z0-9_]+|snapshot_expired)"', text[start:end]))
 
 
+def _uses_canonical_approval_error_import(text: str) -> bool:
+    tree = ast.parse(text, filename=str(DECODER))
+    return any(
+        isinstance(node, ast.ImportFrom)
+        and node.level == 1
+        and node.module == "native_approval_errors"
+        and any(alias.name == "NATIVE_APPROVAL_ERROR_CODES" and alias.asname is None for alias in node.names)
+        for node in ast.walk(tree)
+    )
+
+
 def _check_file_sizes(root: Path) -> None:
     for relative in ACTIVE_RUST_FILES:
         line_count = len(_read(root / relative).splitlines())
@@ -264,7 +275,7 @@ def _check_contracts(root: Path) -> None:
             raise RuntimeError(f"V4 {rust_name} fields drifted from the Python transport contract")
     if "resident_epoch" not in _python_key_set(protocol, "_CHALLENGE_KEYS"):
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
-    if "from .native_approval_errors import NATIVE_APPROVAL_ERROR_CODES" not in decoder:
+    if not _uses_canonical_approval_error_import(decoder):
         raise RuntimeError("Python response decoder does not use the canonical approval error vocabulary")
     if _error_codes(rust_contract, "NATIVE_APPROVAL_ERROR_CODES") != _python_key_set(
         errors, "NATIVE_APPROVAL_ERROR_CODES"

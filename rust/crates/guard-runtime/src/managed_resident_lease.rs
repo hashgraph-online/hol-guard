@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,6 +11,10 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::resident_state::{ensure_private_directory, process_start_marker};
+
+#[path = "managed_resident_lease_identity.rs"]
+mod identity;
+use identity::LeaseIdentity;
 
 const LEASE_DIRECTORY: &str = "resident-client-leases.v1";
 const LEASE_PREFIX: &str = "client-";
@@ -54,109 +60,6 @@ impl Drop for LeaseDirectoryLock {
     fn drop(&mut self) {
         let _ = fs2::FileExt::unlock(&self.file);
     }
-}
-
-struct LeaseIdentity {
-    #[cfg(windows)]
-    file: File,
-    #[cfg(unix)]
-    device: u64,
-    #[cfg(unix)]
-    inode: u64,
-    #[cfg(unix)]
-    nlink: u64,
-}
-
-impl LeaseIdentity {
-    fn from_file(file: &File) -> Result<Self, String> {
-        let metadata = file
-            .metadata()
-            .map_err(|_| "native_resident_lease_write_failed".to_owned())?;
-        if !metadata.is_file() {
-            return Err("native_resident_lease_write_failed".to_owned());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if metadata.nlink() != 1 {
-                return Err("native_resident_lease_write_failed".to_owned());
-            }
-            Ok(Self {
-                device: metadata.dev(),
-                inode: metadata.ino(),
-                nlink: metadata.nlink(),
-            })
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(Self {
-                file: file
-                    .try_clone()
-                    .map_err(|_| "native_resident_lease_write_failed".to_owned())?,
-            })
-        }
-    }
-
-    fn remove_if_same(&self, path: &Path) -> bool {
-        #[cfg(windows)]
-        return guard_runtime_windows_process::remove_file_if_same(path, &self.file)
-            .unwrap_or(false);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let Ok(path_metadata) = fs::symlink_metadata(path) else {
-                return false;
-            };
-            if path_metadata.file_type().is_symlink()
-                || !path_metadata.is_file()
-                || path_metadata.dev() != self.device
-                || path_metadata.ino() != self.inode
-                || path_metadata.nlink() != self.nlink
-            {
-                return false;
-            }
-        }
-        fs::remove_file(path).is_ok()
-    }
-
-    #[cfg(unix)]
-    fn matches_path(&self, path: &Path) -> bool {
-        use std::os::unix::fs::MetadataExt;
-        let Ok(path_metadata) = fs::symlink_metadata(path) else {
-            return false;
-        };
-        !path_metadata.file_type().is_symlink()
-            && path_metadata.is_file()
-            && path_metadata.dev() == self.device
-            && path_metadata.ino() == self.inode
-            && path_metadata.nlink() == self.nlink
-    }
-}
-
-fn remove_open_file_if_same(path: &Path, file: &File) -> bool {
-    #[cfg(windows)]
-    return guard_runtime_windows_process::remove_file_if_same(path, file).unwrap_or(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let Ok(metadata) = file.metadata() else {
-            return false;
-        };
-        let Ok(path_metadata) = fs::symlink_metadata(path) else {
-            return false;
-        };
-        if !metadata.is_file()
-            || metadata.nlink() != 1
-            || path_metadata.file_type().is_symlink()
-            || !path_metadata.is_file()
-            || path_metadata.dev() != metadata.dev()
-            || path_metadata.ino() != metadata.ino()
-            || path_metadata.nlink() != metadata.nlink()
-        {
-            return false;
-        }
-    }
-    fs::remove_file(path).is_ok()
 }
 
 fn lease_directory(state_base: &Path) -> Result<PathBuf, String> {
@@ -208,7 +111,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let identity = match LeaseIdentity::from_file(&file) {
         Ok(identity) => identity,
         Err(error) => {
-            let _ = remove_open_file_if_same(&path, &file);
+            let _ = identity::remove_open_file_if_same(&path, &file);
             return Err(error);
         }
     };

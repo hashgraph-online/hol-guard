@@ -660,7 +660,7 @@
     "tests/test_guard_hook_executable_identity.py": 760,
     "tests/test_guard_hook_post_claim_freshness.py": 1132,
     "tests/test_guard_hook_process_deadline_contract.py": 522,
-    "tests/test_guard_hook_process_runner.py": 1321,
+    "tests/test_guard_hook_process_runner.py": 1397,
     "tests/test_guard_hook_saved_block_terminal.py": 636,
     "tests/test_guard_hook_worker.py": 817,
     "tests/test_guard_interpreted_entrypoint_identity.py": 702,

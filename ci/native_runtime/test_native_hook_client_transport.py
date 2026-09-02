@@ -14,6 +14,7 @@ from pathlib import Path
 from native_hook_client_support import (
     _authenticate_state,
     _connect_state,
+    _hold_native_client_lease,
     _initialize_protected_scope,
     _invoke,
     _read_exact,
@@ -68,27 +69,28 @@ def test_native_resident_returns_bounded_overload_signal(
     runtime, state_dir = native_runtime
     request = _request(runtime, tmp_path)
     _invoke(runtime, state_dir, request)
-    state = json.loads(_state_files(state_dir)[0].read_text(encoding="utf-8"))
-    clients: list[socket.socket] = []
-    last_request_id = b""
-    try:
-        for _index in range(49):
-            client = _connect_state(state)
-            client.settimeout(1)
-            _authenticate_state(client, state)
-            request_id = secrets.token_bytes(32)
-            last_request_id = request_id
-            client.sendall(b"HGR2" + request_id + hashlib.sha256(b"x").digest() + (1).to_bytes(4, "big"))
-            clients.append(client)
-        header = _read_exact(clients[-1], 72)
-        assert header[:4] == b"HGS2"
-        assert header[4:36] == last_request_id
-        length = int.from_bytes(header[-4:], "big")
-        response = json.loads(_read_exact(clients[-1], length))
-        assert response == {"error": "native_overloaded", "retryable": True}
-    finally:
-        for client in clients:
-            client.close()
+    with _hold_native_client_lease(runtime, state_dir):
+        state = json.loads(_state_files(state_dir)[0].read_text(encoding="utf-8"))
+        clients: list[socket.socket] = []
+        last_request_id = b""
+        try:
+            for _index in range(49):
+                client = _connect_state(state)
+                client.settimeout(1)
+                _authenticate_state(client, state)
+                request_id = secrets.token_bytes(32)
+                last_request_id = request_id
+                client.sendall(b"HGR2" + request_id + hashlib.sha256(b"x").digest() + (1).to_bytes(4, "big"))
+                clients.append(client)
+            header = _read_exact(clients[-1], 72)
+            assert header[:4] == b"HGS2"
+            assert header[4:36] == last_request_id
+            length = int.from_bytes(header[-4:], "big")
+            response = json.loads(_read_exact(clients[-1], length))
+            assert response == {"error": "native_overloaded", "retryable": True}
+        finally:
+            for client in clients:
+                client.close()
     recovered = _invoke(runtime, state_dir, request)
     assert recovered["authority"] == "rust"
 

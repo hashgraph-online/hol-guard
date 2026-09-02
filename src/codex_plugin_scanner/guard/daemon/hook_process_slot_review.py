@@ -35,13 +35,16 @@ def review_hook_worker_slot(
         return HookProcessReview(None, "daemon_hook_process_timeout")
     except (BrokenPipeError, EOFError, OSError):
         increment_metric("failures")
+        # Withdraw the failed slot before waiting for or reserving replacement
+        # capacity. Otherwise the scheduler can observe stale capacity while
+        # the failed slot is still registered with the runner.
+        replace_slot(slot)
         retry_slot = _retry_slot_for_idempotent_review(
             payload=payload,
             ready_slots=ready_slots,
             wait_for_capacity=wait_for_capacity,
             review_deadline=review_deadline,
         )
-        replace_slot(slot)
         if not runtime_hook_review_is_idempotent(payload):
             return HookProcessReview(None, "daemon_hook_process_failed")
         if retry_slot is None:

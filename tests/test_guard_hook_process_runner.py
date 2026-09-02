@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import queue
 import signal
 import subprocess
 import threading
@@ -11,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from pathlib import Path
 from typing import ClassVar, Protocol, TextIO, cast, final
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -30,6 +31,7 @@ from codex_plugin_scanner.guard.codex_hook_windows_job import (
 )
 from codex_plugin_scanner.guard.daemon import hook_process_entrypoint as hook_entrypoint_module
 from codex_plugin_scanner.guard.daemon import hook_process_runner as hook_runner_module
+from codex_plugin_scanner.guard.daemon import hook_process_slot_review as hook_slot_review_module
 from codex_plugin_scanner.guard.daemon import hook_process_spawner as hook_spawner_module
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
@@ -82,6 +84,38 @@ def test_evaluator_becomes_ready_when_store_prewarm_fails(
     hook_entrypoint_module._hook_evaluator_main(connection, str(tmp_path / "guard-home"))  # pyright: ignore[reportPrivateUsage]
 
     connection.send.assert_called_once_with(("ready", None))
+
+
+@pytest.mark.parametrize(
+    "timeout_message",
+    (
+        "Timed out waiting for Guard storage access.",
+        "Timed out waiting for the Guard schema migration lock.",
+    ),
+)
+def test_evaluator_reports_transient_storage_startup_timeout_as_not_ready(
+    timeout_message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = MagicMock()
+    connection.recv.side_effect = [("review", {}), ("stop", None)]
+
+    def raise_timeout(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise TimeoutError(timeout_message)
+
+    monkeypatch.setattr(hook_entrypoint_module, "_run_resident_hook_request", raise_timeout)
+
+    hook_entrypoint_module._hook_evaluator_loop(  # pyright: ignore[reportPrivateUsage]
+        connection,
+        stores={},
+        hook_workers={},
+        configured_guard_home=None,
+    )
+
+    assert connection.send.call_args_list == [
+        call(("ready", None)),
+        call(("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"})),
+    ]
 
 
 def test_windows_taskkill_path_uses_system_directory_api(
@@ -414,6 +448,48 @@ def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) ->
     runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
     runner._ready_slot_ids.add(process.pid)  # pyright: ignore[reportPrivateUsage]
     return runner, connection
+
+
+def test_retry_reserves_capacity_only_after_failed_slot_withdrawal() -> None:
+    failed_connection = MagicMock()
+    failed_connection.send.side_effect = BrokenPipeError
+    retry_connection = MagicMock()
+    retry_connection.poll.return_value = True
+    retry_connection.recv.return_value = ("result", {"payload": {"decision": "allow"}, "reason_code": None})
+    failed_slot = HookWorkerSlot(process=MagicMock(), connection=failed_connection)
+    retry_slot = HookWorkerSlot(process=MagicMock(), connection=retry_connection)
+    ready_slots: queue.Queue[HookWorkerSlot] = queue.Queue()
+    events: list[str] = []
+
+    def replace_slot(slot: HookWorkerSlot) -> None:
+        assert slot is failed_slot
+        events.append("withdraw")
+
+    def wait_for_capacity(minimum_workers: int, timeout_seconds: float) -> bool:
+        assert minimum_workers == 1
+        assert timeout_seconds > 0
+        assert events == ["failures", "withdraw"]
+        events.append("reserve")
+        ready_slots.put_nowait(retry_slot)
+        return True
+
+    result = hook_slot_review_module.review_hook_worker_slot(
+        slot=failed_slot,
+        request={},
+        payload={"hook_event_name": "PreToolUse", "tool_call_id": "retry-order"},
+        review_deadline=time.monotonic() + 1,
+        caller_deadline_limited=False,
+        ready_slots=ready_slots,
+        replace_slot=replace_slot,
+        increment_metric=events.append,
+        wait_for_capacity=wait_for_capacity,
+    )
+
+    assert result == (
+        retry_slot,
+        ("result", {"payload": {"decision": "allow"}, "reason_code": None}),
+    )
+    assert events == ["failures", "withdraw", "reserve"]
 
 
 def test_idempotent_review_retries_transient_evaluator_not_ready(tmp_path: Path) -> None:

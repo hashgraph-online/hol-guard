@@ -11,6 +11,7 @@ import socket
 import subprocess
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import pytest
@@ -159,6 +160,53 @@ def _invoke(runtime: Path, state_dir: Path, request: bytes) -> dict[str, object]
         raise AssertionError("native runtime invocation failed: native_client_output_invalid") from None
     assert isinstance(payload, dict)
     return payload
+
+
+@contextmanager
+def _hold_native_client_lease(runtime: Path, state_dir: Path) -> Iterator[None]:
+    process = subprocess.Popen(
+        (str(runtime), "resident-client-stream", "--stdin", str(state_dir)),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    lease_directory = state_dir / "resident-client-leases.v1"
+    lease_pattern = f"client-{process.pid}-*.lease"
+    try:
+        deadline = time.monotonic() + 3
+        while not any(lease_directory.glob(lease_pattern)):
+            if process.poll() is not None:
+                raise AssertionError("native lease holder exited before acquiring its lease")
+            if time.monotonic() >= deadline:
+                raise AssertionError("native lease holder did not acquire its lease")
+            time.sleep(0.01)
+        yield
+    finally:
+        if process.stdin is not None:
+            with suppress(OSError, ValueError):
+                process.stdin.close()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            with suppress(OSError):
+                process.terminate()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                with suppress(OSError):
+                    process.kill()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired as error:
+                    raise AssertionError(
+                        f"native lease holder did not exit after bounded cleanup (pid={process.pid})"
+                    ) from error
+        if process.poll() is None:
+            raise AssertionError(f"native lease holder remains alive after cleanup (pid={process.pid})")
+        if process.returncode != 0:
+            raise AssertionError(
+                f"native lease holder exited unexpectedly (pid={process.pid}, returncode={process.returncode})"
+            )
 
 
 def _state_files(state_dir: Path) -> list[Path]:

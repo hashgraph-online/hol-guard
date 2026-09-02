@@ -281,6 +281,7 @@ fn startup_lock_repeated_acquisition_rewrites_without_growth() {
     let scope = test_scope("startup-lock-repeated");
     let path = scope.join("startup.lock");
     let mut expected_len = None;
+    #[cfg(unix)]
     let mut expected_identity = None;
     for _ in 0..8 {
         let lock = acquire_startup_lock(&scope).unwrap().unwrap();
