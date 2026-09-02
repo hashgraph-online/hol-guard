@@ -1,4 +1,4 @@
-name: Export Everyday Mode EVM 201-300 source
+name: Export Everyday Mode 201-300 branch source
 
 on:
   push:
@@ -15,13 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: feat/everyday-mode-201-300
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - run: git archive --format=tar.gz --output="$RUNNER_TEMP/source.tar.gz" HEAD
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: everyday-mode-201-300-source-${{ github.sha }}
+          name: everyday-mode-201-300-branch-source-${{ github.sha }}
           path: ${{ runner.temp }}/source.tar.gz
           retention-days: 1
           if-no-files-found: error
