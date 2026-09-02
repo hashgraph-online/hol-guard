@@ -22,8 +22,7 @@ _ALLOWLIST_NAME = "shell-hooks-allowlist.json"
 _BLOCK_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
 _MALFORMED_ALLOWLIST = (
-    "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can "
-    "allowlist its pre_tool_call command."
+    "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can allowlist its pre_tool_call command."
 )
 _MISSING_HOOK_COMMAND = "Hermes Guard hook command is missing; runtime protection was not registered."
 
@@ -168,8 +167,7 @@ def merge_guard_hook_allowlist(
     approvals = [
         item
         for item in payload.get("approvals", [])
-        if isinstance(item, dict)
-        and not (item.get("event") == _PRETOOL_EVENT and item.get("command") in retired)
+        if isinstance(item, dict) and not (item.get("event") == _PRETOOL_EVENT and item.get("command") in retired)
     ]
     if not any(item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string for item in approvals):
         approvals.append({"event": _PRETOOL_EVENT, "command": command_string})

@@ -403,7 +403,9 @@ def _should_exit_block(harness: str, event_name: str, policy_action: str) -> boo
     canonical = harness.strip().lower().replace("_", "-")
     compact = event_name.replace("_", "").replace("-", "").lower()
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and compact in {
-        "pretooluse", "userpromptsubmit", "pretoolcall",
+        "pretooluse",
+        "userpromptsubmit",
+        "pretoolcall",
     }:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False

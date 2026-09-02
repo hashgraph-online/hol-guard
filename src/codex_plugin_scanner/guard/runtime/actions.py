@@ -13,6 +13,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Literal, TypeGuard
 
 from ..action_lattice import is_action_bearing_key
+from ..adapters.hermes_runtime_hooks import prepare_hermes_hook_payload
 from ..redaction import redact_text
 from .secret_sensitivity import redacted_secret_path_context
 from .shell_command_wrappers import normalize_transparent_shell_command
@@ -401,7 +402,6 @@ def normalize_hermes_payload(
     home_dir: Path | str | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Hermes runtime payload into a typed action envelope."""
-    from ..adapters.hermes_runtime_hooks import prepare_hermes_hook_payload
     return _normalize_action_payload(
         prepare_hermes_hook_payload(payload),
         harness="hermes",
