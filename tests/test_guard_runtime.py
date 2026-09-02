@@ -13149,9 +13149,9 @@ def test_hermes_pretool_does_not_queue_terminal_blocks_for_same_channel_delivery
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 2
     assert captured_surface_policy == []
-    assert output["policy_action"] == "block"
+    assert output["decision"] == "block"
     assert "approval_delivery" not in output
 
 
@@ -20106,11 +20106,10 @@ def test_hermes_pretool_blocks_docker_sensitive_command_requests(tmp_path, capsy
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["artifact_type"] == "tool_action_request"
-    assert output["policy_action"] == "block"
+    assert rc == 2
+    assert output["decision"] == "block"
     assert "approval_delivery" not in output
-    assert "docker" in output["risk_summary"].lower()
+    assert "docker" in str(output.get("reason") or "").lower()
 
 
 def test_hermes_pretool_blocks_destructive_shell_command_requests(tmp_path, capsys, monkeypatch):
@@ -20149,10 +20148,9 @@ def test_hermes_pretool_blocks_destructive_shell_command_requests(tmp_path, caps
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["artifact_type"] == "tool_action_request"
-    assert output["policy_action"] == "block"
-    assert "recovery may require version control or a backup" in output["risk_summary"].lower()
+    assert rc == 2
+    assert output["decision"] == "block"
+    assert "destructive shell command" in str(output.get("reason") or "").lower()
 
 
 def test_guard_hook_explains_data_flow_exfiltration_path(tmp_path, capsys, monkeypatch):
