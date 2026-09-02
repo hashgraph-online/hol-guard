@@ -89,14 +89,16 @@ impl PrivateDirectoryBinding {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
         }
-        let rename_parent = open_rename_directory(&self.path)?;
         drop(
             self.handles
                 .pop()
                 .expect("a directory binding always contains its final component"),
         );
-        let renamed = rename_into_directory(&rename_parent, source, destination);
-        drop(rename_parent);
+        let renamed = open_rename_directory(&self.path).and_then(|rename_parent| {
+            let renamed = rename_into_directory(&rename_parent, source, destination);
+            drop(rename_parent);
+            renamed
+        });
         self.handles
             .push(open_directory_bound(&self.path, self.private_final, true)?);
         renamed?;

@@ -8,7 +8,7 @@ fn fixture_file(path: &Path, bytes: &[u8]) {
     {
         use std::io::Write;
         let private_root = path.parent().unwrap_or(path);
-        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        let mut file = crate::resident_state::private_file(path, false, private_root).unwrap();
         file.write_all(bytes).unwrap();
     }
     #[cfg(not(windows))]

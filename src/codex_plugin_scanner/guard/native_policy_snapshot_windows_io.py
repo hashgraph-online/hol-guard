@@ -117,6 +117,8 @@ def _windows_open_configuration(
         if add_file:
             desired_access |= _WINDOWS_FILE_ADD_FILE | _WINDOWS_FILE_TRAVERSE
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
+        if add_file:
+            share_mode |= _WINDOWS_FILE_SHARE_WRITE
         if rename_parent:
             desired_access = _WINDOWS_FILE_TRAVERSE | _WINDOWS_FILE_READ_ATTRIBUTES
             share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE

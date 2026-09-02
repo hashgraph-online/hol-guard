@@ -173,14 +173,14 @@ def _windows_rename_releasing_barrier(
     try:
         root_handle = parent_handle
         if directory_handles is not None:
+            exclusive_kernel32, exclusive_handle = directory_handles.pop()
+            released = True
+            api._windows_close_handle(exclusive_kernel32, exclusive_handle)
             rename_kernel32, rename_handle, _rename_information = api._windows_open_handle(
                 parent_path,
                 directory=True,
                 rename_parent=True,
             )
-            exclusive_kernel32, exclusive_handle = directory_handles.pop()
-            released = True
-            api._windows_close_handle(exclusive_kernel32, exclusive_handle)
             root_handle = rename_handle
         _windows_rename_file_handle(
             kernel32,
