@@ -134,7 +134,7 @@ fn existing_private_file(path: &Path, private_root: &Path) -> Result<bool, Strin
         // file, and foreign-owner/reparse objects must fail closed.
         crate::resident_state::open_private_read(path, 4096, "restart_budget", private_root)
             .map(|file| file.is_some())
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned());
+            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
     }
 
     #[cfg(not(windows))]
