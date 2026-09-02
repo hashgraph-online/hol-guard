@@ -21,6 +21,40 @@ _CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
     "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
 }
 
+# Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
+# only: fail-closing them freezes the conversation without adding an enforcement
+# boundary. PostToolUse and PermissionRequest stay withheld/paused.
+LIFECYCLE_OBSERVE_EVENTS = frozenset(
+    {
+        "UserPromptSubmit",
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "Stop",
+        "Notification",
+        "TaskStart",
+        "TaskError",
+        "SessionShutdown",
+        "PermissionDenied",
+    }
+)
+
+
+def _compact_hook_event_name(event_name: str) -> str:
+    return event_name.strip().lower().replace("_", "").replace("-", "")
+
+
+_LIFECYCLE_CANONICAL_BY_COMPACT = {
+    **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    "userpromptsubmitted": "UserPromptSubmit",
+    "subagentend": "SubagentStop",
+}
+
+
+def lifecycle_event_is_observe_only(event_name: str) -> bool:
+    return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
+
 
 def availability_harness_response(
     payload: Mapping[str, object],
@@ -34,8 +68,19 @@ def availability_harness_response(
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
-    from .hook_worker_responses import harness_json_from_native_pre_tool, post_tool_fail_safe_response
+    from .hook_worker_responses import (
+        harness_json_from_native_pre_tool,
+        observe_lifecycle_fail_safe_response,
+        post_tool_fail_safe_response,
+    )
 
+    canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
+    if canonical_lifecycle is not None:
+        return observe_lifecycle_fail_safe_response(
+            harness,
+            event_name=canonical_lifecycle,
+            reason_code=reason_code,
+        )
     if event_name != "PreToolUse":
         return post_tool_fail_safe_response(harness, reason=reason, reason_code=reason_code)
     if not hook_action_is_emergency_safe(
@@ -93,7 +138,9 @@ def cursor_fallback_permission(
 __all__ = [
     "EMERGENCY_SAFE_REASON",
     "EMERGENCY_SAFE_REASON_CODE",
+    "LIFECYCLE_OBSERVE_EVENTS",
     "availability_harness_response",
     "cursor_fallback_permission",
     "hook_action_is_emergency_safe",
+    "lifecycle_event_is_observe_only",
 ]

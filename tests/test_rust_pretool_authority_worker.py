@@ -366,3 +366,14 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     )
     assert result["reason_code"] == "native_hook_event_unavailable"
     assert result["continue"] is False
+    grok_session = worker.review_http_payload(
+        payload={"hookEventName": "session_start"},
+        params={},
+        default_harness="grok",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert grok_session["decision"] == "allow"
+    assert grok_session["policy_action"] == "allow"
+    assert grok_session["reason_code"] == "native_hook_event_unavailable"

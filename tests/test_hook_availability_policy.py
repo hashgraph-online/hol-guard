@@ -369,3 +369,78 @@ def test_macos_private_prefix_stays_workspace_local() -> None:
         "tool_input": {"file_path": "/private/tmp/guard-project/src/app.ts"},
     }
     assert hook_action_is_emergency_safe(payload, workspace=workspace) is True
+
+
+def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path: Path) -> None:
+    prompt = availability_harness_response(
+        {"hook_event_name": "UserPromptSubmit", "prompt": "hello"},
+        harness="grok",
+        event_name="UserPromptSubmit",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert prompt["decision"] == "allow"
+    assert prompt["policy_action"] == "allow"
+    session = availability_harness_response(
+        {"hook_event_name": "SessionStart"},
+        harness="grok",
+        event_name="SessionStart",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert session["decision"] == "allow"
+    aliased = availability_harness_response(
+        {"hookEventName": "session_start"},
+        harness="grok",
+        event_name="session_start",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert aliased["decision"] == "allow"
+    assert aliased["policy_action"] == "allow"
+    subagent = availability_harness_response(
+        {"hook_event_name": "subagent_start"},
+        harness="grok",
+        event_name="subagent_start",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert subagent["decision"] == "allow"
+    submitted = availability_harness_response(
+        {"hook_event_name": "UserPromptSubmitted"},
+        harness="grok",
+        event_name="UserPromptSubmitted",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert submitted["decision"] == "allow"
+    assert submitted["policy_action"] == "allow"
+    compact = availability_harness_response(
+        {"hook_event_name": " userpromptsubmit "},
+        harness="grok",
+        event_name=" userpromptsubmit ",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert compact["decision"] == "allow"
+    withheld = availability_harness_response(
+        {"hook_event_name": "PostToolUse", "tool_name": "Read"},
+        harness="cursor",
+        event_name="PostToolUse",
+        reason_code="native_post_tool_unavailable",
+        reason="native unavailable",
+    )
+    assert withheld["continue"] is False
+    assert withheld["policy_action"] == "block"
+    curl = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
+        harness="grok",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert curl["policy_action"] == "block"
