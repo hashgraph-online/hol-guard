@@ -1140,8 +1140,7 @@ def _evaluate_with_cloud(
                     _cloud_fail_closed_evaluation(
                         code="cloud_timeout",
                         message=(
-                            "Guard Cloud evaluation timed out, so this package request is paused for "
-                            "explicit review."
+                            "Guard Cloud evaluation timed out, so this package request is paused for explicit review."
                         ),
                         artifact=artifact,
                         targets=targets,

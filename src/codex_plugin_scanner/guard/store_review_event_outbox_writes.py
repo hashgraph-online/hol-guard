@@ -201,16 +201,20 @@ def requeue_pending_request_events(
             """,
             (request_id,),
         ).fetchone()
-        if existing_snapshot is not None and current_identity is not None and (
-            str(existing_snapshot["binding_status"]) == "ready"
+        if (
+            existing_snapshot is not None
+            and current_identity is not None
             and (
-                str(existing_snapshot["oauth_source"]),
-                existing_snapshot["oauth_subject_hash"],
-                existing_snapshot["workspace_id"],
-                existing_snapshot["machine_id"],
-                existing_snapshot["machine_installation_id"],
+                str(existing_snapshot["binding_status"]) == "ready"
+                and (
+                    str(existing_snapshot["oauth_source"]),
+                    existing_snapshot["oauth_subject_hash"],
+                    existing_snapshot["workspace_id"],
+                    existing_snapshot["machine_id"],
+                    existing_snapshot["machine_installation_id"],
+                )
+                == current_identity
             )
-            == current_identity
         ):
             continue
         bind_review_events_for_request(connection, request_id=request_id, oauth_source=source)

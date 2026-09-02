@@ -574,12 +574,7 @@ def _scope_scanner_evidence_material(value: object) -> list[dict[str, object]]:
         if not isinstance(item, Mapping):
             continue
         if item.get("kind") == PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND:
-            material.append(
-                {
-                    key: _json_boundary_value(item.get(key))
-                    for key in _SCOPE_PACKAGE_CONTEXT_KEYS
-                }
-            )
+            material.append({key: _json_boundary_value(item.get(key)) for key in _SCOPE_PACKAGE_CONTEXT_KEYS})
         elif item.get("source") == "github_workflow_approval_record":
             material.append(
                 {
