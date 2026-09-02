@@ -24,6 +24,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          source_path = Path("rust/crates/guard-runtime/src/managed_resident.rs")
+          source = source_path.read_text(encoding="utf-8")
+          source, count = re.subn(
+              r"(?m)^        if \(same_runtime\)$",
+              "        if !containment::state_owner_is_live(&state)\n            || (same_runtime",
+              source,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError(f"managed_resident.rs: expected one live-state condition, found {count}")
+          source_path.write_text(source, encoding="utf-8")
+
+          helper_path = Path(".github/temporary-pr2691-final-repair.py")
+          helper = helper_path.read_text(encoding="utf-8")
+          start_marker = '\nmanaged_resident = "rust/crates/guard-runtime/src/managed_resident.rs"\n'
+          end_marker = '\nconstants = "src/codex_plugin_scanner/guard/native_policy_snapshot_constants.py"\n'
+          start = helper.index(start_marker)
+          end = helper.index(end_marker, start)
+          helper_path.write_text(helper[:start] + helper[end:], encoding="utf-8")
+          PY
           python .github/temporary-pr2691-final-repair.py
           rm .github/temporary-pr2691-final-repair.py
           rm .github/workflows/temporary-pr2691-final-repair.yml
