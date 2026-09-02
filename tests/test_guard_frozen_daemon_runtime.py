@@ -264,7 +264,23 @@ def test_frozen_daemon_launcher_preserves_pyinstaller_reset(
     assert child_env["HOL_GUARD_DESKTOP"] == "1"
 
 
-def test_non_frozen_daemon_launcher_drops_pyinstaller_environment(
+def test_frozen_daemon_launcher_preserves_persistent_desktop_runtime_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_owner = tmp_path / "desktop-core" / "bin" / "hol-guard"
+    runtime_owner.parent.mkdir(parents=True)
+    runtime_owner.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(manager.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(runtime_owner))
+
+    child_env = manager._daemon_launcher_env(home_dir=tmp_path)
+
+    assert child_env["HOL_GUARD_DESKTOP_RUNTIME_OWNER"] == str(runtime_owner)
+
+
+def test_non_frozen_daemon_launcher_drops_desktop_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,7 +291,7 @@ def test_non_frozen_daemon_launcher_drops_pyinstaller_environment(
     child_env = manager._daemon_launcher_env(home_dir=tmp_path)
 
     assert "PYINSTALLER_RESET_ENVIRONMENT" not in child_env
-    assert child_env["HOL_GUARD_DESKTOP"] == "1"
+    assert "HOL_GUARD_DESKTOP" not in child_env
 
 
 def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.MonkeyPatch) -> None:

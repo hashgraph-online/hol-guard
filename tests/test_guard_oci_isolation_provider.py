@@ -149,6 +149,42 @@ class TestEvidenceBuilding:
         )
         assert ev.mounts.forbidden_bind_sources == ("/etc",)
 
+    @pytest.mark.parametrize(
+        "source",
+        ["../etc", "foo/../../etc", "/tmp/../etc", "//etc"],
+    )
+    def test_normalized_forbidden_mount_evidence(self, source):
+        ev = build_oci_evidence(
+            {
+                "ociVersion": "1.0.2",
+                "root": {"path": "rootfs"},
+                "mounts": [
+                    {"destination": "/mnt/input", "type": "bind", "source": source},
+                ],
+            }
+        )
+
+        assert ev.mounts.forbidden_bind_sources == (source,)
+
+    @pytest.mark.parametrize("bind_option", ["bind", "rbind"])
+    def test_option_defined_bind_mount_evidence(self, bind_option):
+        ev = build_oci_evidence(
+            {
+                "ociVersion": "1.0.2",
+                "root": {"path": "rootfs"},
+                "mounts": [
+                    {
+                        "destination": "/mnt/input",
+                        "type": "none",
+                        "source": "data",
+                        "options": [bind_option, "ro"],
+                    },
+                ],
+            }
+        )
+
+        assert ev.mounts.host_bind_mounts == ("/mnt/input",)
+
     def test_dangerous_caps_evidence(self):
         ev = build_oci_evidence(
             {
@@ -278,8 +314,9 @@ class TestEvidenceBuilding:
 
 
 class TestBundleValidation:
-    def test_valid_bundle(self, minimal_bundle):
-        assert _validate_bundle(build_oci_evidence(minimal_bundle)) == ()
+    def test_valid_bundle(self, minimal_bundle, tmp_path):
+        (tmp_path / "rootfs").mkdir()
+        assert _validate_bundle(build_oci_evidence(minimal_bundle, bundle_root=tmp_path)) == ()
 
     def test_root_user_violation(self):
         ev = build_oci_evidence(
@@ -406,6 +443,24 @@ class TestPlanRefusal:
                 },
             )
 
+    def test_refuse_parent_relative_host_mount(self, provider, decision_context):
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec={
+                    "ociVersion": "1.0.2",
+                    "mounts": [
+                        {
+                            "destination": "/mnt/input",
+                            "type": "none",
+                            "source": "../secret.txt",
+                            "options": ["rbind", "ro"],
+                        },
+                    ],
+                },
+            )
+
     def test_refuse_host_network(self, provider, decision_context):
         with pytest.raises(ProviderPlanError, match="host network"):
             provider.plan(
@@ -451,13 +506,264 @@ class TestPlanSuccess:
         assert lease is not None
         assert len(lease.plan_digest) == 64
 
-    def test_os_isolated_plan(self, provider, decision_context, minimal_bundle):
+    def test_os_isolated_plan(self, provider, decision_context, minimal_bundle, tmp_path):
+        (tmp_path / "rootfs").mkdir()
         lease = provider.plan(
             decision_context,
             GuardExecutionAssuranceBoundary.OS_ISOLATED,
             bundle_spec=minimal_bundle,
+            bundle_root=tmp_path,
         )
         assert lease is not None
+
+    @pytest.mark.parametrize("rootfs_path", ["/", "../rootfs", "rootfs/../../etc"])
+    def test_refuse_rootfs_escape(self, provider, decision_context, rootfs_path):
+        with pytest.raises(ProviderPlanError, match="bundle-relative"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle_spec={
+                    "ociVersion": "1.0.2",
+                    "root": {"path": rootfs_path, "readonly": True},
+                },
+            )
+
+    def test_refuse_lifecycle_hooks(self, provider, decision_context, minimal_bundle):
+        bundle = dict(minimal_bundle)
+        bundle["hooks"] = {"prestart": [{"path": "/bin/true"}]}
+
+        with pytest.raises(ProviderPlanError, match="hooks"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
+    def test_symlinked_rootfs_cannot_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").symlink_to("/etc", target_is_directory=True)
+
+        with pytest.raises(ProviderPlanError, match="required boundary"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle_spec=minimal_bundle,
+                bundle_root=tmp_path,
+            )
+
+    def test_symlinked_bind_source_cannot_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").mkdir()
+        (tmp_path / "link-to-etc").symlink_to("/etc", target_is_directory=True)
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": "link-to-etc",
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="required boundary"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle_spec=bundle,
+                bundle_root=tmp_path,
+            )
+
+    def test_absolute_bind_outside_bundle_cannot_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        bundle_root = tmp_path / "bundle"
+        bundle_root.mkdir()
+        (bundle_root / "rootfs").mkdir()
+        outside_source = tmp_path / "outside"
+        outside_source.mkdir()
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": outside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="required boundary"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle_spec=bundle,
+                bundle_root=bundle_root,
+            )
+
+    def test_absolute_bind_inside_bundle_can_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").mkdir()
+        inside_source = tmp_path / "input"
+        inside_source.mkdir()
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": inside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        lease = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=bundle,
+            bundle_root=tmp_path,
+        )
+
+        assert len(lease.plan_digest) == 64
+
+    @pytest.mark.parametrize("mount_type", ["", "none"])
+    def test_path_shaped_mount_without_bind_marker_is_refused(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        mount_type,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/host-etc",
+                "type": mount_type,
+                "source": "/etc",
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
+    @pytest.mark.parametrize(
+        ("mount_type", "options"),
+        [("bind", []), ("none", ["bind"]), ("", ["rbind"])],
+    )
+    def test_empty_explicit_bind_source_is_refused(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        mount_type,
+        options,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": mount_type,
+                "source": "",
+                "options": options,
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
+    def test_malformed_bundle_root_is_plan_error(self, provider, decision_context, minimal_bundle):
+        with pytest.raises(ProviderPlanError, match="bundle_root"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=minimal_bundle,
+                bundle_root=object(),
+            )
+
+    @pytest.mark.parametrize("root_kind", ["file", "missing"])
+    def test_non_directory_bundle_root_is_plan_error(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+        root_kind,
+    ):
+        bundle_root = tmp_path / root_kind
+        if root_kind == "file":
+            bundle_root.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ProviderPlanError, match="existing directory"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=minimal_bundle,
+                bundle_root=bundle_root,
+            )
+
+    def test_bundle_root_changes_plan_digest(self, provider, decision_context, minimal_bundle, tmp_path):
+        first_root = tmp_path / "first"
+        second_root = tmp_path / "second"
+        (first_root / "rootfs").mkdir(parents=True)
+        (second_root / "rootfs").mkdir(parents=True)
+
+        first = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=minimal_bundle,
+            bundle_root=first_root,
+        )
+        second = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=minimal_bundle,
+            bundle_root=second_root,
+        )
+
+        assert first.plan_digest != second.plan_digest
+
+    @pytest.mark.parametrize("malformed_value", [object(), float("nan")])
+    def test_digest_rejects_malformed_recognized_field_as_plan_error(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        malformed_value,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["hostname"] = malformed_value
+
+        with pytest.raises(ProviderPlanError, match="malformed OCI bundle digest input"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
 
     def test_deterministic_digest(self, provider, decision_context, minimal_bundle):
         l1 = provider.plan(
@@ -536,6 +842,16 @@ class TestDigestComputation:
         d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}, "x": 1})
         d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
         assert d1 == d2
+
+    def test_nested_mapping_order_is_deterministic(self):
+        first = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs", "readonly": True}})
+        second = _compute_bundle_digest({"root": {"readonly": True, "path": "rootfs"}, "ociVersion": "1.0.2"})
+
+        assert first == second
+
+    def test_rejects_unsupported_values(self):
+        with pytest.raises(ValueError, match="unsupported OCI spec field type: set"):
+            _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": {"unsupported"}}})
 
 
 # === Unknown features lower assurance ===

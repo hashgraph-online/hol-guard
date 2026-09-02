@@ -13122,6 +13122,25 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+function approvalDecisionSubjectKey(item) {
+  return JSON.stringify([
+    item.request_id,
+    item.harness,
+    item.artifact_id ?? null,
+    item.artifact_type ?? null,
+    item.artifact_hash ?? null,
+    item.action_identity ?? null,
+    item.raw_command_text ?? null,
+    item.workspace ?? null
+  ]);
+}
+function approvalDecisionContractKey(item) {
+  return JSON.stringify([
+    approvalDecisionSubjectKey(item),
+    item.scope_contract_version ?? "legacy",
+    item.scope_contract_digest ?? "legacy"
+  ]);
+}
 const DEFAULT_SCOPE_CHOICES = [
   {
     value: "artifact",
@@ -15550,9 +15569,30 @@ function protectionHealthFor(snapshot, harness = null) {
   return { harness: STABLE_ID$1.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
 }
 function remainingProtectionRepairParts(health) {
+  const hooksCheck = health.checks.find((check) => check.check_id === "harness_hooks");
   return {
     failedHookHarnesses: health.apps.filter((app) => app.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail")).map((app) => app.harness),
-    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status !== "pass")
+    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status !== "pass"),
+    needsConnectedApp: hooksCheck?.status === "fail" && hooksCheck.reason_code === "no_managed_harness"
+  };
+}
+function remainingProtectionRepairMessage(health, displayName) {
+  const remainingParts = remainingProtectionRepairParts(health);
+  const failedHookApps = remainingParts.failedHookHarnesses.map(displayName);
+  const remainingMessages = [];
+  if (remainingParts.needsConnectedApp) {
+    remainingMessages.push("Connect an AI app to start local protection.");
+  }
+  if (failedHookApps.length > 0) {
+    remainingMessages.push(
+      `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`
+    );
+  }
+  if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+  const remaining = remainingMessages.length > 0 ? remainingMessages.join(" ") : "A local protection check still needs attention.";
+  return {
+    failedHookHarnesses: remainingParts.failedHookHarnesses,
+    message: `${remaining} Open the repair details below for the exact check.`
   };
 }
 function isRecord$3(value) {
@@ -15607,6 +15647,23 @@ function normalizeSupplyChainRepairResult(result) {
   };
 }
 const now = "2026-04-11T12:00:00Z";
+const demoPresentationSettings = {
+  presentation_mode: "everyday",
+  presentation_mode_explicit: false,
+  presentation_schema_version: 1,
+  presentation_revision: 0,
+  presentation: {
+    value: "everyday",
+    source: "default",
+    explicit: false,
+    writable: true,
+    schema_version: 1,
+    revision: 0,
+    diagnostic: null
+  },
+  presentation_diagnostic: null,
+  receipt_redaction_level: "partial"
+};
 const demoRequests = [
   {
     request_id: "request-env-reader",
@@ -15814,6 +15871,18 @@ async function requestErrorMessage(response, fallback) {
     return fallback;
   }
   return fallback;
+}
+class GuardRequestResolutionError extends Error {
+  status;
+  payload;
+  constructor(status, payload, fallback) {
+    const error = typeof payload?.["error"] === "string" ? payload["error"] : null;
+    const message = typeof payload?.["message"] === "string" ? payload["message"] : null;
+    super(message?.trim() || (error?.trim() ? `${error} (${status})` : fallback));
+    this.name = "GuardRequestResolutionError";
+    this.status = status;
+    this.payload = payload;
+  }
 }
 class GuardHarnessActionError extends Error {
   status;
@@ -17013,7 +17082,7 @@ function normalizeQueueResolution(payload) {
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
     copy: normalizeQueueCopy(payload.copy),
-    codex_resume: normalizeCodexResume(payload.codex_resume)
+    codexResume: normalizeCodexResume(payload.codexResume)
   };
 }
 function queueSearchParams(input) {
@@ -17278,6 +17347,7 @@ async function fetchSettings() {
       guard_home: "~/.hol-guard",
       config_path: "~/.hol-guard/config.toml",
       settings: {
+        ...demoPresentationSettings,
         mode: "prompt",
         security_level: "balanced",
         default_action: "warn",
@@ -17881,7 +17951,7 @@ async function resolveRequestWithQueueResult(input) {
       resolution_summary: "Decision saved.",
       retry_hint: null,
       copy: null,
-      codex_resume: null
+      codexResume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
@@ -17899,6 +17969,11 @@ async function resolveRequestWithQueueResult(input) {
       reason: input.reason || void 0,
       ...input.scope_contract_version !== void 0 ? { scope_contract_version: input.scope_contract_version } : {},
       ...input.scope_contract_digest !== void 0 ? { scope_contract_digest: input.scope_contract_digest } : {},
+      ...input.persist_policy !== void 0 ? { persist_policy: input.persist_policy } : {},
+      ...input.mcp_grant_target !== void 0 ? { mcp_grant_target: input.mcp_grant_target } : {},
+      ...input.mcp_grant_duration !== void 0 ? { mcp_grant_duration: input.mcp_grant_duration } : {},
+      ...input.local_tool_grant_target !== void 0 ? { local_tool_grant_target: input.local_tool_grant_target } : {},
+      ...input.local_tool_grant_duration !== void 0 ? { local_tool_grant_duration: input.local_tool_grant_duration } : {},
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
@@ -17906,7 +17981,18 @@ async function resolveRequestWithQueueResult(input) {
   });
   const response = await fetchGuardApi(path, init());
   if (!response.ok) {
-    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+    let payload2 = null;
+    try {
+      const candidate = await response.clone().json();
+      payload2 = isRecord$1(candidate) ? candidate : null;
+    } catch {
+      payload2 = null;
+    }
+    throw new GuardRequestResolutionError(
+      response.status,
+      payload2,
+      await requestErrorMessage(response, `Request failed with ${response.status}`)
+    );
   }
   const payload = await response.json();
   return normalizeQueueResolution(payload);
@@ -19595,6 +19681,64 @@ function GuardModalLayer({
     overlayRoot
   );
 }
+function GuardUpdateChannelSummary(props) {
+  let versionContent = /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" });
+  if (props.version) {
+    versionContent = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "p",
+      {
+        className: "min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70",
+        "aria-label": `Guard version ${props.version}`,
+        children: [
+          "v",
+          props.version
+        ]
+      }
+    );
+  }
+  let channelAction;
+  if (props.useAlpha) {
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
+        role: "status",
+        "aria-label": "Alpha updates enabled",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onManage,
+              disabled: props.busy,
+              "aria-label": "Manage alpha updates",
+              title: "Manage alpha updates",
+              className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+              children: "Manage"
+            }
+          )
+        ]
+      }
+    );
+  } else {
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onManage,
+        disabled: props.busy,
+        className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+        children: "Try alpha updates"
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+    versionContent,
+    channelAction
+  ] });
+}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
@@ -19708,48 +19852,27 @@ function GuardUpdatePanel(props) {
   const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
-    version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version}`, children: [
       "v",
       version
-    ] }) : null,
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
+    updateChannelSummary,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
-    props.onSetUpdateChannel && useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "flex items-center justify-between gap-2 rounded-md border border-brand-blue/20 bg-brand-blue/[0.06] px-2 py-1.5",
-        role: "status",
-        "aria-label": "Alpha updates enabled",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-brand-blue", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
-            "Alpha updates"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: handleOpenAlphaModal,
-              disabled: busy,
-              "aria-label": "Manage alpha updates",
-              title: "Manage alpha updates",
-              className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-brand-blue transition-colors hover:bg-brand-blue/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" })
-            }
-          )
-        ]
-      }
-    ) : props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: handleOpenAlphaModal,
-        disabled: busy,
-        className: "inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-        children: "Try alpha updates"
-      }
-    ) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -28915,7 +29038,8 @@ function ReviewDecisionCard(props) {
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
   const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
-  const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
+  const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
+  const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
   reactExports.useEffect(() => {
     if (item) {
       setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
@@ -28931,7 +29055,19 @@ function ReviewDecisionCard(props) {
       setPendingContractKey(null);
       setRememberExactAction(false);
     }
-  }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+  }, [decisionSubjectKey]);
+  reactExports.useEffect(() => {
+    if (!item) return;
+    setAllowScope(
+      (current) => normalizeDecisionScope(item, "allow", current) ?? recommendedScopeForAction(item, "allow") ?? "artifact"
+    );
+    setBlockScope(
+      (current) => normalizeDecisionScope(item, "block", current) ?? recommendedScopeForAction(item, "block") ?? "artifact"
+    );
+    if (item.exact_action_persistence_eligible !== true) {
+      setRememberExactAction(false);
+    }
+  }, [decisionContractKey]);
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item || resolutionBlockReason !== null) return;
@@ -30175,10 +30311,12 @@ async function loadWorkspaceModule(loader, options = {}) {
       throw error;
     }
     const storage = options.storage;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -30190,9 +30328,9 @@ async function loadWorkspaceModule(loader, options = {}) {
     });
   }
 }
-function lazyWorkspace(loader) {
+function lazyWorkspace(moduleId, loader) {
   const load = async () => {
-    const module = await loadWorkspaceModule(loader, { storage: browserSessionStorage() });
+    const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
     return { default: module.default };
   };
   return reactExports.lazy(load);
@@ -30382,6 +30520,7 @@ function WatchProtectionBanner(props) {
   );
 }
 const McpPolicyRequestPanel = lazyWorkspace(
+  "mcp-policy-request-panel",
   () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
@@ -30675,21 +30814,25 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
+  "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
+  "supply-chain-hub-workspace",
   () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
+  "policy-workspace-page",
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
+  "about-workspace",
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 function LazyFallback() {
@@ -30729,6 +30872,7 @@ function parseRequestId(pathname) {
   return null;
 }
 const PROTECT_ROUTE = "/protect";
+const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 function viewTitle(view) {
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
@@ -30797,7 +30941,7 @@ async function loadDetail(requestId) {
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      fetchDiff(item.artifact_id, item.harness),
+      shouldFetchArtifactDiff(item.artifact_type) ? fetchDiff(item.artifact_id, item.harness) : Promise.resolve(null),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -30819,6 +30963,19 @@ async function loadDetail(requestId) {
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
+}
+async function refreshStaleScopeContractSelection({
+  requestId,
+  refreshQueue,
+  loadSelectedDetail,
+  applySelectedDetail
+}) {
+  await refreshQueue();
+  if (requestId === null) return;
+  applySelectedDetail(await loadSelectedDetail(requestId));
+}
+function shouldFetchArtifactDiff(artifactType) {
+  return (/* @__PURE__ */ new Set(["mcp_server", "skill", "skill_file"])).has(artifactType);
 }
 function App() {
   const pathname = usePathname();
@@ -31058,6 +31215,7 @@ function App() {
   const handleOpenInbox = reactExports.useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = reactExports.useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
+  const handleOpenTodayEvidence = reactExports.useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
@@ -31193,9 +31351,24 @@ function App() {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
-      const result = await resolveRequestWithQueueResult(payload);
+      const result = await resolveRequestWithQueueResult(payload).catch(async (error) => {
+        if (error instanceof GuardRequestResolutionError && error.status === 409 && error.payload?.["error"] === "stale_scope_contract") {
+          await refreshStaleScopeContractSelection({
+            requestId: activeRequestId,
+            refreshQueue: async () => {
+              await refreshStateAfterAction();
+            },
+            loadSelectedDetail: loadDetail,
+            applySelectedDetail: setDetail
+          });
+          throw new Error(
+            "This request changed while you were reviewing it. Guard refreshed the current action and scopes; review them, then retry."
+          );
+        }
+        throw error;
+      });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codex_resume ?? null;
+      const resume = result.codexResume ?? null;
       setCodexResume(resume);
       setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {
@@ -31209,7 +31382,7 @@ function App() {
     } finally {
       resolutionInFlight.current = false;
     }
-  }, [requests, refreshStateAfterAction, setResolutionMessage]);
+  }, [activeRequestId, requests, refreshStateAfterAction, setResolutionMessage]);
   const handleRetryResume = reactExports.useCallback(async () => {
     if (resolvedRequestId === null) return;
     const updated = await retryResume(resolvedRequestId);
@@ -31324,20 +31497,10 @@ function App() {
     if (remainingHealth.state === "protected") {
       return "Automatic repairs completed. Guard rechecked every protection layer below.";
     }
-    const remainingParts = remainingProtectionRepairParts(remainingHealth);
-    const currentFailedHarnesses = new Set(remainingParts.failedHookHarnesses);
-    const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
-    const remainingMessages = [];
-    if (failedHookApps.length > 0) {
-      remainingMessages.push(
-        `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`
-      );
-    }
-    if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
-    const remaining = remainingMessages.length > 0 ? remainingMessages.join(" ") : "A local protection check still needs attention.";
+    const remaining = remainingProtectionRepairMessage(remainingHealth, harnessDisplayName);
     throw new ProtectionRepairFlowError(
-      `${remaining} Open the repair details below for the exact check.`,
-      [...failedHarnesses].filter((harness) => currentFailedHarnesses.has(harness))
+      remaining.message,
+      [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness))
     );
   }, [refreshStateAfterAction]);
   const appDetailContent = reactExports.useMemo(() => {
@@ -31354,13 +31517,14 @@ function App() {
         inventory: inventory.kind === "ready" ? inventory.items : [],
         requests: requests.kind === "ready" ? requests.items : [],
         onGoHome: handleGoHome,
+        onOpenApps: handleOpenFleet,
         onOpenRequest: handleOpenRequest,
         onClearAppPolicies: handleClearAppPolicies,
         onClearPolicy: handleClearPolicy,
         onManagedInstallChanged: refreshStateWithoutResult
       }
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
   const policyContent = reactExports.useMemo(() => {
     if (runtime.kind !== "ready") {
       return null;
@@ -31425,6 +31589,7 @@ function App() {
             onOpenInbox: handleOpenInbox,
             onOpenFleet: handleOpenFleet,
             onOpenEvidence: handleOpenEvidence,
+            onOpenTodayEvidence: handleOpenTodayEvidence,
             onOpenInsights: handleOpenInsights,
             onOpenCommands: handleOpenCommands,
             onOpenSettings: handleOpenSettings,
@@ -31507,7 +31672,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniEye as $,
+  ProofStrip as $,
   ActionButton as A,
   HiMiniChevronUp as B,
   HiMiniChevronDown as C,
@@ -31528,157 +31693,158 @@ export {
   startGuardCloudConnect as R,
   SectionLabel as S,
   fetchGuardCloudConnectStatus as T,
-  ProtectionRepairFlowError as U,
-  openPackageFirewallAuthorizeFallback as V,
+  remainingProtectionRepairParts as U,
+  ProtectionRepairFlowError as V,
   WatchProtectionBanner as W,
-  activeFailedHarnesses as X,
-  HiMiniWrenchScrewdriver as Y,
-  HiMiniExclamationCircle as Z,
-  ProofStrip as _,
+  openPackageFirewallAuthorizeFallback as X,
+  activeFailedHarnesses as Y,
+  HiMiniWrenchScrewdriver as Z,
+  HiMiniExclamationCircle as _,
   EvidenceActivityHeatmapMini as a,
-  computeMetrics as a$,
-  HiMiniXCircle as a0,
-  HiMiniClipboardDocumentCheck as a1,
-  HiMiniClipboard as a2,
-  PROTECTION_POSTURE_COPY as a3,
-  POSTURE_OUTCOME_COLUMNS as a4,
-  getDefaultExportFromCjs as a5,
-  React as a6,
-  HiMiniKey as a7,
-  HiMiniLockClosed as a8,
-  HiMiniBellAlert as a9,
-  fetchExtensionControlApi as aA,
-  useResolvedApprovalGate as aB,
-  HiMiniArrowPath as aC,
-  HiMiniInformationCircle as aD,
-  isApprovalProofSubmitDisabled as aE,
-  ApprovalProofFieldInputs as aF,
-  buildApprovalProofCredentials as aG,
-  GenIcon as aH,
-  HiMiniGlobeAlt as aI,
-  HiMiniCube as aJ,
-  HiMiniServerStack as aK,
-  HiMiniFolder as aL,
-  FaWindows as aM,
-  FaAws as aN,
-  approvalProofRecentlySatisfied as aO,
-  HiMiniArrowLeft as aP,
-  HiMiniPlus as aQ,
-  HiMiniNoSymbol as aR,
-  HiMiniArrowTopRightOnSquare as aS,
-  guardAwareHref as aT,
-  fetchApprovalPage as aU,
-  fetchPolicy as aV,
-  HiMiniHome as aW,
-  guardActionPresentation as aX,
-  DEFAULT_FILTER_STATE as aY,
-  filterEvidence as aZ,
-  sortEvidence as a_,
-  HiMiniAdjustmentsHorizontal as aa,
-  HiMiniCircleStack as ab,
-  TabBar as ac,
-  resolveProtectionLevelCopy as ad,
-  fetchSettings as ae,
-  fetchRuntimeSnapshot as af,
-  clearPolicy as ag,
-  clearReviewQueue as ah,
-  revokeApprovalGateCooldown as ai,
-  disableApprovalGateTotp as aj,
-  importSettings as ak,
-  resetSettings as al,
-  enrollApprovalGateTotp as am,
-  verifyApprovalGateTotp as an,
-  clearEvidence as ao,
-  exportDiagnostics as ap,
-  repairApprovalCenter as aq,
-  exportSettings as ar,
-  setupDesktopNotifications as as,
-  WorkspacePageHeader as at,
-  HiMiniMagnifyingGlass as au,
-  isProtectionPosture as av,
-  deriveProtectionPosture as aw,
-  Tag as ax,
-  approvalGateCooldownLabel as ay,
-  fetchLocalCliApi as az,
+  sortEvidence as a$,
+  HiMiniEye as a0,
+  HiMiniXCircle as a1,
+  HiMiniClipboardDocumentCheck as a2,
+  HiMiniClipboard as a3,
+  PROTECTION_POSTURE_COPY as a4,
+  POSTURE_OUTCOME_COLUMNS as a5,
+  getDefaultExportFromCjs as a6,
+  React as a7,
+  HiMiniKey as a8,
+  HiMiniLockClosed as a9,
+  fetchLocalCliApi as aA,
+  fetchExtensionControlApi as aB,
+  useResolvedApprovalGate as aC,
+  HiMiniArrowPath as aD,
+  HiMiniInformationCircle as aE,
+  isApprovalProofSubmitDisabled as aF,
+  ApprovalProofFieldInputs as aG,
+  buildApprovalProofCredentials as aH,
+  GenIcon as aI,
+  HiMiniGlobeAlt as aJ,
+  HiMiniCube as aK,
+  HiMiniServerStack as aL,
+  HiMiniFolder as aM,
+  FaWindows as aN,
+  FaAws as aO,
+  approvalProofRecentlySatisfied as aP,
+  HiMiniArrowLeft as aQ,
+  HiMiniPlus as aR,
+  HiMiniNoSymbol as aS,
+  HiMiniArrowTopRightOnSquare as aT,
+  guardAwareHref as aU,
+  fetchApprovalPage as aV,
+  fetchPolicy as aW,
+  HiMiniHome as aX,
+  guardActionPresentation as aY,
+  DEFAULT_FILTER_STATE as aZ,
+  filterEvidence as a_,
+  HiMiniBellAlert as aa,
+  HiMiniAdjustmentsHorizontal as ab,
+  HiMiniCircleStack as ac,
+  TabBar as ad,
+  resolveProtectionLevelCopy as ae,
+  fetchSettings as af,
+  fetchRuntimeSnapshot as ag,
+  clearPolicy as ah,
+  clearReviewQueue as ai,
+  revokeApprovalGateCooldown as aj,
+  disableApprovalGateTotp as ak,
+  importSettings as al,
+  resetSettings as am,
+  enrollApprovalGateTotp as an,
+  verifyApprovalGateTotp as ao,
+  clearEvidence as ap,
+  exportDiagnostics as aq,
+  repairApprovalCenter as ar,
+  exportSettings as as,
+  setupDesktopNotifications as at,
+  WorkspacePageHeader as au,
+  HiMiniMagnifyingGlass as av,
+  isProtectionPosture as aw,
+  deriveProtectionPosture as ax,
+  Tag as ay,
+  approvalGateCooldownLabel as az,
   HiMiniCommandLine as b,
-  resolveMcpPolicyRequest as b$,
-  CommandActivityWorkspace as b0,
-  EvidenceFilterBar as b1,
-  EvidenceInsightStrip as b2,
-  EvidenceActionList as b3,
-  EvidenceActionDetail as b4,
-  policyIdentityKey as b5,
-  HiMiniChartBar as b6,
+  fetchMcpPolicyRequest as b$,
+  computeMetrics as b0,
+  CommandActivityWorkspace as b1,
+  EvidenceFilterBar as b2,
+  EvidenceInsightStrip as b3,
+  EvidenceActionList as b4,
+  EvidenceActionDetail as b5,
+  policyIdentityKey as b6,
   runHarnessAction as b7,
   GuardHarnessActionError as b8,
   HiMiniRocketLaunch as b9,
-  activatePackageFirewallRuntime as bA,
-  EntitlementNotice as bB,
-  fetchReceipts as bC,
-  lazyWorkspace as bD,
-  __vitePreload as bE,
-  scopeLabel as bF,
-  HiMiniDocumentText as bG,
-  HiMiniCloudArrowUp as bH,
-  HiMiniCheck as bI,
-  HiMiniCodeBracket as bJ,
-  HiMiniClipboardDocument as bK,
-  HiMiniUsers as bL,
-  HiMiniIdentification as bM,
-  policyActionLabel as bN,
-  createCloudExceptionRequest as bO,
-  HiMiniArrowRight as bP,
-  HiMiniPuzzlePiece as bQ,
-  fetchCloudExceptions as bR,
-  fetchCloudExceptionRequests as bS,
-  downloadBlob as bT,
-  PolicyStatField as bU,
-  PaginationControls as bV,
-  HiMiniArrowDownTray as bW,
-  HiMiniQueueList as bX,
-  Surface as bY,
-  HiMiniCheckBadge as bZ,
-  fetchMcpPolicyRequest as b_,
+  parseInterceptProofSnapshot as bA,
+  activatePackageFirewallRuntime as bB,
+  EntitlementNotice as bC,
+  fetchReceipts as bD,
+  lazyWorkspace as bE,
+  __vitePreload as bF,
+  scopeLabel as bG,
+  HiMiniDocumentText as bH,
+  HiMiniCloudArrowUp as bI,
+  HiMiniCheck as bJ,
+  HiMiniCodeBracket as bK,
+  HiMiniClipboardDocument as bL,
+  HiMiniUsers as bM,
+  HiMiniIdentification as bN,
+  policyActionLabel as bO,
+  createCloudExceptionRequest as bP,
+  HiMiniArrowRight as bQ,
+  HiMiniPuzzlePiece as bR,
+  fetchCloudExceptions as bS,
+  fetchCloudExceptionRequests as bT,
+  downloadBlob as bU,
+  PolicyStatField as bV,
+  PaginationControls as bW,
+  HiMiniArrowDownTray as bX,
+  HiMiniQueueList as bY,
+  Surface as bZ,
+  HiMiniCheckBadge as b_,
   HiMiniTrash as ba,
   clearLabelForScope as bb,
-  formatHarnessCommand as bc,
-  isSupplyChainAuditIncomplete as bd,
-  isSupplyChainAuditEvidence as be,
-  readString$1 as bf,
-  isRecord$2 as bg,
-  HiMiniClock as bh,
-  IconActionButton as bi,
-  HiMiniBeaker as bj,
-  ActivationSummary as bk,
-  ActionResultPanel as bl,
-  HiMiniBugAnt as bm,
-  GuardModalLayer as bn,
-  ConnectFlowCard as bo,
-  ApprovalProofInline as bp,
-  HiMiniCloudArrowDown as bq,
-  fetchPackageFirewallStatus as br,
-  runPackageAudit as bs,
-  resolveSupplyChainAuditFailure as bt,
-  runPackageSync as bu,
-  startPackageFirewallConnect as bv,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bw,
-  repairSupplyChainProtection as bx,
-  runPackageFirewallAction as by,
-  parseInterceptProofSnapshot as bz,
+  HiMiniChartBar as bc,
+  formatHarnessCommand as bd,
+  isSupplyChainAuditIncomplete as be,
+  isSupplyChainAuditEvidence as bf,
+  readString$1 as bg,
+  isRecord$2 as bh,
+  HiMiniClock as bi,
+  IconActionButton as bj,
+  HiMiniBeaker as bk,
+  ActivationSummary as bl,
+  ActionResultPanel as bm,
+  HiMiniBugAnt as bn,
+  GuardModalLayer as bo,
+  ConnectFlowCard as bp,
+  ApprovalProofInline as bq,
+  HiMiniCloudArrowDown as br,
+  fetchPackageFirewallStatus as bs,
+  runPackageAudit as bt,
+  resolveSupplyChainAuditFailure as bu,
+  runPackageSync as bv,
+  startPackageFirewallConnect as bw,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bx,
+  repairSupplyChainProtection as by,
+  runPackageFirewallAction as bz,
   HiMiniChevronRight as c,
-  HiMiniDocumentPlus as c0,
-  HiMiniDocumentMagnifyingGlass as c1,
-  fetchSupplyChainBundle as c2,
-  isSupplyChainScannerEvidence as c3,
-  isBlockedGuardAction as c4,
-  HiMiniShieldExclamation as c5,
-  HiMiniComputerDesktop as c6,
-  HiMiniChevronLeft as c7,
-  HiMiniFunnel as c8,
-  HiMiniArrowDown as c9,
-  HiMiniArrowUp as ca,
-  runAuditRemediation as cb,
-  HiMiniSignal as cc,
+  resolveMcpPolicyRequest as c0,
+  HiMiniDocumentPlus as c1,
+  HiMiniDocumentMagnifyingGlass as c2,
+  fetchSupplyChainBundle as c3,
+  isSupplyChainScannerEvidence as c4,
+  isBlockedGuardAction as c5,
+  HiMiniShieldExclamation as c6,
+  HiMiniComputerDesktop as c7,
+  HiMiniChevronLeft as c8,
+  HiMiniFunnel as c9,
+  HiMiniArrowDown as ca,
+  HiMiniArrowUp as cb,
+  runAuditRemediation as cc,
+  HiMiniSignal as cd,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

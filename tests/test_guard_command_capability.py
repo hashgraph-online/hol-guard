@@ -10,6 +10,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_CAPABILITY_STATE_KEY,
@@ -31,13 +32,14 @@ from codex_plugin_scanner.guard.runtime.command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
 )
+from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _connected_store(tmp_path: Path) -> GuardStore:
     store = GuardStore(tmp_path / "guard-home")
     dpop = generate_dpop_key_pair()
-    installation_id = store.get_device_metadata()["installation_id"]
+    machine_id = "machine-device-command-capability"
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -45,8 +47,9 @@ def _connected_store(tmp_path: Path) -> GuardStore:
         dpop_private_key_pem=dpop.private_key_pem,
         dpop_public_jwk=dpop.public_jwk,
         dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
+        device_id=dpop.public_jwk_thumbprint,
         grant_id="grant-1",
-        machine_id=installation_id,
+        machine_id=machine_id,
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
@@ -75,7 +78,7 @@ def _job(
         "leaseId": f"lease-{job_id}",
         "operation": operation,
         "schemaVersion": COMMAND_OPERATION_SCHEMA_VERSIONS[operation],
-        "deviceId": credentials["machine_id"],
+        "deviceId": credentials["device_id"],
         "workspaceId": credentials["workspace_id"],
         "nonce": f"nonce-{job_id}",
         "expiresAt": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
@@ -90,6 +93,33 @@ def _context(tmp_path: Path) -> HarnessContext:
         workspace_dir=tmp_path,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def test_capability_uses_distinct_machine_and_local_installation_bindings(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    assert credentials["machine_id"] != store.get_device_metadata()["installation_id"]
+
+    status = _issue(store, "guard.packageShims.status")
+
+    assert status["enabled"] is True
+
+
+def test_capability_rejects_local_installation_binding_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    local_metadata = store.get_device_metadata()
+    monkeypatch.setattr(
+        store,
+        "get_device_metadata",
+        lambda: {**local_metadata, "installation_id": "unexpected-local-installation"},
+    )
+
+    with pytest.raises(CommandCapabilityError, match="cloud_device_binding_mismatch"):
+        _issue(store, "guard.packageShims.status")
 
 
 def test_command_channel_defaults_off_and_environment_cannot_enable_it(tmp_path: Path) -> None:
@@ -154,53 +184,78 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
         | set(STATE_CHANGING_COMMAND_OPERATIONS)
     )
 
-    assert classified == set(SUPPORTED_COMMAND_OPERATIONS)
+    assert classified == set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}
+    assert EXACT_CLOUD_REVIEW_OPERATION not in classified
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
 
 
-def test_existing_review_capability_implies_mfa_gated_sync_repair(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    status = _issue(
-        store,
+def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_path: Path) -> None:
+    retired_operations = (
         "guard.approval.resolve",
         "guard.localRequests.snapshot",
+        "guard.liveRequests.reassignQuarantined",
+    )
+    classified = (
+        set(READ_ONLY_COMMAND_OPERATIONS)
+        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
+        | set(STATE_CHANGING_COMMAND_OPERATIONS)
+    )
+    assert not (set(retired_operations) & set(SUPPORTED_COMMAND_OPERATIONS))
+    assert not (set(retired_operations) & classified)
+
+    store = _connected_store(tmp_path)
+    _issue(store, "guard.packageShims.status")
+    for index, operation in enumerate(retired_operations):
+        job = _job(store, job_id=f"retired-job-{index}")
+        job["operation"] = operation
+        with pytest.raises(CommandCapabilityError, match="command_operation_unsupported"):
+            authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+
+def test_signed_pre_cutover_capability_preserves_supported_operations(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    _issue(store, "guard.packageShims.status")
+    stored = store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
+    assert isinstance(stored, dict)
+    unsigned = {str(key): value for key, value in stored.items() if key not in {"keyId", "signature"}}
+    unsigned["operations"] = ["guard.packageShims.status", "guard.approval.resolve"]
+    migrated_capability = command_capability_module._signed_payload(store, unsigned, create_key=False)
+    store.set_sync_payload(
+        COMMAND_CAPABILITY_STATE_KEY,
+        migrated_capability,
+        datetime.now(timezone.utc).isoformat(),
     )
 
-    operations = status["operations"]
-    assert isinstance(operations, list)
-    assert "guard.liveRequests.reassignQuarantined" in operations
+    status = command_capability_status(store)
+
+    assert status["enabled"] is True
+    assert status["capability_valid"] is True
+    assert status["operations"] == ["guard.packageShims.status"]
+    assert command_queue.command_queue_enabled(store, environ={}) is True
 
 
-def test_snapshot_only_capability_does_not_imply_sync_repair(tmp_path: Path) -> None:
+def test_policy_memory_capability_requires_its_own_local_confirmation(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
-    status = _issue(store, "guard.localRequests.snapshot")
+    _issue(store, "guard.review.syncPolicyMemory")
 
-    operations = status["operations"]
-    assert isinstance(operations, list)
-    assert "guard.liveRequests.reassignQuarantined" not in operations
-
-
-def test_mfa_gated_sync_repair_does_not_require_a_second_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    _issue(
-        store,
-        "guard.approval.resolve",
-        "guard.localRequests.snapshot",
-    )
     authorized = authorize_command_job(
         store,
-        _job(
-            store,
-            "guard.liveRequests.reassignQuarantined",
-            payload={
-                "source": "default",
-                "workspaceId": "workspace-1",
-            },
-        ),
+        _job(store, "guard.review.syncPolicyMemory", payload={"decisionMemoryBundle": {}}),
         schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
     )
 
-    assert authorized.requires_local_approval is False
+    assert authorized.requires_local_approval is True
+
+
+def test_policy_memory_capability_cannot_be_combined_with_routine_operations(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+
+    with pytest.raises(CommandCapabilityError, match="policy_memory_capability_must_be_isolated"):
+        issue_command_capability(
+            store,
+            operations=("guard.packageShims.status", "guard.review.syncPolicyMemory"),
+            supported_operations=SUPPORTED_COMMAND_OPERATIONS,
+        )
 
 
 def test_capability_is_signed_exact_revocable_and_does_not_disable_sync(tmp_path: Path) -> None:

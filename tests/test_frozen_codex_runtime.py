@@ -145,7 +145,7 @@ def test_frozen_runtime_trust_rejects_bridge_command_tampering(
     tampered_fallback = list(bridge_config["fallback_command"])
     tampered_fallback.append("--policy-action=allow")
 
-    with pytest.raises(ValueError, match="fallback contract|bridge config"):
+    with pytest.raises(ValueError, match=r"fallback contract|bridge config"):
         codex_hook_runtime_trust.validate_codex_hook_launch(
             manifest_path=bridge_config["manifest_path"],
             state_path=bridge_config["state_path"],

@@ -1,16 +1,22 @@
 # Managed Controls rollback runbook
 
-This document separates real Local settings restore from the future Cloud Control Set rollback workflow.
+This document separates Local device-settings restore from Guard Cloud Control Set rollback.
 
 Definitions and authority are in [ADR 0011](adr/0011-extension-first-managed-controls.md) and the [Managed Controls glossary](managed-controls-glossary.md). Local settings history is documented in [Protection Center Local Tools](protection-center-local-tools.md).
 
-## Cloud rollback availability gate
+## Guard Cloud Control Set rollback
 
-The current release/3.0 Local repository does not provide or verify an executable Cloud Managed Controls rollback UI/API. Do not claim that selecting, signing, canarying, deploying, acknowledging, or auditing a rollback is available from this target. Do not infer it from the intended product lifecycle in the ADR or from historical/generic Cloud policy routes.
+Use the rollout controls in `/guard/controls` only when the target environment has the delivery and enforcement stages enabled. The operator must have `guard.controls.publish`, an authorized workspace role, and a valid management step-up challenge.
 
-Until the corresponding Guard Cloud PR lands, keep Managed Controls Cloud rollout disabled. If Local Guard rejects an invalid candidate, record rejection/last-known-good behavior under the [incident runbook](managed-controls-invalid-bundle-incident-runbook.md); that rejection is not an operator-executed rollback.
+1. Pause or emergency-stop expansion and record a bounded reason.
+2. Confirm the exact current candidate bundle hash and version shown by the rollout.
+3. Select rollback, supply the reason, and complete step-up authorization.
+4. Verify that the rollback creates a new monotonic signed publication bound to the same workspace and approved last-known-good policy; never replay the old envelope.
+5. Start with a canary cohort and require the configured acknowledgement threshold.
+6. Confirm the returned bundle identity, policy and authority revisions, catalog digest, effective projection digest, and applied status before expanding.
+7. If delivery, signature, compatibility, acknowledgement, or drift evidence fails, keep expansion stopped and follow the [invalid-bundle incident runbook](managed-controls-invalid-bundle-incident-runbook.md).
 
-After the Cloud implementation ships, replace this gate with tested instructions that prove:
+Rollback evidence must prove:
 
 1. a rollback creates a new monotonic Control Set identity rather than replaying an older bundle;
 2. workspace, signing, catalog, schema, capability, and review requirements remain enforced;

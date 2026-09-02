@@ -77,6 +77,7 @@ from ..codex_app_server import codex_resume_metadata_from_hook_payload
 from ..codex_resume import inspect_codex_resume_capabilities
 from ..config import (
     DEFAULT_SECURITY_LEVEL,
+    MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     VALID_RISK_ACTION_KEYS,
     VALID_SECURITY_LEVELS,
     GuardConfig,
@@ -370,6 +371,7 @@ GuardDaemonServer = _load_lazy_export("..daemon", "GuardDaemonServer")
 ensure_guard_daemon = _load_lazy_export("..daemon", "ensure_guard_daemon")
 load_guard_surface_daemon_client = _load_lazy_export("..daemon", "load_guard_surface_daemon_client")
 repair_approval_center_locator = _load_lazy_export("..daemon", "repair_approval_center_locator")
+repair_guard_daemon_runtime = _load_lazy_export("..daemon", "repair_guard_daemon_runtime")
 CodexMcpGuardProxy = _load_lazy_export("..proxy", "CodexMcpGuardProxy")
 CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
 CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")

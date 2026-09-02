@@ -16,7 +16,7 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
@@ -37,9 +37,18 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
     ProviderPlanError,
     validate_provider_plan_inputs,
 )
+from codex_plugin_scanner.guard.runtime.oci_mount_security import (
+    is_oci_host_path_mount,
+    match_forbidden_oci_path,
+    normalize_oci_bind_source,
+    require_oci_bundle_relative_path,
+    resolve_oci_bind_source,
+    resolve_oci_bundle_path,
+    resolve_oci_bundle_root,
+)
 
 _PROVIDE_KIND: Final = "oci-isolation"
-_SIGNING_IDENTITY: Final = "guard-oci-unsigned"
+_SIGNING_IDENTITY: Final = "guard-oci-builtin"
 _TRUST_DOMAIN: Final = "guard.oci"
 
 # OCI features mapped to atomic guarantees.
@@ -202,6 +211,8 @@ class OCIMountEvidence:
     secret_mounts: tuple[str, ...] = ()
     output_mounts: tuple[str, ...] = ()
     forbidden_bind_sources: tuple[str, ...] = ()
+    unverified_bind_sources: tuple[str, ...] = ()
+    resolved_bind_sources: tuple[str, ...] = ()
     world_writable_binds: tuple[str, ...] = ()
 
 
@@ -232,6 +243,8 @@ class OCIRootFSEvidence:
     path: str = ""
     readonly: bool = False
     absolute: bool = False
+    containment_verified: bool = False
+    resolved_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -293,7 +306,11 @@ def _validate_bundle(evidence: OCIBundleEvidence) -> tuple[str, ...]:
 
     if evidence.mounts:
         violations.extend(evidence.mounts.forbidden_bind_sources)
+        violations.extend(f"unverified bind source: {source}" for source in evidence.mounts.unverified_bind_sources)
         violations.extend(evidence.mounts.world_writable_binds)
+
+    if not evidence.rootfs.containment_verified:
+        violations.append("rootfs containment is unverified")
 
     if evidence.capabilities:
         violations.extend(evidence.capabilities.dangerous_capabilities)
@@ -458,8 +475,10 @@ def _compute_bundle_digest(spec: dict[str, object]) -> str:
             filtered[key] = {nested_key: _frame_scalar(value) for nested_key, value in mapping.items()}
         elif isinstance(raw, (int, float, bool)):
             filtered[key] = raw
+        elif raw is None:
+            filtered[key] = None
         else:
-            filtered[key] = repr(raw)
+            raise ValueError(f"unsupported OCI spec field type: {type(raw).__name__}")
     return framed_digest("guard.oci-bundle-spec.v1", filtered)
 
 
@@ -473,7 +492,7 @@ def _frame_scalar(value: object) -> object:
     mapping = _object_map(value)
     if mapping is not None:
         return {key: _frame_scalar(mapping[key]) for key in sorted(mapping)}
-    return f"<unsupported:{type(value).__name__}>"
+    raise ValueError(f"unsupported OCI spec field type: {type(value).__name__}")
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +505,7 @@ def _build_evidence(
     rootfs: dict[str, object] | None = None,
     process: dict[str, object] | None = None,
     linux: dict[str, object] | None = None,
+    bundle_root: str | Path | None = None,
 ) -> OCIBundleEvidence:
     """Build evidence from an OCI bundle spec dict without executing code.
 
@@ -496,12 +516,12 @@ def _build_evidence(
     version = raw_version if isinstance(raw_version, str) and raw_version else "0.0.0"
     bundle_valid = version != "0.0.0"
     rootfs_spec = _object_map(rootfs if rootfs is not None else bundle.get("root")) or {}
-    rootfs_ev = _read_rootfs(rootfs_spec)
+    rootfs_ev = _read_rootfs(rootfs_spec, bundle_root=bundle_root)
     process_spec = _object_map(process if process is not None else bundle.get("process")) or {}
     user_ev = _read_process(process_spec, rootfs_ev)
     raw_linux = linux if linux is not None else bundle.get("linux")
     linux_ev = _read_linux(_object_map(raw_linux) or {})
-    mounts_ev = _read_mounts(_object_list(bundle.get("mounts")) or [])
+    mounts_ev = _read_mounts(_object_list(bundle.get("mounts")) or [], bundle_root=bundle_root)
     network_ev = _read_network(linux_ev)
     raw_binary_digest = bundle.get("_binary_digest")
 
@@ -522,7 +542,7 @@ def _build_evidence(
     )
 
 
-def _read_rootfs(spec: dict[str, object]) -> OCIRootFSEvidence:
+def _read_rootfs(spec: dict[str, object], *, bundle_root: str | Path | None = None) -> OCIRootFSEvidence:
     """Extract rootfs evidence from spec."""
     path = spec.get("path", "")
     readonly = spec.get("readonly", False)
@@ -531,10 +551,24 @@ def _read_rootfs(spec: dict[str, object]) -> OCIRootFSEvidence:
     if not isinstance(readonly, bool):
         readonly = False
     abs_path = PurePosixPath(path).is_absolute()
+    containment_verified = False
+    resolved_path = ""
+    try:
+        resolved_path = resolve_oci_bundle_path(
+            path,
+            bundle_root=bundle_root,
+            label="OCI rootfs path",
+            require_directory=True,
+        )
+        containment_verified = True
+    except ValueError:
+        pass
     return OCIRootFSEvidence(
         path=path,
         readonly=readonly,
         absolute=abs_path,
+        containment_verified=containment_verified,
+        resolved_path=resolved_path,
     )
 
 
@@ -689,12 +723,18 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
     )
 
 
-def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
+def _read_mounts(
+    spec_list: list[object],
+    *,
+    bundle_root: str | Path | None = None,
+) -> OCIMountEvidence:
     """Extract mount evidence from OCI mounts list."""
     host_binds: list[str] = []
     secret_mounts: list[str] = []
     output_mounts: list[str] = []
     forbidden_sources: list[str] = []
+    unverified_sources: list[str] = []
+    resolved_sources: list[str] = []
     world_writable: list[str] = []
 
     readonly_rootfs = False
@@ -712,20 +752,33 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
         typ = raw_type if isinstance(raw_type, str) else ""
         raw_options = mount.get("options")
         options = (raw_options,) if isinstance(raw_options, str) else _string_tuple(raw_options)
+        is_bind = is_oci_host_path_mount(typ, options, src)
+
+        if is_bind and not src:
+            forbidden_sources.append("<empty-bind-source>")
+            continue
 
         # Rootfs mount (no source, destination=/)
-        if (typ == "bind" or src == "") and dst == "/":
+        if not is_bind and src == "" and dst == "/":
             if "readonly" in options or "ro" in options:
                 readonly_rootfs = True
             continue
 
         # Host bind mount detection
-        if typ == "bind" and src and (src.startswith("/") or src.startswith("./")):
-            is_forbidden = False
-            for forbidden in _FORBIDDEN_BIND_SOURCES:
-                if src == forbidden or src.startswith(forbidden + "/"):
-                    is_forbidden = True
-                    break
+        if is_bind and src:
+            normalized_src, escapes_bundle = normalize_oci_bind_source(src)
+            resolved_src = normalized_src
+            source_verified = False
+            try:
+                resolved_src = resolve_oci_bind_source(src, bundle_root=bundle_root)
+                source_verified = True
+                resolved_sources.append(resolved_src)
+            except ValueError:
+                pass
+            is_forbidden = escapes_bundle or any(
+                match_forbidden_oci_path(candidate, _FORBIDDEN_BIND_SOURCES) is not None
+                for candidate in (normalized_src, resolved_src)
+            )
             if not is_forbidden:
                 # Check if it's a world-writable bind
                 for opt in options:
@@ -734,6 +787,8 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
                         break
             else:
                 forbidden_sources.append(src)
+            if not source_verified:
+                unverified_sources.append(src)
 
             # Classify as secret or output mount
             secret_keywords = frozenset({".env", ".ssh", "secret", "credential", "private", "token"})
@@ -751,6 +806,8 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
         secret_mounts=tuple(secret_mounts),
         output_mounts=tuple(output_mounts),
         forbidden_bind_sources=tuple(forbidden_sources),
+        unverified_bind_sources=tuple(unverified_sources),
+        resolved_bind_sources=tuple(resolved_sources),
         world_writable_binds=tuple(world_writable),
     )
 
@@ -803,7 +860,7 @@ class OCIIsolationProvider:
         return ProviderIdentity(
             provider_kind=_PROVIDE_KIND,
             implementation_version=self._version,
-            binary_or_image_digest="0" * 64,
+            binary_or_image_digest=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             signing_identity=_SIGNING_IDENTITY,
             trust_domain=_TRUST_DOMAIN,
         )
@@ -848,8 +905,9 @@ class OCIIsolationProvider:
         rootfs_spec: dict[str, object] | None = None,
         process_spec: dict[str, object] | None = None,
         linux_spec: dict[str, object] | None = None,
+        bundle_root: str | Path | None = None,
     ) -> ExecutionLease:
-        """Produce a pure, side-effect-free fenced lease.
+        """Produce a side-effect-free fenced lease.
 
             context: Decision context from the effect decision engine.
             minimum_boundary: Desired minimum isolation boundary.
@@ -859,6 +917,8 @@ class OCIIsolationProvider:
             rootfs_spec: Optional rootfs override dict.
             process_spec: Optional process override dict.
             linux_spec: Optional linux spec override dict.
+            bundle_root: Authoritative OCI bundle directory used to prove
+                rootfs and relative bind-source containment.
 
         Returns:
             A bounded :class:`ExecutionLease` with a deterministic digest.
@@ -869,6 +929,10 @@ class OCIIsolationProvider:
         """
         if not isinstance(context, DecisionContext):
             raise ProviderPlanError("context must be a DecisionContext")
+        try:
+            bundle_root = resolve_oci_bundle_root(bundle_root)
+        except ValueError as error:
+            raise ProviderPlanError(str(error)) from error
         validate_provider_plan_inputs(input_paths, declared_outputs)
 
         # Boundary enforcement
@@ -877,11 +941,26 @@ class OCIIsolationProvider:
 
         # Build evidence from bundle spec
         bundle = bundle_spec or {}
+        hooks = bundle.get("hooks")
+        if hooks not in (None, {}):
+            raise ProviderPlanError("OCI lifecycle hooks are unsupported")
+        selected_rootfs = rootfs_spec if rootfs_spec is not None else _object_map(bundle.get("root")) or {}
+        if selected_rootfs:
+            rootfs_path = selected_rootfs.get("path")
+            try:
+                require_oci_bundle_relative_path(
+                    rootfs_path if isinstance(rootfs_path, str) else "",
+                    label="OCI rootfs path",
+                )
+            except ValueError as error:
+                if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED:
+                    raise ProviderPlanError(str(error)) from error
         evidence = _build_evidence(
             bundle,
             rootfs=rootfs_spec,
             process=process_spec,
             linux=linux_spec,
+            bundle_root=bundle_root,
         )
 
         # Validate evidence — produce violation list
@@ -914,14 +993,21 @@ class OCIIsolationProvider:
                 raise ProviderPlanError("required boundary is unavailable on this host")
 
         # Compute deterministic plan digest
-        spec_fields: dict[str, object] = {
-            "context_digest": context.context_digest,
-            "minimum_boundary": minimum_boundary.value,
-            "bundle_digest": _compute_bundle_digest(bundle),
-            "bundle_version": evidence.bundle_version,
-            "violations_count": len(violations),
-        }
-        plan_digest = framed_digest("guard.oci-plan.v1", spec_fields)
+        try:
+            canonical_bundle_root = Path(bundle_root).resolve(strict=True).as_posix() if bundle_root is not None else ""
+            spec_fields: dict[str, object] = {
+                "context_digest": context.context_digest,
+                "minimum_boundary": minimum_boundary.value,
+                "bundle_digest": _compute_bundle_digest(bundle),
+                "bundle_version": evidence.bundle_version,
+                "bundle_root": canonical_bundle_root,
+                "rootfs_resolved_path": evidence.rootfs.resolved_path,
+                "resolved_bind_sources": evidence.mounts.resolved_bind_sources,
+                "violations_count": len(violations),
+            }
+            plan_digest = framed_digest("guard.oci-plan.v1", spec_fields)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise ProviderPlanError("malformed OCI bundle digest input") from error
 
         return ExecutionLease(
             plan_digest=plan_digest,
@@ -970,9 +1056,16 @@ def build_oci_evidence(
     rootfs: dict[str, object] | None = None,
     process: dict[str, object] | None = None,
     linux: dict[str, object] | None = None,
+    bundle_root: str | Path | None = None,
 ) -> OCIBundleEvidence:
     """Build OCI bundle evidence from spec dicts."""
-    return _build_evidence(bundle, rootfs=rootfs, process=process, linux=linux)
+    return _build_evidence(
+        bundle,
+        rootfs=rootfs,
+        process=process,
+        linux=linux,
+        bundle_root=bundle_root,
+    )
 
 
 __all__ = [

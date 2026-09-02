@@ -444,9 +444,7 @@ class TestSourceRefTargetMismatch:
 
 
 class TestPreToolUseFallsBackToLegacy:
-    """Regression: PreToolUse must not be handled by the fast worker.
-    It must raise HookWorkerUnsupported so the server falls through to
-    the legacy CLI path, preserving policy/permission checks."""
+    """Non-command PreToolUse still raises HookWorkerUnsupported for the CLI path."""
 
     def test_pre_tool_use_raises_unsupported(self, workspace: Path, home_dir: Path, guard_home: Path) -> None:
         from codex_plugin_scanner.guard.daemon.hook_worker import HookWorkerUnsupported

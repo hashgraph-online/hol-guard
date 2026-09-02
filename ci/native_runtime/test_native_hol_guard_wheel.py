@@ -61,11 +61,11 @@ def _write_source_wheel(
             "\n"
         ).encode(),
         f"{dist_info}/WHEEL": (
-            "Wheel-Version: 1.0\n"
-            "Generator: test\n"
-            "Root-Is-Purelib: true\n"
-            "Tag: py3-none-any\n"
-        ).encode(),
+            b"Wheel-Version: 1.0\n"
+            b"Generator: test\n"
+            b"Root-Is-Purelib: true\n"
+            b"Tag: py3-none-any\n"
+        ),
         f"{dist_info}/RECORD": b"",
     }
     if unsafe_name is not None:

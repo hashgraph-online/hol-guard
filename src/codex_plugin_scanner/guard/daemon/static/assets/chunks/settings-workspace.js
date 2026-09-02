@@ -1,4 +1,4 @@
-import { a3 as PROTECTION_POSTURE_COPY, a4 as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, a5 as getDefaultExportFromCjs, a6 as React, K as useFocusTrap, a7 as HiMiniKey, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, a8 as HiMiniLockClosed, a9 as HiMiniBellAlert, aa as HiMiniAdjustmentsHorizontal, ab as HiMiniCircleStack, ac as TabBar, c as HiMiniChevronRight, ad as resolveProtectionLevelCopy, ae as fetchSettings, af as fetchRuntimeSnapshot, e as updateSettings, ag as clearPolicy, ah as clearReviewQueue, ai as revokeApprovalGateCooldown, aj as disableApprovalGateTotp, ak as importSettings, al as resetSettings, am as enrollApprovalGateTotp, an as verifyApprovalGateTotp, ao as clearEvidence, ap as exportDiagnostics, aq as repairApprovalCenter, ar as exportSettings, as as setupDesktopNotifications, m as EmptyState, at as WorkspacePageHeader, W as WatchProtectionBanner, au as HiMiniMagnifyingGlass, C as HiMiniChevronDown, o as HiMiniCheckCircle, M as HiMiniExclamationTriangle, av as isProtectionPosture, aw as deriveProtectionPosture, ax as Tag, ay as approvalGateCooldownLabel, z as HiMiniXMark } from "../guard-dashboard.js";
+import { a4 as PROTECTION_POSTURE_COPY, a5 as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, a6 as getDefaultExportFromCjs, a7 as React, K as useFocusTrap, a8 as HiMiniKey, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, a9 as HiMiniLockClosed, aa as HiMiniBellAlert, ab as HiMiniAdjustmentsHorizontal, ac as HiMiniCircleStack, ad as TabBar, c as HiMiniChevronRight, ae as resolveProtectionLevelCopy, af as fetchSettings, ag as fetchRuntimeSnapshot, e as updateSettings, ah as clearPolicy, ai as clearReviewQueue, aj as revokeApprovalGateCooldown, ak as disableApprovalGateTotp, al as importSettings, am as resetSettings, an as enrollApprovalGateTotp, ao as verifyApprovalGateTotp, ap as clearEvidence, aq as exportDiagnostics, ar as repairApprovalCenter, as as exportSettings, at as setupDesktopNotifications, m as EmptyState, au as WorkspacePageHeader, W as WatchProtectionBanner, av as HiMiniMagnifyingGlass, C as HiMiniChevronDown, o as HiMiniCheckCircle, M as HiMiniExclamationTriangle, aw as isProtectionPosture, ax as deriveProtectionPosture, ay as Tag, az as approvalGateCooldownLabel, z as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
@@ -2475,6 +2475,134 @@ function SettingsSelectRow({
     )
   ] });
 }
+const PRESENTATION_SCHEMA_VERSION = 1;
+const LEGACY = {
+  simple: "everyday",
+  advanced: "technical",
+  developer: "technical"
+};
+function resolvePresentationMode(input) {
+  const revision = typeof input.revision === "number" && Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0;
+  const writable = input.writable !== false;
+  const resolved = (value, source, explicit, diagnostic2 = null) => ({
+    value,
+    source,
+    explicit,
+    writable,
+    schemaVersion: PRESENTATION_SCHEMA_VERSION,
+    revision,
+    diagnostic: diagnostic2
+  });
+  if (input.readError) return resolved("everyday", "read-error", false, "presentation_settings_unavailable");
+  if (input.sessionPreview === "everyday" || input.sessionPreview === "technical") {
+    return resolved(input.sessionPreview, "session-preview", true);
+  }
+  const unsupportedSchema = input.schemaVersion !== void 0 && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION;
+  const persistedMode = !unsupportedSchema && (input.value === "everyday" || input.value === "technical") ? input.value : null;
+  if (persistedMode !== null && input.explicit === true) {
+    return resolved(persistedMode, "local-explicit", true);
+  }
+  if (!unsupportedSchema && typeof input.value === "string" && LEGACY[input.value]) {
+    return resolved(LEGACY[input.value], "migrated", true, `migrated_legacy_${input.value}_presentation_mode`);
+  }
+  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
+    return resolved(input.cloudProfile, "cloud-profile", false);
+  }
+  if (persistedMode !== null) {
+    return resolved(persistedMode, "default", false);
+  }
+  let diagnostic = null;
+  if (unsupportedSchema) {
+    diagnostic = "unsupported_presentation_schema_fell_back_to_everyday";
+  } else if (input.value !== void 0 && input.value !== null && input.value !== "") {
+    diagnostic = "unknown_presentation_mode_fell_back_to_everyday";
+  }
+  return resolved("everyday", "default", false, diagnostic);
+}
+const presentationModeOptions = [
+  { value: "everyday", label: "Everyday Mode - clear summaries" },
+  { value: "technical", label: "Technical Mode - show more detail" }
+];
+function resolveSettingsPresentation(settings) {
+  const resolved = resolvePresentationMode({
+    value: settings.presentation_mode,
+    explicit: settings.presentation_mode_explicit,
+    schemaVersion: settings.presentation_schema_version,
+    revision: settings.presentation_revision,
+    writable: settings.presentation?.writable ?? true
+  });
+  const authoritative = settings.presentation;
+  if (isAuthoritativePresentation(authoritative, resolved)) {
+    return {
+      ...resolved,
+      source: authoritative.source,
+      writable: authoritative.writable,
+      diagnostic: authoritative.diagnostic
+    };
+  }
+  return resolved;
+}
+function isAuthoritativePresentation(presentation, resolved) {
+  return presentation !== void 0 && presentation.value === resolved.value && presentation.explicit === resolved.explicit && presentation.schema_version === resolved.schemaVersion && presentation.revision === resolved.revision;
+}
+function buildSettingsUpdatePayload(draft, saved) {
+  const previous = saved ?? draft;
+  const presentationChanged = draft.presentation_mode !== previous.presentation_mode || draft.presentation_mode_explicit !== previous.presentation_mode_explicit;
+  const payload = { ...draft };
+  delete payload.presentation;
+  delete payload.presentation_diagnostic;
+  delete payload.presentation_mode;
+  delete payload.presentation_mode_explicit;
+  delete payload.presentation_schema_version;
+  delete payload.presentation_revision;
+  if (presentationChanged) {
+    payload.presentation_mode = draft.presentation_mode;
+    payload.presentation_mode_explicit = true;
+    payload.presentation_schema_version = PRESENTATION_SCHEMA_VERSION;
+    payload.presentation_revision = previous.presentation_revision;
+  }
+  return payload;
+}
+function normalizePresentationSettings(settings) {
+  const presentation = resolveSettingsPresentation(settings);
+  return {
+    ...settings,
+    presentation_mode: presentation.value,
+    presentation_mode_explicit: presentation.explicit,
+    presentation_schema_version: presentation.schemaVersion,
+    presentation_revision: presentation.revision,
+    presentation: {
+      value: presentation.value,
+      source: presentation.source,
+      explicit: presentation.explicit,
+      writable: presentation.writable,
+      schema_version: presentation.schemaVersion,
+      revision: presentation.revision,
+      diagnostic: presentation.diagnostic
+    },
+    presentation_diagnostic: presentation.diagnostic
+  };
+}
+function parsePresentationMode(value) {
+  if (value === "everyday" || value === "technical") {
+    return value;
+  }
+  return null;
+}
+function applyPresentationMode(settings, mode) {
+  return {
+    ...settings,
+    presentation_mode: mode,
+    presentation_mode_explicit: true,
+    presentation_schema_version: PRESENTATION_SCHEMA_VERSION
+  };
+}
+function presentationModeStatus(presentation) {
+  if (presentation.source === "migrated") {
+    return presentation.explicit ? "Chosen on this device. Your previous display preference was migrated." : "Recommended default. Your previous display preference was migrated.";
+  }
+  return presentation.explicit ? "Chosen on this device." : "Recommended default.";
+}
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function resolveInitialSettingsTab(search) {
   const section = new URLSearchParams(search).get("section");
@@ -2649,7 +2777,7 @@ function normalizeGuardSettings(settings) {
   }, {});
   const posture = isProtectionPosture(settings.protection_posture) ? settings.protection_posture : deriveProtectionPosture(settings.mode, securityLevel);
   return {
-    ...settings,
+    ...normalizePresentationSettings(settings),
     protection_posture: posture,
     watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
@@ -2857,6 +2985,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     },
     []
   );
+  const handlePresentationModeChange = reactExports.useCallback((event) => {
+    const nextMode = parsePresentationMode(event.target.value);
+    if (nextMode === null) return;
+    setDraft((value) => value === null ? value : applyPresentationMode(value, nextMode));
+    setSaveError(null);
+  }, []);
   const handleSecurityLevelChange = reactExports.useCallback((securityLevel) => {
     setDraft((value) => {
       if (value === null) return value;
@@ -3084,7 +3218,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
       };
       const settingsToSave = {
-        ...draft,
+        ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
         risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
         approval_gate: approvalGateUpdate
       };
@@ -3562,6 +3696,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   }
   const consequenceSummary = buildConsequenceSummary(draft);
   const selectedPosture = currentProtectionPosture(draft);
+  const resolvedPresentation = resolveSettingsPresentation(draft);
   const protectionCapabilities = state.kind === "ready" ? state.payload.protection_capabilities ?? [] : [];
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
@@ -3648,6 +3783,18 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Timing and features", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                SettingsSelectRow,
+                {
+                  label: "Presentation mode",
+                  description: "Choose whether Guard leads with clear everyday explanations or opens with technical detail. This never changes protection or enforcement.",
+                  value: resolvedPresentation.value,
+                  onChange: handlePresentationModeChange,
+                  options: presentationModeOptions,
+                  disabled: !resolvedPresentation.writable
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption -mt-2 text-slate-500", children: presentationModeStatus(resolvedPresentation) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "approval-wait", className: "guard-settings-body font-medium text-brand-dark", children: "How long to wait for your answer" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Seconds before Guard returns control to your AI app" }),
@@ -4419,6 +4566,7 @@ export {
   buildApprovalGateWriteProof,
   buildClearPolicyPayload,
   buildClearReviewQueuePayload,
+  buildSettingsUpdatePayload,
   buildTotpQrImageOptions,
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
@@ -4430,6 +4578,7 @@ export {
   resolveInitialSettingsTab,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription,
+  resolveSettingsPresentation,
   resolveTotpSetupModalDescription,
   resolveTotpSetupModalTitle,
   resolveTotpSetupStep

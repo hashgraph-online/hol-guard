@@ -85,6 +85,20 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
     assert _mapping(bun["with"])["bun-version"] == "1.3.14"
 
 
+def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
+    steps = _steps(_job("build-native-guard-wheels"))
+    checkout = _action_step(steps, "actions/checkout")
+    setup_python = _action_step(steps, "actions/setup-python")
+    install_uv = _named_step(steps, "Install pinned uv without cache")
+
+    checkout_ref = _text(_mapping(checkout["with"])["ref"])
+    assert "github.event.pull_request.head.sha" in checkout_ref
+    assert "github.sha" in checkout_ref
+    assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
+    assert steps.index(setup_python) < steps.index(install_uv) < steps.index(checkout)
+    assert "--no-cache-dir uv==0.9.26" in _text(install_uv["run"])
+
+
 def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard() -> None:
     steps = _steps(_job("pr-installed-canary"))
     names = [step.get("name") for step in steps]

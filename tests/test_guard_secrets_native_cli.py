@@ -112,6 +112,18 @@ def test_native_rules_bypass_guard_parser(monkeypatch: pytest.MonkeyPatch) -> No
     payload = json.loads(output)
     assert payload["schema"] == "guard-secret-rules.v1"
     assert any(rule["rule_id"] == "github-token" for rule in payload["rules"])
+    public_fields = {"description", "family", "rule_id", "severity", "strong_format", "validation"}
+    assert all(set(rule) == public_fields for rule in payload["rules"])
+    assert all("pattern" not in rule and "candidate" not in rule for rule in payload["rules"])
+
+
+def test_public_rules_catalog_matches_detector_metadata() -> None:
+    from codex_plugin_scanner.guard.secrets.public_rule_catalog import PUBLIC_RULES_JSON
+    from codex_plugin_scanner.guard.secrets.secret_detection import detector_version, secret_rule_catalog
+
+    payload = json.loads(PUBLIC_RULES_JSON)
+    assert payload["detector_version"] == detector_version()
+    assert payload["rules"] == secret_rule_catalog()
 
 
 def test_native_staged_scan_fails_on_findings_without_printing_secret(tmp_path: Path) -> None:
@@ -187,8 +199,28 @@ def test_precommit_install_refuses_custom_hooks_path(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _git(tmp_path, "config", "core.hooksPath", ".custom-hooks")
 
-    with pytest.raises(ValueError, match="custom core.hooksPath"):
+    with pytest.raises(ValueError, match=r"custom core.hooksPath"):
         install_precommit_hook(tmp_path)
+
+
+def test_precommit_install_rejects_symlinked_hooks_directory(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    hooks = tmp_path / ".git" / "hooks"
+    preserved_hooks = tmp_path / ".git" / "hooks-original"
+    hooks.rename(preserved_hooks)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        hooks.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable")
+
+    with pytest.raises(ValueError, match="real trusted directory"):
+        install_precommit_hook(tmp_path)
+    with pytest.raises(ValueError, match="real trusted directory"):
+        uninstall_precommit_hook(tmp_path)
+
+    assert list(outside.iterdir()) == []
 
 
 def test_precommit_uninstall_does_not_remove_foreign_hook(tmp_path: Path) -> None:
@@ -203,3 +235,14 @@ def test_precommit_uninstall_does_not_remove_foreign_hook(tmp_path: Path) -> Non
 
     assert result.status == "not_installed"
     assert hook.read_bytes() == original
+
+
+def test_precommit_uninstall_accepts_missing_hooks_directory(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    hooks = tmp_path / ".git" / "hooks"
+    hooks.rename(tmp_path / ".git" / "hooks-preserved")
+
+    result = uninstall_precommit_hook(tmp_path)
+
+    assert result.status == "not_installed"
+    assert result.chained_existing is False

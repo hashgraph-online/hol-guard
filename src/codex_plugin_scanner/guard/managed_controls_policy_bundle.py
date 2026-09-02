@@ -93,6 +93,60 @@ def _projection_digest(value: dict[str, object]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def signed_cloud_extension_projection_json(
+    parsed: ParsedManagedControlsPolicy,
+    *,
+    catalog_digest: str,
+) -> str:
+    """Return the canonical signed-Cloud projection for the observed wire catalog."""
+
+    signed_layers = ()
+    if parsed.signed_cloud_layer is not None:
+        layer = parsed.signed_cloud_layer
+        signed_layers = (
+            ExtensionControlLayer(
+                layer.schema_version,
+                layer.kind,
+                catalog_digest,
+                layer.global_lockdown,
+                layer.controls,
+            ),
+        )
+    projection = {
+        "schemaVersion": "guard.signed-cloud-extension-projection.v1",
+        "authorityMode": parsed.authority_mode,
+        "signedCloudLayersJson": layers_to_json(signed_layers),
+        "ruleTargets": [
+            {
+                "ruleId": target.rule_id,
+                "extensionIds": list(target.extension_ids),
+                "permissionIds": list(target.permission_ids),
+            }
+            for target in parsed.rule_targets
+        ],
+        "delegatedTargets": [
+            {
+                "targetKind": target.target.kind.value,
+                "targetId": target.target.target_id,
+                "enforcementOwner": target.enforcement_owner,
+            }
+            for target in parsed.delegated_targets
+        ],
+    }
+    return json.dumps(projection, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def signed_cloud_extension_projection_digest(
+    parsed: ParsedManagedControlsPolicy,
+    *,
+    catalog_digest: str,
+) -> str:
+    """Hash the canonical signed-Cloud projection for the observed wire catalog."""
+
+    canonical = signed_cloud_extension_projection_json(parsed, catalog_digest=catalog_digest)
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
 def validated_managed_controls_policy_bundle_v2_payload(
     policy_bundle: dict[str, object],
     *,

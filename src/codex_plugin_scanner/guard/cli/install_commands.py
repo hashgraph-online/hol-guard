@@ -398,8 +398,15 @@ def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
 
 def _grok_hook_command_is_guard(command: str) -> bool:
     lowered = command.lower()
+    tokens = lowered.replace("=", " ").replace(",", " ").split()
+    if not tokens:
+        return False
+    first = tokens[0].rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if first in {"echo", "true", "false", "printf", ":"}:
+        return False
     return "hook" in lowered and (
-        "hol-guard" in lowered
+        "hol-guard" in tokens
+        or any(token.endswith("/hol-guard") or token.endswith("\\hol-guard") for token in tokens)
         or "__guard-bounded-hook" in lowered
         or "bounded_cli_hook_bridge" in lowered
         or "codex_plugin_scanner.guard" in lowered
@@ -418,12 +425,40 @@ def _grok_prompt_hook_is_observe(prompt_hook: Path) -> bool:
     hooks = payload.get("hooks")
     if not isinstance(hooks, dict):
         return False
-    required = {"UserPromptSubmit", "SubagentStart", "SessionStart"}
-    return required.issubset({name for name in hooks if isinstance(name, str)})
+    required = ("UserPromptSubmit", "SubagentStart", "SessionStart")
+    return all(_grok_event_has_command_hook(hooks.get(event_name)) for event_name in required)
+
+
+def _grok_event_has_command_hook(entries: object) -> bool:
+    if not isinstance(entries, list) or not entries:
+        return False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("hooks")
+        if not isinstance(nested, list):
+            continue
+        for hook_entry in nested:
+            if not isinstance(hook_entry, dict) or hook_entry.get("type") != "command":
+                continue
+            command = hook_entry.get("command")
+            if isinstance(command, str) and _grok_hook_command_is_guard(command):
+                return True
+    return False
 
 
 def _grok_managed_config_is_active(managed_text: str) -> bool:
-    return "BEGIN HOL GUARD MANAGED GROK" in managed_text and "Read(**/.grok/auth/**)" in managed_text
+    from ..adapters.grok_config import GUARD_MANAGED_BEGIN, GUARD_MANAGED_END
+
+    start = managed_text.find(GUARD_MANAGED_BEGIN)
+    stop = managed_text.find(GUARD_MANAGED_END)
+    if start < 0 or stop <= start:
+        return False
+    for line in managed_text[start:stop].splitlines():
+        active = line.split("#", 1)[0].strip()
+        if "Read(**/.grok/auth/**)" in active:
+            return True
+    return False
 
 
 def grok_hooks_protection_ready(context: HarnessContext) -> bool:

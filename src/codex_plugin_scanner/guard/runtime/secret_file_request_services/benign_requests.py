@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 from pathlib import Path
 
@@ -16,12 +17,14 @@ from ..direct_vitest import direct_local_typescript_execution_context, direct_lo
 from ..extension_control_contract import ControlSurface, ExtensionControlLayer
 from ..extension_control_resolver import resolve_extension_controls
 from ..extension_control_runtime import current_extension_control_snapshot
+from ..false_positive_rules import KNOWN_AGENT_DOC_SUFFIXES, target_is_known_skill_doc_path
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..github_capability_contract import GitHubCommandAssessment
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
+from ..shell_execution_context import model_shell_execution_context
 from .agent_guidance_reads import is_benign_agent_guidance_read
 from .constants_core import _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
@@ -50,7 +53,7 @@ from .interpreter_observers import (
     _looks_like_safe_read_only_lookup_command,
 )
 from .request_artifacts import _candidate_command_texts
-from .request_models import ToolActionRequestMatch, _normalize_tool_name
+from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
 from .routine_directory_creation import is_safe_routine_directory_creation
 from .sensitive_read_pipeline import _runtime_read_root_texts
 from .shell_quote_tokens import shell_token_segments, shell_tokens_preserving_quote_context
@@ -232,6 +235,75 @@ def is_explicitly_benign_tool_action_request(
     return found_benign_candidate
 
 
+def _is_bounded_agent_guidance_read_chain(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path,
+) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    context = model_shell_execution_context(
+        command_text,
+        cwd=cwd,
+        workspace_root=cwd,
+        home_dir=home_dir,
+    )
+    if not context.complete or not 1 <= len(context.segments) <= 8:
+        return False
+    for segment in context.segments:
+        controls = (*segment.control_before, *segment.control_after)
+        if any(operator != "&&" for operator in controls) or segment.directory_operation is not None:
+            return False
+        parts = list(segment.tokens)
+        target = _bounded_sed_read_target(parts)
+        if target is None:
+            return False
+        if _is_approved_agent_guidance_target(target, home_dir=home_dir):
+            continue
+        if _is_guard_safety_doc_target(target, home_dir=home_dir):
+            continue
+        return False
+    return True
+
+
+def _bounded_sed_read_target(parts: list[str]) -> str | None:
+    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
+        return None
+    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
+    if match is None:
+        return None
+    start, end = map(int, match.groups())
+    return parts[3] if start <= end and end - start + 1 <= 500 else None
+
+
+def _is_approved_agent_guidance_target(target: str, *, home_dir: Path) -> bool:
+    if not target_is_known_skill_doc_path(target, home_dir=home_dir):
+        return False
+    normalized = target.replace("\\", "/").rstrip("/")
+    return normalized.endswith("/SKILL.md") or any(normalized.endswith(suffix) for suffix in KNOWN_AGENT_DOC_SUFFIXES)
+
+
+def _is_guard_safety_doc_target(target: str, *, home_dir: Path) -> bool:
+    expected = home_dir / ".hol-support" / "SAFETY.md"
+    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
+    try:
+        resolved_home = home_dir.resolve(strict=True)
+        resolved_support = (home_dir / ".hol-support").resolve(strict=True)
+        resolved_expected = expected.resolve(strict=True)
+        return (
+            candidate.absolute() == expected.absolute()
+            and not home_dir.is_symlink()
+            and not (home_dir / ".hol-support").is_symlink()
+            and not expected.is_symlink()
+            and resolved_support == resolved_home / ".hol-support"
+            and resolved_expected == resolved_support / "SAFETY.md"
+            and resolved_expected.is_file()
+        )
+    except (OSError, RuntimeError):
+        return False
+
+
 def _quote_aware_direct_github_read_is_safe(
     command_text: str,
     *,
@@ -367,7 +439,7 @@ def build_tool_action_request_artifact(
             f"Requested `{request.tool_name}` action `{request.command_text}` via transparent wrappers "
             f"`{' -> '.join(wrapper_chain)}` ({request.action_class})."
         )
-    risk_summary = f"Requests a sensitive native tool action: {request.action_class}."
+    risk_summary = tool_action_risk_summary(request)
     runtime_reason = request.reason
     if wrapper_chain:
         runtime_reason = (
@@ -397,7 +469,7 @@ def build_tool_action_request_artifact(
             "command_text": request.command_text,
             "action_class": request.action_class,
             "request_summary": request_summary,
-            "runtime_request_signals": [f"invokes a sensitive native tool action: {request.action_class}"],
+            "runtime_request_signals": [risk_summary],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": runtime_reason,
             "raw_command_text": request.raw_command_text,

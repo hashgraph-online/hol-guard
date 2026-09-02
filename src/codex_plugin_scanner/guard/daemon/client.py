@@ -14,6 +14,7 @@ from .manager import (
     ensure_guard_daemon,
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
+    load_running_guard_daemon_identity,
 )
 
 
@@ -165,6 +166,9 @@ class GuardSurfaceDaemonClient:
     def refresh_extension_controls(self) -> dict[str, object]:
         return self._post("/v1/extension-controls/refresh", {})
 
+    def refresh_command_queue_worker(self) -> dict[str, object]:
+        return self._post("/v1/command-queue/worker/refresh", {})
+
     def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/recover-authority", payload)
 
@@ -183,6 +187,13 @@ class GuardSurfaceDaemonClient:
         if not _is_string_object_dict(value):
             raise GuardDaemonRequestError("Guard daemon returned invalid containment health")
         return value
+
+    def resolve_policy_decision(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/policy/resolve", payload)
+
+    def claim_policy_decision(self, payload: dict[str, object]) -> bool:
+        response = self._post("/v1/policy/claim", payload)
+        return response.get("claimed") is True
 
     def _get(self, path: str, *, timeout: float) -> dict[str, object]:
         request = urllib.request.Request(
@@ -268,4 +279,14 @@ def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClie
         auth_token = load_guard_daemon_auth_token(guard_home)
     if daemon_url is None or auth_token is None:
         raise RuntimeError(f"Guard daemon state is incomplete for {guard_home}.")
+    return GuardSurfaceDaemonClient(daemon_url, auth_token)
+
+
+def load_running_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+    """Load the current daemon authority without starting or repairing a daemon."""
+
+    identity = load_running_guard_daemon_identity(guard_home)
+    if identity is None:
+        raise GuardDaemonTransportError("Guard daemon authority is unavailable")
+    daemon_url, auth_token = identity
     return GuardSurfaceDaemonClient(daemon_url, auth_token)

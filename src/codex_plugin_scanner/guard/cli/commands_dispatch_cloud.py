@@ -23,9 +23,6 @@ if TYPE_CHECKING:
         _guard_service_sync_failure_message,
         _guard_service_sync_payload,
         _guard_sync_failure_message,
-        _handle_daemon_repair,
-        _handle_daemon_status,
-        _handle_daemon_stop,
         _validated_supply_chain_sync_payload,
     )
 
@@ -47,7 +44,9 @@ from ..runtime.command_capability import (
 from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
+from .commands_dispatch_cloud_review import apply_connect_time_cloud_review_consent
 from .commands_parser_helpers import *
+from .commands_support_service import _dispatch_guard_daemon_command
 
 
 def _cloud_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
@@ -149,7 +148,7 @@ def _run_guard_connect_command(
             )
             return 2
         try:
-            reassigned = store.reassign_quarantined_live_request_outbox(
+            reassigned = store.reassign_quarantined_review_events(
                 approved_source=approved_source,
                 approved_workspace_id=approved_workspace,
             )
@@ -181,39 +180,30 @@ def _run_guard_connect_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
-    if not bool(getattr(args, "headless", False)):
-        payload, exit_code = _build_guard_device_connect_payload(
-            store=store,
-            connect_url=args.connect_url,
-            use_browser_oauth=True,
-            open_device_browser=False,
-            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
-            home_dir=context.home_dir if context is not None else None,
-            workspace_dir=context.workspace_dir if context is not None else workspace,
-        )
-        if payload is None:
-            return exit_code
-        _emit("connect", payload, getattr(args, "json", False))
+    headless = bool(getattr(args, "headless", False))
+    payload, exit_code = _build_guard_device_connect_payload(
+        store=store,
+        connect_url=args.connect_url,
+        use_browser_oauth=not headless,
+        open_device_browser=headless and bool(getattr(args, "open_browser", False)),
+        wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+        announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
+        ci_safe=ci_safe if headless else False,
+        machine_label=machine_label if headless else None,
+        home_dir=context.home_dir if context is not None else None,
+        workspace_dir=context.workspace_dir if context is not None else workspace,
+    )
+    if payload is None:
         return exit_code
-    if bool(getattr(args, "headless", False)):
-        payload, exit_code = _build_guard_device_connect_payload(
-            store=store,
-            connect_url=args.connect_url,
-            use_browser_oauth=False,
-            open_device_browser=bool(getattr(args, "open_browser", False)),
-            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
-            ci_safe=ci_safe,
-            machine_label=machine_label,
-            home_dir=context.home_dir if context is not None else None,
-            workspace_dir=context.workspace_dir if context is not None else workspace,
-        )
-        if payload is None:
-            return exit_code
-        _emit("connect", payload, getattr(args, "json", False))
-        return exit_code
-    return 2
+    payload = apply_connect_time_cloud_review_consent(
+        args=args,
+        store=store,
+        guard_home=guard_home or store.guard_home,
+        payload=payload,
+        exit_code=exit_code,
+    )
+    _emit("connect", payload, getattr(args, "json", False))
+    return exit_code
 
 
 def _run_guard_disconnect_command(
@@ -307,15 +297,14 @@ def _run_guard_sync_command(
 
         with GuardProgress(total=2, title="Guard Sync") as bar:
             bar.step("Syncing receipts, Guard events, and inventory to Guard Cloud...")
-            with store.hold_cloud_sync_lock():
-                payload = sync_receipts(
-                    store,
-                    auth_context=auth_context,
-                    home_dir=context.home_dir,
-                    workspace_dir=context.workspace_dir,
-                    include_aibom=True,
-                    force_aibom=force_aibom,
-                )
+            payload = sync_local_guard_cloud_proof(
+                store,
+                auth_context=auth_context,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
+                include_aibom=True,
+                force_aibom=force_aibom,
+            )
             bar.step("Syncing supply chain state...")
             with suppress(GuardSyncNotConfiguredError, RuntimeError):
                 payload["supply_chain"] = _validated_supply_chain_sync_payload(
@@ -613,46 +602,13 @@ def _run_guard_daemon_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    if guard_home is None:
-        raise RuntimeError("Guard home is required")
-    daemon_command = getattr(args, "daemon_command", None)
-    if daemon_command == "ensure":
-        wake_token = getattr(args, "wake_token", None)
-        try:
-            ensure_guard_daemon(
-                guard_home,
-                home_dir=context.home_dir if context is not None else None,
-            )
-        finally:
-            if isinstance(wake_token, str) and wake_token:
-                clear_guard_daemon_wake_reservation(guard_home, token=wake_token)
-        return 0
-    if daemon_command == "status":
-        return _handle_daemon_status(guard_home, getattr(args, "json", False))
-    if daemon_command == "repair":
-        return _handle_daemon_repair(guard_home, getattr(args, "json", False))
-    if daemon_command == "stop":
-        return _handle_daemon_stop(guard_home, getattr(args, "json", False))
-    if store is None:
-        store = GuardStore(
-            guard_home,
-            prime_policy_integrity=bool(getattr(args, "serve", False)),
-        )
-    daemon_home_dir = context.home_dir if context is not None else None
-    daemon_workspace_dir = (
-        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
+    return _dispatch_guard_daemon_command(
+        args,
+        guard_home=guard_home,
+        workspace=workspace,
+        context=context,
+        store=store,
     )
-    daemon = GuardDaemonServer(
-        store,
-        port=args.port or 0,
-        home_dir=daemon_home_dir,
-        workspace_dir=daemon_workspace_dir,
-    )
-    if args.serve:
-        daemon.serve()
-        return 0
-    _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
-    return 0
 
 
 def _run_guard_commands_command(

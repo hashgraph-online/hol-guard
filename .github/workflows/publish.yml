@@ -28,16 +28,16 @@ on:
     branches: [main, release/3.0]
   pull_request:
     branches: [main, release/3.0]
-    types: [opened, synchronize, reopened, labeled, closed]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  # Serialize publish-capable events for one release branch while keeping
-  # ordinary pull-request validation isolated by its merge ref.
-  group: hol-guard-publish-${{ github.event.pull_request.merged && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.ref }}
+  # Serialize publish-capable branch events while keeping pull-request
+  # validation isolated by its merge ref.
+  group: hol-guard-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -81,7 +81,6 @@ jobs:
   build:
     name: Build + Verify
     if: >-
-      (github.event.action != 'closed' || github.event.pull_request.merged) &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
@@ -97,7 +96,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ (github.event.pull_request.merged && github.event.pull_request.merge_commit_sha) || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -126,10 +125,6 @@ jobs:
           GITHUB_EVENT_ACTION: ${{ github.event.action }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_ACTOR_ID: ${{ github.actor_id }}
@@ -197,7 +192,7 @@ jobs:
               VALIDATOR_ARGS+=(--existing-version "$existing_version")
             done
             VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]] || [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$GITHUB_EVENT_ACTION" == "closed" && "$PR_MERGED" == "true" && "$PR_BASE_REF" == "release/3.0" && "$PR_HEAD_REPO" == "$GITHUB_REPOSITORY" && -n "$PR_MERGE_SHA" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
@@ -206,11 +201,6 @@ jobs:
             TRAIN_REF="refs/heads/release/${TRAIN}"
             ACTUAL_REF="$GITHUB_REF"
             EXPECTED_SOURCE="$GITHUB_SHA"
-            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-              SOURCE_SHA="$PR_MERGE_SHA"
-              EXPECTED_SOURCE="$PR_MERGE_SHA"
-              ACTUAL_REF="$TRAIN_REF"
-            fi
             if [[ "$SOURCE_SHA" != "$EXPECTED_SOURCE" ]]; then
               echo "Checked-out source does not match the immutable release source" >&2
               exit 1
@@ -227,7 +217,7 @@ jobs:
               --argjson tags "$TAG_VERSIONS" \
               '$pypi + $testpypi + $tags | unique')
             mapfile -t SOURCE_ALPHA_TAGS < <(
-              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.0a*" | sed 's#^alpha/v##'
+              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.1a*" | sed 's#^alpha/v##'
             )
             if [[ "${#SOURCE_ALPHA_TAGS[@]}" -gt 1 ]]; then
               echo "Source commit has multiple reserved alpha versions" >&2
@@ -414,7 +404,7 @@ jobs:
         (
           needs.build.outputs.channel == 'alpha' &&
           (
-            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
             (github.event_name == 'workflow_dispatch' && github.event.inputs.release_train == '3.0')
           )
         )
@@ -442,20 +432,20 @@ jobs:
             runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
           - runner: windows-latest
             platform_tag: win_amd64
+            rustflags: -C link-arg=/Brepro
             target: x86_64-pc-windows-msvc
             runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-          ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Install pinned uv without cache
+        shell: bash
+        run: python -m pip install --disable-pip-version-check --no-cache-dir uv==0.9.26
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          version: "0.9.26"
-          enable-cache: true
+          persist-credentials: false
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       - run: uv sync --frozen --extra dev --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -479,6 +469,7 @@ jobs:
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}
         run: |
@@ -780,7 +771,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -810,7 +801,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -915,7 +906,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -1385,9 +1376,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1395,6 +1384,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             shopt -s nullglob
@@ -1432,7 +1422,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -1493,9 +1483,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1503,6 +1491,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" alpha
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             for remote_file in "$existing_dir"/hol_guard-*; do
@@ -1541,7 +1530,7 @@ jobs:
         (
           (
             (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
           ) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&

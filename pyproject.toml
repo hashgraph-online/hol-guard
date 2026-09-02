@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.0.0a0"
+version = "3.0.1"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -120,6 +120,7 @@ Documentation = "https://github.com/hashgraph-online/hol-guard/tree/main/docs/gu
 Repository = "https://github.com/hashgraph-online/hol-guard"
 Issues = "https://github.com/hashgraph-online/hol-guard/issues"
 Changelog = "https://github.com/hashgraph-online/hol-guard/releases"
+Dataset = "https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security"
 
 [tool.ruff]
 target-version = "py310"
@@ -130,8 +131,9 @@ packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
+"contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
-"docs/guard/contracts/guard-cloud-review-v2.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/guard-cloud-review-v2.md"
+"docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 
 [tool.hatch.build]
 artifacts = [
@@ -156,6 +158,8 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/fixtures/mcp-canary-server.py" = ["N999"]
+"scripts/codex-auto-resume-smoke.py" = ["N999"]
+"scripts/e2e-cursor-hook-smoke.py" = ["N999"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -182,7 +186,11 @@ markers = [
 
 [tool.mutmut]
 source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
-also_copy = ["src/codex_plugin_scanner"]
+also_copy = [
+  "src/codex_plugin_scanner",
+  "contracts/guard-cloud-review",
+  "docs/guard/contracts/guard-cloud-review.md",
+]
 pytest_add_cli_args_test_selection = [
   "tests/test_guard_command_model.py",
   "tests/test_guard_command_critical_floors.py",

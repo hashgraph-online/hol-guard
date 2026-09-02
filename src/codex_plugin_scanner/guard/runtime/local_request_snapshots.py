@@ -357,7 +357,7 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
         config = load_guard_config(store.guard_home)
         if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
             return config.receipt_redaction_level
-    except Exception:
+    except (OSError, ValueError):
         pass
     return "full"
 
@@ -408,7 +408,7 @@ def _local_request_snapshot_routing_base(
             ("workspace_id", "workspaceId", getattr(oauth, "workspace_id", None)),
             ("machine_installation_id", "machineInstallationId", getattr(oauth, "installation_id", None)),
             ("grant_id", "grantId", getattr(oauth, "grant_id", None)),
-            ("runtime_grant_id", "runtimeGrantId", getattr(oauth, "runtime_id", None)),
+            ("runtime_id", "runtimeId", getattr(oauth, "runtime_id", None)),
         ):
             _set_dual_key(metadata, snake_key, camel_key, value)
         return metadata
@@ -421,7 +421,7 @@ def _local_request_snapshot_routing_base(
     if isinstance(credentials, Mapping):
         _set_dual_key(metadata, "workspace_id", "workspaceId", credentials.get("workspace_id"))
         _set_dual_key(metadata, "grant_id", "grantId", credentials.get("grant_id"))
-        _set_dual_key(metadata, "runtime_grant_id", "runtimeGrantId", credentials.get("runtime_id"))
+        _set_dual_key(metadata, "runtime_id", "runtimeId", credentials.get("runtime_id"))
         _set_dual_key(
             metadata,
             "machine_installation_id",

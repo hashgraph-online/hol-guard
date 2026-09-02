@@ -18,6 +18,17 @@ def _add_guard_common_args(
     parser.add_argument("--workspace", default=default)
 
 
+def _add_daemon_recover_parser(
+    daemon_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    parser = daemon_subparsers.add_parser("recover", help=argparse.SUPPRESS)
+    _add_guard_common_args(parser)
+    parser.add_argument(
+        "failure_kind",
+        choices=("authenticated-control-plane-failure", "overload", "transport-failure"),
+    )
+
+
 def _add_aibom_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--include-symlinks",
@@ -55,6 +66,7 @@ def _guard_http_url(value: str) -> str:
 
 __all__ = [
     "_add_aibom_cli_args",
+    "_add_daemon_recover_parser",
     "_add_guard_cisco_mode_arg",
     "_add_guard_common_args",
     "_aibom_cli_options_from_args",

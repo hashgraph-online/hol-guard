@@ -163,7 +163,8 @@ def _macos_loaded_status(paths: MachinePaths, output: str) -> SupervisorStatus |
         return SupervisorStatus("stopped", "supervisor_executable_mismatch")
     if _launchctl_scalar(output, "run interval") != "300 seconds":
         return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    if _launchctl_scalar(output, "state") not in {"running", "not running"}:
+    state = _launchctl_scalar(output, "state")
+    if state not in {"running", "not running"}:
         return SupervisorStatus("stopped", "supervisor_stopped")
     return None
 

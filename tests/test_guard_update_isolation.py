@@ -12,7 +12,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import update_commands, update_subprocess
-from codex_plugin_scanner.guard.cli.update_subprocess import InstalledDistribution, TrustedUpdateContext
+from codex_plugin_scanner.guard.cli.update_subprocess import (
+    InstalledDistribution,
+    TrustedUpdateContext,
+    UpdateSubprocessError,
+)
 from codex_plugin_scanner.guard.mdm.contracts import (
     ManagedNetworkPolicy,
     ManagedPolicy,
@@ -365,3 +369,38 @@ def test_status_uses_trusted_distribution_record_not_parent_metadata(
     assert isinstance(version_check, dict)
     assert version_check["current_version"] == "8.7.6"
     assert payload["auto_updatable"] is True
+
+
+def test_status_keeps_running_version_when_trusted_environment_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "build_guard_install_surface_payload",
+        lambda: {"installer": "pipx", "binary_diagnostics": {}},
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "load_managed_policy",
+        lambda: ManagedPolicyState(status="absent", source="test", policy=None),
+    )
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.109")
+    monkeypatch.setattr(
+        update_commands,
+        "_status_installed_distribution",
+        lambda **_kwargs: (_ for _ in ()).throw(UpdateSubprocessError("update_command_not_on_path")),
+    )
+
+    payload = update_commands.build_guard_update_status_payload()
+
+    assert payload["current_version"] == "2.2.109"
+    assert payload["auto_updatable"] is False
+    assert payload["update_available"] is False
+    assert payload["reason_code"] == "update_command_not_on_path"
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": "2.2.109",
+        "latest_version": None,
+        "update_available": None,
+    }

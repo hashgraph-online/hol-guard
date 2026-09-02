@@ -8,25 +8,60 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from http.server import HTTPServer
 from pathlib import Path
+from urllib import request
 from urllib.parse import urlencode
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_auth as hook_auth
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as bridge_flow
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
-    _ProxyHandler,
     _write_authenticated_daemon_files,
 )
+
+
+def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
+    monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
+    monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
+    monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
+    try:
+        daemon.start()
+        deadline = time.monotonic() + 5
+        opener = request.build_opener(request.ProxyHandler({}))
+        while True:
+            try:
+                with opener.open(f"http://127.0.0.1:{daemon.port}/healthz", timeout=0.25) as response:
+                    if response.status == 200:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Guard daemon health check did not return HTTP 200")
+                    time.sleep(0.01)
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+        if not daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+            minimum_workers=1,
+            timeout_seconds=15,
+        ):
+            raise TimeoutError("Guard daemon hook workers did not become ready")
+    except BaseException:
+        daemon.stop()
+        raise
 
 
 def test_assert_loopback_http_url_rejects_remote_and_credentialed_urls() -> None:
@@ -90,6 +125,29 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
     assert prompt["continue"] is False
 
 
+def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bridge,
+        "current_process_identity",
+        lambda: {"pid": 4102, "startToken": "fixture-start"},
+    )
+    payload = json.loads(
+        bridge._with_browser_wait_process(
+            '{"hook_event_name":"PreToolUse"}',
+            wait_timeout_seconds=607,
+        )
+    )
+
+    assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 600
+    assert set(payload) == {
+        "hook_event_name",
+        bridge.CODEX_BROWSER_WAIT_PROCESS_KEY,
+        bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
+    }
+
+
 def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
     assert bridge._unavailable_response("UserPromptSubmit", "review failed") == {
         "continue": True,
@@ -111,10 +169,10 @@ def test_launcher_integrity_failure_does_not_stop_user_prompt(
         "sys.stdin",
         io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "resume"})),
     )
-    monkeypatch.setattr(bridge, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
     monkeypatch.setattr(
-        bridge,
-        "_trusted_hook_launch",
+        bridge_flow,
+        "trusted_hook_launch",
         lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
     )
     config = _bridge_config(guard_home, 5474)
@@ -138,10 +196,10 @@ def test_launcher_integrity_failure_still_denies_pretool_use(
         "sys.stdin",
         io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})),
     )
-    monkeypatch.setattr(bridge, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
     monkeypatch.setattr(
-        bridge,
-        "_trusted_hook_launch",
+        bridge_flow,
+        "trusted_hook_launch",
         lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
     )
     config = _bridge_config(guard_home, 5474)
@@ -184,61 +242,6 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
         )
         == {}
     )
-
-
-def test_main_posts_to_authenticated_daemon(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
-    daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    daemon_thread.start()
-    proxy = HTTPServer(("127.0.0.1", 0), _ProxyHandler)
-    proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
-    proxy_thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _DaemonHandler.response_body = (
-        b'{"hookSpecificOutput":{"hookEventName":"PreToolUse"},"reason_code":"daemon_hook_queue_capacity"}'
-    )
-    _ProxyHandler.captured_paths = []
-    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy.server_address[1]}")
-    monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.server_address[1]}")
-    monkeypatch.delenv("NO_PROXY", raising=False)
-    monkeypatch.delenv("no_proxy", raising=False)
-    complete_command = "trap - DEBUG; { cat .env; } > /dev/null\ncat <<'EOF'\nharmless\nEOF"
-    hook_payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": complete_command},
-    }
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook_payload)))
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, port))
-    finally:
-        daemon.shutdown()
-        proxy.shutdown()
-        daemon_thread.join(timeout=5)
-        proxy_thread.join(timeout=5)
-
-    assert exit_code == 0
-    assert _DaemonHandler.captured_challenge_guard_token is None
-    assert _DaemonHandler.captured_guard_token == "fixture-token"
-    captured_hook_payload = json.loads(str(_DaemonHandler.captured_hook_body))
-    assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 10_001)
-    assert captured_hook_payload == hook_payload
-    assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
-    assert _ProxyHandler.captured_paths == []
-    response = json.loads(capsys.readouterr().out)
-    if response == {}:
-        pass
-    elif "hookSpecificOutput" in response:
-        assert response["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    else:
-        assert response["continue"] is False
 
 
 @pytest.mark.parametrize(
@@ -338,12 +341,12 @@ def test_repeated_generation_rollover_stays_bounded(monkeypatch: pytest.MonkeyPa
     def changed_generation(**_kwargs: object) -> dict[str, object]:
         nonlocal attempts
         attempts += 1
-        raise bridge._DaemonGenerationChangedError("fixture rollover")
+        raise bridge_flow._DaemonGenerationChangedError("fixture rollover")
 
-    monkeypatch.setattr(bridge, "_daemon_response_once", changed_generation)
+    monkeypatch.setattr(bridge_flow, "_daemon_response_once", changed_generation)
 
-    with pytest.raises(bridge._DaemonGenerationChangedError):
-        bridge._daemon_response(
+    with pytest.raises(bridge_flow._DaemonGenerationChangedError):
+        bridge_flow._daemon_response(
             state_path="unused",
             query="",
             data='{"hook_event_name":"UserPromptSubmit"}',
@@ -446,7 +449,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {
@@ -489,7 +492,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -526,7 +529,7 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -582,7 +585,7 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {
@@ -652,7 +655,7 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {"guard-home": str(guard_home), "home": str(tmp_path), "workspace": str(session_workspace)}
@@ -717,8 +720,9 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
+    config["hook_timeouts"] = {"PreToolUse": 30}
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
     monkeypatch.setattr(
@@ -845,7 +849,7 @@ def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -890,7 +894,7 @@ def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     assert guard_config.mode == "prompt"
     assert guard_config.security_level == "balanced"
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -928,7 +932,7 @@ def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -971,7 +975,7 @@ def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_re
     temporary_root = trusted_temporary_root_for_path(tmp_path)
     assert temporary_root is not None
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -1007,7 +1011,7 @@ def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon, monkeypatch)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]

@@ -1,4 +1,4 @@
-import { az as fetchLocalCliApi, r as reactExports, aA as fetchExtensionControlApi, j as jsxRuntimeExports, aB as useResolvedApprovalGate, a8 as HiMiniLockClosed, M as HiMiniExclamationTriangle, aC as HiMiniArrowPath, t as HiMiniShieldCheck, aD as HiMiniInformationCircle, aE as isApprovalProofSubmitDisabled, z as HiMiniXMark, aF as ApprovalProofFieldInputs, aG as buildApprovalProofCredentials, aH as GenIcon, N as HiMiniBolt, aI as HiMiniGlobeAlt, aJ as HiMiniCube, I as HiMiniCloud, aK as HiMiniServerStack, b as HiMiniCommandLine, aL as HiMiniFolder, aM as FaWindows, aN as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aO as approvalProofRecentlySatisfied, aP as HiMiniArrowLeft, aQ as HiMiniPlus, a1 as HiMiniClipboardDocumentCheck, a2 as HiMiniClipboard, au as HiMiniMagnifyingGlass, y as HiMiniSparkles, aR as HiMiniNoSymbol, R as startGuardCloudConnect, aS as HiMiniArrowTopRightOnSquare, at as WorkspacePageHeader, aT as guardAwareHref } from "../guard-dashboard.js";
+import { aA as fetchLocalCliApi, r as reactExports, aB as fetchExtensionControlApi, j as jsxRuntimeExports, aC as useResolvedApprovalGate, a9 as HiMiniLockClosed, M as HiMiniExclamationTriangle, aD as HiMiniArrowPath, t as HiMiniShieldCheck, aE as HiMiniInformationCircle, aF as isApprovalProofSubmitDisabled, z as HiMiniXMark, aG as ApprovalProofFieldInputs, aH as buildApprovalProofCredentials, aI as GenIcon, N as HiMiniBolt, aJ as HiMiniGlobeAlt, aK as HiMiniCube, I as HiMiniCloud, aL as HiMiniServerStack, b as HiMiniCommandLine, aM as HiMiniFolder, aN as FaWindows, aO as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aP as approvalProofRecentlySatisfied, aQ as HiMiniArrowLeft, aR as HiMiniPlus, a2 as HiMiniClipboardDocumentCheck, a3 as HiMiniClipboard, av as HiMiniMagnifyingGlass, y as HiMiniSparkles, aS as HiMiniNoSymbol, R as startGuardCloudConnect, aT as HiMiniArrowTopRightOnSquare, au as WorkspacePageHeader, aU as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -474,7 +474,13 @@ function normalizeLocalCliCommand(value) {
 function normalizeLocalCliList(value) {
   if (!isRecord(value)) throw new Error("Invalid local CLI list");
   const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items) ? value.items.map(normalizeLocalCliItem) : [];
+  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }) : [];
   return {
     schema_version: requiredString(value.schema_version, "schema"),
     revision: requiredInt(value.revision, "revision"),
@@ -4808,6 +4814,7 @@ function ExtensionsOverview(props) {
       props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
     ] }),
     props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
+    props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PatternSearchConsole,
       {
@@ -5528,13 +5535,31 @@ function deriveProtectionStatus(effective) {
       };
   }
 }
+function summarizeProtectionChange(change) {
+  if ("globalLockdown" in change) {
+    if (change.globalLockdown) {
+      return { current: "Off", requested: "Active", title: "Enable Emergency Lockdown" };
+    }
+    return { current: "Active", requested: "Off", title: "Disable Emergency Lockdown" };
+  }
+  if (change.enabled) {
+    return {
+      current: "Blocked",
+      requested: "Allowed within Guard safety rules",
+      title: `Permit ${change.extension.name}`
+    };
+  }
+  return {
+    current: "Allowed",
+    requested: "Blocked",
+    title: `Block ${change.extension.name}`
+  };
+}
 function ReviewModal(props) {
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");
   const dialogRef = useModalDialog(props.onCancel, !props.busy);
-  const title = "globalLockdown" in props.change ? `${props.change.globalLockdown ? "Enable" : "Disable"} Emergency Lockdown` : `${props.change.enabled ? "Permit" : "Block"} ${props.change.extension.name}`;
-  const current = "globalLockdown" in props.change ? props.change.globalLockdown ? "Off" : "Active" : props.change.enabled ? "Blocked" : "Allowed";
-  const requested = "globalLockdown" in props.change ? props.change.globalLockdown ? "Active" : "Off" : props.change.enabled ? "Allowed within Guard safety rules" : "Blocked";
+  const { current, requested, title } = summarizeProtectionChange(props.change);
   const handlePassword = reactExports.useCallback((event) => {
     setPassword(event.target.value);
   }, []);
@@ -5837,6 +5862,7 @@ function ProtectionCenterWorkspace(props) {
         catalogExtensions,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
+        localCliError: localClis.error,
         mutationError: mutationError && !pending ? mutationError : null,
         recoveryStatus,
         healthBroken,
@@ -5857,6 +5883,7 @@ function ProtectionCenterWorkspace(props) {
         onRetry: retryLocalClis
       }
     ) : null,
+    showLocalCli && localClis.error && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-3 text-sm font-medium text-rose-800", children: localClis.error }) : null,
     showLocalCli && !localClis.data && !localClis.error ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading custom extension" }) : null,
     routeState.route.kind === "add-custom" && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddCustomExtensionWorkspace,

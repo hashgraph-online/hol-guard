@@ -261,6 +261,7 @@ def approval_schema_statement() -> str:
           browser_intent_json text,
           desktop_notified_at text,
           raw_command_text text,
+          continuation_snapshot_json text,
           guard_version text,
           first_seen_guard_version text,
           last_seen_guard_version text,
@@ -337,7 +338,8 @@ def list_approval_requests(
                 normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, scanner_evidence_json, browser_intent_json, review_command,
+                fallback_cli_command, scanner_evidence_json, browser_intent_json, continuation_snapshot_json,
+                review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
         from approval_requests
@@ -373,6 +375,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "last_seen_guard_version", "NULL")},
                 {_column_expr(columns, "scanner_evidence_json", "'[]'")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
+                {_column_expr(columns, "continuation_snapshot_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -530,6 +533,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "last_seen_guard_version": row["last_seen_guard_version"],
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "browser_intent": _json_object(row["browser_intent_json"]),
+        "continuation_snapshot": _json_object(row["continuation_snapshot_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),

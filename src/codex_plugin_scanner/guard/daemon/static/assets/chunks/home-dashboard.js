@@ -395,7 +395,8 @@ function HomeWorkspace(props) {
                   ]
                 },
                 s.label
-              )) })
+              )) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { className: "mt-4", variant: "secondary", onClick: props.onOpenTodayEvidence, children: "Review today's activity" })
             ]
           }
         )

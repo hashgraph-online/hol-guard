@@ -11,7 +11,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
+from ..stable_digest import sha256_content_digest
 from ..store import GuardStore
+from .command_operation_classification import (
+    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
+    POLICY_MEMORY_COMMAND_OPERATIONS,
+    READ_ONLY_COMMAND_OPERATIONS,
+    REMOTE_STEP_UP_COMMAND_OPERATIONS,
+    STATE_CHANGING_COMMAND_OPERATIONS,
+)
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -24,44 +33,6 @@ COMMAND_CAPABILITY_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
 COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
-
-READ_ONLY_COMMAND_OPERATIONS: tuple[str, ...] = (
-    "guard.packageShims.status",
-    "guard.packageShims.test",
-    "guard.packageShims.audit",
-    "guard.app.status",
-    "guard.app.updateCheck",
-    "guard.localRequests.snapshot",
-)
-LOCAL_CONFIRMATION_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.packageShims.remove",
-        "guard.app.remove",
-    }
-)
-STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.packageShims.repair",
-        "guard.packageShims.sync",
-        "guard.packageShims.install",
-        "guard.app.repair",
-        "guard.app.connect",
-        "guard.app.update",
-        "guard.approval.resolve",
-        "guard.liveRequests.reassignQuarantined",
-    }
-)
-REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.liveRequests.reassignQuarantined",
-    }
-)
-_REVIEW_SYNC_REPAIR_PREREQUISITES = frozenset(
-    {
-        "guard.approval.resolve",
-        "guard.localRequests.snapshot",
-    }
-)
 
 
 class CommandCapabilityError(ValueError):
@@ -149,18 +120,19 @@ def _verify_signed_payload(store: GuardStore, payload: object) -> dict[str, obje
 def _oauth_target(store: GuardStore) -> tuple[str, str]:
     # Routine daemon/dashboard checks must stay non-interactive. Explicit
     # connection repair can promote credentials before capability issuance.
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    if not isinstance(credentials, dict):
+    try:
+        oauth = guard_review_oauth_metadata(store)
+    except GuardReviewContractError as error:
+        raise CommandCapabilityError("cloud_connection_required") from error
+    if not oauth.machine_id or not oauth.installation_id:
         raise CommandCapabilityError("cloud_connection_required")
-    device_id = credentials.get("machine_id")
-    workspace_id = credentials.get("workspace_id")
-    if not isinstance(device_id, str) or not device_id:
-        raise CommandCapabilityError("cloud_device_binding_missing")
-    if not isinstance(workspace_id, str) or not workspace_id:
-        raise CommandCapabilityError("cloud_workspace_binding_missing")
-    local_device = store.get_device_metadata().get("installation_id")
-    if local_device != device_id:
+    local_installation_id = str(store.get_device_metadata().get("installation_id") or "")
+    if local_installation_id != oauth.installation_id:
         raise CommandCapabilityError("cloud_device_binding_mismatch")
+    # OAuth machine and local-installation identities remain distinct; the
+    # DPoP device ID binds command capabilities.
+    device_id = oauth.device_id
+    workspace_id = oauth.workspace_id
     return device_id, workspace_id
 
 
@@ -184,8 +156,10 @@ def issue_command_capability(
     normalized_operations = tuple(sorted(set(operations)))
     if not normalized_operations:
         raise CommandCapabilityError("capability_operations_required")
-    if any(operation not in supported for operation in normalized_operations):
+    if set(normalized_operations) - supported or "guard.review.resolveExact" in operations:
         raise CommandCapabilityError("unsupported_capability_operation")
+    if POLICY_MEMORY_COMMAND_OPERATIONS & set(normalized_operations) and len(normalized_operations) != 1:
+        raise CommandCapabilityError("policy_memory_capability_must_be_isolated")
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
         store,
@@ -253,33 +227,29 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     if capability.get("workspaceId") != workspace_id:
         raise CommandCapabilityError("capability_workspace_mismatch")
     operations = capability.get("operations")
-    if (
-        not isinstance(operations, list)
-        or not operations
-        or not all(isinstance(operation, str) and operation for operation in operations)
-    ):
+    if not isinstance(operations, list) or not operations:
         raise CommandCapabilityError("capability_operations_invalid")
-    if len(operations) != len(set(operations)):
+    validated_operations: list[str] = []
+    for operation in operations:
+        if not isinstance(operation, str) or not operation:
+            raise CommandCapabilityError("capability_operations_invalid")
+        validated_operations.append(operation)
+    if len(validated_operations) != len(set(validated_operations)):
         raise CommandCapabilityError("capability_operations_invalid")
     classified_operations = (
         set(READ_ONLY_COMMAND_OPERATIONS)
         | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
         | set(STATE_CHANGING_COMMAND_OPERATIONS)
     )
-    if any(operation not in classified_operations for operation in operations):
-        raise CommandCapabilityError("capability_operation_unsupported")
-    expanded_operations = set(operations)
-    if _REVIEW_SYNC_REPAIR_PREREQUISITES.issubset(expanded_operations):
-        expanded_operations.update(REMOTE_STEP_UP_COMMAND_OPERATIONS)
+    # Project signed grants onto the current runtime operation set.
+    active_operations = set(validated_operations) & classified_operations
     return {
         **capability,
-        "operations": sorted(expanded_operations),
+        "operations": sorted(active_operations),
     }
 
 
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
-    """Return safe capability state for CLI, daemon, and dashboard surfaces."""
-
     pending_status = [
         {key: item[key] for key in ("id", "operation", "issuer", "expiresAt", "approveCommand") if key in item}
         for item in pending_command_approvals(store, now=now)
@@ -376,7 +346,7 @@ def command_job_identity(
     payload = job.get("payload")
     if not isinstance(payload, dict):
         raise CommandCapabilityError("command_payload_invalid")
-    identity["payloadDigest"] = hashlib.sha256(_canonical_bytes(payload)).hexdigest()
+    identity["payloadDigest"] = sha256_content_digest(_canonical_bytes(payload))
     return identity
 
 
@@ -419,7 +389,7 @@ def authorize_command_job(
 
 
 def _identity_digest(identity: Mapping[str, object]) -> str:
-    return hashlib.sha256(_canonical_bytes(identity)).hexdigest()
+    return sha256_content_digest(_canonical_bytes(identity))
 
 
 def register_pending_command(
@@ -617,6 +587,7 @@ def audit_command_decision(
 
 
 def _audit(store: GuardStore, event_name: str, payload: dict[str, object], now: str) -> None:
+    """Best-effort local audit; never raises."""
     try:
         store.add_event(event_name, payload, now)
     except Exception:

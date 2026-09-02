@@ -173,7 +173,7 @@ def test_verifier_rejects_missing_cookie_declared_runtime(
     )
     monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
 
-    with pytest.raises(ValueError, match="Cookie-declared Python runtime target 'Python'.*found 0"):
+    with pytest.raises(ValueError, match=r"Cookie-declared Python runtime target 'Python'.*found 0"):
         module.verify(archive, "TEAM123")
 
 

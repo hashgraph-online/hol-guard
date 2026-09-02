@@ -6,6 +6,9 @@ from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_commands import resolve_command_id_for_text
+from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
+    refresh_package_script_catalogs,
+)
 from codex_plugin_scanner.guard.runtime.package_json_scripts import (
     command_id_for_script,
     commands_from_package_scripts,
@@ -257,6 +260,24 @@ def test_hook_remembers_real_package_json_path(tmp_path: Path) -> None:
     assert stored["source_path"] == str((project / "package.json").resolve())
 
 
+def test_list_items_does_not_scan_cwd_as_a_package_project(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project = _write_package(tmp_path / "cwd-app", scripts={"guard:audit": "tsx audit.ts"})
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    payload = LocalCliApiService(store=GuardStore(home)).list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert all(not isinstance(item, dict) or item.get("surface") != "package-scripts" for item in items)
+
+
 def test_list_items_redacts_remembered_package_paths(tmp_path: Path) -> None:
     project = _write_package(tmp_path / "ads-app", scripts={"guard:reddit-targeting:audit": "tsx audit.ts"})
     home = tmp_path / "home"
@@ -310,8 +331,10 @@ def test_refresh_includes_workspace_packages(tmp_path: Path) -> None:
     _write_package(nested, scripts={"guard:reddit-targeting:audit": "tsx audit.ts"}, name="ads")
     home = tmp_path / "home"
     home.mkdir()
-    service = LocalCliApiService(store=GuardStore(home))
+    store = GuardStore(home)
+    service = LocalCliApiService(store=store)
     _ = service.recognize({"command": "pnpm run", "cwd": str(root)})
+    refresh_package_script_catalogs(store, home_dir=home)
     payload = service.list_items()
     items = payload["items"]
     assert isinstance(items, list)
@@ -358,6 +381,7 @@ def test_refresh_updates_identity_hash_when_scripts_change(tmp_path: Path) -> No
         _package_json(name="app", scripts={"build": "echo first", "guard:audit": "echo audit"}),
         encoding="utf-8",
     )
+    refresh_package_script_catalogs(store, home_dir=home)
     payload = service.list_items()
     listed = next(
         entry

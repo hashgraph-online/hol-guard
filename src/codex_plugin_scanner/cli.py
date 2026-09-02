@@ -103,7 +103,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
     scan_parser.add_argument(
         "--ecosystem",
-        choices=("auto", "codex", "claude", "gemini", "opencode"),
+        choices=("auto", *list_supported_ecosystems(), "dsh", "deepseek_harness"),
         default="auto",
         help="Target one ecosystem explicitly or auto-detect all supported ecosystems.",
     )
@@ -266,7 +266,7 @@ def _resolve_legacy_args(
         "disconnect",
         "login",
         "sync",
-        "device",
+        *("device", "cloud-review"),
         "bridge",
         "daemon",
         "hook",
@@ -303,6 +303,11 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    effective_argv = sys.argv[1:] if argv is None else argv
+    if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
+        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+
+        return main_from_argv(effective_argv[1:])
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
     requested_argv = sys.argv[1:] if argv is None else argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.live_request_sync import _build_live_request_event
+from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
 from codex_plugin_scanner.guard.runtime.local_request_snapshots import _cloud_scrub_text
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
     normalize_transparent_shell_command,
@@ -51,7 +51,7 @@ def test_cloud_scrub_does_not_restore_a_placeholder_like_file_argument() -> None
     assert _cloud_scrub_text(command) == command
 
 
-def test_cloud_scrub_preserves_source_search_pattern_through_live_request_event(
+def test_cloud_scrub_preserves_source_search_pattern_through_cloud_review_event(
     tmp_path: Path,
 ) -> None:
     command = "grep -n 'access_token = os.getenv(\"TOKEN\")' src/config.py"
@@ -65,7 +65,7 @@ def test_cloud_scrub_preserves_source_search_pattern_through_live_request_event(
         "status": "pending",
     }
 
-    event = _build_live_request_event(
+    event = build_cloud_review_event(
         item,
         oauth=None,
         redaction_level="none",
@@ -199,7 +199,7 @@ def test_cloud_scrub_fails_closed_for_malformed_source_search_syntax() -> None:
     assert "[redacted]" in scrubbed
 
 
-def test_source_search_secret_never_leaks_from_live_request_payload(tmp_path: Path) -> None:
+def test_source_search_secret_never_leaks_from_cloud_review_payload(tmp_path: Path) -> None:
     secret = "synthetic-secret-value-123456789"
     item: dict[str, object] = {
         "artifact_id": "pi:source-search-secret",
@@ -211,7 +211,7 @@ def test_source_search_secret_never_leaks_from_live_request_payload(tmp_path: Pa
         "status": "pending",
     }
 
-    event = _build_live_request_event(
+    event = build_cloud_review_event(
         item,
         oauth=None,
         redaction_level="none",

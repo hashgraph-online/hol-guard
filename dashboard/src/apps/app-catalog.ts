@@ -20,6 +20,13 @@ export const SUPPORTED_APPS_BRIEF =
 export const SUPPORTED_APPS_FULL =
   "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, and more. Run your AI app once and Guard will detect it automatically.";
 
+export function defaultConnectHarness(
+  repairHarness?: string,
+  visibleHarnesses: string[] = [],
+): string {
+  return repairHarness ?? visibleHarnesses[0] ?? SUPPORTED_APP_SLUGS[0];
+}
+
 export type AppInstallStatus = "active" | "partial" | "observed" | "not_installed";
 
 export function resolveAppInstallStatus(

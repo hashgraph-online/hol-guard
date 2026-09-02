@@ -332,14 +332,14 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     result = guard_runner_module.repair_guard_cloud_connect_storage(store)
     credentials = store.get_oauth_local_credentials(allow_primary=True) or pytest.fail("missing OAuth credentials")
     assert credentials["grant_id"] == "grant-1"
-    assert result["repaired_oauth_binding"] is True and result["claimed_live_requests"] == 0
-    binding = store.get_live_request_oauth_binding() or pytest.fail("missing live-request binding")
+    assert result["repaired_oauth_binding"] is True and result["rebound_review_events"] == 0
+    binding = store.get_review_event_oauth_binding() or pytest.fail("missing Cloud Review binding")
     late = "9999-12-31T23:59:59+00:00"
-    assert store.live_request_outbox_status(now=late)["quarantined_depth"] == 1
+    assert store.review_event_outbox_status(now=late)["quarantined_depth"] == 1
     approved = {"approved_source": "default", "approved_workspace_id": "workspace-1"}
-    assert store.reassign_quarantined_live_request_outbox(**approved) == 1
+    assert store.reassign_quarantined_review_events(**approved) == 1
     delivery = {key: value for key, value in binding.items() if key != "oauth_source"}
-    rows = store.list_ready_live_request_outbox(now=late, limit=10, **delivery)
+    rows = store.list_ready_review_events(now=late, limit=10, **delivery)
     assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
 
 

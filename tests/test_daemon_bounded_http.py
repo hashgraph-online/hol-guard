@@ -19,10 +19,17 @@ from codex_plugin_scanner.guard.store import GuardStore
 class _Handler(BaseHTTPRequestHandler):
     release = threading.Event()
     entered = threading.Event()
+    hold_count = 0
+    hold_lock = threading.Lock()
+    two_holds = threading.Event()
 
     def do_GET(self) -> None:
         if self.path == "/hold":
             self.entered.set()
+            with _Handler.hold_lock:
+                _Handler.hold_count += 1
+                if _Handler.hold_count >= 2:
+                    _Handler.two_holds.set()
             self.release.wait(timeout=2)
         payload = json.dumps({"ok": True}).encode()
         self.send_response(200)
@@ -78,13 +85,15 @@ def test_bounded_server_returns_fast_retryable_overload(monkeypatch) -> None:
     monkeypatch.setenv("HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS", "2")
     _Handler.release.clear()
     _Handler.entered.clear()
+    _Handler.two_holds.clear()
+    _Handler.hold_count = 0
     server, thread = _serve()
     port = server.server_address[1]
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
             first = executor.submit(_get, port, "/hold")
             second = executor.submit(_get, port, "/hold")
-            assert _Handler.entered.wait(timeout=1)
+            assert _Handler.two_holds.wait(timeout=1)
             deadline = time.monotonic() + 1
             third = executor.submit(_get, port, "/")
             status, body = third.result(timeout=1)

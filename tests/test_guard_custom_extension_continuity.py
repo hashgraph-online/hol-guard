@@ -211,13 +211,13 @@ def test_stale_and_offline_state_keep_last_known_good_local_setting(tmp_path: Pa
     assert offline[identity.cli_id]["status"] == "stale"
 
 
-def test_fresh_signed_bundle_removal_marks_state_without_deleting_local_authority(tmp_path: Path) -> None:
+def test_omitted_signed_field_retains_last_good_authority_until_explicit_removal(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     identity = _identity()
     _observe(store, identity)
     apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
     removed = apply_verified_custom_extension_continuity(store, {"payload": {}}, now=_NOW)
-    assert removed["items"][identity.cli_id]["status"] == "removed"
+    assert removed["items"][identity.cli_id]["status"] == "applied"
     assert store.read_local_cli_grant(identity.cli_id)["state"] == "allowed"
 
 

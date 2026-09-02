@@ -13,6 +13,7 @@ from ..secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from ..secret_sensitivity import classify_secret_path
 from .constants_core import _FILE_READ_TOOL_NAMES, _PATH_KEYS, _PATH_LIST_KEYS
 from .constants_patterns import _ENCODED_EXECUTION_TARGET_PATTERN
+from .tool_action_risk_summaries import tool_action_risk_summary
 
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -321,4 +322,5 @@ __all__ = [
     "extract_sensitive_file_read_request",
     "extract_sensitive_file_read_request_from_action",
     "is_file_read_tool_name",
+    "tool_action_risk_summary",
 ]

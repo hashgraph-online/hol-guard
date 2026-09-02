@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 
+from .continuation_snapshot import non_resumable_continuation_snapshot, validated_continuation_snapshot
 from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .store_approvals import (
@@ -125,6 +126,7 @@ def _update_request(
                fallback_cli_command = ?, scanner_evidence_json = ?,
                watch_only_observation = case when watch_only_observation = 1 and ? = 1 then 1 else 0 end,
                browser_intent_json = ?, review_command = ?, approval_url = ?, raw_command_text = ?, guard_version = ?,
+               continuation_snapshot_json = ?,
                first_seen_guard_version = coalesce(first_seen_guard_version, ?), last_seen_guard_version = ?
            where request_id = ? and oauth_source = ?""",
         _update_values(
@@ -187,6 +189,7 @@ def _update_values(
         _rewrite_approval_url(request.approval_url, request_id),
         request.raw_command_text,
         request.guard_version,
+        _continuation_snapshot_json(request),
         request.first_seen_guard_version or request.guard_version,
         request.last_seen_guard_version or request.guard_version,
         request_id,
@@ -214,9 +217,9 @@ def _insert_request(
              launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
              scanner_evidence_json, browser_intent_json, review_command, approval_url, status, resolution_action,
              resolution_scope, reason, created_at, resolved_at, raw_command_text, guard_version,
-             first_seen_guard_version, last_seen_guard_version, watch_only_observation)
+             first_seen_guard_version, last_seen_guard_version, watch_only_observation, continuation_snapshot_json)
            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         _insert_values(
             request,
             canonical,
@@ -287,7 +290,15 @@ def _insert_values(
         request.first_seen_guard_version or request.guard_version,
         request.last_seen_guard_version or request.guard_version,
         int(_scanner_evidence_is_watch_only(request.scanner_evidence)),
+        _continuation_snapshot_json(request),
     )
+
+
+def _continuation_snapshot_json(request: GuardApprovalRequest) -> str:
+    snapshot = validated_continuation_snapshot(request.continuation_snapshot)
+    if snapshot is None:
+        snapshot = non_resumable_continuation_snapshot(request.to_dict())
+    return json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
 
 
 def _scanner_evidence_is_watch_only(scanner_evidence: Sequence[Mapping[str, object]]) -> bool:

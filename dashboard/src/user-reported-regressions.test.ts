@@ -42,7 +42,7 @@ assert(
   "evidence activity chart has an accessible label",
 );
 assert(
-  appSource.includes("lazyWorkspace(() =>") && appSource.includes('import("./extensions-workspace")'),
+  appSource.includes('lazyWorkspace("extensions-workspace", () =>') && appSource.includes('import("./extensions-workspace")'),
   "extensions workspace loads through the retrying lazy wrapper",
 );
 assert(

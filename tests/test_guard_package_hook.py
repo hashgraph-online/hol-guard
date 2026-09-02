@@ -14,7 +14,6 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
@@ -159,6 +158,21 @@ def _bundle_response(*, action: str, policy_rules: list[dict[str, object]] | Non
                 "validUntil": None,
             }
         ],
+    }
+
+
+def _review_policy_rule(rule_id: str = "policy-review-1") -> dict[str, object]:
+    return {
+        "action": "review",
+        "ruleId": rule_id,
+        "ecosystemSelector": "npm",
+        "enabled": True,
+        "expiresAt": "2099-01-01T00:00:00Z",
+        "harnessSelector": "codex",
+        "packageSelector": "minimist",
+        "priority": 1,
+        "severityThreshold": "low",
+        "versionRangeSelector": "1.2.8",
     }
 
 
@@ -309,20 +323,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
@@ -355,11 +356,12 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     pending = store.list_approval_requests(limit=5)
-    assert pending[0]["risk_summary"]
-    assert "minimist" in pending[0]["risk_summary"].lower()
+    risk_summary = pending[0]["risk_summary"]
+    assert isinstance(risk_summary, str)
+    assert "minimist" in risk_summary.lower()
 
 
-def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
+def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -375,69 +377,26 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 10\n", encoding="utf-8")
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
     def fail_daemon(_home: Path) -> object:
         raise RuntimeError("no daemon")
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    opened_urls: list[str] = []
-    resolved_request_ids: list[str] = []
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
-        lambda url: opened_urls.append(url) or True,
+        lambda _url: pytest.fail("direct Codex hook should return native JSON before opening a browser"),
     )
-
-    def resolve_actual_exact_request(**kwargs: object) -> dict[str, object]:
-        request_ids = kwargs.get("request_ids")
-        assert isinstance(request_ids, list)
-        assert request_ids
-        resolved_items: list[dict[str, object]] = []
-        for request_id_value in request_ids:
-            assert isinstance(request_id_value, str)
-            queued_request = store.get_approval_request(request_id_value)
-            assert queued_request is not None
-            assert str(queued_request["artifact_hash"]).startswith("guard-approval-context:v1:")
-            apply_approval_resolution(
-                store=store,
-                request_id=request_id_value,
-                action="allow",
-                scope="artifact",
-                workspace=None,
-                reason="approved exact package request",
-            )
-            resolved_request = store.get_approval_request(request_id_value)
-            assert resolved_request is not None
-            resolved_items.append(resolved_request)
-            resolved_request_ids.append(request_id_value)
-        return {
-            "resolved": True,
-            "pending_request_ids": [],
-            "items": resolved_items,
-        }
 
     monkeypatch.setattr(
         guard_commands_module,
         "wait_for_approval_requests",
-        resolve_actual_exact_request,
+        lambda **_kwargs: pytest.fail("direct Codex hook should return native JSON before waiting"),
     )
 
     rc = main(
@@ -456,15 +415,20 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
     )
     captured = capsys.readouterr()
 
-    assert rc == 0
-    assert captured.out == ""
-    assert len(resolved_request_ids) == 1
-    assert opened_urls
-    assert "/requests/" in opened_urls[0]
-    assert opened_urls[0] in captured.err
+    assert rc == 0, captured
+    payload = json.loads(captured.out)
+    approval_requests = store.list_approval_requests(limit=5)
+    assert len(approval_requests) == 1
+    request_id = str(approval_requests[0]["request_id"])
+    assert str(approval_requests[0]["artifact_hash"]).startswith("guard-approval-context:v1:")
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert f"/requests/{request_id}" in reason
+    assert "retry the same Codex action" in reason
+    assert captured.err == ""
 
 
-def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
+def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -480,20 +444,7 @@ def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
@@ -534,9 +485,13 @@ def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
     )
     captured = capsys.readouterr()
 
-    assert rc == 0
+    assert rc == 0, captured
+    payload = json.loads(captured.out)
     assert observed_timeouts == [8]
-    assert "/requests/" in captured.out or "/requests/" in captured.err
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "/requests/" in reason
+    assert "retry the same Codex action" in reason
+    assert "waiting for approval in your browser" in captured.err
 
 
 def test_guard_hook_warns_for_package_request_without_blocking(

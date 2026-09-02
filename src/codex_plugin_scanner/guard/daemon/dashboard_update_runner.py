@@ -137,7 +137,11 @@ def _isolated_daemon_refresh(
 
 
 def _daemon_refresh_restarted(payload: object) -> bool:
-    return isinstance(payload, dict) and payload.get("status") == "restarted"
+    return (
+        isinstance(payload, dict)
+        and payload.get("status") in {"restarted", "retained_newer_runtime"}
+        and payload.get("runtime_verified") is True
+    )
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:

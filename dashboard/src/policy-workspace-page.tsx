@@ -6,7 +6,7 @@ import type { PolicyPageView } from "./policy-workspace";
 import { resolveCloudPolicyControlsUrl, resolveCloudExceptionsConnected } from "./policy-workspace-helpers";
 import { lazyWorkspace } from "./lazy-workspace";
 
-const PolicyWorkspace = lazyWorkspace(() =>
+const PolicyWorkspace = lazyWorkspace("policy-workspace", () =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
 );
 

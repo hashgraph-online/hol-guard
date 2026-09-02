@@ -414,7 +414,9 @@ export function normalizeLocalCliCommand(value: unknown): LocalCliCommand {
 export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
   if (!isRecord(value)) throw new Error("Invalid local CLI list");
   const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items) ? value.items.map(normalizeLocalCliItem) : [];
+  const items = Array.isArray(value.items)
+    ? value.items.flatMap((entry) => { try { return [normalizeLocalCliItem(entry)]; } catch { return []; } })
+    : [];
   return {
     schema_version: requiredString(value.schema_version, "schema"),
     revision: requiredInt(value.revision, "revision"),

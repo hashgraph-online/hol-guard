@@ -24,6 +24,7 @@ from .store_command_activity_maintenance import StoreCommandActivityMaintenanceM
 from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
 from .store_command_shadow import StoreCommandShadowMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
+from .store_continuation import StoreContinuationMixin
 from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
@@ -31,9 +32,11 @@ from .store_managed_controls_status import StoreManagedControlsStatusMixin
 from .store_local_cli import StoreLocalCliMixin
 from .store_local_mcp import StoreLocalMcpMixin
 from .store_evidence_facade import StoreEvidenceMixin
+from .store_exact_cloud_review import StoreExactCloudReviewMixin
 from .store_inventory import StoreInventoryMixin
 from .store_policy_document import StorePolicyDocumentMixin
-from .store_live_request_outbox import StoreLiveRequestOutboxMixin
+from .store_review_event_outbox import StoreReviewEventOutboxMixin
+from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
 from .store_policy import StorePolicyMixin
@@ -61,6 +64,7 @@ class GuardStore(
     StoreSecretPolicyIntegrityMixin,
     StoreWorkflowCapabilitySecretControlMixin,
     StoreConnectionSchemaMixin,
+    StoreContinuationMixin,
     StoreManagedControlsStatusMixin,
     StoreExtensionControlAuthorityMixin,
     StoreCustomExtensionContinuityMixin,
@@ -76,12 +80,14 @@ class GuardStore(
     StoreInventoryMixin,
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,
+    StoreReviewPolicyMemoryMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalQueriesMixin,
     StoreApprovalsMixin,
-    StoreLiveRequestOutboxMixin,
+    StoreExactCloudReviewMixin,
+    StoreReviewEventOutboxMixin,
     StoreEventReceiptsMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,

@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer, protection_repair_retry
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
@@ -268,6 +269,8 @@ class TestGuardSurfaceServer:
             lambda self: SimpleNamespace(active_error_count=0),
         )
         monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+        monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+        monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         request = urllib.request.Request(
@@ -287,13 +290,8 @@ class TestGuardSurfaceServer:
 
         assert payload["repaired"] is True
         assert payload["check_ids"] == [
-            "policy_engine",
-            "rule_packs",
-            "tamper_checks",
-            "decision_plane_compatibility",
-            "containment_compatibility",
-            "sandbox",
-            "decision_stream",
+            "policy_engine", "rule_packs", "tamper_checks", "harness_hooks",
+            "decision_plane_compatibility", "containment_compatibility", "sandbox", "decision_stream",
         ]
         assert payload["pending_check_ids"] == []
         assert payload["message"] == "Integrity protection restored."
@@ -1012,16 +1010,20 @@ class TestGuardSurfaceServer:
         assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
         assert store.list_guard_sessions() == []
 
-    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(self, tmp_path) -> None:
+    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
+        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
+        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
+        monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
         assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
+            minimum_workers=1, timeout_seconds=15
         )
 
         try:
@@ -1045,16 +1047,15 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with urllib.request.urlopen(hook_request, timeout=15) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                    minimum_workers=1,
-                    timeout_seconds=15,
+                    minimum_workers=1, timeout_seconds=15
                 )
-                with urllib.request.urlopen(hook_request, timeout=5) as response:
+                with urllib.request.urlopen(hook_request, timeout=15) as response:
                     hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1996,10 +1997,10 @@ class TestGuardSurfaceServer:
 
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         monkeypatch.setattr(daemon._server.hook_process_runner, "start", lambda **_: None)
+        monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
         daemon.start()
         daemon._server.runtime_hook_process_scheduler.set_active_limit(1)
         monkeypatch.setattr(daemon._server.hook_process_runner, "review", fake_review)
-
         try:
             request = urllib.request.Request(
                 (
@@ -2865,7 +2866,7 @@ class TestGuardSurfaceServer:
         assert daemon._shutdown_started.wait(timeout=3)
         daemon_thread = daemon._thread
         assert daemon_thread is not None
-        daemon_thread.join(timeout=10)
+        daemon_thread.join(timeout=40)
         runtime_state = store.get_runtime_state()
         daemon.stop()
 
@@ -4249,7 +4250,7 @@ class TestGuardDaemonFastHookPath:
     These tests exercise the full daemon HTTP path with
     HOL_GUARD_HOOK_FAST_PATH=1 enabled, proving that:
     - PostToolUse with guard_source_ref uses the resident worker
-    - PreToolUse falls through to legacy CLI (not the worker)
+    - Non-command PreToolUse and unavailable native command PreToolUse fall through to CLI
     - PostToolUse inline output uses the resident scanner
     - Worker exceptions return fail-safe deny/block
     """
@@ -4320,11 +4321,7 @@ class TestGuardDaemonFastHookPath:
         assert result["notice"] == "none"
 
     def test_fast_path_pre_tool_use_falls_back_to_legacy(self, tmp_path, monkeypatch) -> None:
-        """PreToolUse must NOT be handled by the fast worker.
-
-        It must fall through to the legacy CLI path so existing
-        policy/permission/approval checks run.
-        """
+        """Command PreToolUse without a native runtime still reaches the CLI path."""
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)

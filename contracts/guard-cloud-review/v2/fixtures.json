@@ -6,123 +6,149 @@
       "name": "pending-without-decision-or-delivery",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T17:59:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-00", "reviewRequestId": "review-request-00", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab", "status": "none"},
-        "delivery": {"correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab", "status": "none"},
-        "application": {"correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab", "status": "waiting"},
-        "continuation": {"correlationId": "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab", "capability": "suspended-response", "status": "waiting"}
+        "request": {"correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-00", "reviewRequestId": "review-request-00", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab", "status": "none"},
+        "delivery": {"correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab", "status": "none"},
+        "application": {"correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab", "status": "waiting"},
+        "continuation": {"correlationId": "gcr_018f0a0a-1234-7abc-8def-0123456789ab", "capability": "suspended-response", "status": "waiting"}
       }
     },
     {
       "name": "decision-recorded-awaiting-local-application",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:01:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-01", "reviewRequestId": "review-request-01", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab", "receiptId": "receipt-01", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-01", "status": "queued"},
-        "application": {"correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab", "status": "waiting"},
-        "continuation": {"correlationId": "gcrv2_018f0a0b-1234-7abc-8def-0123456789ab", "capability": "suspended-response", "status": "waiting"}
+        "request": {"correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-01", "reviewRequestId": "review-request-01", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab", "receiptId": "receipt-01", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-01", "status": "queued"},
+        "application": {"correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab", "status": "waiting"},
+        "continuation": {"correlationId": "gcr_018f0a0b-1234-7abc-8def-0123456789ab", "capability": "suspended-response", "status": "waiting"}
       }
     },
     {
       "name": "allow-once-applied-and-resumed",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-02", "reviewRequestId": "review-request-02", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab", "receiptId": "receipt-02", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-02", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
-        "application": {"correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
-        "continuation": {"correlationId": "gcrv2_018f0a0c-1234-7abc-8def-0123456789ab", "resultId": "continuation-02", "capability": "suspended-response", "status": "resumed", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-02", "reviewRequestId": "review-request-02", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab", "receiptId": "receipt-02", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-02", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a0c-1234-7abc-8def-0123456789ab", "resultId": "continuation-02", "capability": "suspended-response", "status": "resumed", "completedAt": "2026-08-23T18:03:00Z"}
       }
     },
     {
       "name": "allow-once-applied-manual-retry",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-03", "reviewRequestId": "review-request-03", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab", "receiptId": "receipt-03", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-03", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
-        "application": {"correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
-        "continuation": {"correlationId": "gcrv2_018f0a0d-1234-7abc-8def-0123456789ab", "resultId": "continuation-03", "capability": "retry-only", "status": "manual_retry_required", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-03", "reviewRequestId": "review-request-03", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab", "receiptId": "receipt-03", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-03", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a0d-1234-7abc-8def-0123456789ab", "resultId": "continuation-03", "capability": "retry-only", "status": "manual_retry_required", "completedAt": "2026-08-23T18:03:00Z"}
       }
     },
     {
       "name": "block-applied-without-continuation",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-04", "reviewRequestId": "review-request-04", "kind": "reviewable_pause", "status": "resolved_block", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab", "receiptId": "receipt-04", "outcome": "block", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-04", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
-        "application": {"correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
-        "continuation": {"correlationId": "gcrv2_018f0a0e-1234-7abc-8def-0123456789ab", "resultId": "continuation-04", "capability": "unsupported", "status": "blocked_not_resumed", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-04", "reviewRequestId": "review-request-04", "kind": "reviewable_pause", "status": "resolved_block", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab", "receiptId": "receipt-04", "outcome": "block", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-04", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a0e-1234-7abc-8def-0123456789ab", "resultId": "continuation-04", "capability": "unsupported", "status": "blocked_not_resumed", "completedAt": "2026-08-23T18:03:00Z"}
       }
     },
     {
       "name": "block-recorded-awaiting-local-application",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:01:00Z",
-        "request": {"correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-08", "reviewRequestId": "review-request-08", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab", "receiptId": "receipt-08", "outcome": "block", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-08", "status": "queued"},
-        "application": {"correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab", "status": "waiting"},
-        "continuation": {"correlationId": "gcrv2_018f0a12-1234-7abc-8def-0123456789ab", "capability": "unsupported", "status": "waiting"}
+        "request": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-08", "reviewRequestId": "review-request-08", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "receiptId": "receipt-08", "outcome": "block", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-08", "status": "queued"},
+        "application": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "status": "waiting"},
+        "continuation": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "capability": "unsupported", "status": "waiting"}
       }
     },
     {
       "name": "allow-once-applied-and-already-resumed",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-05", "reviewRequestId": "review-request-05", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab", "receiptId": "receipt-05", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-05", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
-        "application": {"correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
-        "continuation": {"correlationId": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab", "resultId": "continuation-05", "capability": "session-resume", "status": "already_resumed", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-05", "reviewRequestId": "review-request-05", "kind": "reviewable_pause", "status": "resolved_allow", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab", "receiptId": "receipt-05", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-05", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab", "status": "applied", "appliedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a0f-1234-7abc-8def-0123456789ab", "resultId": "continuation-05", "capability": "session-resume", "status": "already_resumed", "completedAt": "2026-08-23T18:03:00Z"}
       }
     },
     {
       "name": "continuation-failed-after-terminal-local-application",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-06", "reviewRequestId": "review-request-06", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab", "receiptId": "receipt-06", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-06", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
-        "application": {"correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab", "status": "failed_terminal", "reason": "local application failed", "completedAt": "2026-08-23T18:02:00Z"},
-        "continuation": {"correlationId": "gcrv2_018f0a10-1234-7abc-8def-0123456789ab", "resultId": "continuation-06", "capability": "retry-only", "status": "failed", "reason": "local application failed", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-06", "reviewRequestId": "review-request-06", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab", "receiptId": "receipt-06", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-06", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab", "status": "failed_terminal", "reason": "local application failed", "completedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a10-1234-7abc-8def-0123456789ab", "resultId": "continuation-06", "capability": "retry-only", "status": "failed", "reason": "local application failed", "completedAt": "2026-08-23T18:03:00Z"}
+      }
+    },
+    {
+      "name": "continuation-failed-after-rejected-binding",
+      "result": {
+        "contractVersion": "guard-cloud-review-v2",
+        "correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab",
+        "observedAt": "2026-08-23T18:03:00Z",
+        "request": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-08", "reviewRequestId": "review-request-08", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "receiptId": "receipt-08", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-08", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "status": "rejected_binding", "reason": "local binding changed", "completedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "resultId": "continuation-08", "capability": "retry-only", "status": "failed", "reason": "local binding changed", "completedAt": "2026-08-23T18:03:00Z"}
+      }
+    },
+    {
+      "name": "continuation-failed-after-rejected-stale",
+      "result": {
+        "contractVersion": "guard-cloud-review-v2",
+        "correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab",
+        "observedAt": "2026-08-23T18:03:00Z",
+        "request": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-09", "reviewRequestId": "review-request-09", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "receiptId": "receipt-09", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-09", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "status": "rejected_stale", "reason": "local request is stale", "completedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "resultId": "continuation-09", "capability": "retry-only", "status": "failed", "reason": "local request is stale", "completedAt": "2026-08-23T18:03:00Z"}
       }
     },
     {
       "name": "continuation-not-applicable-without-local-application",
       "result": {
         "contractVersion": "guard-cloud-review-v2",
-        "correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab",
+        "correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab",
         "observedAt": "2026-08-23T18:03:00Z",
-        "request": {"correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-07", "reviewRequestId": "review-request-07", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
-        "decision": {"correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab", "receiptId": "receipt-07", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
-        "delivery": {"correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab", "status": "not_applicable"},
-        "application": {"correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab", "status": "not_applicable"},
-        "continuation": {"correlationId": "gcrv2_018f0a11-1234-7abc-8def-0123456789ab", "resultId": "continuation-07", "capability": "unsupported", "status": "not_applicable", "completedAt": "2026-08-23T18:03:00Z"}
+        "request": {"correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-07", "reviewRequestId": "review-request-07", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab", "receiptId": "receipt-07", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab", "status": "not_applicable"},
+        "application": {"correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab", "status": "not_applicable"},
+        "continuation": {"correlationId": "gcr_018f0a11-1234-7abc-8def-0123456789ab", "resultId": "continuation-07", "capability": "unsupported", "status": "not_applicable", "completedAt": "2026-08-23T18:03:00Z"}
       }
     }
   ],
   "invalidResults": [
     {"name": "legacy-ambiguous-status", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["application", "status"], "value": "sent"}], "error": "not one of"},
-    {"name": "mismatched-correlation", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["delivery", "correlationId"], "value": "gcrv2_018f0a0f-1234-7abc-8def-0123456789ab"}], "error": "must match"},
+    {"name": "mismatched-correlation", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["delivery", "correlationId"], "value": "gcr_018f0a0f-1234-7abc-8def-0123456789ab"}], "error": "must match"},
     {"name": "immutable-block-cannot-use-exact-review-result", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["request", "kind"], "value": "immutable_policy_block"}], "error": "reviewable_pause"},
     {"name": "recorded-decision-requires-delivery", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["delivery", "status"], "value": "none"}, {"path": ["delivery", "commandJobId"], "delete": true}, {"path": ["delivery", "leasedAt"], "delete": true}, {"path": ["delivery", "completedAt"], "delete": true}], "error": "conditional value is not allowed"},
     {"name": "applied-application-requires-delivery-timestamp", "source": "allow-once-applied-and-resumed", "mutations": [{"path": ["application", "appliedAt"], "delete": true}], "error": "appliedAt"},

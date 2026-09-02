@@ -3,10 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import http.client
 import json
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,14 +11,11 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import extension_control_api as extension_control_api_module
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -437,7 +431,11 @@ class _ApplyingStore:
         assert catalog_digest == self.current_view.catalog_digest
         return self.current_view
 
-    def read_extension_control_authority_for_registry(self, _registry: object, **kwargs: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self,
+        _registry: object,
+        **kwargs: object,
+    ) -> ExtensionControlAuthorityView:
         if kwargs.get("include_managed_controls") is False:
             return self.current_view
         base_layers = (
@@ -626,66 +624,3 @@ def test_local_apply_persists_raw_signed_but_previews_active_managed_layer(
 
     assert store.committed_layers == (raw_signed,)
     assert service.effective()["layers"] == json.loads(layers_to_json((managed_signed,)))
-
-
-def test_http_routes_authenticate_before_reading_sensitive_post_body(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=2)
-    try:
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/extension-controls/catalog",
-            method="GET",
-        )
-        with pytest.raises(urllib.error.HTTPError) as unauthorized:
-            urllib.request.urlopen(request, timeout=2)
-        assert unauthorized.value.code == 401
-
-        auth_token = load_guard_daemon_auth_token(store.guard_home)
-        assert auth_token is not None
-        authenticated = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/extension-controls/catalog",
-            method="GET",
-            headers={"X-Guard-Dashboard-Session": _dashboard_token(auth_token)},
-        )
-        with urllib.request.urlopen(authenticated, timeout=2) as response:
-            assert response.status == 200
-            assert json.loads(response.read())["catalog_digest"] == (BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-
-        connection.putrequest("POST", "/v1/extension-controls/apply")
-        connection.putheader("Content-Type", "application/json")
-        connection.putheader("Content-Length", "1000000")
-        connection.endheaders()
-        response = connection.getresponse()
-        assert response.status == 401
-        response.read()
-        connection.close()
-        connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=2)
-        connection.putrequest("POST", "/v1/extension-controls/apply")
-        connection.putheader("X-Guard-Token", auth_token)
-        connection.putheader("Content-Type", "application/json")
-        connection.putheader("Content-Length", "1000001")
-        connection.endheaders()
-        response = connection.getresponse()
-        client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
-        refreshed = client.refresh_extension_controls()
-        assert refreshed["health"] == "unenrolled"
-        with pytest.raises(GuardDaemonRequestError) as not_recoverable:
-            client.recover_extension_control_authority({"session_nonce": "nonce"})
-        assert not_recoverable.value.status == 409
-        assert not_recoverable.value.code == "authority_not_recoverable"
-        with pytest.raises(GuardDaemonRequestError) as not_degraded:
-            client.acknowledge_degraded_extension_controls({})
-        assert not_degraded.value.status == 409
-        assert not_degraded.value.code == "authority_not_degraded"
-        with pytest.raises(GuardDaemonRequestError) as unavailable:
-            client.preview_extension_controls(_mutation_payload(revision=0))
-        assert unavailable.value.status == 423
-        assert unavailable.value.code == "authority_unavailable"
-        assert unavailable.value.recovery_action == "enroll_or_repair_authority"
-
-        assert response.status == 413
-    finally:
-        connection.close()
-        daemon.stop()

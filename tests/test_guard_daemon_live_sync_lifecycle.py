@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 def test_finish_service_stops_cloud_workers_and_allows_restart(monkeypatch, tmp_path: Path) -> None:
     stopped: list[tuple[str, object]] = []
     command_worker = object()
-    live_request_worker = object()
+    cloud_review_worker = object()
     store = SimpleNamespace(
         guard_home=tmp_path,
         clear_runtime_state=lambda *, session_id: None,
@@ -20,7 +20,7 @@ def test_finish_service_stops_cloud_workers_and_allows_restart(monkeypatch, tmp_
     service = object.__new__(daemon_server_module.GuardDaemonServer)
     service._shutdown_started = threading.Event()
     service._command_queue_worker = command_worker
-    service._live_request_sync_worker = live_request_worker
+    service._cloud_review_sync_worker = cloud_review_worker
     service._server = SimpleNamespace(
         runtime_session_id="runtime-session",
         server_address=("127.0.0.1", 4781),
@@ -37,7 +37,7 @@ def test_finish_service_stops_cloud_workers_and_allows_restart(monkeypatch, tmp_
     monkeypatch.setattr(
         daemon_server_module,
         "stop_cloud_sync_sync_worker",
-        lambda worker: stopped.append(("live-request", worker)),
+        lambda worker: stopped.append(("cloud-review", worker)),
     )
     monkeypatch.setattr(
         daemon_server_module,
@@ -49,7 +49,7 @@ def test_finish_service_stops_cloud_workers_and_allows_restart(monkeypatch, tmp_
 
     assert stopped == [
         ("command", command_worker),
-        ("live-request", live_request_worker),
+        ("cloud-review", cloud_review_worker),
     ]
     assert service._thread is threading.current_thread()
     assert service._shutdown_started.is_set()

@@ -97,3 +97,115 @@ def test_list_items_exposes_continuity_only_when_every_production_flag_is_enable
     disabled = LocalCliApiService(store=store).list_items()
     assert disabled["cloud"]["continuity_enabled"] is False
     assert disabled["items"][0]["continuity"] is None
+
+
+def test_list_items_returns_stored_grants_when_discovery_fails(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    store = GuardStore(home)
+    store.record_local_cli_observation(identity, seen_at="2026-08-25T16:00:00Z")
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-08-25T16:00:00Z",
+    )
+    service = LocalCliApiService(store=store)
+
+    def fail_observe() -> dict[str, str]:
+        raise AssertionError("list_items must not persist harness MCP")
+
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", fail_observe)
+    payload = service.list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert len(items) == 1
+    listed = items[0]
+    assert isinstance(listed, dict)
+    assert listed["cli_id"] == identity.cli_id
+    assert listed["state"] == "allowed"
+
+
+def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    project = tmp_path / "gone-app"
+    project.mkdir()
+    (project / "package.json").write_text(
+        '{"name":"gone-app","scripts":{"guard:audit":"tsx audit.ts"}}\n',
+        encoding="utf-8",
+    )
+    (project / "pnpm-lock.yaml").write_text("{}\n", encoding="utf-8")
+    store = GuardStore(home)
+    service = LocalCliApiService(store=store)
+    recognized = service.recognize({"command": "pnpm run", "cwd": str(project)})
+    item = recognized["item"]
+    assert isinstance(item, dict)
+    (project / "package.json").unlink()
+    payload = service.list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert all(entry.get("cli_id") != item["cli_id"] for entry in items if isinstance(entry, dict))
+
+
+def test_list_items_keeps_granted_package_scripts_after_project_is_gone(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    project = tmp_path / "ads-app"
+    project.mkdir()
+    (project / "package.json").write_text(
+        '{"name":"ads-app","scripts":{"guard:audit":"tsx audit.ts"}}\n',
+        encoding="utf-8",
+    )
+    (project / "pnpm-lock.yaml").write_text("{}\n", encoding="utf-8")
+    store = GuardStore(home)
+    service = LocalCliApiService(store=store)
+    recognized = service.recognize({"command": "pnpm run", "cwd": str(project)})
+    item = recognized["item"]
+    assert isinstance(item, dict)
+    listed = UnlistedCliIdentity(
+        cli_id=str(item["cli_id"]),
+        name=str(item["name"]),
+        kind="script",
+        identity_hash=str(item["identity_hash"]),
+        example_label=str(item["example_label"]),
+        interpreter_name="pnpm",
+    )
+    store.upsert_local_cli_grant(
+        identity=listed,
+        state="allowed",
+        expected_revision=int(recognized["revision"]),
+        updated_at="2026-08-25T16:00:00Z",
+    )
+    (project / "package.json").unlink()
+    payload = service.list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    granted = next(entry for entry in items if isinstance(entry, dict) and entry.get("cli_id") == listed.cli_id)
+    assert granted["state"] == "allowed"
+    assert granted["surface"] == "package-scripts"

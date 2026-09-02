@@ -22,6 +22,7 @@ import {
   repairApprovalCenter,
   repairProtectionCheck,
   resolveRequestWithQueueResult,
+  GuardRequestResolutionError,
   retryResume,
   runHarnessAction,
 } from "./guard-api";
@@ -31,26 +32,26 @@ import { buildClearPayload } from "./clear-policy-payload";
 import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
-import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
+import { protectionHealthFor, remainingProtectionRepairMessage } from "./protection-health";
 import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
-const HomeWorkspace = lazyWorkspace(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
-const ExtensionsWorkspace = lazyWorkspace(() =>
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazyWorkspace("extensions-workspace", () =>
   import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
-const SupplyChainHubWorkspace = lazyWorkspace(() =>
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => import("./help-modal").then((m) => ({ default: m.HelpModal })));
+const SupplyChainHubWorkspace = lazyWorkspace("supply-chain-hub-workspace", () =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
-const PolicyWorkspacePage = lazyWorkspace(() =>
+const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
 );
-const AboutWorkspace = lazyWorkspace(() =>
+const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
 
@@ -152,6 +153,7 @@ function parseRequestId(pathname: string): string | null {
 }
 
 export const PROTECT_ROUTE = "/protect";
+export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
   if (view === "home") return "Home";
@@ -230,7 +232,9 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      fetchDiff(item.artifact_id, item.harness),
+      shouldFetchArtifactDiff(item.artifact_type)
+        ? fetchDiff(item.artifact_id, item.harness)
+        : Promise.resolve(null),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -257,6 +261,26 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
+}
+
+export async function refreshStaleScopeContractSelection<T>({
+  requestId,
+  refreshQueue,
+  loadSelectedDetail,
+  applySelectedDetail,
+}: {
+  requestId: string | null;
+  refreshQueue: () => Promise<void>;
+  loadSelectedDetail: (requestId: string) => Promise<T>;
+  applySelectedDetail: (detail: T) => void;
+}): Promise<void> {
+  await refreshQueue();
+  if (requestId === null) return;
+  applySelectedDetail(await loadSelectedDetail(requestId));
+}
+
+export function shouldFetchArtifactDiff(artifactType: string): boolean {
+  return new Set(["mcp_server", "skill", "skill_file"]).has(artifactType);
 }
 
 export function App() {
@@ -534,6 +558,7 @@ export function App() {
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
+  const handleOpenTodayEvidence = useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
@@ -693,9 +718,28 @@ export function App() {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
-      const result = await resolveRequestWithQueueResult(payload);
+      const result = await resolveRequestWithQueueResult(payload).catch(async (error: unknown) => {
+        if (
+          error instanceof GuardRequestResolutionError &&
+          error.status === 409 &&
+          error.payload?.["error"] === "stale_scope_contract"
+        ) {
+          await refreshStaleScopeContractSelection({
+            requestId: activeRequestId,
+            refreshQueue: async () => {
+              await refreshStateAfterAction();
+            },
+            loadSelectedDetail: loadDetail,
+            applySelectedDetail: setDetail,
+          });
+          throw new Error(
+            "This request changed while you were reviewing it. Guard refreshed the current action and scopes; review them, then retry.",
+          );
+        }
+        throw error;
+      });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codex_resume ?? null;
+      const resume = result.codexResume ?? null;
       setCodexResume(resume);
       setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {
@@ -709,7 +753,7 @@ export function App() {
     } finally {
       resolutionInFlight.current = false;
     }
-  }, [requests, refreshStateAfterAction, setResolutionMessage]);
+  }, [activeRequestId, requests, refreshStateAfterAction, setResolutionMessage]);
 
   const handleRetryResume = useCallback(async () => {
     if (resolvedRequestId === null) return;
@@ -842,22 +886,10 @@ export function App() {
     if (remainingHealth.state === "protected") {
       return "Automatic repairs completed. Guard rechecked every protection layer below.";
     }
-    const remainingParts = remainingProtectionRepairParts(remainingHealth);
-    const currentFailedHarnesses = new Set(remainingParts.failedHookHarnesses);
-    const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
-    const remainingMessages: string[] = [];
-    if (failedHookApps.length > 0) {
-      remainingMessages.push(
-        `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
-      );
-    }
-    if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
-    const remaining = remainingMessages.length > 0
-      ? remainingMessages.join(" ")
-      : "A local protection check still needs attention.";
+    const remaining = remainingProtectionRepairMessage(remainingHealth, harnessDisplayName);
     throw new ProtectionRepairFlowError(
-      `${remaining} Open the repair details below for the exact check.`,
-      [...failedHarnesses].filter((harness) => currentFailedHarnesses.has(harness)),
+      remaining.message,
+      [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness)),
     );
   }, [refreshStateAfterAction]);
 
@@ -874,13 +906,14 @@ export function App() {
         inventory={inventory.kind === "ready" ? inventory.items : []}
         requests={requests.kind === "ready" ? requests.items : []}
         onGoHome={handleGoHome}
+        onOpenApps={handleOpenFleet}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
         onClearPolicy={handleClearPolicy}
         onManagedInstallChanged={refreshStateWithoutResult}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
 
   const policyContent = useMemo(() => {
     if (runtime.kind !== "ready") {
@@ -951,6 +984,7 @@ export function App() {
             onOpenInbox={handleOpenInbox}
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
+            onOpenTodayEvidence={handleOpenTodayEvidence}
             onOpenInsights={handleOpenInsights}
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}

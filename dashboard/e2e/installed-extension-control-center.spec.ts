@@ -13,7 +13,7 @@ const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
 const extensionId = "command.api-gateway";
 const permissionId = "command.api-gateway.permission.delete";
 const governedRuleId = "command.api-gateway.delete";
-const expectedExtensionCount = 59;
+const expectedExtensionCount = 60;
 
 async function installSession(page: import("@playwright/test").Page) {
   await page.addInitScript(({ daemon, token }) => {

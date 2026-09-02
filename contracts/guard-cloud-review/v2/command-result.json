@@ -1,0 +1,93 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://hol.org/contracts/guard-cloud-review/v2/command-result.json",
+    "title": "HOL Guard Cloud Review exact command-result contract (protocol v2)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "applicationReason",
+        "applicationStatus",
+        "applicationUpdatedAt",
+        "continuationReason",
+        "continuationStatus",
+        "continuationUpdatedAt",
+        "contractVersion",
+        "correlationId",
+        "localRequestId",
+        "protocolVersion",
+        "receiptId"
+    ],
+    "properties": {
+        "applicationReason": {"type": ["string", "null"], "maxLength": 128},
+        "applicationStatus": {
+            "enum": [
+                "applied",
+                "rejected_stale",
+                "rejected_binding",
+                "failed_retryable",
+                "failed_terminal",
+                "not_applicable"
+            ]
+        },
+        "applicationUpdatedAt": {"type": "string", "format": "date-time"},
+        "continuationReason": {"type": ["string", "null"], "maxLength": 128},
+        "continuationStatus": {
+            "enum": [
+                "already_resumed",
+                "blocked_not_resumed",
+                "failed",
+                "manual_retry_required",
+                "not_applicable",
+                "resumed",
+                "unsupported",
+                "waiting"
+            ]
+        },
+        "continuationUpdatedAt": {"type": "string", "format": "date-time"},
+        "contractVersion": {"const": "guard-cloud-review-command-result-v2"},
+        "correlationId": {"$ref": "#/$defs/opaqueId"},
+        "localRequestId": {"$ref": "#/$defs/opaqueId"},
+        "protocolVersion": {"const": 2},
+        "receiptId": {"$ref": "#/$defs/opaqueId"}
+    },
+    "$defs": {
+        "opaqueId": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"}
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"applicationStatus": {"const": "applied"}}, "required": ["applicationStatus"]},
+            "then": {"properties": {"applicationReason": {"const": null}}}
+        },
+        {
+            "if": {
+                "properties": {
+                    "applicationStatus": {
+                        "enum": [
+                            "rejected_stale",
+                            "rejected_binding",
+                            "failed_retryable",
+                            "failed_terminal"
+                        ]
+                    }
+                },
+                "required": ["applicationStatus"]
+            },
+            "then": {"properties": {"applicationReason": {"type": "string", "minLength": 1}}}
+        }
+    ],
+    "x-hol-contract": {
+        "contractVersion": "guard-cloud-review-command-result-v2",
+        "protocolVersion": 2,
+        "correlation": {
+            "field": "correlationId",
+            "source": "Cloud command job id",
+            "cloudAggregation": {
+                "commandJobId": "/correlationId",
+                "reviewRequestLocalId": "/localRequestId",
+                "decisionReceiptId": "/receiptId",
+                "localApplicationStatus": "/applicationStatus",
+                "agentContinuationStatus": "/continuationStatus"
+            }
+        }
+    }
+}

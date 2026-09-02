@@ -79,7 +79,7 @@ def _sorted_policy_rows(store: GuardStore) -> list[dict[str, object]]:
     return sorted(store.list_policy_decisions(), key=lambda row: str(row["decision_id"]))
 
 
-def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> bool:
+def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> dict[str, object] | None:
     device = store.get_device_metadata()
     return store.apply_policy_bundle_authority(
         build_policy_bundle_decisions(
@@ -233,10 +233,10 @@ def test_atomic_activation_cannot_replace_newer_checkpoint_with_older_signed_bun
         bundle_version="policy-2026-07-18.1",
         issued_at="2026-07-18T00:00:00Z",
     )
-    assert _activate_bundle(store, newer, "2026-07-18T01:00:00Z") is True
+    assert _activate_bundle(store, newer, "2026-07-18T01:00:00Z") is not None
     rows_after_newer = _sorted_policy_rows(store)
 
-    assert _activate_bundle(store, older, "2026-07-18T02:00:00Z") is False
+    assert _activate_bundle(store, older, "2026-07-18T02:00:00Z") is None
     assert store.get_sync_payload("policy_bundle") == newer
     assert store.get_sync_payload("policy_bundle_last_good") == newer
     assert store.get_sync_payload("policy_bundle_acceptance_checkpoint") == (policy_bundle_acceptance_checkpoint(newer))
@@ -263,7 +263,7 @@ def test_atomic_activation_rejects_corrupt_existing_checkpoint_without_mutation(
         bundle_version="policy-2026-07-18.1",
         issued_at="2026-07-18T00:00:00Z",
     )
-    assert _activate_bundle(store, newer, "2026-07-18T01:00:00Z") is True
+    assert _activate_bundle(store, newer, "2026-07-18T01:00:00Z") is not None
     rows_after_newer = _sorted_policy_rows(store)
 
     with sqlite3.connect(store.path) as connection:
@@ -272,7 +272,7 @@ def test_atomic_activation_rejects_corrupt_existing_checkpoint_without_mutation(
             (corrupt_checkpoint, "policy_bundle_acceptance_checkpoint"),
         )
 
-    assert _activate_bundle(store, older, "2026-07-18T02:00:00Z") is False
+    assert _activate_bundle(store, older, "2026-07-18T02:00:00Z") is None
     assert store.get_sync_payload("policy_bundle") == newer
     assert store.get_sync_payload("policy_bundle_last_good") == newer
     assert _sorted_policy_rows(store) == rows_after_newer

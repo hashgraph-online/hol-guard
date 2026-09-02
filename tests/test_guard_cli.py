@@ -4194,6 +4194,12 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_update_dry_run_emits_planned_command(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "3.0.1a1")
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_latest_alpha_version_from_pypi",
+            lambda _current: "3.0.1a2",
+        )
 
         rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--dry-run", "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4206,6 +4212,12 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_update_dry_run_skips_guard_store_init(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "3.0.1a1")
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_latest_alpha_version_from_pypi",
+            lambda _current: "3.0.1a2",
+        )
         monkeypatch.setattr(
             guard_commands_module,
             "GuardStore",
@@ -9682,7 +9694,7 @@ url = http://127.0.0.1:8787/guard-canary
             lambda _context: HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         )
 
-        def _fake_sync_receipts(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        def _fake_sync_local_guard_cloud_proof(_store: GuardStore, **kwargs: object) -> dict[str, object]:
             captured_receipt_kwargs.append(dict(kwargs))
             auth_context = kwargs.get("auth_context")
             assert isinstance(auth_context, dict)
@@ -9707,7 +9719,7 @@ url = http://127.0.0.1:8787/guard-canary
                 },
             }
 
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", _fake_sync_receipts)
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
         monkeypatch.setattr(
             guard_commands_module,
             "sync_supply_chain_cloud_state",
@@ -9745,14 +9757,14 @@ url = http://127.0.0.1:8787/guard-canary
             lambda _context: HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         )
 
-        def _fake_sync_receipts(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        def _fake_sync_local_guard_cloud_proof(_store: GuardStore, **kwargs: object) -> dict[str, object]:
             captured_receipt_kwargs.append(dict(kwargs))
             return {
                 "synced_at": "2026-06-18T22:00:00Z",
                 "receipts_stored": 2,
             }
 
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", _fake_sync_receipts)
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
         monkeypatch.setattr(
             guard_commands_module,
             "sync_supply_chain_cloud_state",

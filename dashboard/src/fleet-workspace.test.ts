@@ -1,4 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
@@ -17,6 +18,15 @@ assert(
 assert(
   activeFailedHarnesses(["codex", "codex", "grok"], ["grok"])[0] === "grok",
   "resolved and duplicate app failures do not leave stale repair actions",
+);
+
+assert(
+  defaultConnectHarness(undefined, []) === "codex",
+  "empty fleet still opens a supported app from Connect an app",
+);
+assert(
+  defaultConnectHarness(undefined, ["grok", "claude-code"]) === "grok",
+  "observed apps keep their own connect target",
 );
 
 const urls = {

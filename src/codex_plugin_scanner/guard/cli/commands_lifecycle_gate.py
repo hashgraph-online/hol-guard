@@ -57,6 +57,9 @@ def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequire
         action = f"commands.{commands_command}"
         subject = _string_attribute(args, "job_id") or "remote-command-authority"
         return LifecycleGateRequirement(action, subject)
+    cloud_review_command = _string_attribute(args, "cloud_review_command")
+    if command == "cloud-review" and cloud_review_command in {"enable", "disable"}:
+        return LifecycleGateRequirement(f"cloud-review.{cloud_review_command}", "exact-cloud-review")
     if command == "daemon" and _string_attribute(args, "daemon_command") == "stop":
         return LifecycleGateRequirement("daemon.stop", "local-daemon")
     trust_command = _string_attribute(args, "trust_command")

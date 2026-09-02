@@ -1097,12 +1097,13 @@ def _is_frozen_runtime() -> bool:
 
 
 def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
+    home_dir = context.home_dir
     protect_args = [
         "protect",
         "--package-shim-ui",
         "--guard-home",
         str(context.guard_home),
-        *_home_override_args(context),
+        *(["--home", str(home_dir)] if home_dir else []),
         *workspace_args,
     ]
     if _is_frozen_runtime():

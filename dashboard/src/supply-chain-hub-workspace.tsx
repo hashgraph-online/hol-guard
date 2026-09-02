@@ -11,13 +11,13 @@ import {
 } from "./supply-chain-fix-all";
 import { lazyWorkspace } from "./lazy-workspace";
 
-const SupplyChainWorkspace = lazyWorkspace(() =>
+const SupplyChainWorkspace = lazyWorkspace("supply-chain-workspace", () =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
 );
-const AuditWorkspace = lazyWorkspace(() =>
+const AuditWorkspace = lazyWorkspace("audit-workspace", () =>
   import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
 );
-const FeedHealthWorkspace = lazyWorkspace(() =>
+const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 
