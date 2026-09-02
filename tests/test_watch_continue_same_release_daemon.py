@@ -52,7 +52,84 @@ def test_guard_daemon_state_rejects_different_package_version_peer() -> None:
     payload = {
         "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
         "package_version": "0.0.1",
+        "source_root": "/opt/hol-guard/lib/python",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_matches_older_desktop_core_sidecar() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "Library/Application Support/org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_matches_windows_desktop_core_sidecar() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": r"AppData\Roaming\org.hol.guard.desktop\core\versions\0.0.1\hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_generic_desktop_core_path() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
         "source_root": "/desktop/core/sidecar",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_empty_fingerprint_desktop_sidecar() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "   ",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_incompatible_desktop_sidecar() -> None:
+    payload = {
+        "compatibility_version": "not-current",
+        "package_version": "0.0.1",
+        "source_root": "Library/Application Support/org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_embedded_desktop_marker() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "opt/hol-guard/evil-org.hol.guard.desktop/core/versions/0.0.1/hol-guard",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_desktop_marker_without_version_child() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "Library/Application Support/org.hol.guard.desktop/core/versions",
         "runtime_fingerprint": "desktop-sidecar-fingerprint",
     }
 
@@ -91,6 +168,44 @@ def test_load_guard_daemon_url_rejects_older_package_version(
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
 
     assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
+
+def test_load_guard_daemon_url_accepts_older_desktop_core_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_current_guard_daemon_source_root",
+        lambda: "Library/Application Support/org.hol.guard.desktop/core/versions/3.0.45/hol-guard",
+    )
+    monkeypatch.setattr(daemon_manager_module, "__version__", "3.0.45")
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        5530,
+        "token-123",
+        pid=12345,
+    )
+    monkeypatch.setattr(daemon_manager_module, "__version__", "3.0.46")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_current_guard_daemon_runtime_fingerprint",
+        lambda: "pipx-runtime-fingerprint",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module.urllib.request,
+        "urlopen",
+        lambda request, timeout=1: _HealthzResponse(),
+    )
+
+    assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
 
 
 def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
