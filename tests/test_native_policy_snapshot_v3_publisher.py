@@ -76,7 +76,7 @@ test_windows_open_handle_uses_disk_nonreparse_read_contract = (
     _windows_tests.test_windows_open_handle_uses_disk_nonreparse_read_contract
 )
 test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle = (
-    _windows_tests.test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle
+    _windows_tests.test_windows_existing_directory_reapplies_private_dacl_on_same_handle
 )
 test_windows_private_descriptor_deduplicates_system_owner_ace = (
     _windows_tests.test_windows_private_descriptor_deduplicates_system_owner_ace
