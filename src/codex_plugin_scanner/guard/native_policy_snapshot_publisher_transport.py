@@ -51,6 +51,25 @@ def _decode_ack_v3(output: bytes | None) -> dict[str, object] | None:
     return value
 
 
+def _ack_from_resident_output(output: bytes | None) -> dict[str, object] | None:
+    if output:
+        try:
+            value = _strict_json_loads_v3(output)
+        except NativePolicySnapshotError:
+            value = None
+        else:
+            error = value.get("error") if isinstance(value, dict) else None
+            if (
+                isinstance(value, dict)
+                and isinstance(error, str)
+                and error
+                and error != POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION
+                and set(value) <= {"error", "retryable"}
+            ):
+                raise NativePolicySnapshotError(error)
+    return _decode_ack_v3(output)
+
+
 def _publish_snapshot_v3(
     *,
     publisher: Any,
@@ -85,7 +104,7 @@ def _publish_snapshot_v3(
             payload=encoded,
             deadline_monotonic=time.monotonic() + _PUBLISH_TIMEOUT_SECONDS,
         )
-        ack = _decode_ack_v3(output)
+        ack = _ack_from_resident_output(output)
         if ack is None:
             raise NativePolicySnapshotError("native_policy_snapshot_ack_invalid")
         if ack["status"] == POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION:

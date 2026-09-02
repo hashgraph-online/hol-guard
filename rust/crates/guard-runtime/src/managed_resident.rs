@@ -41,7 +41,8 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
 }
 
-const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
+const CLIENT_START_TIMEOUT: Duration =
+    Duration::from_millis(if cfg!(windows) { 1_500 } else { 600 });
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 
 fn try_live_or_restart(

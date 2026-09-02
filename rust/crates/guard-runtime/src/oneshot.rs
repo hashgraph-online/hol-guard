@@ -5,6 +5,7 @@ use guard_command::{parse_command, CommandModelRequestV1};
 use guard_contracts::{NativeHookRequestV1, NATIVE_PROTOCOL_VERSION};
 use guard_hook_core::review_post_tool;
 use guard_policy_snapshot::{validate as validate_policy_snapshot, PolicySnapshotV1};
+#[cfg(not(windows))]
 use guard_secure_fs::read_bounded;
 use serde::Deserialize;
 use serde_json::Value;
@@ -43,9 +44,7 @@ fn validate_durable_policy_generation(
     let canonical_guard_home = std::fs::canonicalize(Path::new(guard_home))
         .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
     let state_path = canonical_guard_home.join(POLICY_GENERATION_STATE_NAME);
-    let state_bytes = read_bounded(&state_path, MAX_POLICY_GENERATION_STATE_BYTES)
-        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
-        .bytes;
+    let state_bytes = read_durable_generation_bytes(&canonical_guard_home, &state_path)?;
     let state: DurablePolicyGenerationState = serde_json::from_slice(&state_bytes)
         .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
     if state.schema != POLICY_GENERATION_STATE_SCHEMA || state.generation == 0 {
@@ -55,6 +54,35 @@ fn validate_durable_policy_generation(
         return Err("native_policy_snapshot_not_current".to_owned());
     }
     Ok(())
+}
+
+fn read_durable_generation_bytes(
+    canonical_guard_home: &Path,
+    state_path: &Path,
+) -> Result<Vec<u8>, String> {
+    #[cfg(windows)]
+    {
+        use std::io::Read;
+        let mut file = crate::resident_state::open_private_read(
+            state_path,
+            MAX_POLICY_GENERATION_STATE_BYTES as u64,
+            "generation_state",
+            canonical_guard_home,
+        )
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .ok_or_else(|| "native_policy_generation_state_invalid".to_owned())?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
+        Ok(bytes)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = canonical_guard_home;
+        Ok(read_bounded(state_path, MAX_POLICY_GENERATION_STATE_BYTES)
+            .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+            .bytes)
+    }
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

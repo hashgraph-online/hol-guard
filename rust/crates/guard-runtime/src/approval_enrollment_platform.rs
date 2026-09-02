@@ -104,7 +104,10 @@ pub(super) fn write_platform_secret(account: &str, value: &str) -> Result<(), St
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(super) fn read_platform_secret(_account: &str) -> Result<Option<String>, String> {
-    Err("native_approval_secure_state_unavailable".to_owned())
+    // No desktop secret store is wired on this platform yet. Treat that as an
+    // empty store so reads can fail open to "no enrollment", matching Linux
+    // when the helper binary is absent. Writes below still fail closed.
+    Ok(None)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
