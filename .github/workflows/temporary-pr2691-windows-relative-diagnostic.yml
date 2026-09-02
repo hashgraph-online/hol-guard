@@ -22,7 +22,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          python - <<'PY'
+          @'
           from pathlib import Path
 
           private_files = Path('rust/crates/guard-runtime-windows-process/src/private_files.rs')
@@ -64,10 +64,12 @@ jobs:
           if text.count(old) != 1:
               raise RuntimeError(f'relative_child.rs status target count: {text.count(old)}')
           relative_child.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+          '@ | python -
           rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
           rustup default 1.88.0
           cargo fmt --manifest-path rust/Cargo.toml --all -- --check
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
           cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime approval::approval_v4::tests::ed25519_assertion_validates_and_persists_counter_zero_and_one -- --nocapture
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+
+# Trigger after workflow registration.
