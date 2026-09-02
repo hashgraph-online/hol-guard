@@ -289,6 +289,18 @@ fn read_response(
     Ok(response)
 }
 
+// Once a request has been fully written and flushed, the peer may have
+// already applied it. Response-side teardown is therefore never replay-safe.
+fn read_committed_response(
+    stream: &mut dyn crate::ResidentStream,
+    request_id: &[u8; FRAME_REQUEST_ID_BYTES],
+) -> Result<Vec<u8>, ResidentClientError> {
+    read_response(stream, request_id).map_err(|error| ResidentClientError {
+        code: error.code,
+        retryable_teardown: false,
+    })
+}
+
 pub(crate) fn send_request_for_digest_detailed(
     transport: &str,
     endpoint: &str,
@@ -319,7 +331,7 @@ pub(crate) fn send_request_for_digest_detailed(
     if started.elapsed() >= timeout {
         return Err("native_client_deadline_exceeded".to_owned().into());
     }
-    read_response(&mut *stream, &request_id)
+    read_committed_response(&mut *stream, &request_id)
 }
 
 pub(crate) fn send_request_for_digest(
@@ -399,6 +411,65 @@ mod tests {
         });
         let error = read_response(&mut client, &request_id).unwrap_err();
         assert_eq!(error.code, "native_client_response_digest_mismatch");
+        assert!(!error.retryable_teardown);
+    }
+
+    #[test]
+    fn response_teardown_after_flushed_request_is_never_retryable() {
+        use std::io::{self, Read, Write};
+
+        struct ResponseTeardownSocket {
+            wrote_request: bool,
+            flushed_request: bool,
+        }
+
+        impl Read for ResponseTeardownSocket {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                assert!(self.wrote_request);
+                assert!(self.flushed_request);
+                Err(io::Error::from(io::ErrorKind::ConnectionReset))
+            }
+        }
+
+        impl Write for ResponseTeardownSocket {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                self.wrote_request = true;
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                self.flushed_request = true;
+                Ok(())
+            }
+        }
+
+        impl crate::ResidentStream for ResponseTeardownSocket {
+            fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        let mut client = ResponseTeardownSocket {
+            wrote_request: false,
+            flushed_request: false,
+        };
+        let request_id = write_request(
+            &mut client,
+            &[0u8; crate::AUTH_TOKEN_BYTES],
+            &[0u8; AUTH_NONCE_BYTES],
+            b"{}",
+        )
+        .unwrap();
+        let error = read_committed_response(&mut client, &request_id).unwrap_err();
+        assert_eq!(error.code, "native_client_frame_read_failed");
         assert!(!error.retryable_teardown);
     }
 

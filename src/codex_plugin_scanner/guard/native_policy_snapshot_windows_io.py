@@ -23,11 +23,9 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_GENERIC_READ,
     _WINDOWS_GENERIC_WRITE,
     _WINDOWS_OPEN_EXISTING,
-    _WINDOWS_OWNER_SECURITY_INFORMATION,
     _WINDOWS_SE_FILE_OBJECT,
     _WINDOWS_SECURITY_INFORMATION,
     _WINDOWS_WRITE_DAC,
-    _WINDOWS_WRITE_OWNER,
     NativePolicySnapshotError,
 )
 
@@ -85,11 +83,10 @@ def _windows_open_handle(
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new else 0)
         share_mode = _WINDOWS_FILE_SHARE_READ
     if descriptor is not None:
-        # SetSecurityInfo requires WRITE_DAC on a handle. The security
-        # descriptor passed to CreateFileW protects creation, while this
-        # access right lets the post-create verification/application remain
-        # valid on Windows instead of failing closed for every fresh object.
-        desired_access |= _WINDOWS_WRITE_DAC | _WINDOWS_WRITE_OWNER
+        # SetSecurityInfo needs WRITE_DAC on the handle. Ownership is left
+        # unchanged so existing administrator- or SYSTEM-owned state can be
+        # hardened without requiring WRITE_OWNER.
+        desired_access |= _WINDOWS_WRITE_DAC
     if create_new:
         flags |= _WINDOWS_FILE_FLAG_WRITE_THROUGH
         disposition = _WINDOWS_CREATE_NEW
@@ -151,19 +148,8 @@ def _windows_apply_private_dacl(kernel32: Any, handle: Any, descriptor: Any, dac
     import ctypes
     from ctypes import wintypes
 
-    del kernel32, directory
+    del kernel32, descriptor, directory
     advapi32 = _snapshot_api()._windows_dll("advapi32")
-    owner = ctypes.c_void_p()
-    owner_defaulted = wintypes.BOOL()
-    get_owner = advapi32.GetSecurityDescriptorOwner
-    get_owner.argtypes = [
-        ctypes.c_void_p,
-        ctypes.POINTER(ctypes.c_void_p),
-        ctypes.POINTER(wintypes.BOOL),
-    ]
-    get_owner.restype = wintypes.BOOL
-    if not get_owner(descriptor, ctypes.byref(owner), ctypes.byref(owner_defaulted)) or not owner:
-        raise NativePolicySnapshotError("native_policy_windows_acl_build_failed")
     setter = advapi32.SetSecurityInfo
     setter.argtypes = [
         wintypes.HANDLE,
@@ -179,8 +165,8 @@ def _windows_apply_private_dacl(kernel32: Any, handle: Any, descriptor: Any, dac
         setter(
             handle,
             _WINDOWS_SE_FILE_OBJECT,
-            _WINDOWS_SECURITY_INFORMATION | _WINDOWS_OWNER_SECURITY_INFORMATION,
-            owner,
+            _WINDOWS_SECURITY_INFORMATION,
+            None,
             None,
             dacl,
             None,

@@ -56,11 +56,31 @@ pub(super) fn verify_windows_handle<H: std::os::windows::io::AsRawHandle>(
     verify_windows_descriptor(&applied, owner)
 }
 
+fn windows_owner_is_trusted(
+    applied_owner: &Sid,
+    owner: &Sid,
+    system: &Sid,
+    administrators: &Sid,
+) -> bool {
+    applied_owner == owner || applied_owner == system || applied_owner == administrators
+}
+
 fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
     let system = "S-1-5-18"
         .parse::<LocalBox<Sid>>()
         .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
-    if applied.owner() != Some(owner) {
+    let administrators = "S-1-5-32-544"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_administrators_sid_failed".to_owned())?;
+    let applied_owner = applied
+        .owner()
+        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
+    if !windows_owner_is_trusted(
+        applied_owner,
+        owner,
+        system.as_ref(),
+        administrators.as_ref(),
+    ) {
         return Err("native_resident_windows_acl_not_private".to_owned());
     }
     let sddl = applied
@@ -99,4 +119,38 @@ fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Resul
         return Err("native_resident_windows_acl_not_private".to_owned());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_owner_allowlist_rejects_unrelated_principals() {
+        let owner = "S-1-5-21-1-2-3-1001".parse::<LocalBox<Sid>>().unwrap();
+        let system = "S-1-5-18".parse::<LocalBox<Sid>>().unwrap();
+        let administrators = "S-1-5-32-544".parse::<LocalBox<Sid>>().unwrap();
+        let unrelated = "S-1-5-21-4-5-6-1002"
+            .parse::<LocalBox<Sid>>()
+            .unwrap();
+
+        for applied_owner in [
+            owner.as_ref(),
+            system.as_ref(),
+            administrators.as_ref(),
+        ] {
+            assert!(windows_owner_is_trusted(
+                applied_owner,
+                owner.as_ref(),
+                system.as_ref(),
+                administrators.as_ref(),
+            ));
+        }
+        assert!(!windows_owner_is_trusted(
+            unrelated.as_ref(),
+            owner.as_ref(),
+            system.as_ref(),
+            administrators.as_ref(),
+        ));
+    }
 }

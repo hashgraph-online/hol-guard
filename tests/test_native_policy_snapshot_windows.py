@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
+import codex_plugin_scanner.guard.native_policy_snapshot_windows_acl as windows_acl
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_support as windows_support
 
 from .native_policy_snapshot_test_fixtures import _fake_windows_snapshot_kernel
@@ -103,6 +104,7 @@ def test_windows_open_handle_uses_disk_nonreparse_read_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     create_arguments: list[tuple[object, ...]] = []
+    set_security_arguments: list[tuple[object, ...]] = []
     closed: list[object] = []
 
     def create_file(*arguments: object) -> object:
@@ -119,13 +121,22 @@ def test_windows_open_handle_uses_disk_nonreparse_read_contract(
         closed.append(handle)
         return 1
 
+    def set_security_info(*arguments: object) -> int:
+        set_security_arguments.append(arguments)
+        return 0
+
     kernel32 = types.SimpleNamespace(
         CreateFileW=create_file,
         CloseHandle=close_handle,
         GetFileInformationByHandle=get_information,
         GetFileType=lambda _handle: snapshot_module._WINDOWS_FILE_TYPE_DISK,
     )
-    monkeypatch.setattr(snapshot_module, "_windows_dll", lambda _name: kernel32)
+    advapi32 = types.SimpleNamespace(SetSecurityInfo=set_security_info)
+    monkeypatch.setattr(
+        snapshot_module,
+        "_windows_dll",
+        lambda name: advapi32 if name == "advapi32" else kernel32,
+    )
 
     opened = snapshot_module._windows_open_handle(Path("C:/Guard/snapshot.json"), directory=False)
 
@@ -133,12 +144,33 @@ def test_windows_open_handle_uses_disk_nonreparse_read_contract(
     assert create_arguments[0][1] == snapshot_module._WINDOWS_GENERIC_READ
     assert create_arguments[0][2] == snapshot_module._WINDOWS_FILE_SHARE_READ
     assert create_arguments[0][5] & snapshot_module._WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
-    assert closed == []
     snapshot_module._windows_close_handle(*opened[:2])
-    assert [getattr(handle, "value", handle) for handle in closed] == [71]
+
+    descriptor = ctypes.c_void_p(17)
+    dacl = ctypes.c_void_p(19)
+    hardened = snapshot_module._windows_open_handle(
+        Path("C:/Guard/snapshot.json"),
+        directory=False,
+        descriptor=descriptor,
+    )
+    assert create_arguments[1][1] == snapshot_module._WINDOWS_GENERIC_READ | snapshot_module._WINDOWS_WRITE_DAC
+    assert create_arguments[1][1] & snapshot_module._WINDOWS_WRITE_OWNER == 0
+    snapshot_module._windows_apply_private_dacl(
+        hardened[0],
+        hardened[1],
+        descriptor,
+        dacl,
+        False,
+    )
+    assert set_security_arguments[0][2] == snapshot_module._WINDOWS_SECURITY_INFORMATION
+    assert set_security_arguments[0][3] is None
+    assert getattr(set_security_arguments[0][5], "value", set_security_arguments[0][5]) == 19
+    snapshot_module._windows_close_handle(*hardened[:2])
+
+    assert [getattr(handle, "value", handle) for handle in closed] == [71, 71]
 
 
-def test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle(
+def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -243,6 +275,10 @@ def test_windows_private_descriptor_deduplicates_system_owner_ace(
     assert captured == [
         "O:S-1-5-18D:P(A;OICI;FA;;;S-1-5-18)",
     ]
+    assert windows_acl._windows_owner_is_trusted("S-1-5-21-1", "S-1-5-21-1")
+    assert windows_acl._windows_owner_is_trusted(snapshot_module._WINDOWS_SYSTEM_SID, "S-1-5-21-1")
+    assert windows_acl._windows_owner_is_trusted("S-1-5-32-544", "S-1-5-21-1")
+    assert not windows_acl._windows_owner_is_trusted("S-1-5-21-2", "S-1-5-21-1")
 
 
 def test_windows_cache_read_rejects_ancestor_reparse_before_open(

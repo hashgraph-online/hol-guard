@@ -40,6 +40,12 @@ def _windows_sid_class(sid: str | None, owner_sid: str | None) -> str:
     return "other"
 
 
+def _windows_owner_is_trusted(actual_sid: str, owner_sid: str) -> bool:
+    """Accept only owners that already control the local Windows host."""
+
+    return actual_sid in {owner_sid, _WINDOWS_SYSTEM_SID, _WINDOWS_ADMINISTRATORS_SID}
+
+
 def _windows_acl_not_private(
     *,
     protected: bool | None = None,
@@ -150,8 +156,9 @@ def _verify_owner(
     ctypes_module: Any,
     wintypes: Any,
 ) -> None:
-    if _sid_string(owner, convert_sid, local_free, ctypes_module, wintypes) != owner_sid:
-        raise _windows_acl_not_private(sid_class="other")
+    actual_sid = _sid_string(owner, convert_sid, local_free, ctypes_module, wintypes)
+    if not _windows_owner_is_trusted(actual_sid, owner_sid):
+        raise _windows_acl_not_private(sid_class=_windows_sid_class(actual_sid, owner_sid))
 
 
 def _verify_protected_control(descriptor: Any, advapi32: Any, ctypes_module: Any, wintypes: Any) -> bool:
@@ -295,7 +302,7 @@ def _verify_acl_entry(
 
 
 def _windows_verify_private_dacl(handle: Any, *, owner_sid: str, directory: bool) -> None:
-    """Require a protected DACL containing only owner and SYSTEM full access."""
+    """Require a protected DACL containing only the current principal and SYSTEM."""
 
     from ctypes import wintypes
 
