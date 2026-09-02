@@ -41,6 +41,8 @@ mod directory_binding;
 mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
+#[path = "relative_child.rs"]
+mod relative_child;
 pub use directory_binding::{
     bind_directory, bind_private_directory, create_private_directory, PrivateDirectoryBinding,
 };

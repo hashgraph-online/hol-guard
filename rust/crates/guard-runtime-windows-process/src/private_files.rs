@@ -14,9 +14,7 @@ use winapi::um::fileapi::{
     OPEN_EXISTING,
 };
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::minwinbase::{
-    FileAttributeTagInfo, FileDispositionInfo, SECURITY_ATTRIBUTES,
-};
+use winapi::um::minwinbase::{FileAttributeTagInfo, FileDispositionInfo, SECURITY_ATTRIBUTES};
 use winapi::um::winbase::{
     GetFileInformationByHandleEx, FILE_FLAG_BACKUP_SEMANTICS, FILE_TYPE_DISK,
 };
@@ -409,9 +407,9 @@ pub(super) fn rename_into_directory(
     };
     if status < 0 {
         // SAFETY: ntdll maps this NTSTATUS to a Win32 error code.
-        return Err(io::Error::from_raw_os_error(unsafe {
-            RtlNtStatusToDosError(status)
-        } as i32));
+        return Err(io::Error::from_raw_os_error(
+            unsafe { RtlNtStatusToDosError(status) } as i32,
+        ));
     }
     Ok(())
 }
