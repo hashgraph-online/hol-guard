@@ -391,6 +391,23 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason="native unavailable",
     )
     assert session["decision"] == "allow"
+    aliased = availability_harness_response(
+        {"hookEventName": "session_start"},
+        harness="grok",
+        event_name="session_start",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert aliased["decision"] == "allow"
+    assert aliased["policy_action"] == "allow"
+    subagent = availability_harness_response(
+        {"hook_event_name": "subagent_start"},
+        harness="grok",
+        event_name="subagent_start",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert subagent["decision"] == "allow"
     withheld = availability_harness_response(
         {"hook_event_name": "PostToolUse", "tool_name": "Read"},
         harness="cursor",

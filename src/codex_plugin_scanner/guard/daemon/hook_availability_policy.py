@@ -41,8 +41,16 @@ LIFECYCLE_OBSERVE_EVENTS = frozenset(
 )
 
 
+def _compact_hook_event_name(event_name: str) -> str:
+    return event_name.strip().lower().replace("_", "").replace("-", "")
+
+
+_LIFECYCLE_OBSERVE_COMPACT = frozenset(_compact_hook_event_name(name) for name in LIFECYCLE_OBSERVE_EVENTS)
+_LIFECYCLE_CANONICAL_BY_COMPACT = {_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS}
+
+
 def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    return event_name.strip() in LIFECYCLE_OBSERVE_EVENTS
+    return _compact_hook_event_name(event_name) in _LIFECYCLE_OBSERVE_COMPACT
 
 
 def availability_harness_response(
@@ -63,10 +71,11 @@ def availability_harness_response(
         post_tool_fail_safe_response,
     )
 
-    if lifecycle_event_is_observe_only(event_name):
+    canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
+    if canonical_lifecycle is not None:
         return observe_lifecycle_fail_safe_response(
             harness,
-            event_name=event_name,
+            event_name=canonical_lifecycle,
             reason_code=reason_code,
         )
     if event_name != "PreToolUse":
