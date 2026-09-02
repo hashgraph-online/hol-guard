@@ -366,9 +366,12 @@ pub(super) fn persist_private_bytes(
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
-    let result = replace_temporary(&temporary, path, kind, private_root);
+    // Release the creator handle before replacement. The Windows helper
+    // reopens the candidate; keeping both handles open made post-rename
+    // identity checks fail when an authority watcher also had the target.
     #[cfg(windows)]
     drop(file);
+    let result = replace_temporary(&temporary, path, kind, private_root);
     #[cfg(not(windows))]
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);

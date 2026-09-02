@@ -82,6 +82,7 @@ def _publish_snapshot_v3(
 ) -> tuple[dict[str, object], int]:
     """Materialize, push, and authenticate a snapshot, including one recovery retry."""
 
+    from .native_resident_client import native_resident_client_failure_code
     from .native_runtime import _isolated_environment
 
     recovery_attempted = False
@@ -106,7 +107,9 @@ def _publish_snapshot_v3(
         )
         ack = _ack_from_resident_output(output)
         if ack is None:
-            raise NativePolicySnapshotError("native_policy_snapshot_ack_invalid")
+            raise NativePolicySnapshotError(
+                native_resident_client_failure_code() or "native_policy_snapshot_ack_invalid"
+            )
         if ack["status"] == POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION:
             floor = ack["generation"]
             candidate_generation = snapshot["generation"]

@@ -100,7 +100,7 @@ impl PrivateDirectoryBinding {
             renamed
         });
         self.handles
-            .push(open_directory_bound(&self.path, self.private_final, true)?);
+            .push(open_directory_bound(&self.path, false, true)?);
         renamed?;
         let committed = self.open_private_file(destination)?;
         if file_information(source.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
