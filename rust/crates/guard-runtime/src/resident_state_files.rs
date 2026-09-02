@@ -186,9 +186,8 @@ pub(crate) fn private_lock_file(
     let descriptor = windows_security::private_file_descriptor()?;
     let file = match binding.create_private_file(name, descriptor.as_ref()) {
         Ok(file) => {
-            windows_security::verify_private_file(&file).map_err(|error| {
+            windows_security::verify_private_file(&file).inspect_err(|_| {
                 let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
-                error
             })?;
             file
         }

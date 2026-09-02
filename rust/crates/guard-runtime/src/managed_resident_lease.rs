@@ -150,8 +150,6 @@ fn acquire_directory_lock_with_retry(
 pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let private_root = private_root_for_state_base(state_base)?;
     let directory = lease_directory(state_base)?;
-    let _lock =
-        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_ACQUIRE_RETRY_BUDGET)?;
     let process_id = std::process::id();
     let start_marker = process_start_marker(process_id)?;
     let digest = crate::resident_state::runtime_digest()?;
@@ -160,6 +158,8 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let nonce = crate::resident_state_encoding::hex_bytes(&nonce);
     let path = directory.join(format!("{LEASE_PREFIX}{process_id}-{nonce}{LEASE_SUFFIX}"));
     let contents = format!("{process_id}\n{start_marker}\n{digest}\n");
+    let directory_lock =
+        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_ACQUIRE_RETRY_BUDGET)?;
     let mut file = crate::resident_state::private_file(&path, true, &private_root)?;
     let identity = match LeaseIdentity::from_file(&file) {
         Ok(identity) => identity,
@@ -168,6 +168,11 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
             return Err(error);
         }
     };
+    // Lease paths are nonce-qualified and identity-bound. Release the
+    // directory lock before the durability flush so unrelated clients
+    // are not serialized behind filesystem latency. Recent partial
+    // records remain fail-closed as live until the write completes.
+    drop(directory_lock);
     if file
         .write_all(contents.as_bytes())
         .and_then(|()| file.sync_all())
@@ -188,7 +193,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
             if heartbeat_stopped.load(Ordering::Acquire) {
                 break;
             }
-            if let Ok(Some(_lock)) =
+            if let Ok(Some(directory_lock)) =
                 acquire_directory_lock(&heartbeat_directory, &heartbeat_private_root)
             {
                 let Ok(mut file) = crate::resident_state::private_file(
@@ -198,6 +203,10 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
                 ) else {
                     break;
                 };
+                // As with initial publication, keep the directory lock
+                // only for opening the identity-bound lease path. A
+                // recent partial heartbeat is conservatively live.
+                drop(directory_lock);
                 if file
                     .write_all(heartbeat_contents.as_bytes())
                     .and_then(|()| file.sync_all())
