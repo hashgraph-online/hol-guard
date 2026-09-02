@@ -120,31 +120,19 @@ def _windows_file_identity(information: Any) -> tuple[int, int, int] | None:
     )
 
 
-def _windows_commit_private_file_handle(
+def _windows_prepare_replace_destination(
     *,
     api: Any,
-    kernel32: Any,
-    source_handle: Any,
-    source_information: Any,
     parent_path: Path,
-    parent_handle: Any,
     destination_name: str,
     descriptor: Any,
     dacl: Any,
     owner_sid: str,
-    kind: str,
-    replace_existing: bool = True,
-    rename_state: list[bool] | None = None,
-    directory_handles: list[tuple[Any, Any]] | None = None,
-) -> None:
-    """Validate the old target, then replace it through bound handles."""
+    replace_existing: bool,
+) -> Path:
+    """Verify an existing destination, then close it so rename can replace it."""
 
-    destination_name = _windows_child_name(destination_name)
-    source_identity = _windows_file_identity(source_information)
-    api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
     target_path = parent_path / destination_name
-    target_handle = None
-    target_kernel32 = None
     try:
         target_kernel32, target_handle, _target_information = api._windows_open_handle(
             target_path,
@@ -154,24 +142,31 @@ def _windows_commit_private_file_handle(
             rename_source=True,
         )
     except FileNotFoundError:
-        target_handle = None
-        target_kernel32 = None
-    else:
-        # The owner check is deliberately separate and precedes every ACL
-        # mutation. A foreign-owned destination fails closed.
-        try:
-            api._windows_verify_private_owner(target_handle, owner_sid=owner_sid)
-            api._windows_apply_private_dacl(target_kernel32, target_handle, descriptor, dacl, False)
-            api._windows_verify_private_dacl(target_handle, owner_sid=owner_sid, directory=False)
-            if not replace_existing:
-                raise FileExistsError(str(target_path))
-        except BaseException:
-            api._windows_close_handle(target_kernel32, target_handle)
-            target_handle = None
-            raise
+        return target_path
+    try:
+        api._windows_verify_private_owner(target_handle, owner_sid=owner_sid)
+        api._windows_apply_private_dacl(target_kernel32, target_handle, descriptor, dacl, False)
+        api._windows_verify_private_dacl(target_handle, owner_sid=owner_sid, directory=False)
+        if not replace_existing:
+            raise FileExistsError(str(target_path))
+    finally:
         api._windows_close_handle(target_kernel32, target_handle)
-        target_handle = None
-        target_kernel32 = None
+    return target_path
+
+
+def _windows_rename_releasing_barrier(
+    *,
+    api: Any,
+    kernel32: Any,
+    source_handle: Any,
+    parent_path: Path,
+    parent_handle: Any,
+    destination_name: str,
+    replace_existing: bool,
+    directory_handles: list[tuple[Any, Any]] | None,
+) -> None:
+    """Rename through a share-delete parent after releasing the exclusive barrier."""
+
     rename_kernel32 = None
     rename_handle = None
     released = False
@@ -194,23 +189,6 @@ def _windows_commit_private_file_handle(
             destination_name,
             replace_if_exists=replace_existing,
         )
-        if rename_state is not None:
-            rename_state[0] = True
-        api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
-        try:
-            committed_kernel32, committed_handle, committed_information = api._windows_open_handle(
-                target_path,
-                directory=False,
-                share_delete=True,
-            )
-        except (FileNotFoundError, NativePolicySnapshotError) as error:
-            raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed") from error
-        try:
-            if source_identity is not None and _windows_file_identity(committed_information) != source_identity:
-                raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed")
-            api._windows_verify_private_dacl(committed_handle, owner_sid=owner_sid, directory=False)
-        finally:
-            api._windows_close_handle(committed_kernel32, committed_handle)
     finally:
         if rename_handle is not None:
             api._windows_close_handle(rename_kernel32, rename_handle)
@@ -223,8 +201,66 @@ def _windows_commit_private_file_handle(
                 repair=True,
             )
             directory_handles.append((restored_kernel32, restored_handle))
-        if target_handle is not None:
-            api._windows_close_handle(target_kernel32, target_handle)
+
+
+def _windows_commit_private_file_handle(
+    *,
+    api: Any,
+    kernel32: Any,
+    source_handle: Any,
+    source_information: Any,
+    parent_path: Path,
+    parent_handle: Any,
+    destination_name: str,
+    descriptor: Any,
+    dacl: Any,
+    owner_sid: str,
+    kind: str,
+    replace_existing: bool = True,
+    rename_state: list[bool] | None = None,
+    directory_handles: list[tuple[Any, Any]] | None = None,
+) -> None:
+    """Validate the old target, then replace it through bound handles."""
+
+    destination_name = _windows_child_name(destination_name)
+    source_identity = _windows_file_identity(source_information)
+    api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
+    target_path = _windows_prepare_replace_destination(
+        api=api,
+        parent_path=parent_path,
+        destination_name=destination_name,
+        descriptor=descriptor,
+        dacl=dacl,
+        owner_sid=owner_sid,
+        replace_existing=replace_existing,
+    )
+    _windows_rename_releasing_barrier(
+        api=api,
+        kernel32=kernel32,
+        source_handle=source_handle,
+        parent_path=parent_path,
+        parent_handle=parent_handle,
+        destination_name=destination_name,
+        replace_existing=replace_existing,
+        directory_handles=directory_handles,
+    )
+    if rename_state is not None:
+        rename_state[0] = True
+    api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
+    try:
+        committed_kernel32, committed_handle, committed_information = api._windows_open_handle(
+            target_path,
+            directory=False,
+            share_delete=True,
+        )
+    except (FileNotFoundError, NativePolicySnapshotError) as error:
+        raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed") from error
+    try:
+        if source_identity is not None and _windows_file_identity(committed_information) != source_identity:
+            raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed")
+        api._windows_verify_private_dacl(committed_handle, owner_sid=owner_sid, directory=False)
+    finally:
+        api._windows_close_handle(committed_kernel32, committed_handle)
 
 
 def _windows_write_private_file_atomic(

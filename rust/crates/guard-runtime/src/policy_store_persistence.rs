@@ -37,7 +37,10 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
             .unwrap_or("policy-snapshot-v3.json");
         let target_name = OsStr::new(file_name);
         let backup_name = format!(".{file_name}.previous");
-        let open_candidate = |name: &OsStr| {
+        fn open_candidate(
+            binding: &guard_runtime_windows_process::PrivateDirectoryBinding,
+            name: &OsStr,
+        ) -> Result<Option<std::fs::File>, String> {
             let file = match binding.open_private_file(name) {
                 Ok(file) => file,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -50,17 +53,17 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
                 return Err("native_policy_snapshot_authority_recovery_failed".to_owned());
             }
             Ok(Some(file))
-        };
-        let target_exists = open_candidate(target_name)?.is_some();
-        let backup_exists = open_candidate(OsStr::new(&backup_name))?.is_some();
+        }
+        let target_exists = open_candidate(&binding, target_name)?.is_some();
+        let backup_exists = open_candidate(&binding, OsStr::new(&backup_name))?.is_some();
         if !target_exists && backup_exists {
-            let source = open_candidate(OsStr::new(&backup_name))?
+            let source = open_candidate(&binding, OsStr::new(&backup_name))?
                 .ok_or_else(|| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
             binding
                 .replace_private_file(&source, target_name)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         } else if target_exists && backup_exists {
-            let backup = open_candidate(OsStr::new(&backup_name))?
+            let backup = open_candidate(&binding, OsStr::new(&backup_name))?
                 .ok_or_else(|| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
             guard_runtime_windows_process::delete_private_file_handle(&backup)
                 .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
@@ -76,7 +79,7 @@ pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
             if !name_text.starts_with(&prefix) || !name_text.ends_with(".tmp") {
                 continue;
             }
-            let Some(file) = open_candidate(&name)? else {
+            let Some(file) = open_candidate(&binding, &name)? else {
                 continue;
             };
             guard_runtime_windows_process::delete_private_file_handle(&file)
