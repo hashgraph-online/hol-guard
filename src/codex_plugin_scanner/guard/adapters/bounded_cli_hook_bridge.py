@@ -7,9 +7,6 @@ to an isolated subprocess (~1s) when the daemon is unreachable.
 from __future__ import annotations
 
 import json
-import os
-import stat
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -25,6 +22,12 @@ from ..codex_hook_launch_runtime import (
 )
 from ..daemon.hook_availability_policy import EMERGENCY_SAFE_REASON, hook_action_is_emergency_safe
 from ..private_file_io import read_private_regular_text
+from .desktop_hook_proxy import (
+    _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
+)
+from .desktop_hook_proxy import (
+    _trusted_desktop_hook_proxy_command,
+)
 
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
@@ -33,164 +36,6 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DAEMON_TIMEOUT_BUDGET_SECONDS = 5.0
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
-_DESKTOP_PROXY_ENV = "HOL_GUARD_DESKTOP_HOOK_PROXY"
-
-
-def _codesign_team(path: Path) -> str | None:
-    """Return a verified Apple TeamIdentifier without importing the Desktop runtime."""
-
-    verify = subprocess.run(
-        ["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if verify.returncode != 0:
-        return None
-    display = subprocess.run(
-        ["/usr/bin/codesign", "--display", "--verbose=4", str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if display.returncode != 0:
-        return None
-    for line in display.stderr.splitlines():
-        team = line.strip().removeprefix("TeamIdentifier=")
-        if team != line.strip() and team and team != "not set":
-            return team
-    return None
-
-
-_DESKTOP_PROXY_LAUNCH_SCRIPT = r"""
-set -u
-proxy=$1
-expected_team=$2
-bundle=$3
-config=$4
-fallback=$5
-fallback_bridge() {
-  exec "$fallback" __guard-bounded-hook "$config"
-}
-verify_team() {
-  candidate=$1
-  /usr/bin/codesign --verify --strict --verbose=2 "$candidate" >/dev/null 2>&1 || return 1
-  actual_team=$(
-    /usr/bin/codesign --display --verbose=4 "$candidate" 2>&1 \
-      | /usr/bin/sed -n 's/^TeamIdentifier=//p' \
-      | /usr/bin/head -n 1
-  ) || return 1
-  [ -n "$actual_team" ] || return 1
-  [ "$actual_team" != "not set" ] || return 1
-  [ "$actual_team" = "$expected_team" ]
-}
-[ -x "$proxy" ] && [ ! -L "$proxy" ] || fallback_bridge
-[ -x "$fallback" ] && [ ! -L "$fallback" ] || fallback_bridge
-[ -d "$bundle" ] && [ ! -L "$bundle" ] || fallback_bridge
-proxy_before=$(/usr/bin/stat -f '%d:%i:%u:%p' "$proxy" 2>/dev/null) || fallback_bridge
-fallback_before=$(/usr/bin/stat -f '%d:%i:%u:%p' "$fallback" 2>/dev/null) || fallback_bridge
-verify_team "$bundle" || fallback_bridge
-verify_team "$proxy" || fallback_bridge
-verify_team "$fallback" || fallback_bridge
-proxy_after=$(/usr/bin/stat -f '%d:%i:%u:%p' "$proxy" 2>/dev/null) || fallback_bridge
-fallback_after=$(/usr/bin/stat -f '%d:%i:%u:%p' "$fallback" 2>/dev/null) || fallback_bridge
-[ "$proxy_before" = "$proxy_after" ] || fallback_bridge
-[ "$fallback_before" = "$fallback_after" ] || fallback_bridge
-"$proxy" __guard-hook-proxy "$config"
-status=$?
-if [ "$status" -eq 125 ] || [ "$status" -eq 126 ] || [ "$status" -eq 127 ]; then
-  fallback_bridge
-fi
-exit "$status"
-""".strip()
-
-
-def _bundle_for_executable(path: Path) -> Path | None:
-    for ancestor in path.parents:
-        if ancestor.suffix == ".app":
-            return ancestor
-    return None
-
-
-def _trusted_desktop_path(path: Path) -> bool:
-    """Require a regular private executable under a non-symlinked app bundle."""
-
-    try:
-        raw_metadata = path.lstat()
-        resolved = path.resolve(strict=True)
-        metadata = resolved.stat()
-    except OSError:
-        return False
-    if stat.S_ISLNK(raw_metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-        return False
-    if not os.access(resolved, os.X_OK):
-        return False
-    if metadata.st_uid not in {os.getuid(), 0} or stat.S_IMODE(metadata.st_mode) & 0o022:
-        return False
-    bundle = _bundle_for_executable(resolved)
-    if bundle is None:
-        return False
-    for directory in (bundle, bundle / "Contents", bundle / "Contents" / "MacOS"):
-        try:
-            raw = directory.lstat()
-            current = directory.stat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(raw.st_mode) or not stat.S_ISDIR(current.st_mode):
-            return False
-        if current.st_uid not in {os.getuid(), 0} or stat.S_IMODE(current.st_mode) & 0o022:
-            return False
-    return True
-
-
-def _trusted_desktop_hook_proxy_command(
-    python_executable: str,
-    config_json: str,
-) -> tuple[str, ...] | None:
-    """Return a runtime-verified signed macOS proxy command or retain Core."""
-
-    if (
-        sys.platform != "darwin"
-        or not bool(getattr(sys, "frozen", False))
-        or os.environ.get("HOL_GUARD_DESKTOP") != "1"
-    ):
-        return None
-    raw = os.environ.get(_DESKTOP_PROXY_ENV)
-    if not raw:
-        return None
-    candidate = Path(raw)
-    core_candidate = Path(python_executable)
-    if not candidate.is_absolute() or not core_candidate.is_absolute():
-        return None
-    if not _trusted_desktop_path(candidate) or not _trusted_desktop_path(core_candidate):
-        return None
-    try:
-        proxy = candidate.resolve(strict=True)
-        core = core_candidate.resolve(strict=True)
-    except OSError:
-        return None
-    proxy_bundle = _bundle_for_executable(proxy)
-    core_bundle = _bundle_for_executable(core)
-    if proxy_bundle is None or proxy_bundle != core_bundle or proxy.parent != core.parent:
-        return None
-
-    proxy_team = _codesign_team(proxy)
-    core_team = _codesign_team(core)
-    bundle_team = _codesign_team(proxy_bundle)
-    if proxy_team is None or proxy_team == "not set" or proxy_team != core_team or proxy_team != bundle_team:
-        return None
-
-    return (
-        "/bin/sh",
-        "-c",
-        _DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
-        str(proxy),
-        proxy_team,
-        str(proxy_bundle),
-        config_json,
-        str(core),
-    )
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -268,11 +113,29 @@ def bounded_cli_hook_command(
     )
 
 
-def _bounded_stdin() -> str | None:
+_EVENT_ALIASES = {
+    "permissionrequest": "PermissionRequest",
+    "pretooluse": "PreToolUse",
+    "userpromptsubmit": "UserPromptSubmit",
+    "posttooluse": "PostToolUse",
+    "sessionstart": "SessionStart",
+    "notification": "Notification",
+    "stop": "Stop",
+}
+_EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName")
+
+
+def _read_bounded_stdin() -> tuple[str | None, str]:
     raw = sys.stdin.buffer.read(_MAX_HOOK_INPUT_BYTES + 1)
+    prefix = raw[:_MAX_HOOK_INPUT_BYTES].decode("utf-8", errors="replace")
     if len(raw) > _MAX_HOOK_INPUT_BYTES:
-        return None
-    return raw.decode("utf-8", errors="replace")
+        return None, prefix
+    return prefix, prefix
+
+
+def _bounded_stdin() -> str | None:
+    text, _prefix = _read_bounded_stdin()
+    return text
 
 
 def _validated_frozen_cli_args(
@@ -296,8 +159,7 @@ def _validated_frozen_cli_args(
     if tuple(cli_args[4:6]) != ("--harness", harness):
         return None
     tail = cli_args[6:]
-    json_output = bool(tail and tail[-1] == "--json")
-    if json_output:
+    if tail and tail[-1] == "--json":
         tail = tail[:-1]
     if len(tail) % 2 != 0:
         return None
@@ -309,17 +171,15 @@ def _validated_frozen_cli_args(
         if not Path(value).is_absolute():
             return None
         seen_flags.add(flag)
-    command: tuple[str, ...] = (
+    return (
         "hook",
         "--guard-home",
         str(expected_guard_home),
         "--harness",
         harness,
         *tail,
+        "--json",
     )
-    if json_output:
-        command = (*command, "--json")
-    return command
 
 
 def _json_object(text: str) -> dict[str, object] | None:
@@ -336,32 +196,75 @@ def _json_object(text: str) -> dict[str, object] | None:
     return payload
 
 
+def _canonical_event_token(value: str) -> str | None:
+    stripped = value.strip()
+    if not stripped:
+        return None
+    normalized = stripped.replace("_", "").replace("-", "").lower()
+    return _EVENT_ALIASES.get(normalized, stripped)
+
+
 def _event_name(input_text: str) -> str:
     payload = _json_object(input_text or "{}")
-    if payload is None:
-        return "PreToolUse"
-    for key in ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized = value.replace("_", "").replace("-", "").lower()
-            return {
-                "permissionrequest": "PermissionRequest",
-                "pretooluse": "PreToolUse",
-                "userpromptsubmit": "UserPromptSubmit",
-                "posttooluse": "PostToolUse",
-                "sessionstart": "SessionStart",
-                "notification": "Notification",
-                "stop": "Stop",
-            }.get(normalized, value.strip())
+    if payload is not None:
+        for key in _EVENT_NAME_KEYS:
+            value = payload.get(key)
+            if isinstance(value, str):
+                named = _canonical_event_token(value)
+                if named is not None:
+                    return named
+    for key in _EVENT_NAME_KEYS:
+        token = f'"{key}"'
+        start = input_text.find(token)
+        colon = input_text.find(":", start + len(token)) if start >= 0 else -1
+        quote = input_text.find('"', colon + 1) if colon >= 0 else -1
+        end = input_text.find('"', quote + 1) if quote >= 0 else -1
+        if 0 <= quote < end:
+            named = _canonical_event_token(input_text[quote + 1 : end])
+            if named is not None:
+                return named
     return "PreToolUse"
 
 
 def _has_json_object_line(output: str) -> bool:
+    stripped = output.strip()
+    if stripped and _json_object(stripped) is not None:
+        return True
     for line in reversed(output.splitlines()):
         if not line.strip():
             continue
         return _json_object(line.strip()) is not None
     return False
+
+
+def _cli_args_with_json(cli_args: Sequence[str]) -> list[str]:
+    if cli_args and cli_args[-1] == "--json":
+        return list(cli_args)
+    return [*cli_args, "--json"]
+
+
+def _guard_home_is_recording_only(guard_home: Path) -> bool:
+    try:
+        from ..config import maybe_auto_revert_watch
+        from ..protection_posture import protection_is_off
+
+        config = maybe_auto_revert_watch(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+
+
+def _watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
+    if harness == "copilot":
+        return {"permissionDecision": "allow"}
+    if harness in {"grok", "hermes", "openclaw"}:
+        return {"decision": "allow"}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "permissionDecision": "allow",
+        }
+    }
 
 
 def _failure_payload(
@@ -370,7 +273,10 @@ def _failure_payload(
     event_name: str,
     reason: str,
     input_text: str = "",
+    guard_home: Path | None = None,
 ) -> tuple[dict[str, object], int]:
+    if guard_home is not None and _guard_home_is_recording_only(guard_home):
+        return _watch_continue_payload(harness, event_name), 0
     payload = _json_object(input_text or "{}")
     if event_name == "PreToolUse" and isinstance(payload, dict) and hook_action_is_emergency_safe(payload):
         if harness == "copilot":
@@ -424,12 +330,19 @@ def _failure_payload(
     }, 0
 
 
-def _emit_failure(*, harness: str, input_text: str, reason: str = _FAILURE_REASON) -> int:
+def _emit_failure(
+    *,
+    harness: str,
+    input_text: str,
+    reason: str = _FAILURE_REASON,
+    guard_home: Path | None = None,
+) -> int:
     payload, returncode = _failure_payload(
         harness=harness,
         event_name=_event_name(input_text),
         reason=reason,
         input_text=input_text,
+        guard_home=guard_home,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
@@ -685,15 +598,15 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
         )
         if direct_cli_args is None:
-            return _emit_failure(harness=harness, input_text=input_text)
+            return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
         command = (sys.executable, *direct_cli_args)
     elif frozen_launcher:
-        return _emit_failure(harness=harness, input_text=input_text)
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
     else:
         command = isolated_guard_cli_command(
             python_executable,
             package_root,
-            cli_args,
+            _cli_args_with_json(cli_args),
         )
     daemon_result = _try_daemon_hook(
         guard_home=guard_home,
@@ -716,18 +629,22 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         timeout_seconds=float(timeout_seconds),
     )
     if result.timed_out:
-        return _emit_failure(harness=harness, input_text=input_text)
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
     if result.output_limit_exceeded:
         return _emit_failure(
             harness=harness,
             input_text=input_text,
             reason="HOL Guard blocked this action because hook output exceeded the safe size limit.",
+            guard_home=guard_home,
         )
     if result.returncode is None:
-        return _emit_failure(harness=harness, input_text=input_text)
-    if not _has_json_object_line(result.stdout):
-        return _emit_failure(harness=harness, input_text=input_text)
-    if result.stdout:
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+    compact_payload = _json_object(result.stdout.strip())
+    if compact_payload is None and not _has_json_object_line(result.stdout):
+        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+    if compact_payload is not None:
+        _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
+    elif result.stdout:
         _ = sys.stdout.write(result.stdout)
     return result.returncode
 
@@ -738,12 +655,15 @@ def main_from_argv(argv: Sequence[str]) -> int:
     config = _json_object(argv[0]) if len(argv) == 1 else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
-    input_text = _bounded_stdin()
+    input_text, stdin_prefix = _read_bounded_stdin()
     if input_text is None:
+        guard_home_value = config.get("guard_home") if config is not None else None
+        guard_home = Path(guard_home_value) if isinstance(guard_home_value, str) else None
         return _emit_failure(
             harness=harness,
-            input_text="{}",
+            input_text=stdin_prefix or "{}",
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
+            guard_home=guard_home,
         )
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)

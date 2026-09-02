@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 _DESKTOP_CORE_PARTS = ("org.hol.guard.desktop", "core", "versions")
 
 
@@ -13,6 +15,21 @@ def daemon_source_is_desktop_core(source_root: object) -> bool:
     parts = tuple(part.lower() for part in source_root.replace("\\", "/").split("/") if part)
     marker_len = len(_DESKTOP_CORE_PARTS)
     return any(parts[index : index + marker_len] == _DESKTOP_CORE_PARTS for index in range(len(parts) - marker_len))
+
+
+def daemon_desktop_core_source_available(source_root: object) -> bool:
+    """Return True when a Desktop Core sidecar path still exists on disk.
+
+    Relative fixture paths keep matching by shape. Absolute trees that were
+    deleted after a Core move are not peers and must be recycled.
+    """
+
+    if not daemon_source_is_desktop_core(source_root):
+        return False
+    path = Path(str(source_root).replace("\\", "/"))
+    if not path.is_absolute():
+        return True
+    return path.exists()
 
 
 def daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
@@ -33,4 +50,4 @@ def daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
         return True
     if payload.get("package_version") == __version__:
         return True
-    return daemon_source_is_desktop_core(payload.get("source_root"))
+    return daemon_desktop_core_source_available(payload.get("source_root"))

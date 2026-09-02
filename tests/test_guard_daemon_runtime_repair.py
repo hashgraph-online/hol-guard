@@ -211,6 +211,44 @@ def test_repair_retains_desktop_sidecar_with_invalid_package_version(
     assert result["cli_version"] == "3.0.46"
 
 
+def test_repair_recycles_missing_absolute_desktop_core_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    missing = tmp_path / "org.hol.guard.desktop" / "core" / "versions" / "3.0.45" / "hol-guard"
+    monkeypatch.setattr(
+        runtime_repair,
+        "verified_live_guard_daemon_identity",
+        lambda _home: {
+            "package_version": "3.0.45",
+            "runtime_fingerprint": "desktop-sidecar",
+            "source_root": str(missing),
+        },
+    )
+    monkeypatch.setattr(runtime_repair, "__version__", "3.0.46")
+    monkeypatch.setattr(
+        runtime_repair,
+        "repair_approval_center_locator",
+        lambda _home: {"repaired": True, "cleared": []},
+    )
+    monkeypatch.setattr(runtime_repair, "retire_all_guard_daemons_for_home", lambda _home: [321])
+    monkeypatch.setattr(runtime_repair, "guard_daemon_retirement_is_complete", lambda _home: True)
+    monkeypatch.setattr(runtime_repair, "clear_guard_daemon_state", lambda _home: None)
+    monkeypatch.setattr(
+        runtime_repair,
+        "ensure_guard_daemon_after_update",
+        lambda _home, *, home_dir: "http://127.0.0.1:5474",
+    )
+
+    result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
+
+    assert result["runtime_status"] == "restarted"
+    assert result["daemon_version"] == "3.0.45"
+
+
 def test_repair_restarts_when_authenticated_state_is_absent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
