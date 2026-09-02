@@ -125,7 +125,7 @@ pub(crate) fn private_file(
         };
         // CREATE_NEW already created an empty file; the existing-object case
         // returned above before opening or mutating it.
-        return Ok(file);
+        Ok(file)
     }
 
     #[cfg(not(windows))]
