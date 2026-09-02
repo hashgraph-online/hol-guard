@@ -5963,15 +5963,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "reason_code": reason_code,
                 "observed_review_failure": True,
             }
-        if event == "PreToolUse":
-            from .hook_availability_policy import availability_harness_response
+        from .hook_availability_policy import LIFECYCLE_OBSERVE_EVENTS, availability_harness_response
 
+        if event == "PreToolUse" or event in LIFECYCLE_OBSERVE_EVENTS:
             payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
             workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
             return availability_harness_response(
                 payload_dict,
                 harness=harness,
-                event_name="PreToolUse",
+                event_name=event,
                 reason_code=reason_code,
                 reason=reason,
                 workspace=workspace_path,

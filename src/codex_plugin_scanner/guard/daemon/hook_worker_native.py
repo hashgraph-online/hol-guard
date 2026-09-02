@@ -68,10 +68,12 @@ class HookWorkerNativeMixin:
         if event_name not in {"PreToolUse", "PostToolUse"}:
             if oracle_surface:
                 raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
-            return post_tool_fail_safe_response(
-                harness,
-                reason="HOL Guard could not classify this hook event safely.",
+            return availability_harness_response(
+                {},
+                harness=harness,
+                event_name=event_name,
                 reason_code="native_hook_event_unavailable",
+                reason="HOL Guard could not classify this hook event safely.",
             )
         reason_code = {"off": "native_hook_disabled", "shadow": "native_shadow_diagnostic_disabled"}.get(mode)
         if reason_code is None or oracle_surface:
