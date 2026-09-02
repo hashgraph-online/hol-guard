@@ -1,0 +1,166 @@
+from pathlib import Path
+
+
+def replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected one replacement target, found {count}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+state_windows = Path("rust/crates/guard-runtime/src/resident_state_windows.rs")
+replace_once(
+    state_windows,
+    """    SetNamedSecurityInfo(
+        path.as_os_str(),
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        None,
+        None,
+        Some(dacl),
+        None,
+    )
+""",
+    """    SetNamedSecurityInfo(
+        path.as_os_str(),
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl
+            | SecurityInformation::Owner
+            | SecurityInformation::ProtectedDacl,
+        Some(owner.as_ref()),
+        None,
+        Some(dacl),
+        None,
+    )
+""",
+)
+
+private_files = Path("rust/crates/guard-runtime-windows-process/src/private_files.rs")
+text = private_files.read_text(encoding="utf-8")
+start_marker = "pub(super) fn rename_into_directory("
+end_marker = "\n/// Delete the path's currently opened object"
+start = text.find(start_marker)
+end = text.find(end_marker, start)
+if start < 0 or end < 0:
+    raise RuntimeError("private_files.rs: rename function boundaries not found")
+replacement = """pub(super) fn rename_into_directory(
+    binding: &super::directory_binding::PrivateDirectoryBinding,
+    source: &std::fs::File,
+    destination: &OsStr,
+) -> io::Result<()> {
+    let destination_path = binding.path().join(destination);
+    let mut name = destination_path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if name.is_empty() || name.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "private destination name is invalid",
+        ));
+    }
+    let byte_count = name
+        .len()
+        .checked_mul(size_of::<u16>())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+    name.push(0);
+    let filename_offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+    let payload_size = name
+        .len()
+        .checked_mul(size_of::<u16>())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+    let buffer_size = filename_offset
+        .checked_add(payload_size)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+    let word_size = size_of::<usize>();
+    let allocation_size = buffer_size
+        .checked_add(word_size - 1)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private name is too long"))?;
+    let mut buffer = vec![0usize; allocation_size / word_size];
+    let buffer_ptr = buffer.as_mut_ptr() as *mut u8;
+    // SAFETY: `Vec<usize>` provides the alignment required by
+    // FILE_RENAME_INFO. FileNameLength excludes the trailing NUL.
+    unsafe {
+        let info = buffer_ptr as *mut FILE_RENAME_INFO;
+        (*info).ReplaceIfExists = TRUE;
+        (*info).RootDirectory = null_mut();
+        (*info).FileNameLength = byte_count as DWORD;
+        std::ptr::copy_nonoverlapping(
+            name.as_ptr() as *const u8,
+            buffer_ptr.add(filename_offset),
+            payload_size,
+        );
+    }
+    // SAFETY: `source` is a live DELETE-capable handle and the
+    // aligned buffer remains valid for this synchronous call.
+    if unsafe {
+        SetFileInformationByHandle(
+            source.as_raw_handle() as HANDLE,
+            FileRenameInfo,
+            buffer_ptr as *mut _,
+            buffer_size as DWORD,
+        )
+    } == FALSE
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+"""
+private_files.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+
+lease_tests = Path("rust/crates/guard-runtime/src/managed_resident_lease_tests.rs")
+replace_once(
+    lease_tests,
+    "        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();\n",
+    "        let mut file = crate::resident_state::private_file(path, false, private_root).unwrap();\n",
+)
+
+oneshot = Path("rust/crates/guard-runtime/src/oneshot.rs")
+replace_once(
+    oneshot,
+    "use guard_secure_fs::read_bounded;\n",
+    "#[cfg(not(windows))]\nuse guard_secure_fs::read_bounded;\n",
+)
+replace_once(
+    oneshot,
+    """    let state_bytes = read_bounded(&state_path, MAX_POLICY_GENERATION_STATE_BYTES)
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .bytes;
+""",
+    """    #[cfg(windows)]
+    let state_bytes = {
+        let mut file = crate::resident_state_files::open_private_read(
+            &state_path,
+            MAX_POLICY_GENERATION_STATE_BYTES as u64,
+            "policy_generation_state",
+            &canonical_guard_home,
+        )
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .ok_or_else(|| "native_policy_generation_state_invalid".to_owned())?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut bytes)
+            .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
+        bytes
+    };
+    #[cfg(not(windows))]
+    let state_bytes = read_bounded(&state_path, MAX_POLICY_GENERATION_STATE_BYTES)
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .bytes;
+""",
+)
+
+authority_tests = Path("rust/crates/guard-runtime/src/approval_v4_authority_tests.rs")
+replace_once(
+    authority_tests,
+    "use std::time::{SystemTime, UNIX_EPOCH};\n",
+    "use std::sync::atomic::{AtomicU64, Ordering};\n\nstatic TEST_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);\n",
+)
+replace_once(
+    authority_tests,
+    """    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+""",
+    """    let suffix = TEST_ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+""",
+)
