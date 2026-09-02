@@ -166,3 +166,5 @@ jobs:
           git diff --cached --check
           git commit -m "fix(runtime): avoid lease acquisition stalls"
           git push origin HEAD:fix/native-runtime-process-lifecycle
+
+# Triggered after workflow registration.
