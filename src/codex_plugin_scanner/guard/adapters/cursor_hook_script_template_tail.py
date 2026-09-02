@@ -248,8 +248,14 @@ def _cursor_availability_response(
             payload,
             hook_event_name=hook_event_name,
             workspace=workspace_path,
+            recording_only=_recording_only_from_guard_home(),
         )
     except Exception:
+        if _recording_only_from_guard_home():
+            compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+            if compact in {"aftershellexecution", "aftermcpexecution"}:
+                return {}, 0
+            return {"permission": "allow"}, 0
         compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
@@ -302,6 +308,9 @@ def main() -> int:
     try:
         return _main_inner()
     except Exception:
+        if _recording_only_from_guard_home():
+            print(json.dumps({"permission": "allow"}))
+            return 0
         print(
             json.dumps(
                 {

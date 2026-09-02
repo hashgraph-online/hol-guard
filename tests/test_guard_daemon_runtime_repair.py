@@ -44,7 +44,6 @@ def test_repair_restarts_authenticated_older_runtime(
     monkeypatch.setattr(runtime_repair, "guard_daemon_retirement_is_complete", lambda _home: True)
     monkeypatch.setattr(runtime_repair, "clear_guard_daemon_state", lambda _home: None)
     monkeypatch.setattr(runtime_repair, "__version__", "3.0.34")
-    monkeypatch.setattr(runtime_repair, "current_guard_daemon_runtime_fingerprint", lambda: "current")
     monkeypatch.setattr(
         runtime_repair,
         "ensure_guard_daemon_after_update",
@@ -82,7 +81,6 @@ def test_repair_retains_authenticated_newer_runtime(
         lambda _home: {"repaired": True, "cleared": []},
     )
     monkeypatch.setattr(runtime_repair, "__version__", "3.0.34")
-    monkeypatch.setattr(runtime_repair, "current_guard_daemon_runtime_fingerprint", lambda: "current")
     monkeypatch.setattr(
         runtime_repair,
         "retire_all_guard_daemons_for_home",
@@ -110,7 +108,7 @@ def test_repair_validates_home_before_retiring_runtime(
         runtime_repair.repair_guard_daemon_runtime(tmp_path / "guard-home", home_dir=missing_home)
 
 
-def test_repair_restarts_equal_version_with_stale_fingerprint(
+def test_repair_retains_equal_version_peer_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -120,27 +118,25 @@ def test_repair_restarts_equal_version_with_stale_fingerprint(
     monkeypatch.setattr(
         runtime_repair,
         "verified_live_guard_daemon_identity",
-        lambda _home: {"package_version": "3.0.34", "runtime_fingerprint": "stale"},
+        lambda _home: {"package_version": "3.0.34", "runtime_fingerprint": "desktop-sidecar"},
     )
     monkeypatch.setattr(runtime_repair, "__version__", "3.0.34")
-    monkeypatch.setattr(runtime_repair, "current_guard_daemon_runtime_fingerprint", lambda: "current")
     monkeypatch.setattr(
         runtime_repair,
         "repair_approval_center_locator",
         lambda _home: {"repaired": True, "cleared": []},
     )
-    monkeypatch.setattr(runtime_repair, "retire_all_guard_daemons_for_home", lambda _home: [321])
-    monkeypatch.setattr(runtime_repair, "guard_daemon_retirement_is_complete", lambda _home: True)
-    monkeypatch.setattr(runtime_repair, "clear_guard_daemon_state", lambda _home: None)
     monkeypatch.setattr(
         runtime_repair,
-        "ensure_guard_daemon_after_update",
-        lambda _home, *, home_dir: "http://127.0.0.1:5474",
+        "retire_all_guard_daemons_for_home",
+        lambda _home: (_ for _ in ()).throw(AssertionError("same-release peer runtime must remain active")),
     )
 
     result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
 
-    assert result["runtime_status"] == "restarted"
+    assert result["runtime_status"] == "current"
+    assert result["daemon_version"] == "3.0.34"
+    assert result["cli_version"] == "3.0.34"
 
 
 def test_repair_restarts_when_authenticated_state_is_absent(
@@ -152,7 +148,6 @@ def test_repair_restarts_when_authenticated_state_is_absent(
     home_dir.mkdir()
     monkeypatch.setattr(runtime_repair, "verified_live_guard_daemon_identity", lambda _home: None)
     monkeypatch.setattr(runtime_repair, "__version__", "3.0.34")
-    monkeypatch.setattr(runtime_repair, "current_guard_daemon_runtime_fingerprint", lambda: "current")
     monkeypatch.setattr(
         runtime_repair,
         "repair_approval_center_locator",

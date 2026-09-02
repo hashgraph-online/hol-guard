@@ -1,0 +1,148 @@
+"""Watch continues tools; same-release daemons stay current across install paths."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+    availability_harness_response,
+    cursor_fallback_permission,
+)
+from codex_plugin_scanner.version import __version__
+
+
+class _HealthzResponse:
+    status = 200
+
+    def __enter__(self) -> _HealthzResponse:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(
+            {
+                "ok": True,
+                "tables": ["guard_connect_states"],
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            }
+        ).encode("utf-8")
+
+
+def test_guard_daemon_state_matches_same_release_peer_fingerprint() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": __version__,
+        "source_root": "/desktop/core/sidecar",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_different_package_version_peer() -> None:
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": "0.0.1",
+        "source_root": "/desktop/core/sidecar",
+        "runtime_fingerprint": "desktop-sidecar-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_load_guard_daemon_url_rejects_older_package_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        5530,
+        "token-123",
+        pid=12345,
+    )
+    monkeypatch.setattr(daemon_manager_module, "__version__", "9.9.9")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_current_guard_daemon_runtime_fingerprint",
+        lambda: "pipx-runtime-fingerprint",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+
+    assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
+
+def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        5530,
+        "token-123",
+        pid=12345,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_current_guard_daemon_runtime_fingerprint",
+        lambda: "pipx-runtime-fingerprint",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module.urllib.request,
+        "urlopen",
+        lambda request, timeout=1: _HealthzResponse(),
+    )
+
+    assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
+
+
+def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\n',
+        encoding="utf-8",
+    )
+    git_cmd = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
+        harness="grok",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
+        guard_home=guard_home,
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert git_cmd["decision"] == "allow"
+    gh_cmd = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr view 1"}},
+        harness="grok",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
+        guard_home=guard_home,
+    )
+    assert gh_cmd["decision"] == "allow"
+
+
+def test_cursor_fallback_watch_allows_shell() -> None:
+    allow, code = cursor_fallback_permission(
+        {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
+        hook_event_name="beforeShellExecution",
+        recording_only=True,
+    )
+    assert code == 0
+    assert allow["permission"] == "allow"

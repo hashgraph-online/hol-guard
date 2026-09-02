@@ -72,6 +72,7 @@ def try_native_hook_authority(
             reason="HOL Guard could not complete the native hook decision safely.",
             workspace=workspace,
             home_dir=home_dir,
+            guard_home=guard_home,
         )
     finally:
         if worker is not None:
@@ -133,6 +134,7 @@ def try_native_or_source_ref_hook(
                 reason="HOL Guard could not complete the native hook decision safely.",
                 workspace=runtime_workspace,
                 home_dir=context.home_dir,
+                guard_home=context.guard_home,
             ),
             getattr(args, "json", False),
         )
