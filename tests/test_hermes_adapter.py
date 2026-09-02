@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -501,6 +502,36 @@ def test_launch_environment_recomputes_cloud_identity_hints(tmp_path: Path):
     env = HermesHarnessAdapter().launch_environment(context)
 
     assert "HERMES_GUARD_CLOUD_WORKSPACE" not in env
+
+
+def test_install_warns_when_local_mode_has_no_cloud_pairing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    hermes = bin_dir / "hermes"
+    hermes.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    hermes.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(context)
+    diagnostics = adapter.diagnostics(context)
+
+    assert any(
+        "runtime shell enforcement requires a Guard Cloud pairing" in note
+        for note in manifest["notes"]
+    )
+    assert any(
+        "runtime shell enforcement requires a Guard Cloud pairing" in warning
+        for warning in diagnostics["warnings"]
+    )
 
 
 def test_install_stringifies_typed_env_values_in_managed_manifest(tmp_path: Path):

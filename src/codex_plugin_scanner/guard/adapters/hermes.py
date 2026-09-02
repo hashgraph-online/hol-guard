@@ -60,6 +60,9 @@ _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
+_HERMES_LOCAL_MODE_NOTE = (
+    "Hermes local installs only cover launch-time artifacts; runtime shell enforcement requires a Guard Cloud pairing."
+)
 _GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS = 3
 _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS = 5
 
@@ -240,6 +243,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             "servers": _manifest_servers(source_configs),
             "notes": [
                 "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
+                *([_HERMES_LOCAL_MODE_NOTE] if cloud_identity is None else []),
                 "Guard wrote Guard-managed MCP proxy entries into the Hermes config.yaml.",
                 *_manifest_notes(shim_manifest),
             ],
@@ -329,6 +333,21 @@ class HermesHarnessAdapter(HarnessAdapter):
             ),
             "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
         }
+
+    def diagnostic_warnings(
+        self,
+        detection: HarnessDetection,
+        runtime_probe: dict[str, object] | None,
+    ) -> list[str]:
+        warnings = super().diagnostic_warnings(detection, runtime_probe)
+        if (
+            detection.installed
+            and isinstance(runtime_probe, dict)
+            and runtime_probe.get("managed_install_ready") is True
+            and runtime_probe.get("cloud_agent_identity_configured") is False
+        ):
+            warnings.append(_HERMES_LOCAL_MODE_NOTE)
+        return warnings
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         manifest = managed_install.get("manifest") if isinstance(managed_install, dict) else None

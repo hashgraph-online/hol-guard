@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
+from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -4983,6 +4985,41 @@ args = ["-lc", "echo hi"]
         assert rc == 0
         assert output["native_hook_state"]["protection_active"] is False
         assert any("managed Codex hooks are missing" in warning for warning in output["warnings"])
+
+    def test_guard_doctor_labels_hermes_local_only_coverage(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        hermes = bin_dir / "hermes"
+        hermes.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        hermes.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+        _write_text(
+            home_dir / ".hermes" / "config.yaml",
+            "mcp_servers:\n  github:\n    command: npx\n",
+        )
+
+        context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
+        HermesHarnessAdapter().install(context)
+
+        rc = main([
+            "guard",
+            "doctor",
+            "hermes",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(home_dir / ".hol-guard"),
+            "--json",
+        ])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["protection_label"] == "launch-review only"
+        assert any(
+            "runtime shell enforcement requires a Guard Cloud pairing" in warning
+            for warning in output["warnings"]
+        )
 
     def test_guard_doctor_reports_runtime_detector_registry_state(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"

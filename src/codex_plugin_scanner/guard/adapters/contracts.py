@@ -297,7 +297,8 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Hermes is an early-access harness; some event surface coverage depends on the Hermes version installed."
+            "Hermes local installs only guarantee launch-time artifact review; "
+            "runtime shell enforcement requires a Guard Cloud pairing or a Guard-launched session."
         ),
         smoke_command="hol-guard install hermes --dry-run",
     ),
