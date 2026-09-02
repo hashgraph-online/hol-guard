@@ -2,7 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./app";
-import "./tailwind-root.css";
+import { PresentationModeProvider } from "./presentation-mode-provider";
+import "./styles.css";
 import "./shell-navigation.css";
 import "./shell-navigation-status.css";
 import "./responsive-layout.css";
@@ -15,6 +16,8 @@ if (container === null) {
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <PresentationModeProvider>
+      <App />
+    </PresentationModeProvider>
   </StrictMode>
 );
