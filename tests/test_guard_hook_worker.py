@@ -568,7 +568,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["continue"] is False
+        assert result["continue"] is True
         assert result["stopReason"] == result["reason"]
         assert result["policy_action"] == "block"
         assert result["model_output_action"] == "block"
@@ -690,7 +690,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["continue"] is False
+        assert result["continue"] is True
         assert result["policy_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
 

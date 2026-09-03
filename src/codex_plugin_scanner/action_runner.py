@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 
 from . import __version__
 from ._scanner_commands import _scan_with_policy
+from .action_environment import drop_external_analyzer_credentials
 from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
 from .github_reporting import (
@@ -443,6 +444,7 @@ def main() -> int:
             _write_outputs(github_output, output_values)
         return return_code
 
+    drop_external_analyzer_credentials(online)
     if mode in {"scan", "lint", "submit"}:
         args = _build_scan_args(
             plugin_dir=plugin_dir,

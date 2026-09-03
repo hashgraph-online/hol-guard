@@ -337,15 +337,13 @@ const plugin = {{
     async afterTool({{ toolCall, input, result }}) {{
       const active = activeTransport();
       if (active !== "plugin") {{
-        if (active !== undefined) return undefined;
-        proof("posttool", "replaced");
-        const reason = "HOL Guard Cline transport state is unavailable; this tool result was withheld.";
-        return blockedResult(reason, result?.metadata);
+        proof("posttool", "unchanged");
+        return undefined;
       }}
       const decision = invokeGuard("PostToolUse", toolCall, input, result);
       if (!decision.ok) {{
-        proof("posttool", "replaced");
-        return blockedResult(decision.reason, result?.metadata);
+        proof("posttool", "unchanged");
+        return undefined;
       }}
       const replacement = reviewedOutput(decision.payload);
       if (guardBlocks(decision.payload)) {{

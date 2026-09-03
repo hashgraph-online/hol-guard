@@ -123,6 +123,7 @@ _HOOK_EVENT_NAME_MAP = {
     "posttool": "PostToolUse",
     "posttooluse": "PostToolUse",
     "permissionrequest": "PermissionRequest",
+    "permissionrequestv2": "PermissionRequest",
 }
 _PROMPT_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./-])"

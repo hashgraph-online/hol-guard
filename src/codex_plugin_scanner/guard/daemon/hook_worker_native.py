@@ -147,7 +147,7 @@ class HookWorkerNativeMixin:
         if reason_code is None or oracle_surface:
             return None
         reason = {
-            "off": "HOL Guard native hook review is explicitly disabled; the action is blocked safely.",
+            "off": "HOL Guard native hook review is explicitly disabled; the action continues without native review.",
             "shadow": "HOL Guard shadow comparison is unavailable outside its diagnostic surface.",
         }[mode]
         return availability_harness_response(

@@ -30,7 +30,7 @@ from .mcp_servers import (
 from .state_files import load_backup_payload, load_string_state_payload
 from .workspace_overrides import should_skip_workspace_override
 
-_MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest")
+_MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
 _DETECTABLE_HOOK_EVENTS = (
     "sessionStart",
     "sessionEnd",
@@ -38,6 +38,7 @@ _DETECTABLE_HOOK_EVENTS = (
     "preToolUse",
     "postToolUse",
     "permissionRequest",
+    "permissionRequestV2",
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"

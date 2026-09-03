@@ -170,7 +170,7 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
         return
     if event_name == "PostToolUse" and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-        payload.update({"decision": "block", "reason": reason, "continue": False, "stopReason": reason})
+        payload.update({"decision": "block", "reason": reason, "continue": True, "stopReason": reason})
         _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)

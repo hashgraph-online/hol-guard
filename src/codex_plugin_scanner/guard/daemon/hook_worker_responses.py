@@ -206,13 +206,17 @@ def post_tool_native_block_response(
     return {
         "decision": "block",
         "reason": reason,
-        "continue": False,
+        "continue": True,
         "stopReason": reason,
         "policy_action": "block",
         "risk_summary": reason,
         "model_output_action": "block",
         "notice": "warning",
         "reason_code": reason_code,
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": reason,
+        },
     }
 
 
@@ -222,7 +226,32 @@ def post_tool_fail_safe_response(
     reason: str = "HOL Guard could not complete local hook review safely.",
     reason_code: str = "daemon_worker_exception",
 ) -> dict[str, object]:
-    if _canonical_hook_harness(harness) in {"pi", "omp"}:
+    del reason
+    return observe_lifecycle_fail_safe_response(
+        harness,
+        event_name="PostToolUse",
+        reason_code=reason_code,
+    )
+
+
+def permission_unavailable_response(
+    harness: str,
+    *,
+    event_name: str,
+    reason: str,
+    reason_code: str,
+) -> dict[str, object]:
+    """Pause Permission* hooks when native review cannot finish."""
+
+    canonical = _canonical_hook_harness(harness)
+    if canonical == "copilot":
+        return {
+            "behavior": "deny",
+            "message": reason,
+            "interrupt": True,
+            "reason_code": reason_code,
+        }
+    if canonical in {"pi", "omp"}:
         return {
             "decision": "deny",
             "reason": reason,
@@ -230,7 +259,19 @@ def post_tool_fail_safe_response(
             "notice": "warning",
             "reason_code": reason_code,
         }
-    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
+    if canonical in {"grok", "hermes", "openclaw"}:
+        decision = "block" if canonical == "hermes" else "deny"
+        return {"decision": decision, "reason": reason, "reason_code": reason_code}
+    return {
+        "continue": False,
+        "stopReason": reason,
+        "systemMessage": reason,
+        "reason_code": reason_code,
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "decision": {"behavior": "deny", "message": reason},
+        },
+    }
 
 
 def observe_lifecycle_fail_safe_response(
@@ -286,6 +327,7 @@ __all__ = [
     "harness_json_from_native_pre_tool",
     "harness_json_from_review_response",
     "observe_lifecycle_fail_safe_response",
+    "permission_unavailable_response",
     "post_tool_fail_safe_response",
     "post_tool_native_block_response",
 ]
