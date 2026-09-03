@@ -491,5 +491,5 @@ def test_cursor_unparseable_input_allows_read_and_pauses_shell() -> None:
     assert watch_code == 0
     assert watch == {"permission": "allow"}
     empty, empty_code = cursor_unparseable_input_permission("")
-    assert empty_code == 2
-    assert empty["permission"] == "deny"
+    assert empty_code == 0
+    assert empty == {"permission": "allow"}

@@ -93,6 +93,9 @@ def hook_review_is_recording_only(
 
 
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw", "pi", "omp"})
+_NATIVE_DISABLED_REASON_CODES = frozenset(
+    {"native_hook_disabled", "native_shadow_diagnostic_disabled"}
+)
 
 
 def recording_only_pre_tool_response(
@@ -169,10 +172,21 @@ def availability_harness_response(
             reason_code=reason_code,
             reason=reason,
         )
+    if reason_code in _NATIVE_DISABLED_REASON_CODES and pre_tool_event:
+        return recording_only_pre_tool_response(
+            harness,
+            reason_code=reason_code,
+            reason=reason,
+        )
     if compact.startswith("permission"):
-        from .hook_worker_responses import post_tool_fail_safe_response
+        from .hook_worker_responses import permission_unavailable_response
 
-        return post_tool_fail_safe_response(harness, reason=reason, reason_code=reason_code)
+        return permission_unavailable_response(
+            harness,
+            event_name=event_name,
+            reason=reason,
+            reason_code=reason_code,
+        )
     if not hook_event_pauses_when_unavailable(event_name):
         return observe_lifecycle_fail_safe_response(
             harness,
@@ -249,7 +263,7 @@ def cursor_unparseable_input_permission(
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if recording_only or compact == "beforereadfile":
+    if recording_only or compact in {"", "beforereadfile"}:
         return {"permission": "allow"}, 0
     return dict(_CURSOR_UNAVAILABLE_DENY), 2
 

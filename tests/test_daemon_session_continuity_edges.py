@@ -1,0 +1,106 @@
+"""Session-continuity edges when native review cannot finish or PostTool blocks."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
+from codex_plugin_scanner.guard.adapters.cline_bridge import plugin_after_tool_replacement
+from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
+    _is_copilot_permission_request,
+)
+from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+    availability_harness_response,
+    cursor_unparseable_input_permission,
+)
+from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
+    post_tool_fail_safe_response,
+    post_tool_native_block_response,
+)
+
+
+def test_cline_after_tool_transport_miss_passes_through_original_result() -> None:
+    assert plugin_after_tool_replacement("") is None
+    assert plugin_after_tool_replacement("not json") is None
+    blocked = plugin_after_tool_replacement('{"decision":"block","reason":"secret"}')
+    assert blocked is not None
+    assert blocked["result"]["isError"] is True
+
+
+def test_post_tool_fail_safe_continues_the_turn() -> None:
+    payload = post_tool_fail_safe_response("claude-code", reason="worker exploded")
+    assert payload["continue"] is True
+    assert payload.get("decision") != "block"
+
+
+def test_successful_post_tool_block_withholds_without_stopping() -> None:
+    payload = post_tool_native_block_response(reason="credential-looking output")
+    assert payload["decision"] == "block"
+    assert payload["model_output_action"] == "block"
+    assert payload["continue"] is True
+    assert payload["hookSpecificOutput"]["additionalContext"] == "credential-looking output"
+
+
+def test_old_cursor_hooks_allow_empty_stdin_without_baked_event() -> None:
+    allow, code = cursor_unparseable_input_permission("")
+    assert code == 0
+    assert allow == {"permission": "allow"}
+    deny, deny_code = cursor_unparseable_input_permission("beforeShellExecution")
+    assert deny_code == 2
+    assert deny["permission"] == "deny"
+
+
+def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
+    payload = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
+        harness="grok",
+        event_name="PreToolUse",
+        reason_code="native_hook_disabled",
+        reason="native off",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert payload["decision"] == "allow"
+    permission = availability_harness_response(
+        {"hook_event_name": "PermissionRequest"},
+        harness="claude-code",
+        event_name="PermissionRequest",
+        reason_code="native_hook_disabled",
+        reason="native off",
+    )
+    assert permission["continue"] is False
+    daemon_miss = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
+        harness="grok",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert daemon_miss["policy_action"] == "block"
+
+
+def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
+    assert _is_copilot_permission_request({"hook_name": "permissionRequestV2"}) is True
+    assert _is_copilot_permission_request({"hookEventName": "PermissionRequestV2"}) is True
+    payload, code = failure_payload(
+        harness="copilot",
+        event_name="PermissionRequestV2",
+        reason="native unavailable",
+        payload={"hook_event_name": "PermissionRequestV2"},
+        recording_only=False,
+    )
+    assert code == 0
+    assert payload["behavior"] == "deny"
+    assert payload["interrupt"] is True
+    assert "permissionDecision" not in payload
+    availability = availability_harness_response(
+        {"hook_event_name": "PermissionRequestV2"},
+        harness="copilot",
+        event_name="PermissionRequestV2",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert availability["behavior"] == "deny"
+    assert availability["interrupt"] is True

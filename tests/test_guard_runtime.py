@@ -1860,7 +1860,7 @@ clearer UX and an implementation plan with technical references.
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert payload["continue"] is False
+        assert payload["continue"] is True
         assert "credential-looking output" in payload["stopReason"]
 
     @pytest.mark.parametrize(
@@ -1912,7 +1912,7 @@ clearer UX and an implementation plan with technical references.
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert payload["continue"] is False
+        assert payload["continue"] is True
         assert "credential-looking output" in payload["stopReason"]
 
     def test_codex_post_tool_use_blocks_parameter_expansion_source_view(
@@ -1956,7 +1956,7 @@ clearer UX and an implementation plan with technical references.
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert payload["continue"] is False
+        assert payload["continue"] is True
         assert "credential-looking output" in payload["stopReason"]
 
     def test_codex_post_tool_use_blocks_unbraced_env_expansion_source_view(
@@ -2000,7 +2000,7 @@ clearer UX and an implementation plan with technical references.
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert payload["continue"] is False
+        assert payload["continue"] is True
         assert "credential-looking output" in payload["stopReason"]
 
     def test_codex_post_tool_use_allows_quoted_greater_than_search_pipeline(
@@ -2085,7 +2085,7 @@ clearer UX and an implementation plan with technical references.
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert payload["continue"] is False
+        assert payload["continue"] is True
         assert "credential-looking output" in payload["stopReason"]
 
     def test_codex_post_tool_use_allows_common_source_directory_searches(
@@ -2215,7 +2215,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     def test_codex_post_tool_use_blocks_nvmrc_mixed_fake_and_secret_assignments(
@@ -2259,7 +2259,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     def test_codex_post_tool_use_allows_docs_fake_token_examples(
@@ -2483,7 +2483,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     def test_codex_post_tool_use_queues_secret_family_copy_for_local_secret_output(
@@ -2581,7 +2581,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     @pytest.mark.parametrize(
@@ -2632,7 +2632,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     def test_codex_post_tool_helpers_treat_env_ignore_environment_with_shell_expansion_as_local_secret_read(
@@ -2688,7 +2688,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["continue"] is False
+        assert output["continue"] is True
         assert "credential-looking output" in output["stopReason"]
 
     def test_codex_url_looking_local_path_does_not_escape_workspace(self, tmp_path) -> None:
@@ -8782,7 +8782,7 @@ def test_guard_hook_claude_native_approval_does_not_lower_current_reapproval(tmp
     assert prompt_rc == 0
     assert post_rc == 0
     assert post_payload["decision"] == "block"
-    assert post_payload["continue"] is False
+    assert post_payload["continue"] is True
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert native_receipt["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
@@ -10088,7 +10088,7 @@ def test_guard_hook_claude_alias_saved_allow_does_not_lower_canonical_reapproval
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert post_rc == 0
     assert post_payload["decision"] == "block"
-    assert post_payload["continue"] is False
+    assert post_payload["continue"] is True
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert any(receipt["harness"] == "claude-code" for receipt in receipts)
@@ -18614,7 +18614,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
 
     assert rc == 0
     payload = json.loads(captured.out)
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
     assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
@@ -18657,7 +18657,7 @@ def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
     payload = json.loads(captured.out)
 
     assert rc == 0
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "credential-looking output" in payload["stopReason"]
 
 
@@ -18706,7 +18706,7 @@ def test_guard_hook_codex_post_tool_use_explains_merged_stderr_capture(
     payload = json.loads(captured.out)
 
     assert rc == 0
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "Combined stdout/stderr looked credential-like before it reached Codex." in payload["stopReason"]
     assert payload["stopReason"].count("terminal policy decision") == 1
     assert "Browser approval cannot override it" in payload["stopReason"]
@@ -18873,7 +18873,7 @@ def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_outp
     payload = json.loads(captured.out)
 
     assert rc == 0
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "Focused pytest emitted credential-looking output before it reached Codex." in payload["stopReason"]
     assert "Pytest can execute repository-controlled code" in payload["stopReason"]
     assert payload["stopReason"].count("terminal policy decision") == 1
@@ -18923,9 +18923,8 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     assert rc == 0
     payload = json.loads(captured.out)
     assert payload["decision"] == "block"
-    assert payload["continue"] is False
-    assert "hookSpecificOutput" not in payload
-    assert captured.err == ""
+    assert payload["continue"] is True
+    assert "Traceback" not in captured.err
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
@@ -18996,7 +18995,7 @@ def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approva
     assert rc == 0
     assert not worker.is_alive()
     assert payload["decision"] == "block"
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     tool_receipts = [
         receipt
         for receipt in store.list_receipts(limit=20)
@@ -19233,7 +19232,7 @@ def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
     payload = json.loads(captured.out)
 
     assert rc == 0
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "credential-looking output" in payload["stopReason"]
 
 
@@ -19513,7 +19512,7 @@ def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
     payload = json.loads(captured.out)
 
     assert rc == 0
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
 

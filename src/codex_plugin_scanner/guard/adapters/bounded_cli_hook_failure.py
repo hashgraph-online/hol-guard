@@ -11,6 +11,11 @@ from ..daemon.hook_availability_policy import (
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 
 
+def _is_permission_event(event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return compact.startswith("permission")
+
+
 def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
     if harness == "copilot":
         return {"permissionDecision": "allow"}
@@ -55,7 +60,7 @@ def _observe_payload(harness: str, event_name: str, reason: str) -> dict[str, ob
 
 def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
     if harness == "copilot":
-        if event_name == "PermissionRequest":
+        if _is_permission_event(event_name):
             return {
                 "behavior": "deny",
                 "message": reason,
@@ -68,7 +73,7 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
     if harness in _DECISION_HOOK_HARNESSES:
         decision = "block" if harness == "hermes" else "deny"
         return {"decision": decision, "reason": reason}, (2 if harness == "hermes" else 0)
-    if event_name == "PermissionRequest":
+    if _is_permission_event(event_name):
         return {
             "continue": False,
             "stopReason": reason,
@@ -96,7 +101,7 @@ def failure_payload(
     pauses = hook_event_pauses_when_unavailable(event_name)
     if (
         pauses
-        and event_name != "PermissionRequest"
+        and not _is_permission_event(event_name)
         and isinstance(payload, dict)
         and hook_action_is_emergency_safe(payload)
     ):

@@ -124,8 +124,8 @@ def _emit_native_hook_response(
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
-    if event_name in {"Notification", "PermissionRequest"}:
-        if event_name == "PermissionRequest" and policy_action in {"block", "sandbox-required"}:
+    if event_name == "Notification" or event_name.startswith("PermissionRequest"):
+        if event_name.startswith("PermissionRequest") and policy_action in {"block", "sandbox-required"}:
             decision: dict[str, object] = {
                 "behavior": "deny",
                 "message": additional_context or reason,
@@ -138,7 +138,7 @@ def _emit_native_hook_response(
             }
             _write_json_line(payload, output_stream=output_stream)
             return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "codex":
+        if event_name.startswith("PermissionRequest") and _canonical_harness_name(harness) == "codex":
             if policy_action in {"review", "require-reapproval"}:
                 payload["systemMessage"] = (
                     "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
@@ -147,7 +147,7 @@ def _emit_native_hook_response(
             if payload:
                 _write_json_line(payload, output_stream=output_stream)
             return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "claude-code":
+        if event_name.startswith("PermissionRequest") and _canonical_harness_name(harness) == "claude-code":
             message = system_message or reason
             if message:
                 payload["systemMessage"] = message
@@ -170,7 +170,7 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
         return
     if event_name == "PostToolUse" and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-        payload.update({"decision": "block", "reason": reason, "continue": False, "stopReason": reason})
+        payload.update({"decision": "block", "reason": reason, "continue": True, "stopReason": reason})
         _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
