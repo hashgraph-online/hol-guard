@@ -37,7 +37,8 @@ _DETECTABLE_HOOK_EVENTS = (
     "userPromptSubmitted",
     "preToolUse",
     "postToolUse",
-    "permissionRequest", "permissionRequestV2",
+    "permissionRequest",
+    "permissionRequestV2",
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
