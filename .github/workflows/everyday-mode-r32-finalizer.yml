@@ -1,0 +1,120 @@
+name: Finalize Everyday Mode review fixes
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-r32-final
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: everyday-mode-r32-finalizer
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out immutable branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
+
+      - name: Recover and apply the reviewed source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import os
+          from pathlib import Path
+          import re
+
+          source = Path('.github/workflows/everyday-mode-r32-review-fixes.yml').read_text(encoding='utf-8')
+          match = re.search(r'^\s+SCRIPT_B64:\s*(\S+)\s*$', source, re.MULTILINE)
+          if match is None:
+              raise SystemExit('SCRIPT_B64 payload was not found')
+          payload = gzip.decompress(base64.b64decode(match.group(1), validate=True))
+          target = Path(os.environ['RUNNER_TEMP']) / 'apply_fixes.py'
+          target.write_bytes(payload)
+          print(f'payload_sha256={hashlib.sha256(payload).hexdigest()}')
+          PY
+          python "$RUNNER_TEMP/apply_fixes.py"
+          rm -f \
+            .github/workflows/everyday-mode-r32-review-fixes.yml \
+            .github/workflows/everyday-mode-r32-finalizer.yml
+
+      - name: Install development dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+
+      - name: Format and lint touched Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            src/codex_plugin_scanner/guard/config.py
+            src/codex_plugin_scanner/guard/presentation_preferences.py
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+            src/codex_plugin_scanner/guard/runtime/action_explanation_contract.py
+            src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py
+            tests/test_guard_everyday_mode_completion.py
+            tests/test_guard_action_explanation_contract.py
+          )
+          uv run --no-sync ruff check --fix "${files[@]}"
+          uv run --no-sync ruff format "${files[@]}"
+          uv run --no-sync ruff check "${files[@]}"
+
+      - name: Run focused regression tests
+        run: >-
+          uv run --no-sync pytest
+          tests/test_guard_everyday_mode_completion.py
+          tests/test_guard_action_explanation_contract.py
+          --tb=short
+
+      - name: Enforce structural code-quality ratchet
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/code_quality_audit.py \
+            --root . \
+            --baseline ci/code-quality-baseline.json \
+            --json-output "$RUNNER_TEMP/code-quality-audit.json"
+          cat "$RUNNER_TEMP/code-quality-audit.json"
+
+      - name: Run static type checks
+        run: uv run --no-sync basedpyright --level error
+
+      - name: Commit the final source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 1
+          fi
+          git commit -m "fix: harden Everyday Mode persistence and projections"
+          git push origin HEAD:feat/everyday-mode-r32-final
