@@ -135,13 +135,14 @@ def _terminal_session_is_local(terminal_name: str) -> bool:
 
 
 def _terminal_descriptors_share_session(control_descriptor: int, input_descriptor: int) -> bool:
-    """Confirm that stdin belongs to the process controlling terminal."""
+    """Confirm that stdin belongs to the foreground controlling-terminal session.
 
-    tcgetpgrp = getattr(os, "tcgetpgrp", None)
-    if not callable(tcgetpgrp):
-        return False
+    Linux exposes ``/dev/tty`` as a character-device alias while stdin names
+    the concrete PTY, so their device numbers are expected to differ.
+    """
+
     try:
-        return tcgetpgrp(control_descriptor) == tcgetpgrp(input_descriptor)
+        return os.tcgetpgrp(control_descriptor) == os.tcgetpgrp(input_descriptor)
     except OSError:
         return False
 
