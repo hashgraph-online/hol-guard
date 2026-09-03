@@ -1,0 +1,29 @@
+name: Export Everyday Mode completion source
+
+on:
+  push:
+    branches:
+      - tmp/everyday-completion-source-20260903
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Archive exact source
+        shell: bash
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/source.tar.gz" HEAD
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: everyday-completion-source-${{ github.sha }}
+          path: ${{ runner.temp }}/source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
