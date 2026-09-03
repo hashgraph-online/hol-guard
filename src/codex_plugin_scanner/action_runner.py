@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 
 from . import __version__
 from ._scanner_commands import _scan_with_policy
+from .action_environment import drop_external_analyzer_credentials
 from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
 from .github_reporting import (
@@ -62,30 +63,6 @@ def _read_positive_int_env(name: str, *, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
-
-
-_EXTERNAL_ANALYZER_SECRET_ENV_NAMES = ("MCP_SCANNER_API_KEY", "MCP_SCANNER_LLM_API_KEY")
-
-
-def _drop_external_analyzer_credentials(online: bool) -> tuple[str, ...]:
-    """Remove env-triggered external analyzer credentials unless online opted in.
-
-    The Cisco MCP integration deliberately passes these variables through to its
-    isolated subprocess so local installs can opt into LLM/API analysis. Inside
-    the GitHub Action that passthrough would let runner- or org-level secrets
-    activate external analyzers even though the workflow requested an offline
-    scan, so the Action boundary blanks them unless ``online`` is true.
-    """
-    if online:
-        return ()
-    dropped = tuple(name for name in _EXTERNAL_ANALYZER_SECRET_ENV_NAMES if os.environ.pop(name, None) is not None)
-    if dropped:
-        print(
-            "Note: online is disabled; removed "
-            f"{', '.join(dropped)} from the scan environment so repository content "
-            "cannot reach external analyzers. Set the online input to true to permit them."
-        )
-    return dropped
 
 
 def _write_outputs(path: str, values: dict[str, str]) -> None:
@@ -467,8 +444,8 @@ def main() -> int:
             _write_outputs(github_output, output_values)
         return return_code
 
+    drop_external_analyzer_credentials(online)
     if mode in {"scan", "lint", "submit"}:
-        _drop_external_analyzer_credentials(online)
         args = _build_scan_args(
             plugin_dir=plugin_dir,
             profile=profile,
@@ -677,7 +654,6 @@ def main() -> int:
             return finish(1)
 
     elif mode == "verify":
-        _drop_external_analyzer_credentials(online)
         verification = verify_plugin(Path(plugin_dir).resolve(), online=online)
         scan_scope = getattr(verification, "scope", "plugin")
         if scan_scope == "repository":
