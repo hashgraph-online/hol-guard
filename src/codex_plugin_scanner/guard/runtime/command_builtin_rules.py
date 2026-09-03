@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .command_backup_extensions import BACKUP_COMMAND_RULES
+from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_RULES
@@ -79,6 +80,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
