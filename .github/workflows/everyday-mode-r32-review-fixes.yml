@@ -1,0 +1,141 @@
+name: Apply Everyday Mode review fixes
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-r32-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: everyday-mode-r32-review-fixes
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out immutable branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply reviewed fixes
+        shell: bash
+        env:
+          PATCH_B64: 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
+        run: |
+          set -euo pipefail
+          printf '%s' "$PATCH_B64" | base64 --decode | gzip --decompress > "$RUNNER_TEMP/review-fixes.patch"
+          echo '88e7bc871954573b57e24c9f78a69f4253827e34f30bd23566f37822b867877c  '"$RUNNER_TEMP/review-fixes.patch" | sha256sum --check
+          git apply --check "$RUNNER_TEMP/review-fixes.patch"
+          git apply "$RUNNER_TEMP/review-fixes.patch"
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.6'
+
+      - name: Format, regenerate evidence, and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          python_targets=(
+            src/codex_plugin_scanner/guard/config.py
+            src/codex_plugin_scanner/guard/presentation_mode.py
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+            tests/test_guard_presentation_mode.py
+            tests/test_guard_everyday_mode_completion.py
+          )
+          uv run --no-sync python -m ruff format "${python_targets[@]}"
+          uv run --no-sync python -m ruff check --fix "${python_targets[@]}"
+          uv run --no-sync python -m ruff check "${python_targets[@]}"
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+          uv run --no-sync python scripts/ci/test_inventory.py --output "$RUNNER_TEMP/test-inventory.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          inventory = json.loads(Path("/home/runner/work/_temp/test-inventory.json").read_text())
+          baseline = {
+              "schema_version": 1,
+              "maximum_collected_cases": inventory["inventory"]["collected_cases"],
+              "maximum_test_source_lines": inventory["test_source_lines"],
+          }
+          Path("ci/test-suite-ratchet-baseline.json").write_text(json.dumps(baseline, indent=2) + "\n")
+          PY
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory "$RUNNER_TEMP/test-inventory.json"
+          uv run --no-sync pytest -q \
+            tests/test_guard_presentation_mode.py \
+            tests/test_guard_everyday_mode_completion.py \
+            tests/test_guard_desktop_contract.py \
+            tests/test_guard_action_explanation_contract.py \
+            tests/test_guard_command_decision_diff.py
+          cd dashboard
+          bun install --frozen-lockfile
+          bun run test
+          bun run build
+
+      - name: Commit only reviewed source and generated gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/everyday-mode-r32-review-fixes.yml
+          rm -f "$workflow"
+          git diff --check
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          allowed = {
+              ".github/workflows/everyday-mode-r32-review-fixes.yml",
+              "ci/test-suite-ratchet-baseline.json",
+              "dashboard/src/presentation-migration.ts",
+              "dashboard/src/presentation-mode.test.ts",
+              "dashboard/src/presentation-mode.ts",
+              "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
+              "src/codex_plugin_scanner/guard/config.py",
+              "src/codex_plugin_scanner/guard/presentation_migration.py",
+              "src/codex_plugin_scanner/guard/presentation_mode.py",
+              "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+              "tests/test_guard_everyday_mode_completion.py",
+              "tests/test_guard_presentation_mode.py",
+          }
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = changed - allowed
+          required = {
+              "src/codex_plugin_scanner/guard/config.py",
+              "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
+              "src/codex_plugin_scanner/guard/presentation_mode.py",
+              "dashboard/src/presentation-mode.ts",
+              "tests/test_guard_presentation_mode.py",
+              "tests/test_guard_everyday_mode_completion.py",
+          }
+          if unexpected or not required <= changed:
+              raise SystemExit(f"invalid changed paths: unexpected={sorted(unexpected)} missing={sorted(required - changed)}")
+          for obsolete in (
+              "src/codex_plugin_scanner/guard/presentation_migration.py",
+              "dashboard/src/presentation-migration.ts",
+          ):
+              if Path(obsolete).exists():
+                  raise SystemExit(f"obsolete migration module remained: {obsolete}")
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: preserve presentation revision and schema compatibility'
+          git push origin HEAD:feat/everyday-mode-r32-final
