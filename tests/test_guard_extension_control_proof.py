@@ -217,7 +217,6 @@ def test_enrollment_accepts_linux_tty_alias_for_same_controlling_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expected = "ENROLL EXTENSION CONTROL local-admin\n"
-    device_numbers = {10: 1280, 11: 34816}
     process_groups = {10: 4200, 11: 4200}
 
     def process_group(descriptor: int) -> int:
@@ -237,10 +236,6 @@ def test_enrollment_accepts_linux_tty_alias_for_same_controlling_session(
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof.os.dup",
         lambda descriptor: descriptor,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.fstat",
-        lambda descriptor: type("Terminal", (), {"st_rdev": device_numbers[descriptor]})(),
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
