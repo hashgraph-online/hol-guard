@@ -163,6 +163,18 @@ def test_no_op_write_preserves_unsupported_future_schema(tmp_path: Path) -> None
     assert 'presentation_mode = "future"' in persisted
     assert "presentation_schema_version = 99" in persisted
 
+    before = config_path.read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="newer schema"):
+        update_guard_settings(
+            guard_home,
+            {
+                "presentation_mode": "technical",
+                "presentation_revision": current.presentation_revision,
+            },
+            skip_approval_gate=True,
+        )
+    assert config_path.read_text(encoding="utf-8") == before
+
 
 def test_revision_only_write_is_rejected(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard"

@@ -702,6 +702,10 @@ def update_guard_settings(
         current_mode=coerce_presentation_mode_write(current_config.presentation_mode),
         current_explicit=current_config.presentation_mode_explicit,
         current_revision=current_config.presentation_revision,
+        current_writable=(
+            current_config.presentation_diagnostic
+            != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC
+        ),
     )
     switching_to_custom_without_overrides = (
         payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()

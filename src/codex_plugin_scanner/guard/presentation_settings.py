@@ -29,6 +29,7 @@ def resolve_presentation_settings_update(
     current_mode: GuardPresentationMode,
     current_explicit: bool,
     current_revision: int,
+    current_writable: bool = True,
 ) -> PresentationSettingsUpdate:
     requested = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
     if "presentation_revision" in payload and not requested:
@@ -51,13 +52,20 @@ def resolve_presentation_settings_update(
     elif "presentation_mode" in payload:
         explicit = True
 
+    changed = requested and (mode != current_mode or explicit != current_explicit)
     if requested:
         expected_revision = payload.get("presentation_revision")
         if expected_revision is not None and expected_revision != current_revision:
-            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
+            raise ValueError(
+                "Presentation preference changed on another surface. Reload settings and try again."
+            )
+        if changed and not current_writable:
+            raise ValueError(
+                "Presentation settings use a newer schema and cannot be changed by this Guard version."
+            )
     return PresentationSettingsUpdate(
         requested=requested,
-        changed=requested and (mode != current_mode or explicit != current_explicit),
+        changed=changed,
         mode=mode,
         explicit=explicit,
     )
