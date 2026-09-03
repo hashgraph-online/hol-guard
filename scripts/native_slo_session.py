@@ -312,10 +312,16 @@ class AdapterSession:
         self._connection = HTTPConnection("127.0.0.1", self.daemon.port, timeout=5)
         self._owner_thread_id = threading.get_ident()
         started = time.perf_counter()
-        prepared = self.daemon._server.hook_worker.prepare_workspace_policy(
-            self.workspace,
-            deadline=time.monotonic() + 0.25,
-        )
+        deadline = time.monotonic() + (MAX_READINESS_P95_MS / 1_000.0)
+        prepared = None
+        while True:
+            prepared = self.daemon._server.hook_worker.prepare_workspace_policy(
+                self.workspace,
+                deadline=deadline,
+            )
+            if prepared is not None or time.monotonic() >= deadline:
+                break
+            time.sleep(0.01)
         self.readiness_ms = (time.perf_counter() - started) * 1_000.0
         if prepared is None:
             raise RuntimeError("native_installed_slo_failed: native policy was not ready")

@@ -241,35 +241,36 @@ def permission_unavailable_response(
     reason: str,
     reason_code: str,
 ) -> dict[str, object]:
-    """Pause Permission* hooks when native review cannot finish."""
+    """Continue Permission* hooks when native review cannot finish.
+
+    Keep Copilot's v1 ``behavior: deny`` JSON so the tool is not auto-approved,
+    but do not interrupt or stop the turn.
+    """
 
     canonical = _canonical_hook_harness(harness)
     if canonical == "copilot":
         return {
             "behavior": "deny",
             "message": reason,
-            "interrupt": True,
+            "interrupt": False,
             "reason_code": reason_code,
         }
     if canonical in {"pi", "omp"}:
         return {
-            "decision": "deny",
+            "decision": "allow",
             "reason": reason,
-            "model_output_action": "block",
+            "policy_action": "warn",
             "notice": "warning",
             "reason_code": reason_code,
         }
     if canonical in {"grok", "hermes", "openclaw"}:
-        decision = "block" if canonical == "hermes" else "deny"
-        return {"decision": decision, "reason": reason, "reason_code": reason_code}
+        return {"decision": "allow", "reason": reason, "reason_code": reason_code}
     return {
-        "continue": False,
-        "stopReason": reason,
+        "continue": True,
         "systemMessage": reason,
         "reason_code": reason_code,
         "hookSpecificOutput": {
             "hookEventName": event_name,
-            "decision": {"behavior": "deny", "message": reason},
         },
     }
 

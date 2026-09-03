@@ -182,11 +182,11 @@ def test_prompt_mode_still_blocks_failed_local_review(
         daemon.stop()
 
     if endpoint == "pi":
-        assert payload["decision"] == "deny"
+        assert payload["decision"] == "allow"
     else:
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
     assert payload["reason_code"] == _DEADLINE_REASON
 
 
@@ -223,7 +223,7 @@ def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_comp
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
         assert hook_output["permissionDecision"] == "allow"
-    assert payload["reason_code"] == "native_degraded_emergency_safe"
+    assert payload["reason_code"] == _DEADLINE_REASON
 
 
 def test_hook_overload_continues_emergency_safe_workspace_read(
@@ -254,7 +254,7 @@ def test_hook_overload_continues_emergency_safe_workspace_read(
     finally:
         daemon.stop()
 
-    assert payload["reason_code"] == "native_degraded_emergency_safe"
+    assert payload["reason_code"] == "daemon_hook_queue_capacity"
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "allow"

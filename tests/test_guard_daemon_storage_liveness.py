@@ -157,7 +157,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         assert health["ok"] is True
         assert health_elapsed < 0.25
         assert max(elapsed for _payload, elapsed in results) < 1.6
-        assert all(payload.get("decision") == "deny" for payload, _elapsed in results)
+        assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
     finally:
         blocker.rollback()
