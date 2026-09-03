@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import os
 import runpy
 import shlex
@@ -74,9 +75,16 @@ def package_shim_interpreter_runnable(wrapper: bytes) -> bool:
         return True
     if not interpreter.is_file():
         return False
-    if os.name == "nt":
-        return True
-    return os.access(interpreter, os.X_OK)
+    if os.name != "nt" and not os.access(interpreter, os.X_OK):
+        return False
+    trusted = set(trusted_frozen_guard_cli_paths())
+    names = {str(interpreter)}
+    with contextlib.suppress(OSError):
+        names.add(str(interpreter.resolve()))
+    for path in tuple(trusted):
+        with contextlib.suppress(OSError):
+            trusted.add(str(Path(path).resolve()))
+    return bool(names & trusted)
 
 
 def expected_package_shim_executable_bytes(

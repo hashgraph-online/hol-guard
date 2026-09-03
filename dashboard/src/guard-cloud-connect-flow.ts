@@ -155,6 +155,7 @@ function waitForPoll(delayMs: number, signal: AbortSignal): Promise<void> {
 export async function waitForAuthorizeUrl(
   initialStatus: GuardCloudOpenStatus,
   signal: AbortSignal,
+  poll: ReadCloudConnect = readCloudConnect,
 ): Promise<GuardCloudOpenStatus> {
   if (signal.aborted) {
     throw new DOMException("Cloud connection polling stopped", "AbortError");
@@ -172,8 +173,11 @@ export async function waitForAuthorizeUrl(
     }
     const pollDelayMs = Math.max(100, Math.min(5000, flow.poll_after_ms ?? 1000));
     await waitForPoll(pollDelayMs, signal);
-    const polled = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-    status = { ...polled, dashboard_url: status.dashboard_url ?? null };
+    const polled = await withCloudRequestTimeout((nextSignal) => poll("GET", nextSignal), signal);
+    status = {
+      ...polled,
+      dashboard_url: polled.dashboard_url ?? status.dashboard_url ?? null,
+    };
   }
   return status;
 }

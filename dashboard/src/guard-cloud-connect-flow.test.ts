@@ -2,6 +2,7 @@ import {
   CloudRequestTimeoutError,
   parseGuardCloudConnectHttp,
   startOrRecoverCloudConnect,
+  waitForAuthorizeUrl,
 } from "./guard-cloud-connect-flow";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -42,6 +43,33 @@ assert(recovered.connect_required === false, "fallback POST 409 must succeed as 
 assert(
   recovered.dashboard_url === "https://example.com/cloud/dashboard",
   "fallback POST 409 must keep dashboard_url",
+);
+
+const polledDashboard = await waitForAuthorizeUrl(
+  {
+    connect_required: true,
+    connect_flow: {
+      state: "running",
+      title: "Finish Guard Cloud sign-in in your browser",
+      detail: "HOL Guard opened the secure sign-in flow in your browser.",
+      action_label: "Connect Guard Cloud",
+      authorize_url: null,
+      connect_url: "https://example.com/guard/connect",
+      browser_opened: false,
+      request_id: "guard-connect-poll",
+      poll_after_ms: 100,
+    },
+  },
+  new AbortController().signal,
+  async () => parseGuardCloudConnectHttp(200, {
+    connect_required: false,
+    connect_flow: null,
+    dashboard_url: "https://example.com/cloud/dashboard",
+  }),
+);
+assert(
+  polledDashboard.dashboard_url === "https://example.com/cloud/dashboard",
+  "authorize poll must keep a dashboard_url returned by GET",
 );
 
 console.log("guard-cloud-connect-flow.test.ts passed");

@@ -19206,7 +19206,7 @@ function waitForPoll(delayMs, signal) {
     signal.addEventListener("abort", abort, { once: true });
   });
 }
-async function waitForAuthorizeUrl(initialStatus, signal) {
+async function waitForAuthorizeUrl(initialStatus, signal, poll = readCloudConnect) {
   if (signal.aborted) {
     throw new DOMException("Cloud connection polling stopped", "AbortError");
   }
@@ -19218,8 +19218,11 @@ async function waitForAuthorizeUrl(initialStatus, signal) {
     }
     const pollDelayMs = Math.max(100, Math.min(5e3, flow.poll_after_ms ?? 1e3));
     await waitForPoll(pollDelayMs, signal);
-    const polled = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-    status = { ...polled, dashboard_url: status.dashboard_url ?? null };
+    const polled = await withCloudRequestTimeout((nextSignal) => poll("GET", nextSignal), signal);
+    status = {
+      ...polled,
+      dashboard_url: polled.dashboard_url ?? status.dashboard_url ?? null
+    };
   }
   return status;
 }
