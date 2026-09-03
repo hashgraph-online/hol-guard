@@ -1,0 +1,156 @@
+name: PR 2745 finalizer round 2
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-r32-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr2745-finalizer-round-2
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/everyday-mode-r32-final
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            requirements.txt
+            docker-requirements.txt
+
+      - name: Install development dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+
+      - name: Apply final review and lint fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          config_path = Path("src/codex_plugin_scanner/guard/config.py")
+          replace_once(
+              config_path,
+              "    presentation_writable = config.presentation_diagnostic != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC\n",
+              "    presentation_writable = config.presentation_diagnostic != _UNSUPPORTED_SCHEMA\n",
+          )
+
+          parser_path = Path("src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py")
+          replace_once(
+              parser_path,
+              '    presentation_parser.add_argument("--expected-revision", type=int, default=None)\n',
+              '    presentation_parser.add_argument("--expected-revision", type=int, required=True)\n',
+          )
+
+          test_path = Path("tests/test_guard_everyday_mode_completion.py")
+          replace_once(
+              test_path,
+              "from __future__ import annotations\n\nfrom types import SimpleNamespace\n",
+              "from __future__ import annotations\n\nimport argparse\nfrom types import SimpleNamespace\n\nimport pytest\n",
+          )
+          replace_once(
+              test_path,
+              "from codex_plugin_scanner.guard.cli.commands_dispatch_desktop import (\n",
+              "from codex_plugin_scanner.guard.cli import commands as guard_commands_module\nfrom codex_plugin_scanner.guard.cli.commands_dispatch_desktop import (\n",
+          )
+          replace_once(
+              test_path,
+              "\n\ndef test_desktop_bootstrap_old_core_fallback_is_everyday_and_not_writable() -> None:\n",
+              """
+
+
+def test_desktop_presentation_set_requires_expected_revision() -> None:
+    parser = argparse.ArgumentParser(prog="hol-guard")
+    guard_commands_module.add_guard_root_parser(parser)
+
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["desktop", "presentation-set", "--mode", "technical"])
+
+    assert error.value.code == 2
+    parsed = parser.parse_args(
+        [
+            "desktop",
+            "presentation-set",
+            "--mode",
+            "technical",
+            "--expected-revision",
+            "7",
+        ]
+    )
+    assert parsed.desktop_command == "presentation-set"
+    assert parsed.expected_revision == 7
+
+
+def test_desktop_bootstrap_old_core_fallback_is_everyday_and_not_writable() -> None:
+""",
+          )
+          PY
+
+      - name: Format and lint touched Python files
+        run: |
+          uv run --no-sync python -m ruff check --fix \
+            src/codex_plugin_scanner/guard/config.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            tests/test_guard_everyday_mode_completion.py
+          uv run --no-sync python -m ruff format \
+            src/codex_plugin_scanner/guard/config.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            tests/test_guard_everyday_mode_completion.py
+          uv run --no-sync python -m ruff check \
+            src/codex_plugin_scanner/guard/config.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            tests/test_guard_everyday_mode_completion.py
+
+      - name: Run focused presentation tests
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/test_guard_everyday_mode_completion.py \
+            tests/test_guard_presentation_mode.py
+
+      - name: Verify test-suite ratchet
+        run: |
+          uv run --no-sync python scripts/ci/test_inventory.py --output /tmp/test-inventory.json
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory /tmp/test-inventory.json
+
+      - name: Commit fixes and remove finalizer
+        run: |
+          rm -- .github/workflows/pr2745-finalize-round2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No changes produced"
+            exit 1
+          fi
+          git commit -m "fix: require presentation revision and restore lint"
+          git push origin HEAD:refs/heads/feat/everyday-mode-r32-final
