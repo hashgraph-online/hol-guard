@@ -34,6 +34,45 @@ GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
+_MACOS_BUNDLED_HOL_GUARD = Path("/Applications/HOL Guard.app/Contents/MacOS/hol-guard")
+_CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
+
+
+def _desktop_core_shim_for_executable(executable: Path) -> Path | None:
+    versions_dir = executable.parent.parent
+    if versions_dir.name != "versions":
+        return None
+    parent = versions_dir.parent
+    unix = parent / _CURRENT_HOL_GUARD_SHIM
+    windows = parent / f"{_CURRENT_HOL_GUARD_SHIM}.cmd"
+    if os.name == "nt":
+        if windows.is_file():
+            return windows
+        if unix.is_file():
+            return unix
+        return windows
+    return unix
+
+
+def _resolve_cursor_hook_guard_cli_argv0(baked_argv0: str) -> str:
+    path = Path(baked_argv0)
+    if path.is_file():
+        return baked_argv0
+    shim = _desktop_core_shim_for_executable(path)
+    if shim is not None and shim.is_file():
+        return str(shim)
+    if shim is not None and sys.platform == "darwin" and _MACOS_BUNDLED_HOL_GUARD.is_file():
+        return str(_MACOS_BUNDLED_HOL_GUARD)
+    return baked_argv0
+
+
+def _resolved_guard_cli() -> list[str]:
+    if not GUARD_CLI:
+        return GUARD_CLI
+    argv0 = _resolve_cursor_hook_guard_cli_argv0(GUARD_CLI[0])
+    if argv0 == GUARD_CLI[0]:
+        return GUARD_CLI
+    return [argv0, *GUARD_CLI[1:]]
 
 
 def _remaining_seconds(deadline_monotonic: float) -> float:
@@ -262,20 +301,20 @@ def _run_guard_fallback(
     try:
         remaining = _remaining_seconds(deadline_monotonic)
         if remaining <= 0:
-            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
         if run_isolated_hook_process is None:
             raise RuntimeError("HOL Guard isolated hook runtime is unavailable")
         result = run_isolated_hook_process(
-            [*GUARD_CLI, *guard_argv],
+            [*_resolved_guard_cli(), *guard_argv],
             cwd=GUARD_HOME,
             environment=dict(guard_env),
             input_text=payload_json,
             timeout_seconds=remaining,
         )
         if result.timed_out:
-            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], remaining)
+            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], remaining)
         return subprocess.CompletedProcess(
-            [*GUARD_CLI, *guard_argv],
+            [*_resolved_guard_cli(), *guard_argv],
             result.returncode if result.returncode is not None else 1,
             stdout=result.stdout,
             stderr="",

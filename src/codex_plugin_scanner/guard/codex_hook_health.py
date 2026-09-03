@@ -22,7 +22,15 @@ def codex_runtime_hooks_verified(context: HarnessContext) -> bool:
     json_hooks = _json_object(CodexHarnessAdapter._hooks_path(context)).get("hooks")
     hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     hooks_enabled = not isinstance(features, dict) or features.get("hooks") is not False
-    return bool(hooks_enabled) and live_guard_codex_hooks_intercept(hooks)
+    if hooks_enabled and live_guard_codex_hooks_intercept(hooks):
+        return True
+    from .adapters.codex import codex_native_hook_state
+
+    try:
+        state = codex_native_hook_state(context)
+    except Exception:
+        return False
+    return bool(state.get("shell_protection_active"))
 
 
 __all__ = ["codex_runtime_hooks_verified"]

@@ -2518,6 +2518,7 @@ function normalizeGuardCloudConnectStatus(value: unknown): GuardCloudConnectStat
   return {
     connect_required: value.connect_required === true,
     connect_flow: normalizePackageFirewallConnectFlow(value.connect_flow),
+    dashboard_url: typeof value.dashboard_url === "string" ? value.dashboard_url : null,
   };
 }
 

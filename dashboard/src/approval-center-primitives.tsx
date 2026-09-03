@@ -2,7 +2,6 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, AnchorHTMLAttributes, ChangeEvent, ReactNode, Ref } from "react";
 import {
   HiMiniArrowTopRightOnSquare,
-  HiMiniCloud,
   HiMiniCommandLine,
   HiMiniDocumentText,
   HiMiniHome,
@@ -36,6 +35,7 @@ import { CloudUserMenu } from "./cloud-user-menu";
 import type { GuardApprovalGatePublicConfig, GuardCloudUserProfile } from "./guard-types";
 import type { GuardUpdateChannelProof } from "./guard-api";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
+import { OpenGuardCloudAction } from "./open-guard-cloud-action";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
 export type AppView =
@@ -249,9 +249,7 @@ export function ShellSidebar(props: {
             <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" aria-hidden="true" />}>
               Local dashboard
             </SidebarAction>
-            <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" aria-hidden="true" />}>
-              Open Guard Cloud
-            </SidebarAction>
+            <OpenGuardCloudAction variant="approval-sidebar" collapsed={collapsed} />
             <SidebarAction href={GITHUB_ISSUE_LINK} external icon={<HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />}>
               {GITHUB_ISSUE_BUTTON_LABEL}
             </SidebarAction>

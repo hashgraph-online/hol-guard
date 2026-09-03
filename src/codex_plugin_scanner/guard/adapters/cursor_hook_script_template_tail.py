@@ -430,7 +430,7 @@ def _main_inner() -> int:
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(
-                [*GUARD_CLI, *guard_argv],
+                [*_resolved_guard_cli(), *guard_argv],
                 daemon_result[0],
                 stdout=daemon_result[1],
                 stderr=daemon_result[2],
