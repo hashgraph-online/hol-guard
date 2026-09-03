@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...version import __version__
+from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext
 from .hook_python import (
     HookPythonAttestation,
@@ -83,17 +84,24 @@ def _file_metadata_payload(value: HookPythonFileMetadata) -> dict[str, int]:
     }
 
 
+def _frozen_guard_cli_attestation() -> GuardCliAttestation:
+    launcher = Path(resolve_frozen_guard_cli()).expanduser().absolute()
+    try:
+        identity = _executable_identity(launcher)
+    except RuntimeError:
+        identity = _executable_identity(Path(sys.executable).expanduser().absolute())
+    return GuardCliAttestation(
+        command=(str(identity.invocation_path),),
+        python=None,
+        frozen_identity=identity,
+    )
+
+
 def resolve_attested_guard_cli(context: HarnessContext) -> GuardCliAttestation:
     """Resolve Guard's CLI without consulting PATH or the caller's import cwd."""
 
     if bool(getattr(sys, "frozen", False)):
-        executable = Path(sys.executable).expanduser().absolute()
-        identity = _executable_identity(executable)
-        return GuardCliAttestation(
-            command=(str(identity.invocation_path),),
-            python=None,
-            frozen_identity=identity,
-        )
+        return _frozen_guard_cli_attestation()
     try:
         python = attest_guard_hook_python(context)
     except RuntimeError as error:

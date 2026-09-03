@@ -83,12 +83,44 @@ def trusted_frozen_guard_cli_paths() -> frozenset[str]:
     return frozenset(trusted)
 
 
+def uses_top_level_hook_command(guard_cli: list[str]) -> bool:
+    """Return whether argv0 exposes `hook` without a `guard` prefix."""
+
+    if not guard_cli:
+        return False
+    name = Path(guard_cli[0]).name.lower()
+    return name in {
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+        CURRENT_HOL_GUARD_SHIM,
+        f"{CURRENT_HOL_GUARD_SHIM}.cmd",
+        f"{CURRENT_HOL_GUARD_SHIM}.exe",
+    }
+
+
+def argv0_is_ephemeral_desktop_cli(argv0: str) -> bool:
+    """Return whether argv0 lives under a pruneable Desktop `versions/` path."""
+
+    return desktop_core_shim_for_executable(Path(argv0)) is not None
+
+
+def frozen_launcher_is_prune_safe(launcher: str) -> bool:
+    """Return whether a frozen launcher survives Desktop Core prune."""
+
+    return desktop_core_shim_for_executable(Path(launcher)) is None
+
+
 __all__ = [
     "CURRENT_HOL_GUARD_SHIM",
     "MACOS_BUNDLED_HOL_GUARD",
+    "argv0_is_ephemeral_desktop_cli",
     "desktop_core_shim_for_executable",
+    "frozen_launcher_is_prune_safe",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
     "resolved_guard_cli",
     "trusted_frozen_guard_cli_paths",
+    "uses_top_level_hook_command",
 ]

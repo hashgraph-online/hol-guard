@@ -9,6 +9,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
+from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from .base import HarnessContext
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
@@ -342,15 +343,6 @@ def _resolve_guard_cli_command(context: HarnessContext) -> list[str]:
     """Return only the isolated CLI bound to the running Guard distribution."""
 
     return list(resolve_attested_guard_cli(context).command)
-
-
-def _uses_top_level_hook_command(guard_cli: list[str]) -> bool:
-    if not guard_cli:
-        return False
-    # hol-guard/plugin-guard entrypoints expose `hook` at the top level (combined-mode
-    # hol-guard rewrites `hook` to `guard hook` internally). Only module invocations
-    # need an explicit `guard` prefix.
-    return Path(guard_cli[0]).name in {"hol-guard", "plugin-guard"}
 
 
 def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:

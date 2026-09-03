@@ -96,6 +96,7 @@ def test_repair_retains_authenticated_newer_runtime(
 
     assert result["runtime_status"] == "retained_newer_runtime"
     assert result["daemon_version"] == "3.0.35"
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_repair_restarts_newer_mismatched_non_desktop_runtime(
@@ -189,6 +190,7 @@ def test_repair_retains_equal_version_peer_runtime(
     assert result["runtime_status"] == "current"
     assert result["daemon_version"] == "3.0.34"
     assert result["cli_version"] == "3.0.34"
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_repair_restarts_older_desktop_core_sidecar(

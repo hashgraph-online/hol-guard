@@ -12,6 +12,7 @@ from pathlib import Path
 from .adapters.base import HarnessContext
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
+from .cursor_hook_rebind import rebind_stale_cursor_hooks
 from .shim_refresh import refresh_stale_harness_shims
 from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
@@ -170,6 +171,19 @@ def reconcile_runtime_artifacts(
         store,
         home_dir=context.home_dir,
     )
+    try:
+        cursor_rebind = rebind_stale_cursor_hooks(store.guard_home, home_dir=context.home_dir)
+    except (OSError, RuntimeError) as error:
+        cursor_rebind = {
+            "rebound": False,
+            "reason": "cursor_hook_script_rebind_failed",
+            "error": str(error),
+        }
+    if cursor_rebind.get("rebound") is True and "cursor" not in repaired_harnesses:
+        repaired_harnesses = (*repaired_harnesses, "cursor")
+    if cursor_rebind.get("reason") == "cursor_hook_script_rebind_failed":
+        error_text = cursor_rebind.get("error")
+        errors.append(f"cursor:rebind:{error_text if isinstance(error_text, str) else 'failed'}")
 
     repaired_managers: tuple[str, ...] = ()
     try:
