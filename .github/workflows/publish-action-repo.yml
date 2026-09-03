@@ -161,6 +161,17 @@ jobs:
           cp "${GITHUB_WORKSPACE}/action/scanner-runtime-requirements.txt" scanner-runtime-requirements.txt
           cp "${GITHUB_WORKSPACE}/action/scanner-cisco-runtime-requirements.txt" scanner-cisco-runtime-requirements.txt
           cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
+          # Published examples must not teach consumers to track the floating
+          # v1 tag: rewrite usage examples to the immutable release tag. The
+          # end-of-line anchor keeps illustrative pins like @v1.0.0 intact.
+          ACTION_TAG="${{ steps.version.outputs.tag }}"
+          sed -i "s|hashgraph-online/ai-plugin-scanner-action@v1$|hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}|" README.md
+          if grep -q "hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}$" README.md; then
+            echo "README examples pinned to immutable release tag ${ACTION_TAG}."
+          else
+            echo "Expected at least one rewritten action usage example in README.md." >&2
+            exit 1
+          fi
 
       - name: Detect sync changes
         id: diff

@@ -11,9 +11,9 @@
 
 This repository is the canonical Marketplace-facing wrapper for the scanner action. The hol-guard repository remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
 
-The legacy action slug `hashgraph-online/hol-codex-plugin-scanner-action@v1` remains supported as a compatibility alias for existing workflows. New integrations should use `hashgraph-online/ai-plugin-scanner-action@v1`.
+The legacy action slug `hashgraph-online/hol-codex-plugin-scanner-action@v1` remains supported as a compatibility alias for existing workflows. New integrations should use `hashgraph-online/ai-plugin-scanner-action` pinned to an immutable release tag or commit SHA as described in [Pinning and supply-chain hygiene](#pinning-and-supply-chain-hygiene).
 
-The default Marketplace install path uses an exact `plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/hol-guard`, and only then installs it. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only. Live network probing and submission automation remain explicit opt-in features.
+The default Marketplace install path uses an exact `plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/hol-guard`, and only then installs it. Dependency resolution is fully hash-locked: the runtime dependency closure, the optional Cisco scanner closure, and `pypi-attestations` itself are each installed from committed `--require-hashes` lockfiles, and the reviewed wheel is installed with `--no-deps` only after its SHA-256 and PyPI provenance are verified. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only, and env-configured external analyzer credentials (`MCP_SCANNER_API_KEY`, `MCP_SCANNER_LLM_API_KEY`) are removed from the scan environment unless `online` is enabled. Live network probing and submission automation remain explicit opt-in features.
 
 Advanced distribution paths are available when you need them:
 
@@ -31,6 +31,21 @@ Advanced distribution paths are available when you need them:
     fail_on_severity: high
 ```
 
+## Pinning and supply-chain hygiene
+
+Every release of this action is published with an immutable version tag (`v1.x.y`) plus the floating `v1` major tag. Examples in the published action repository reference the immutable release tag for the release you are reading; pin it exactly, or resolve it to a full commit SHA for the strictest form:
+
+```yaml
+# Immutable release tag (never re-pointed after publication)
+- uses: hashgraph-online/ai-plugin-scanner-action@v1.0.0
+
+# Strictest form: full commit SHA
+# gh api repos/hashgraph-online/ai-plugin-scanner-action/commits/v1.0.0 --jq .sha
+- uses: hashgraph-online/ai-plugin-scanner-action@<full-commit-sha>
+```
+
+Security-conscious consumers should prefer the commit-SHA form, the same guidance GitHub publishes for all third-party actions. The scanner package installed by the action is already content-addressed: `scanner-version.txt` pins the exact PyPI release, `scanner-sha256.txt` pins the wheel digest checked after download, and `pypi-attestations` verifies the wheel's PyPI provenance against this repository before installation.
+
 ## Inputs
 
 | Input | Description | Default |
@@ -42,7 +57,7 @@ Advanced distribution paths are available when you need them:
 | `profile` | Policy profile: `default`, `public-marketplace`, or `strict-security` | `default` |
 | `config` | Optional path to a scanner config file such as `.plugin-scanner.toml` | `""` |
 | `baseline` | Optional path to a baseline suppression file | `""` |
-| `online` | Enable live network probing for `verify` mode | `false` |
+| `online` | Permit network access: live probing for `verify` mode and env-configured external analyzer credentials. When `false`, `MCP_SCANNER_API_KEY` and `MCP_SCANNER_LLM_API_KEY` are removed from the scan environment | `false` |
 | `upload_sarif` | Upload the generated SARIF report to GitHub code scanning when `mode: scan` | `false` |
 | `sarif_category` | SARIF category used during GitHub code scanning upload | `ai-plugin-scanner` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
@@ -96,7 +111,7 @@ Mode notes:
 - `scan` and `lint` respect `profile`, `config`, and `baseline`.
 - `verify` respects `online` and writes a human-readable report for `format: text`.
 - `submit` writes the plugin-quality artifact to `output` when provided, otherwise `plugin-quality.json`. `registry_payload_output` remains dedicated to the separate HOL registry payload.
-- `online`, `submission_enabled`, and `upload_sarif` are the only common paths that intentionally reach beyond the runner after the scanner package itself has been installed.
+- `online`, `submission_enabled`, and `upload_sarif` are the only common paths that intentionally reach beyond the runner after the scanner package itself has been installed. With `online: false` (the default), env-configured external analyzer credentials are removed from the scan environment, so runner- or organization-level `MCP_SCANNER_API_KEY` / `MCP_SCANNER_LLM_API_KEY` secrets cannot send repository content to external analyzers.
 - `pr_comment_status` currently defaults to `skipped` in this Marketplace wrapper path.
 
 ## Examples
@@ -234,7 +249,8 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 ## Release Management
 
 - Publish immutable releases for this Marketplace wrapper repository automatically from the source scanner repo when `action/` changes merge to `main`.
-- Move the floating major tag `v1` to the latest compatible release.
+- Move the floating major tag `v1` to the latest compatible release; version tags (`v1.x.y`) are created once per release and never re-pointed.
+- Rewrite `uses:` examples in the published README from the floating `@v1` form to the immutable `@v1.x.y` release tag during bundle sync, so published examples never teach consumers to depend on a mutable ref.
 - Keep the canonical action in its own public repository for GitHub Marketplace publication.
 - Configure `ACTION_REPO_TOKEN` as a secret in the source repository so `publish-action-repo.yml` can automatically sync the canonical action repository, refresh the `awesome-codex-plugins` submission guide, create releases, and publish autogenerated release notes.
 - Configure `AWESOME_CODEX_PLUGINS_TOKEN` as a secret with `contents:write` access to `hashgraph-online/awesome-codex-plugins` so the same publish workflow can update the submission guide after each reviewed scanner release.

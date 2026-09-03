@@ -36,7 +36,7 @@ inputs:
     required: false
     default: "false"
   online:
-    description: "Enable live network probing for verify mode"
+    description: "Permit network access: live probing for verify mode and env-configured external analyzer credentials (MCP_SCANNER_API_KEY, MCP_SCANNER_LLM_API_KEY). When false those credentials are removed from the scan environment so repository content cannot leave the runner."
     required: false
     default: "false"
   upload_sarif:

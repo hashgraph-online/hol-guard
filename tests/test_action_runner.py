@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import socket
 import threading
@@ -14,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 import yaml
 
 from codex_plugin_scanner._scanner_commands import _scan_with_policy
-from codex_plugin_scanner.action_runner import _build_scan_args, main
+from codex_plugin_scanner.action_runner import _build_scan_args, _drop_external_analyzer_credentials, main
 from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -153,6 +154,40 @@ def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None
 
     stdout = capsys.readouterr().out
     assert '"score": 100' in stdout
+
+
+def test_offline_action_drops_external_analyzer_credentials(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("MCP_SCANNER_API_KEY", "runner-secret")
+    monkeypatch.setenv("MCP_SCANNER_LLM_API_KEY", "llm-secret")
+
+    dropped = _drop_external_analyzer_credentials(online=False)
+
+    assert dropped == ("MCP_SCANNER_API_KEY", "MCP_SCANNER_LLM_API_KEY")
+    assert "MCP_SCANNER_API_KEY" not in os.environ
+    assert "MCP_SCANNER_LLM_API_KEY" not in os.environ
+    stdout = capsys.readouterr().out
+    assert "MCP_SCANNER_API_KEY" in stdout
+    assert "online is disabled" in stdout
+
+
+def test_online_action_keeps_external_analyzer_credentials(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("MCP_SCANNER_API_KEY", "runner-secret")
+    monkeypatch.setenv("MCP_SCANNER_LLM_API_KEY", "llm-secret")
+
+    dropped = _drop_external_analyzer_credentials(online=True)
+
+    assert dropped == ()
+    assert os.environ["MCP_SCANNER_API_KEY"] == "runner-secret"
+    assert os.environ["MCP_SCANNER_LLM_API_KEY"] == "llm-secret"
+    assert capsys.readouterr().out == ""
+
+
+def test_offline_action_without_credentials_is_silent(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("MCP_SCANNER_API_KEY", raising=False)
+    monkeypatch.delenv("MCP_SCANNER_LLM_API_KEY", raising=False)
+
+    assert _drop_external_analyzer_credentials(online=False) == ()
+    assert capsys.readouterr().out == ""
 
 
 def test_build_scan_args_propagates_cisco_mcp_scan() -> None:
