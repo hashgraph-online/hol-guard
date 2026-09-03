@@ -98,8 +98,15 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/everyday-mode-r32-finalize.yml
           git diff --check
-          if git status --short | grep -E '(^| )\.github/(workflows|everyday-payload)/'; then
-            echo 'Temporary automation remained in the product diff.' >&2
+          remaining_temp="$(
+            git status --short --untracked-files=all |
+              awk '{print $2}' |
+              grep -E '^\.github/(workflows|everyday-payload)/' |
+              grep -v '^\.github/workflows/everyday-mode-r32-finalize\.yml$' || true
+          )"
+          if [ -n "$remaining_temp" ]; then
+            echo 'Temporary automation remained in the product diff:' >&2
+            printf '%s\n' "$remaining_temp" >&2
             exit 1
           fi
           if find . -type f \( -name 'HOL_GUARD_EVERYDAY_MODE_PRD*' -o -name 'HOL_GUARD_EVERYDAY_MODE_TODO*' -o -name '*TAKEAWAY_PROMPT*' \) | grep -q .; then
