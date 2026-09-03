@@ -30,7 +30,7 @@ from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_m
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
 from .presentation_mode import (
     PRESENTATION_SCHEMA_VERSION,
-    UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
+    UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC as _UNSUPPORTED_SCHEMA,
     coerce_persisted_presentation_mode,
     coerce_presentation_mode_write,
 )
@@ -691,7 +691,6 @@ def update_guard_settings(
     skip_approval_gate: bool = False,
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
-
     if not skip_approval_gate:
         require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
@@ -702,10 +701,7 @@ def update_guard_settings(
         current_mode=coerce_presentation_mode_write(current_config.presentation_mode),
         current_explicit=current_config.presentation_mode_explicit,
         current_revision=current_config.presentation_revision,
-        current_writable=(
-            current_config.presentation_diagnostic
-            != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC
-        ),
+        current_writable=current_config.presentation_diagnostic != _UNSUPPORTED_SCHEMA,
     )
     switching_to_custom_without_overrides = (
         payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()
