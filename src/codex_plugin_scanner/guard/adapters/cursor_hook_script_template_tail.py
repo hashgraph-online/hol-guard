@@ -362,13 +362,24 @@ def _main_inner() -> int:
             return availability_code
         compact_event = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact_event == "beforereadfile":
-            availability, availability_code = _cursor_availability_response(
-                prepared,
-                hook_event_name=hook_event_name,
-                workspace=workspace,
-            )
-            print(json.dumps(availability))
-            return availability_code
+            try:
+                from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
+
+                workspace_path = Path(workspace) if workspace else None
+                check_payload = dict(prepared)
+                check_payload["hook_event_name"] = "PreToolUse"
+                check_payload.setdefault("tool_name", "Read")
+                safe_read = hook_action_is_emergency_safe(check_payload, workspace=workspace_path)
+            except Exception:
+                safe_read = False
+            if safe_read:
+                availability, availability_code = _cursor_availability_response(
+                    prepared,
+                    hook_event_name=hook_event_name,
+                    workspace=workspace,
+                )
+                print(json.dumps(availability))
+                return availability_code
         if recover_kind != "overload":
             _run_guard_recovery(
                 recover_kind,

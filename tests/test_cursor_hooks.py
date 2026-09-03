@@ -233,6 +233,7 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "cursor_fallback_permission" in source
     assert "run_isolated_hook_process = None" in source
     assert 'compact_event == "beforereadfile"' in source
+    assert "hook_action_is_emergency_safe" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
