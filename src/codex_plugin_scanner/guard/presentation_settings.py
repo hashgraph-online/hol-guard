@@ -59,6 +59,7 @@ def resolve_presentation_settings_update(
             raise ValueError(
                 "Presentation preference changed on another surface. Reload settings and try again."
             )
+        # Unsupported future-schema state is read-only instead of being silently downgraded.
         if changed and not current_writable:
             raise ValueError(
                 "Presentation settings use a newer schema and cannot be changed by this Guard version."
