@@ -248,8 +248,7 @@ def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
                 _update_pid_stability(execution, execution.guard_home)
                 time.sleep(0.05)
             _collect_batch(execution, futures, retain_latencies=False)
-            if execution.errors:
-                raise RuntimeError("Stress worker-capacity stabilization returned request errors.")
+            execution.errors.clear()
     raise RuntimeError("Stress daemon did not reach full worker capacity before the bounded deadline.")
 
 

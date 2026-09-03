@@ -11,6 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from .base import HarnessContext
+from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 
@@ -26,6 +27,10 @@ _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EV
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 
 
+def _frozen_cursor_hook_launcher() -> str:
+    return resolve_frozen_cursor_hook_launcher()
+
+
 def _managed_hook_command(
     *,
     python_executable: Path | None,
@@ -37,7 +42,7 @@ def _managed_hook_command(
     if python_executable is not None:
         return shlex.join([str(python_executable), script, *event_args])
     if bool(getattr(sys, "frozen", False)):
-        return shlex.join([sys.executable, FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
+        return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
     return shlex.join([sys.executable, script, *event_args])
 
 

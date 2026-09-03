@@ -1,11 +1,104 @@
-import type { GuardCloudConnectStatusResponse } from "./guard-types";
-import { fetchGuardCloudConnectStatus, startGuardCloudConnect } from "./guard-api";
+import type { GuardCloudConnectFlow, GuardCloudConnectStatusResponse } from "./guard-types";
+import { fetchGuardApi, fetchGuardCloudConnectStatus } from "./guard-api";
+
+export type GuardCloudOpenStatus = GuardCloudConnectStatusResponse & {
+  dashboard_url?: string | null;
+};
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+export function safeCloudConnectUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!url.hostname || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    const approvedHttps = url.protocol === "https:" && (host === "hol.org" || host.endsWith(".hol.org"));
+    const localHttp = url.protocol === "http:" && LOOPBACK_HOSTS.has(host);
+    if (!approvedHttps && !localHttp) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
 
 export class CloudRequestTimeoutError extends Error {
   constructor() {
     super("Guard Cloud did not respond within 5 seconds. Try again.");
     this.name = "CloudRequestTimeoutError";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function connectFlowFromPayload(value: unknown): GuardCloudConnectFlow | null {
+  if (!isRecord(value)) return null;
+  const connectUrl = typeof value.connect_url === "string" ? safeCloudConnectUrl(value.connect_url) : null;
+  if (!connectUrl) return null;
+  return {
+    state: value.state === "starting" || value.state === "running" || value.state === "failed" ? value.state : "idle",
+    title: typeof value.title === "string" ? value.title : "",
+    detail: typeof value.detail === "string" ? value.detail : "",
+    action_label: typeof value.action_label === "string" ? value.action_label : "",
+    connect_url: connectUrl,
+    authorize_url: typeof value.authorize_url === "string" ? safeCloudConnectUrl(value.authorize_url) : null,
+    browser_opened: typeof value.browser_opened === "boolean" ? value.browser_opened : null,
+    request_id: typeof value.request_id === "string" ? value.request_id : null,
+    poll_after_ms: typeof value.poll_after_ms === "number" ? value.poll_after_ms : null,
+  };
+}
+
+export function parseGuardCloudConnectHttp(
+  status: number,
+  payload: unknown,
+): GuardCloudOpenStatus {
+  const record = isRecord(payload) ? payload : {};
+  const dashboardUrl = typeof record.dashboard_url === "string" ? safeCloudConnectUrl(record.dashboard_url) : null;
+  if (status === 409 && record.error === "guard_cloud_connect_not_required") {
+    return {
+      connect_required: false,
+      connect_flow: null,
+      dashboard_url: dashboardUrl,
+    };
+  }
+  if (status < 200 || status >= 300) {
+    const message = typeof record.message === "string" && record.message.trim()
+      ? record.message
+      : typeof record.error === "string" && record.error.trim()
+        ? `${record.error} (${status})`
+        : `Request failed with ${status}`;
+    throw new Error(message);
+  }
+  return {
+    connect_required: record.connect_required === true,
+    connect_flow: connectFlowFromPayload(record.connect_flow),
+    dashboard_url: dashboardUrl,
+  };
+}
+
+async function readCloudConnect(
+  method: "GET" | "POST",
+  signal: AbortSignal,
+): Promise<GuardCloudOpenStatus> {
+  const response = await fetchGuardApi("/v1/cloud/connect", {
+    method,
+    signal,
+    ...(method === "POST"
+      ? {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      : {}),
+  });
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  return parseGuardCloudConnectHttp(response.status, payload);
 }
 
 export async function withCloudRequestTimeout<T>(
@@ -36,14 +129,24 @@ export async function withCloudRequestTimeout<T>(
   }
 }
 
+type ReadCloudConnect = (
+  method: "GET" | "POST",
+  signal: AbortSignal,
+) => Promise<GuardCloudOpenStatus>;
+
 export async function startOrRecoverCloudConnect(
   signal: AbortSignal,
-): Promise<GuardCloudConnectStatusResponse> {
+  readConnect: ReadCloudConnect = readCloudConnect,
+): Promise<GuardCloudOpenStatus> {
   try {
-    return await withCloudRequestTimeout(startGuardCloudConnect, signal);
+    return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
   } catch (error: unknown) {
     if (!(error instanceof CloudRequestTimeoutError)) throw error;
-    return await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
+    try {
+      return await withCloudRequestTimeout((nextSignal) => readConnect("GET", nextSignal), signal);
+    } catch {
+      return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
+    }
   }
 }
 
@@ -66,9 +169,10 @@ function waitForPoll(delayMs: number, signal: AbortSignal): Promise<void> {
 }
 
 export async function waitForAuthorizeUrl(
-  initialStatus: GuardCloudConnectStatusResponse,
+  initialStatus: GuardCloudOpenStatus,
   signal: AbortSignal,
-): Promise<GuardCloudConnectStatusResponse> {
+  poll: ReadCloudConnect = readCloudConnect,
+): Promise<GuardCloudOpenStatus> {
   if (signal.aborted) {
     throw new DOMException("Cloud connection polling stopped", "AbortError");
   }
@@ -85,7 +189,11 @@ export async function waitForAuthorizeUrl(
     }
     const pollDelayMs = Math.max(100, Math.min(5000, flow.poll_after_ms ?? 1000));
     await waitForPoll(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
+    const polled = await withCloudRequestTimeout((nextSignal) => poll("GET", nextSignal), signal);
+    status = {
+      ...polled,
+      dashboard_url: safeCloudConnectUrl(polled.dashboard_url) ?? safeCloudConnectUrl(status.dashboard_url),
+    };
   }
   return status;
 }

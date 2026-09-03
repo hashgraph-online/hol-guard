@@ -270,7 +270,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200
-    assert connect_status == {"connect_required": False, "connect_flow": None}
+    assert connect_status["connect_required"] is False and connect_status["connect_flow"] is None and str(connect_status.get("dashboard_url") or "").endswith("/guard")
     assert runtime_status == 200
     assert runtime["sync_configured"] is True
     assert runtime["cloud_state"] in {"paired_active", "paired_waiting"}

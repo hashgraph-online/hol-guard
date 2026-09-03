@@ -8,6 +8,7 @@ import {
 import { ActionButton } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
 import {
+  safeCloudConnectUrl,
   startOrRecoverCloudConnect,
   waitForAuthorizeUrl,
   waitForCloudConnection,
@@ -202,21 +203,6 @@ function cloudConnectButtonLabel(
   if (state?.status === "working") return "Starting sign-in…";
   if (state?.status === "success") return "Guard Cloud connected";
   return defaultLabel;
-}
-
-function safeCloudConnectUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {

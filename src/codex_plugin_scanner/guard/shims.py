@@ -21,6 +21,7 @@ from .package_shim_frozen import (
     frozen_package_shim_python_path,
     installed_package_shim_attestation_bytes,
     normalized_package_shim_content,
+    package_shim_interpreter,
     resolve_frozen_package_shim_path,
     run_frozen_package_shim,
     write_package_manager_shim_files,
@@ -199,7 +200,7 @@ def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args
 
 
 def _build_windows_script(posix_path: Path) -> str:
-    return build_windows_script(sys.executable, posix_path)
+    return build_windows_script(package_shim_interpreter(), posix_path)
 
 
 def _write_package_manager_shim_files(context: HarnessContext, command: str, shim_dir: Path) -> Path:
@@ -1066,10 +1067,6 @@ def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     )
 
 
-def _is_frozen_runtime() -> bool:
-    return bool(getattr(sys, "frozen", False))
-
-
 def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
     home_dir = context.home_dir
     protect_args = [
@@ -1080,8 +1077,8 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
         *(["--home", str(home_dir)] if home_dir else []),
         *workspace_args,
     ]
-    if _is_frozen_runtime():
-        return [sys.executable, *protect_args]
+    if bool(getattr(sys, "frozen", False)):
+        return [package_shim_interpreter(), *protect_args]
     return [
         sys.executable,
         *_trusted_python_flags(),
@@ -1102,7 +1099,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
     command_args = _package_protect_command_args(context, workspace_args)
     return "\n".join(
         (
-            f"#!{sys.executable}",
+            f"#!{package_shim_interpreter()}",
             "from __future__ import annotations",
             "import os",
             "import shutil",

@@ -4059,6 +4059,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             {
                 "connect_required": connect_flow is not None,
                 "connect_flow": connect_flow,
+                "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
             }
         )
 
@@ -4070,6 +4071,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "error": "guard_cloud_connect_not_required",
                     "connect_required": False,
                     "connect_flow": None,
+                    "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
                     "message": "Guard Cloud connect is not required to publish insights from this machine.",
                 },
                 status=409,
@@ -4090,10 +4092,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "request_id": request_id,
             "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
         }
-        started, current = _begin_guard_cloud_connect_state(  # type: ignore[arg-type]
-            self.server,
-            starting_state,
-        )
+        started, current = _begin_guard_cloud_connect_state(self.server, starting_state)  # type: ignore[arg-type]
         if not started:
             self._write_json({"connect_required": True, "connect_flow": current}, status=202)
             return

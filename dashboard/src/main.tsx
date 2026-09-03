@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import "./styles.css";
 import "./shell-navigation.css";
+import "./open-guard-cloud-action.css";
 import "./shell-navigation-status.css";
 import "./responsive-layout.css";
 

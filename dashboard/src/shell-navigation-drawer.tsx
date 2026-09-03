@@ -3,7 +3,6 @@ import type { RefObject } from "react";
 import {
   HiMiniArrowTopRightOnSquare,
   HiMiniBugAnt,
-  HiMiniCloud,
   HiMiniCommandLine,
   HiMiniXMark,
 } from "react-icons/hi2";
@@ -11,6 +10,7 @@ import {
 import { CloudUserMenu } from "./cloud-user-menu";
 import { GuardUpdatePanel } from "./guard-update-panel";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
+import { OpenGuardCloudAction } from "./open-guard-cloud-action";
 import { NavigationLink, navigateFromAnchor, shellHref } from "./shell-navigation-link";
 import { LocalGuardStatusCopy } from "./shell-navigation-status";
 import {
@@ -177,11 +177,7 @@ export function NavigationDrawer(
                 <HiMiniCommandLine aria-hidden="true" />
                 <span>Local dashboard</span>
               </a>
-              <a href="https://hol.org/guard" target="_blank" rel="noopener noreferrer">
-                <HiMiniCloud aria-hidden="true" />
-                <span>Open Guard Cloud</span>
-                <HiMiniArrowTopRightOnSquare aria-hidden="true" />
-              </a>
+              <OpenGuardCloudAction variant="drawer" />
               <a href={GITHUB_ISSUE_LINK} target="_blank" rel="noopener noreferrer">
                 <HiMiniBugAnt aria-hidden="true" />
                 <span>{GITHUB_ISSUE_BUTTON_LABEL}</span>

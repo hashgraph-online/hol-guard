@@ -205,6 +205,25 @@ def test_live_codex_hooks_reject_marker_only_noop_command(
     assert codex_runtime_hooks_verified(ctx) is False
 
 
+def test_live_codex_hooks_pass_when_native_shell_protection_active(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    _write_codex_runtime_hooks(
+        ctx.home_dir,
+        include_permission=False,
+        guard_command="true --harness codex hol-guard hook",
+        extra_foreign=False,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        lambda _context: {"shell_protection_active": True},
+    )
+    assert codex_runtime_hooks_verified(ctx) is True
+
+
 def test_live_cursor_hooks_reject_name_only_noop_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
