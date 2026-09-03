@@ -1,0 +1,62 @@
+name: Refresh Everyday Mode decision evidence
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-r32-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: everyday-mode-r32-refresh-evidence
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out immutable branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - name: Regenerate and verify evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+          uv run --no-sync pytest -q \
+            tests/test_guard_command_decision_diff.py \
+            tests/test_guard_desktop_contract.py
+      - name: Commit only refreshed evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/everyday-mode-r32-refresh-evidence.yml
+          fixture=tests/fixtures/guard-command-corpus/decision-diff-report.json
+          rm -f "$workflow"
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n%s\n' "$workflow" "$fixture" | sort)"
+          if [ "$changed" != "$expected" ]; then
+            echo 'Unexpected files changed while refreshing decision evidence:' >&2
+            printf '%s\n' "$changed" >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: refresh command decision evidence'
+          git push origin HEAD:feat/everyday-mode-r32-final
