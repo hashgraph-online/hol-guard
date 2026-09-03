@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from .presentation_migration import migrate_legacy_presentation_mode
+
 GuardPresentationMode = Literal["everyday", "technical"]
 GuardPresentationSource = Literal[
     "default",
@@ -17,11 +19,6 @@ GuardPresentationSource = Literal[
 
 PRESENTATION_SCHEMA_VERSION = 1
 PRESENTATION_MODE_VALUES = frozenset({"everyday", "technical"})
-LEGACY_PRESENTATION_MODE_MAP: dict[str, GuardPresentationMode] = {
-    "simple": "everyday",
-    "advanced": "technical",
-    "developer": "technical",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,13 +74,14 @@ def coerce_persisted_presentation_mode(
             source="local-explicit" if is_explicit else "default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
         )
-    if isinstance(value, str) and value in LEGACY_PRESENTATION_MODE_MAP:
+    migrated_value = migrate_legacy_presentation_mode(value)
+    if migrated_value is not None:
         return PersistedPresentationMode(
-            value=LEGACY_PRESENTATION_MODE_MAP[value],
+            value=migrated_value,
             explicit=True,
             source="migrated",
             schema_version=PRESENTATION_SCHEMA_VERSION,
-            diagnostic=f"migrated_legacy_{value}_presentation_mode",
+            diagnostic="migrated_legacy_presentation_mode",
         )
     if value is None or value == "":
         return PersistedPresentationMode(
@@ -153,6 +151,7 @@ def resolve_presentation_mode(
             explicit=False,
             writable=writable,
             revision=safe_revision,
+            diagnostic=local.diagnostic,
         )
     return ResolvedPresentationMode(
         value=local.value,

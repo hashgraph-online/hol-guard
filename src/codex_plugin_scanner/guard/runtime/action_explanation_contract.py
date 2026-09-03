@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Mapping
@@ -233,37 +234,82 @@ class GuardActionExplanationV1:
         return payload
 
     def cloud_safe_projection(self) -> dict[str, object]:
-        payload = self.list_projection()
-        payload["technical"] = {
-            "available": False,
-            "unavailable_reason": "Technical content stays on the protected device.",
-            "action_type": self.technical.action_type,
-            "command_display": None,
-            "normalized_command_display": None,
-            "executable": None,
-            "arguments_display": None,
-            "dialect": None,
-            "transport": None,
-            "working_scope_display": None,
-            "wrappers": [],
-            "segments": [],
-            "extension_ids": [],
-            "rule_ids": [],
-            "reason_codes": list(self.technical.reason_codes),
-            "policy_source": None,
-            "parse_confidence": self.technical.parse_confidence,
-            "proof_level": self.technical.proof_level,
-            "receipt_id": None,
-            "action_id": self.technical.action_id,
+        opaque_identity = "action:sha256:" + hashlib.sha256(self.action_identity.encode("utf-8")).hexdigest()
+        return {
+            "schema_version": self.schema_version,
+            "explanation_version": self.explanation_version,
+            "renderer_version": self.renderer_version,
+            "action_identity": opaque_identity,
+            "canonical_identity": None,
+            "catalog_digest": None,
+            "locale": self.locale,
+            "kind": self.kind,
+            "confidence": self.confidence,
+            "uncertainty_reasons": [],
+            "everyday": {
+                "headline_message_id": "guard.action.protected",
+                "headline": "Protected action",
+                "summary_message_id": "guard.action.cloud_safe_summary",
+                "summary": "Guard recorded a protected action. Sensitive details stayed on this device.",
+                "impact_message_id": None,
+                "impact": None,
+                "why_guard_intervened_message_id": None,
+                "why_guard_intervened": None,
+                "recommendation_message_id": None,
+                "recommendation": None,
+                "actor_label": "Guard",
+                "targets": [],
+                "consequences": [],
+                "safer_alternatives": [],
+            },
+            "technical": {
+                "available": False,
+                "unavailable_reason": "Technical content stays on the protected device.",
+                "action_type": self.kind,
+                "command_display": None,
+                "normalized_command_display": None,
+                "executable": None,
+                "arguments_display": None,
+                "dialect": None,
+                "transport": None,
+                "working_scope_display": None,
+                "wrappers": [],
+                "segments": [],
+                "extension_ids": [],
+                "rule_ids": [],
+                "reason_codes": [],
+                "policy_source": None,
+                "parse_confidence": None,
+                "proof_level": None,
+                "receipt_id": None,
+                "action_id": None,
+            },
+            "redaction": {
+                "level": "redacted",
+                "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
+                "omitted_fields": [
+                    "action_identity.raw",
+                    "canonical_identity",
+                    "catalog_digest",
+                    "everyday.actor_label",
+                    "everyday.targets",
+                    "everyday.consequences",
+                    "everyday.safer_alternatives",
+                    "everyday.user_derived_copy",
+                    "technical.command",
+                    "technical.paths",
+                    "technical.arguments",
+                    "technical.extension_ids",
+                    "technical.rule_ids",
+                    "technical.reason_codes",
+                    "technical.policy_source",
+                    "technical.receipt_id",
+                    "technical.action_id",
+                ],
+                "truncated_fields": [],
+                "secret_like_values_removed": True,
+            },
         }
-        payload["redaction"] = {
-            "level": "redacted",
-            "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
-            "omitted_fields": ["technical.command", "technical.paths", "technical.arguments", "technical.rule_ids"],
-            "truncated_fields": [],
-            "secret_like_values_removed": self.redaction.secret_like_values_removed,
-        }
-        return payload
 
 
 @lru_cache(maxsize=1)

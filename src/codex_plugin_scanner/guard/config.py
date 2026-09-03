@@ -697,8 +697,22 @@ def update_guard_settings(
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
-    presentation_change = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
-    if "presentation_revision" in payload and not presentation_change:
+    presentation_request = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
+    requested_presentation_mode = current_config.presentation_mode
+    if "presentation_mode" in payload:
+        requested_presentation_mode = coerce_presentation_mode_write(payload["presentation_mode"])
+    requested_presentation_explicit = current_config.presentation_mode_explicit
+    if "presentation_mode_explicit" in payload:
+        if not isinstance(payload["presentation_mode_explicit"], bool):
+            raise ValueError("presentation_mode_explicit must be a boolean.")
+        requested_presentation_explicit = payload["presentation_mode_explicit"]
+    elif "presentation_mode" in payload:
+        requested_presentation_explicit = True
+    presentation_change = presentation_request and (
+        requested_presentation_mode != current_config.presentation_mode
+        or requested_presentation_explicit != current_config.presentation_mode_explicit
+    )
+    if "presentation_revision" in payload and not presentation_request:
         raise ValueError("presentation_revision requires a presentation preference change.")
     if presentation_change:
         expected_revision = payload.get("presentation_revision")
@@ -716,10 +730,11 @@ def update_guard_settings(
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
-    if presentation_change:
-        next_payload["presentation_mode_explicit"] = True
+    if presentation_request:
+        next_payload["presentation_mode"] = requested_presentation_mode
+        next_payload["presentation_mode_explicit"] = requested_presentation_explicit
         next_payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
-        next_payload["presentation_revision"] = current_config.presentation_revision + 1
+        next_payload["presentation_revision"] = current_config.presentation_revision + (1 if presentation_change else 0)
     incoming_selected_posture = _incoming_selects_protection_posture(
         payload,
         current_config,

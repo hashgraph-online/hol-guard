@@ -102,3 +102,22 @@ def test_unknown_top_level_field_rejected() -> None:
     payload["surprise"] = True
     with pytest.raises(ValueError, match="Unknown"):
         parse_action_explanation(payload)
+
+
+def test_cloud_projection_removes_everyday_identity_and_sensitive_details() -> None:
+    original = _explanation()
+    payload = original.cloud_safe_projection()
+    serialized = __import__("json").dumps(payload, sort_keys=True)
+    everyday = cast(dict[str, object], payload["everyday"])
+    technical = cast(dict[str, object], payload["technical"])
+    assert payload["action_identity"] != original.action_identity
+    assert str(payload["action_identity"]).startswith("action:sha256:")
+    assert payload["canonical_identity"] is None
+    assert everyday["actor_label"] == "Guard"
+    assert everyday["targets"] == []
+    assert everyday["consequences"] == []
+    assert technical["action_id"] is None
+    assert technical["reason_codes"] == []
+    assert "Codex" not in serialized
+    assert "command:v1:abc" not in serialized
+    parse_action_explanation(payload)

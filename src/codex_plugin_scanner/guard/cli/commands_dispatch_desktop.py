@@ -207,6 +207,27 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _presentation_projection(config: GuardConfig) -> dict[str, object]:
+    from ..presentation_mode import resolve_presentation_mode
+
+    resolved = resolve_presentation_mode(
+        local_value=config.presentation_mode,
+        local_explicit=config.presentation_mode_explicit,
+        local_schema_version=config.presentation_schema_version,
+        revision=config.presentation_revision,
+        writable=True,
+    )
+    return {
+        "mode": resolved.value,
+        "source": resolved.source,
+        "explicit": resolved.explicit,
+        "canWrite": resolved.writable,
+        "schemaVersion": resolved.schema_version,
+        "revision": resolved.revision,
+        "diagnostic": resolved.diagnostic,
+    }
+
+
 def build_desktop_bootstrap_payload(
     *,
     status_payload: dict[str, object],
@@ -217,6 +238,7 @@ def build_desktop_bootstrap_payload(
     oldest_pending_at: str | None = None,
     resolved_today_count: int | None = None,
     receipt_summary: dict[str, object] | None = None,
+    presentation: dict[str, object] | None = None,
 ) -> dict[str, object]:
     runtime_status = _text(status_payload.get("runtime_status")) or "offline"
     runtime_active = runtime_status == "active"
@@ -330,6 +352,16 @@ def build_desktop_bootstrap_payload(
         "recentReceipts": receipt_projections,
         "cloud": _cloud_projection(status_payload),
         "dashboard": {"available": True, "launchCommandSupported": True},
+        "presentation": presentation
+        or {
+            "mode": "everyday",
+            "source": "default",
+            "explicit": False,
+            "canWrite": False,
+            "schemaVersion": 1,
+            "revision": 0,
+            "diagnostic": "presentation_not_supported_by_core",
+        },
     }
 
 
@@ -367,8 +399,31 @@ def _run_guard_desktop_command(
         if bool(getattr(args, "alpha", False)):
             argv.append("--alpha")
         return dashboard_update_main(argv)
-    if getattr(args, "desktop_command", None) != "bootstrap":
-        print("Choose desktop bootstrap.", file=sys.stderr)
+    desktop_command = getattr(args, "desktop_command", None)
+    if desktop_command == "presentation-set":
+        if config is None:
+            raise RuntimeError("Guard Desktop presentation update requires local Guard config")
+        from ..config import update_guard_settings
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home or config.guard_home
+        update_payload: dict[str, object] = {
+            "presentation_mode": args.mode,
+            "presentation_mode_explicit": True,
+        }
+        if getattr(args, "expected_revision", None) is not None:
+            update_payload["presentation_revision"] = args.expected_revision
+        updated = update_guard_settings(
+            resolved_home,
+            update_payload,
+            event_source="desktop-presentation",
+            skip_approval_gate=True,
+        )
+        projected = _presentation_projection(updated)
+        if bool(getattr(args, "json", False)):
+            print(json.dumps(projected, sort_keys=True), file=output_stream or sys.stdout)
+        return 0
+    if desktop_command != "bootstrap":
+        print("Choose desktop bootstrap or presentation-set.", file=sys.stderr)
         return 2
     if context is None or store is None or config is None:
         raise RuntimeError("Guard Desktop bootstrap requires local Guard context")
@@ -409,6 +464,7 @@ def _run_guard_desktop_command(
         oldest_pending_at=oldest_pending_at,
         resolved_today_count=resolved_today_count,
         receipt_summary=receipt_summary,
+        presentation=_presentation_projection(config),
     )
     dashboard = payload.get("dashboard")
     if isinstance(dashboard, dict):
