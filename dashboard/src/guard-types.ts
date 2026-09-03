@@ -1022,7 +1022,6 @@ export type GuardCloudConnectFlow = PackageFirewallConnectFlow;
 export type GuardCloudConnectStatusResponse = {
   connect_required: boolean;
   connect_flow: GuardCloudConnectFlow | null;
-  dashboard_url?: string | null;
 };
 
 export type PackageFirewallStatusResponse = {

@@ -35,13 +35,14 @@ from .cursor_hook_payload import (
     cursor_hook_would_prompt_user,
     prepare_cursor_hook_payload,
 )
+from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
 from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
 from .guard_cli_attestation import resolve_attested_guard_cli
 from .hook_python import HookPythonAttestation
 
-_HOOK_SCRIPT_TEMPLATE = HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_TAIL
+_HOOK_SCRIPT_TEMPLATE = HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
 _INHERIT_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -531,8 +532,7 @@ __all__ = [
     "cursor_hook_requires_approval_center_queue",
     "cursor_hook_response_from_guard",
     "cursor_hook_script_source",
-    "cursor_hook_should_block",
-    "cursor_hook_would_prompt_user",
+    "cursor_hook_should_block", "cursor_hook_would_prompt_user",
     "cursor_hooks_path",
     "cursor_native_hook_state",
     "install_cursor_hooks",

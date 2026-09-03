@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import runpy
 import shlex
 import sys
@@ -71,7 +72,11 @@ def package_shim_interpreter_runnable(wrapper: bytes) -> bool:
     interpreter = package_shim_wrapper_interpreter(wrapper)
     if interpreter is None:
         return True
-    return interpreter.is_file()
+    if not interpreter.is_file():
+        return False
+    if os.name == "nt":
+        return True
+    return os.access(interpreter, os.X_OK)
 
 
 def expected_package_shim_executable_bytes(

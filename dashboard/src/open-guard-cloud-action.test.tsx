@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { GuardCloudConnectStatusResponse } from "./guard-types";
-import { OpenGuardCloudAction, runOpenGuardCloudConnect } from "./open-guard-cloud-action";
+import { parseGuardCloudConnectHttp } from "./guard-cloud-connect-flow";
+import { PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE } from "./package-firewall-connect-browser";
+import type { GuardCloudOpenStatus } from "./guard-cloud-connect-flow";
+import {
+  GuardCloudPopupBlockedError,
+  OpenGuardCloudAction,
+  runOpenGuardCloudConnect,
+} from "./open-guard-cloud-action";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -17,8 +23,9 @@ function resetBrowserMocks(): void {
   authorizeCalls = [];
 }
 
-function mockOpenUrl(url: string): void {
+function mockOpenUrl(url: string): boolean {
   openedUrls.push(url);
+  return true;
 }
 
 function mockOpenAuthorize(
@@ -32,19 +39,43 @@ function mockOpenAuthorize(
   return true;
 }
 
-async function runWithStatus(status: GuardCloudConnectStatusResponse): Promise<void> {
+async function runWithStatus(
+  status: GuardCloudOpenStatus,
+  openAuthorize: typeof mockOpenAuthorize = mockOpenAuthorize,
+  openUrl: (url: string) => boolean = mockOpenUrl,
+): Promise<void> {
   resetBrowserMocks();
   const controller = new AbortController();
   await runOpenGuardCloudConnect(
     controller.signal,
-    mockOpenAuthorize,
-    mockOpenUrl,
+    openAuthorize,
+    openUrl,
     {
       start: async () => status,
       wait: async (initialStatus) => initialStatus,
     },
   );
 }
+
+const alreadyConnected = parseGuardCloudConnectHttp(409, {
+  error: "guard_cloud_connect_not_required",
+  connect_required: false,
+  connect_flow: null,
+  dashboard_url: "https://example.com/cloud/dashboard",
+});
+assert(alreadyConnected.connect_required === false, "409 must mean Guard Cloud is already connected");
+assert(
+  alreadyConnected.dashboard_url === "https://example.com/cloud/dashboard",
+  "409 payload must keep dashboard_url for already-connected users",
+);
+
+let missingDashboardFailed = false;
+try {
+  parseGuardCloudConnectHttp(500, { error: "boom" });
+} catch (error: unknown) {
+  missingDashboardFailed = error instanceof Error && error.message.includes("boom");
+}
+assert(missingDashboardFailed, "non-409 failures must still throw");
 
 await runWithStatus({
   connect_required: true,
@@ -114,5 +145,51 @@ try {
 }
 assert(connectOnlyFailed, "connect_url without authorize_url must not be opened as a dead-end page");
 assert(openedUrls.length === 0, "dead-end connect page must not open");
+
+resetBrowserMocks();
+let authorizePopupBlocked = false;
+try {
+  await runWithStatus(
+    {
+      connect_required: true,
+      connect_flow: {
+        state: "running",
+        title: "Finish Guard Cloud sign-in in your browser",
+        detail: "HOL Guard opened the secure sign-in flow in your browser.",
+        action_label: "Connect Guard Cloud",
+        authorize_url: "https://example.com/oauth/authorize?request_id=blocked",
+        connect_url: "https://example.com/guard/connect",
+        browser_opened: false,
+        request_id: "guard-connect-3",
+        poll_after_ms: 1500,
+      },
+    },
+    () => false,
+    mockOpenUrl,
+  );
+} catch (error: unknown) {
+  authorizePopupBlocked = error instanceof GuardCloudPopupBlockedError
+    && error.message === PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE
+    && error.manualUrl === "https://example.com/oauth/authorize?request_id=blocked";
+}
+assert(authorizePopupBlocked, "blocked OAuth popup must throw a recoverable sign-in error");
+
+resetBrowserMocks();
+let dashboardPopupBlocked = false;
+try {
+  await runWithStatus(
+    {
+      connect_required: false,
+      connect_flow: null,
+      dashboard_url: "https://example.com/cloud/dashboard",
+    },
+    mockOpenAuthorize,
+    () => false,
+  );
+} catch (error: unknown) {
+  dashboardPopupBlocked = error instanceof GuardCloudPopupBlockedError
+    && error.manualUrl === "https://example.com/cloud/dashboard";
+}
+assert(dashboardPopupBlocked, "blocked dashboard popup must not look like success");
 
 console.log("open-guard-cloud-action.test.tsx passed");

@@ -225,3 +225,27 @@ def test_resolve_frozen_package_shim_path_rejects_untrusted_files(
     )
 
     assert guard_shims_module.resolve_frozen_package_shim_path([str(outsider)]) is None
+
+
+def test_package_shim_interpreter_runnable_rejects_non_executable_launcher(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.package_shim_frozen import package_shim_interpreter_runnable
+
+    interpreter = tmp_path / "hol-guard"
+    interpreter.write_text("", encoding="utf-8")
+    interpreter.chmod(0o600)
+    sidecar = tmp_path / ".npm.py"
+    wrapper = f"#!/bin/sh\nexec {shlex.quote(str(interpreter))} {shlex.quote(str(sidecar))} \"$@\"\n".encode()
+
+    assert package_shim_interpreter_runnable(wrapper) is False
+
+
+def test_package_shim_interpreter_runnable_accepts_executable_launcher(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.package_shim_frozen import package_shim_interpreter_runnable
+
+    interpreter = tmp_path / "hol-guard"
+    interpreter.write_text("", encoding="utf-8")
+    interpreter.chmod(0o755)
+    sidecar = tmp_path / ".npm.py"
+    wrapper = f"#!/bin/sh\nexec {shlex.quote(str(interpreter))} {shlex.quote(str(sidecar))} \"$@\"\n".encode()
+
+    assert package_shim_interpreter_runnable(wrapper) is True

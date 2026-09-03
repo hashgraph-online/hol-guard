@@ -4,13 +4,20 @@ import {
   HiMiniCloud,
 } from "react-icons/hi2";
 
-import { startOrRecoverCloudConnect, waitForAuthorizeUrl } from "./guard-cloud-connect-flow";
-import { openPackageFirewallAuthorizeFallback } from "./package-firewall-connect-browser";
+import {
+  startOrRecoverCloudConnect,
+  waitForAuthorizeUrl,
+  type GuardCloudOpenStatus,
+} from "./guard-cloud-connect-flow";
+import {
+  openPackageFirewallAuthorizeFallback,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
+} from "./package-firewall-connect-browser";
 
 type OpenGuardCloudActionState =
   | { status: "idle" }
   | { status: "working" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; manualUrl?: string };
 
 export type OpenGuardCloudActionVariant = "sidebar" | "drawer" | "approval-sidebar";
 
@@ -18,6 +25,16 @@ export type OpenGuardCloudActionProps = {
   variant: OpenGuardCloudActionVariant;
   collapsed?: boolean;
 };
+
+export class GuardCloudPopupBlockedError extends Error {
+  readonly manualUrl: string;
+
+  constructor(manualUrl: string) {
+    super(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
+    this.name = "GuardCloudPopupBlockedError";
+    this.manualUrl = manualUrl;
+  }
+}
 
 export function safeCloudConnectUrl(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -34,12 +51,14 @@ export function safeCloudConnectUrl(value: string | null | undefined): string | 
   }
 }
 
-function openGuardCloudUrl(url: string): void {
-  if (typeof window === "undefined") return;
+function openGuardCloudUrl(url: string): boolean {
+  if (typeof window === "undefined") return false;
   const popup = window.open(url, "_blank", "noopener,noreferrer");
   if (popup) {
     popup.opener = null;
+    return true;
   }
+  return false;
 }
 
 function buttonLabel(state: OpenGuardCloudActionState): string {
@@ -50,11 +69,11 @@ function buttonLabel(state: OpenGuardCloudActionState): string {
 export async function runOpenGuardCloudConnect(
   signal: AbortSignal,
   openAuthorize: typeof openPackageFirewallAuthorizeFallback = openPackageFirewallAuthorizeFallback,
-  openUrl: (url: string) => void = openGuardCloudUrl,
+  openUrl: (url: string) => boolean = openGuardCloudUrl,
   connect: {
     start: (signal: AbortSignal) => ReturnType<typeof startOrRecoverCloudConnect>;
     wait: (
-      status: Awaited<ReturnType<typeof startOrRecoverCloudConnect>>,
+      status: GuardCloudOpenStatus,
       signal: AbortSignal,
     ) => ReturnType<typeof waitForAuthorizeUrl>;
   } = {
@@ -72,7 +91,9 @@ export async function runOpenGuardCloudConnect(
     if (!dashboardUrl) {
       throw new Error("Guard Cloud is connected, but no dashboard link was returned.");
     }
-    openUrl(dashboardUrl);
+    if (!openUrl(dashboardUrl)) {
+      throw new GuardCloudPopupBlockedError(dashboardUrl);
+    }
     return;
   }
   const flow = status.connect_flow;
@@ -82,13 +103,36 @@ export async function runOpenGuardCloudConnect(
       flow?.detail || "Guard could not generate a secure sign-in link. Try again.",
     );
   }
-  openAuthorize(authorizeUrl, flow.browser_opened);
+  if (!openAuthorize(authorizeUrl, flow.browser_opened)) {
+    throw new GuardCloudPopupBlockedError(authorizeUrl);
+  }
+}
+
+function ActionError(props: { message: string; manualUrl?: string; compact?: boolean }) {
+  return (
+    <>
+      <p className={props.compact ? "px-3 text-xs text-brand-purple" : "guard-open-guard-cloud-action__error"}>
+        {props.message}
+      </p>
+      {props.manualUrl ? (
+        <a
+          className={props.compact ? "px-3 text-xs font-semibold text-brand-purple underline" : "guard-open-guard-cloud-action__manual"}
+          href={props.manualUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Open sign-in
+        </a>
+      ) : null}
+    </>
+  );
 }
 
 function QuickActionButton(props: {
   label: string;
   disabled: boolean;
   errorMessage: string | null;
+  manualUrl?: string;
   onClick: () => void;
 }) {
   return (
@@ -99,7 +143,7 @@ function QuickActionButton(props: {
         <HiMiniArrowTopRightOnSquare aria-hidden="true" />
       </button>
       {props.errorMessage ? (
-        <p className="guard-open-guard-cloud-action__error">{props.errorMessage}</p>
+        <ActionError message={props.errorMessage} manualUrl={props.manualUrl} />
       ) : null}
     </>
   );
@@ -128,6 +172,14 @@ export function OpenGuardCloudAction(props: OpenGuardCloudActionProps) {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        if (error instanceof GuardCloudPopupBlockedError) {
+          setState({
+            status: "error",
+            message: error.message,
+            manualUrl: error.manualUrl,
+          });
+          return;
+        }
         setState({
           status: "error",
           message:
@@ -140,6 +192,7 @@ export function OpenGuardCloudAction(props: OpenGuardCloudActionProps) {
 
   const label = buttonLabel(state);
   const errorMessage = state.status === "error" ? state.message : null;
+  const manualUrl = state.status === "error" ? state.manualUrl : undefined;
   const disabled = state.status === "working";
 
   if (props.variant === "approval-sidebar") {
@@ -161,7 +214,7 @@ export function OpenGuardCloudAction(props: OpenGuardCloudActionProps) {
           ) : null}
         </button>
         {!collapsed && errorMessage ? (
-          <p className="px-3 text-xs text-brand-purple">{errorMessage}</p>
+          <ActionError compact message={errorMessage} manualUrl={manualUrl} />
         ) : null}
       </div>
     );
@@ -172,6 +225,7 @@ export function OpenGuardCloudAction(props: OpenGuardCloudActionProps) {
       label={label}
       disabled={disabled}
       errorMessage={errorMessage}
+      manualUrl={manualUrl}
       onClick={handleClick}
     />
   );

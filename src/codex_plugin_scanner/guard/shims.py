@@ -37,7 +37,6 @@ from .shim_probe import (
 from .sqlite_tuning import SQLITE_CONNECT_TIMEOUT_SECONDS
 from .stable_digest import stable_digest_hex
 
-
 class HarnessContextLike(Protocol):
     @property
     def home_dir(self) -> Path: ...
