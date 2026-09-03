@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 from ..stable_guard_cli import (
     CURRENT_HOL_GUARD_SHIM,
     MACOS_BUNDLED_HOL_GUARD,
