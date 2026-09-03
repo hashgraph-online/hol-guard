@@ -16,7 +16,7 @@ resolve_frozen_cursor_hook_launcher = resolve_frozen_guard_cli
 resolve_cursor_hook_guard_cli_argv0 = resolve_guard_cli_argv0
 resolved_cursor_hook_guard_cli = resolved_guard_cli
 
-HOOK_SCRIPT_TEMPLATE_RESOLVER = '''
+HOOK_SCRIPT_TEMPLATE_RESOLVER = """
 _MACOS_BUNDLED_HOL_GUARD = Path("/Applications/HOL Guard.app/Contents/MacOS/hol-guard")
 _CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
 
@@ -57,7 +57,7 @@ def _resolved_guard_cli() -> list[str]:
         return GUARD_CLI
     return [argv0, *GUARD_CLI[1:]]
 
-'''
+"""
 
 __all__ = [
     "CURRENT_HOL_GUARD_SHIM",

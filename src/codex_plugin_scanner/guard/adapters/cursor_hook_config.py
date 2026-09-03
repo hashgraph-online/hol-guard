@@ -42,9 +42,7 @@ def _managed_hook_command(
     if python_executable is not None:
         return shlex.join([str(python_executable), script, *event_args])
     if bool(getattr(sys, "frozen", False)):
-        return shlex.join(
-            [_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args]
-        )
+        return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
     return shlex.join([sys.executable, script, *event_args])
 
 
