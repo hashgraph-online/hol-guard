@@ -58,6 +58,7 @@ def test_repair_restarts_authenticated_older_runtime(
     assert result["retired"] == [321]
     assert retired == [guard_home]
     assert events == ["lock-enter", "ensure", "lock-exit"]
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_repair_retains_authenticated_newer_runtime(

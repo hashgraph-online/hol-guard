@@ -86,10 +86,7 @@ def _file_metadata_payload(value: HookPythonFileMetadata) -> dict[str, int]:
 
 def _frozen_guard_cli_attestation() -> GuardCliAttestation:
     launcher = Path(resolve_frozen_guard_cli()).expanduser().absolute()
-    try:
-        identity = _executable_identity(launcher)
-    except RuntimeError:
-        identity = _executable_identity(Path(sys.executable).expanduser().absolute())
+    identity = _executable_identity(launcher)
     return GuardCliAttestation(
         command=(str(identity.invocation_path),),
         python=None,

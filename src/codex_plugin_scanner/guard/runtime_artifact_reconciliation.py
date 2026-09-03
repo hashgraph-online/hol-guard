@@ -173,7 +173,7 @@ def reconcile_runtime_artifacts(
     )
     try:
         cursor_rebind = rebind_stale_cursor_hooks(store.guard_home, home_dir=context.home_dir)
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, UnicodeError) as error:
         cursor_rebind = {
             "rebound": False,
             "reason": "cursor_hook_script_rebind_failed",
@@ -181,7 +181,10 @@ def reconcile_runtime_artifacts(
         }
     if cursor_rebind.get("rebound") is True and "cursor" not in repaired_harnesses:
         repaired_harnesses = (*repaired_harnesses, "cursor")
-    if cursor_rebind.get("reason") == "cursor_hook_script_rebind_failed":
+    if cursor_rebind.get("reason") in {
+        "cursor_hook_script_rebind_failed",
+        "cursor_hook_script_unreadable",
+    }:
         error_text = cursor_rebind.get("error")
         errors.append(f"cursor:rebind:{error_text if isinstance(error_text, str) else 'failed'}")
 

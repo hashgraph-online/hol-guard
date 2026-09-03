@@ -52,6 +52,7 @@ def test_frozen_cursor_hook_command_prefers_current_hol_guard_shim(monkeypatch, 
     versioned.write_text("", encoding="utf-8")
     shim = core_dir / "current-hol-guard"
     shim.write_text("", encoding="utf-8")
+    shim.chmod(0o755)
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hook_config.sys.frozen", True, raising=False)
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hook_config.sys.executable", str(versioned))
     script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
@@ -73,6 +74,7 @@ def test_frozen_cursor_hook_command_prefers_macos_bundle_without_shim(monkeypatc
     bundle = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
     bundle.parent.mkdir(parents=True)
     bundle.write_text("", encoding="utf-8")
+    bundle.chmod(0o755)
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hook_config.sys.frozen", True, raising=False)
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hook_config.sys.executable", str(versioned))
     monkeypatch.setattr(

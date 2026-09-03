@@ -107,6 +107,7 @@ def test_frozen_package_shim_wrapper_uses_current_hol_guard_shim(
     versioned.write_text("", encoding="utf-8")
     shim = core_dir / "current-hol-guard"
     shim.write_text("", encoding="utf-8")
+    shim.chmod(0o755)
     monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
     monkeypatch.setattr(guard_shims_module.sys, "executable", str(versioned))
     monkeypatch.setattr(
@@ -202,7 +203,7 @@ def test_package_shim_status_stale_when_wrapper_interpreter_is_untrusted(
     outsider.write_text("", encoding="utf-8")
     outsider.chmod(0o755)
     wrapper_path.write_text(
-        "\n".join(("#!/bin/sh", f"exec {shlex.quote(str(outsider))} {shlex.quote(str(python_path))} \"$@\"", "")),
+        "\n".join(("#!/bin/sh", f'exec {shlex.quote(str(outsider))} {shlex.quote(str(python_path))} "$@"', "")),
         encoding="utf-8",
     )
 
@@ -229,6 +230,7 @@ def test_resolve_frozen_package_shim_path_accepts_stable_launcher_shebang(
     versioned.write_text("", encoding="utf-8")
     shim = tmp_path / "core" / "current-hol-guard"
     shim.write_text("", encoding="utf-8")
+    shim.chmod(0o755)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(versioned))
     shim_dir = tmp_path / "package-shims" / "bin"

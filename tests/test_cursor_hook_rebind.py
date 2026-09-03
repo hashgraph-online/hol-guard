@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -202,3 +203,117 @@ def test_reconcile_rebinds_ephemeral_cursor_hooks(
     assert result.repaired_harnesses == ("cursor",)
     assert result.changed is True
     assert result.healthy is True
+
+
+def test_rebind_does_not_overwrite_unmanaged_live_script(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = _executable_file(core_dir / "versions" / "3.0.57" / "hol-guard")
+    _executable_file(core_dir / "current-hol-guard", "#!/bin/sh\nexec true\n")
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    live = home / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    live.parent.mkdir(parents=True)
+    live.write_text("print('user owned')\n", encoding="utf-8")
+    managed = guard_home / "managed" / "cursor" / "hol-guard-cursor-hook.py"
+    managed.parent.mkdir(parents=True)
+    managed.write_text(_managed_hook_source(argv0=str(versioned)), encoding="utf-8")
+    monkeypatch.setattr("codex_plugin_scanner.guard.cursor_hook_rebind.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.guard_cli_attestation.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.stable_guard_cli.sys.executable", str(versioned))
+    result = rebind_stale_cursor_hooks(guard_home, home_dir=home)
+    assert result["rebound"] is False
+    assert result["reason"] == "cursor_hook_script_unmanaged"
+    assert live.read_text(encoding="utf-8") == "print('user owned')\n"
+    assert "versions/3.0.57" in managed.read_text(encoding="utf-8")
+
+
+def test_rebind_reports_unreadable_non_utf8_script(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = _executable_file(core_dir / "versions" / "3.0.57" / "hol-guard")
+    _executable_file(core_dir / "current-hol-guard", "#!/bin/sh\nexec true\n")
+    home = tmp_path / "home"
+    live = home / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    live.parent.mkdir(parents=True)
+    live.write_bytes(b"\xff\xfe unmanaged-binary")
+    monkeypatch.setattr("codex_plugin_scanner.guard.cursor_hook_rebind.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.stable_guard_cli.sys.executable", str(versioned))
+    result = rebind_stale_cursor_hooks(tmp_path / "guard", home_dir=home)
+    assert result["rebound"] is False
+    assert result["reason"] == "cursor_hook_script_unreadable"
+
+
+def test_nonexecutable_shim_is_not_a_stable_frozen_launcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX execute bit is not enforced")
+    core_dir = tmp_path / "core"
+    versioned = _executable_file(core_dir / "versions" / "3.0.57" / "hol-guard")
+    shim = core_dir / "current-hol-guard"
+    shim.write_text("#!/bin/sh\n", encoding="utf-8")
+    shim.chmod(0o644)
+    monkeypatch.setattr("codex_plugin_scanner.guard.stable_guard_cli.sys.executable", str(versioned))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.MACOS_BUNDLED_HOL_GUARD",
+        tmp_path / "missing-bundle",
+    )
+    monkeypatch.setattr("codex_plugin_scanner.guard.frozen_runtime_commands.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.frozen_runtime_commands.sys.executable", str(versioned))
+    from codex_plugin_scanner.guard.stable_guard_cli import resolve_frozen_guard_cli
+
+    assert resolve_frozen_guard_cli() == str(versioned)
+    command = frozen_daemon_recovery_command(tmp_path / "guard", tmp_path / "home")
+    assert command[0] == str(versioned)
+
+
+def test_reconcile_reports_unreadable_cursor_hooks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
+    from codex_plugin_scanner.guard.shim_refresh import ShimRefreshResult
+
+    store = type(
+        "Store",
+        (),
+        {
+            "guard_home": tmp_path / "guard",
+            "list_managed_installs": staticmethod(lambda: []),
+        },
+    )()
+    monkeypatch.setattr(
+        reconciliation,
+        "refresh_stale_harness_shims",
+        lambda **_kwargs: ShimRefreshResult(refreshed=(), unchanged=(), errors=()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_failing_managed_harness_hooks",
+        lambda *_args, **_kwargs: ((), ()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "package_shim_status",
+        lambda _context: {"installed_managers": []},
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "rebind_stale_cursor_hooks",
+        lambda *_args, **_kwargs: {
+            "rebound": False,
+            "reason": "cursor_hook_script_unreadable",
+            "error": "utf-8",
+        },
+    )
+
+    result = reconciliation.reconcile_runtime_artifacts(store, home_dir=tmp_path / "home")
+
+    assert result.healthy is False
+    assert result.errors == ("cursor:rebind:utf-8",)

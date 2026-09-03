@@ -6,6 +6,7 @@ on update. Hooks and package-manager shims must not bake that ephemeral path.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -31,6 +32,16 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
     return unix
 
 
+def frozen_cli_path_is_runnable(path: Path) -> bool:
+    """Return whether a frozen launcher can be executed as argv0."""
+
+    if not path.is_file():
+        return False
+    if os.name == "nt":
+        return True
+    return os.access(path, os.X_OK)
+
+
 def resolve_frozen_guard_cli() -> str:
     """Return a prune-safe frozen launcher, then the process executable.
 
@@ -40,10 +51,10 @@ def resolve_frozen_guard_cli() -> str:
 
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
-    if shim is not None and shim.is_file():
+    if shim is not None and frozen_cli_path_is_runnable(shim):
         return str(shim)
     versioned_desktop = shim is not None
-    if versioned_desktop and sys.platform == "darwin" and MACOS_BUNDLED_HOL_GUARD.is_file():
+    if versioned_desktop and sys.platform == "darwin" and frozen_cli_path_is_runnable(MACOS_BUNDLED_HOL_GUARD):
         return str(MACOS_BUNDLED_HOL_GUARD)
     return sys.executable
 
@@ -117,6 +128,7 @@ __all__ = [
     "MACOS_BUNDLED_HOL_GUARD",
     "argv0_is_ephemeral_desktop_cli",
     "desktop_core_shim_for_executable",
+    "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
