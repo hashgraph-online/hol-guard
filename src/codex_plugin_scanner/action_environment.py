@@ -22,9 +22,10 @@ def drop_external_analyzer_credentials(online: bool) -> tuple[str, ...]:
     for name in dropped:
         os.environ.pop(name, None)
     if dropped:
+        # Static wording only: credential names are public constants, values never reach logs.
         print(
-            "Note: online is disabled; removed "
-            f"{', '.join(dropped)} from the scan environment so they cannot enable "
-            "external analyzers. Set the online input to true to permit them."
+            "Note: online is disabled; any present MCP_SCANNER_API_KEY / MCP_SCANNER_LLM_API_KEY "
+            "credentials were removed from the scan environment so they cannot enable external "
+            "analyzers. Set the online input to true to permit them."
         )
     return dropped
