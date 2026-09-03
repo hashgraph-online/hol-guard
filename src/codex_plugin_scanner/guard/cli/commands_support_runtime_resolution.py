@@ -106,7 +106,7 @@ def _legacy_claude_alias_runtime_artifact(
 def _is_copilot_permission_request(payload: dict[str, object]) -> bool:
     for key in ("hook_name", "hook_event_name", "hookEventName"):
         hook_name = payload.get(key)
-        if isinstance(hook_name, str) and hook_name.lower().replace("_", "").replace("-", "").startswith("permission"):
+        if isinstance(hook_name, str) and hook_name.lower().replace("_", "").replace("-", "") in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:
             return True
     return False
 

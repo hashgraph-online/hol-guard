@@ -178,7 +178,7 @@ def availability_harness_response(
             reason_code=reason_code,
             reason=reason,
         )
-    if compact.startswith("permission"):
+    if compact.startswith("permissionrequest"):
         from .hook_worker_responses import permission_unavailable_response
 
         return permission_unavailable_response(

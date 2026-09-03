@@ -13,10 +13,24 @@ from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
 )
+from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
     post_tool_fail_safe_response,
     post_tool_native_block_response,
 )
+
+
+def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
+    assert runtime_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
+    assert runtime_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
+    denied = availability_harness_response(
+        {"hook_event_name": "PermissionDenied"},
+        harness="claude-code",
+        event_name="PermissionDenied",
+        reason_code="native_hook_event_unavailable",
+        reason="native unavailable",
+    )
+    assert denied["continue"] is True
 
 
 def test_cline_after_tool_transport_miss_passes_through_original_result() -> None:
@@ -84,6 +98,8 @@ def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
 def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert _is_copilot_permission_request({"hook_name": "permissionRequestV2"}) is True
     assert _is_copilot_permission_request({"hookEventName": "PermissionRequestV2"}) is True
+    assert _is_copilot_permission_request({"hook_name": "PermissionDenied"}) is False
+    assert _is_copilot_permission_request({"hook_name": "PermissionResponse"}) is False
     camel, camel_code = failure_payload(
         harness="copilot",
         event_name="permissionRequestV2",

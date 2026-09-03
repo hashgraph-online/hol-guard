@@ -37,7 +37,7 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
                 "aftermcpexecution",
             }:
                 return "PostToolUse"
-            if compact.startswith("permission"):
+            if compact in {"permissionrequest", "permissionrequestv2"}:
                 return "PermissionRequest"
             return raw
     return "PreToolUse"

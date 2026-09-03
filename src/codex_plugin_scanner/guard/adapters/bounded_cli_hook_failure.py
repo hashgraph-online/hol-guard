@@ -13,7 +13,7 @@ _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 
 def _is_permission_event(event_name: str) -> bool:
     compact = event_name.strip().lower().replace("_", "").replace("-", "")
-    return compact.startswith("permission")
+    return compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}
 
 
 def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
