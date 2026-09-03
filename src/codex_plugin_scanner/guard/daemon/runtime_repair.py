@@ -7,6 +7,7 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
+from ..cursor_hook_rebind import rebind_stale_cursor_hooks
 from .live_identity import verified_live_guard_daemon_identity
 from .manager import (
     clear_guard_daemon_state,
@@ -39,6 +40,17 @@ def _retained_runtime_status(daemon_version: Version, current_version: Version) 
     if daemon_version > current_version:
         return "retained_newer_runtime"
     return "retained_desktop_runtime"
+
+
+def _rebind_cursor_hooks_best_effort(guard_home: Path, *, home_dir: Path) -> dict[str, object]:
+    try:
+        return rebind_stale_cursor_hooks(guard_home, home_dir=home_dir)
+    except (OSError, RuntimeError, UnicodeError) as error:
+        return {
+            "rebound": False,
+            "reason": "cursor_hook_script_rebind_failed",
+            "error": str(error),
+        }
 
 
 def _keep_live_runtime_result(
@@ -86,7 +98,8 @@ def repair_guard_daemon_runtime(
             current_version=current_version,
         )
         if kept is not None:
-            return kept
+            cursor_rebind = _rebind_cursor_hooks_best_effort(guard_home, home_dir=trusted_home)
+            return {**kept, "cursor_hook_rebind": cursor_rebind.get("reason")}
 
         daemon_version_text = identity.get("package_version") if identity is not None else None
         retired = retire_all_guard_daemons_for_home(guard_home)
@@ -97,6 +110,7 @@ def repair_guard_daemon_runtime(
             guard_home,
             home_dir=trusted_home,
         )
+        cursor_rebind = _rebind_cursor_hooks_best_effort(guard_home, home_dir=trusted_home)
     return {
         **result,
         "runtime_status": "restarted",
@@ -104,6 +118,7 @@ def repair_guard_daemon_runtime(
         "cli_version": __version__,
         "daemon_url": daemon_url,
         "retired": retired,
+        "cursor_hook_rebind": cursor_rebind.get("reason"),
     }
 
 

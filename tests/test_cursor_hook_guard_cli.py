@@ -49,6 +49,7 @@ def test_resolve_frozen_cursor_hook_launcher_prefers_shim(monkeypatch: pytest.Mo
     versioned.write_text("", encoding="utf-8")
     shim = core_dir / "current-hol-guard"
     shim.write_text("", encoding="utf-8")
+    shim.chmod(0o755)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.stable_guard_cli.sys.executable",
         str(versioned),

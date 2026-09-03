@@ -6,6 +6,7 @@ on update. Hooks and package-manager shims must not bake that ephemeral path.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -31,6 +32,16 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
     return unix
 
 
+def frozen_cli_path_is_runnable(path: Path) -> bool:
+    """Return whether a frozen launcher can be executed as argv0."""
+
+    if not path.is_file():
+        return False
+    if os.name == "nt":
+        return True
+    return os.access(path, os.X_OK)
+
+
 def resolve_frozen_guard_cli() -> str:
     """Return a prune-safe frozen launcher, then the process executable.
 
@@ -40,10 +51,10 @@ def resolve_frozen_guard_cli() -> str:
 
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
-    if shim is not None and shim.is_file():
+    if shim is not None and frozen_cli_path_is_runnable(shim):
         return str(shim)
     versioned_desktop = shim is not None
-    if versioned_desktop and sys.platform == "darwin" and MACOS_BUNDLED_HOL_GUARD.is_file():
+    if versioned_desktop and sys.platform == "darwin" and frozen_cli_path_is_runnable(MACOS_BUNDLED_HOL_GUARD):
         return str(MACOS_BUNDLED_HOL_GUARD)
     return sys.executable
 
@@ -83,12 +94,45 @@ def trusted_frozen_guard_cli_paths() -> frozenset[str]:
     return frozenset(trusted)
 
 
+def uses_top_level_hook_command(guard_cli: list[str]) -> bool:
+    """Return whether argv0 exposes `hook` without a `guard` prefix."""
+
+    if not guard_cli:
+        return False
+    name = Path(guard_cli[0]).name.lower()
+    return name in {
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+        CURRENT_HOL_GUARD_SHIM,
+        f"{CURRENT_HOL_GUARD_SHIM}.cmd",
+        f"{CURRENT_HOL_GUARD_SHIM}.exe",
+    }
+
+
+def argv0_is_ephemeral_desktop_cli(argv0: str) -> bool:
+    """Return whether argv0 lives under a pruneable Desktop `versions/` path."""
+
+    return desktop_core_shim_for_executable(Path(argv0)) is not None
+
+
+def frozen_launcher_is_prune_safe(launcher: str) -> bool:
+    """Return whether a frozen launcher survives Desktop Core prune."""
+
+    return desktop_core_shim_for_executable(Path(launcher)) is None
+
+
 __all__ = [
     "CURRENT_HOL_GUARD_SHIM",
     "MACOS_BUNDLED_HOL_GUARD",
+    "argv0_is_ephemeral_desktop_cli",
     "desktop_core_shim_for_executable",
+    "frozen_cli_path_is_runnable",
+    "frozen_launcher_is_prune_safe",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
     "resolved_guard_cli",
     "trusted_frozen_guard_cli_paths",
+    "uses_top_level_hook_command",
 ]

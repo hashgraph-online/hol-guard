@@ -58,6 +58,7 @@ def test_repair_restarts_authenticated_older_runtime(
     assert result["retired"] == [321]
     assert retired == [guard_home]
     assert events == ["lock-enter", "ensure", "lock-exit"]
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_repair_retains_authenticated_newer_runtime(
@@ -96,6 +97,7 @@ def test_repair_retains_authenticated_newer_runtime(
 
     assert result["runtime_status"] == "retained_newer_runtime"
     assert result["daemon_version"] == "3.0.35"
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_ensure_keeps_newer_live_daemon_when_older_executable_is_requested(
@@ -230,6 +232,7 @@ def test_repair_retains_equal_version_peer_runtime(
     assert result["runtime_status"] == "current"
     assert result["daemon_version"] == "3.0.34"
     assert result["cli_version"] == "3.0.34"
+    assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
 def test_repair_restarts_older_desktop_core_sidecar(
