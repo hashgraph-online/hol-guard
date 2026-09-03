@@ -699,7 +699,7 @@ def update_guard_settings(
     next_payload = dict(current)
     presentation_update = resolve_presentation_settings_update(
         payload,
-        current_mode=current_config.presentation_mode,
+        current_mode=coerce_presentation_mode_write(current_config.presentation_mode),
         current_explicit=current_config.presentation_mode_explicit,
         current_revision=current_config.presentation_revision,
     )
