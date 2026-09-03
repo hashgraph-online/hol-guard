@@ -360,6 +360,15 @@ def _main_inner() -> int:
             )
             print(json.dumps(availability))
             return availability_code
+        compact_event = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact_event == "beforereadfile":
+            availability, availability_code = _cursor_availability_response(
+                prepared,
+                hook_event_name=hook_event_name,
+                workspace=workspace,
+            )
+            print(json.dumps(availability))
+            return availability_code
         if recover_kind != "overload":
             _run_guard_recovery(
                 recover_kind,
