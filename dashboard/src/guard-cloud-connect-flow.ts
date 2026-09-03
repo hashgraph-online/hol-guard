@@ -1,5 +1,5 @@
 import type { GuardCloudConnectFlow, GuardCloudConnectStatusResponse } from "./guard-types";
-import { fetchGuardApi, fetchGuardCloudConnectStatus, startGuardCloudConnect } from "./guard-api";
+import { fetchGuardApi, fetchGuardCloudConnectStatus } from "./guard-api";
 
 export type GuardCloudOpenStatus = GuardCloudConnectStatusResponse & {
   dashboard_url?: string | null;
@@ -113,17 +113,23 @@ export async function withCloudRequestTimeout<T>(
   }
 }
 
+type ReadCloudConnect = (
+  method: "GET" | "POST",
+  signal: AbortSignal,
+) => Promise<GuardCloudOpenStatus>;
+
 export async function startOrRecoverCloudConnect(
   signal: AbortSignal,
+  readConnect: ReadCloudConnect = readCloudConnect,
 ): Promise<GuardCloudOpenStatus> {
   try {
-    return await withCloudRequestTimeout((nextSignal) => readCloudConnect("POST", nextSignal), signal);
+    return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
   } catch (error: unknown) {
     if (!(error instanceof CloudRequestTimeoutError)) throw error;
     try {
-      return await withCloudRequestTimeout((nextSignal) => readCloudConnect("GET", nextSignal), signal);
+      return await withCloudRequestTimeout((nextSignal) => readConnect("GET", nextSignal), signal);
     } catch {
-      return await withCloudRequestTimeout(startGuardCloudConnect, signal);
+      return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
     }
   }
 }

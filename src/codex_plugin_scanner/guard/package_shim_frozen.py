@@ -140,9 +140,13 @@ def package_shim_integrity_ok(
     if not package_shim_interpreter_runnable(installed_wrapper):
         return False
     sidecar_path = frozen_package_shim_python_path(shim_dir, command)
-    if package_shim_needs_shell_wrapper() and sidecar_path.is_file() and not sidecar_path.is_symlink():
-        if not package_shim_interpreter_runnable(sidecar_path.read_bytes()):
-            return False
+    if (
+        package_shim_needs_shell_wrapper()
+        and sidecar_path.is_file()
+        and not sidecar_path.is_symlink()
+        and not package_shim_interpreter_runnable(sidecar_path.read_bytes())
+    ):
+        return False
     expected = expected_package_shim_attestation_bytes(python_source, shim_dir, command)
     current = installed_package_shim_attestation_bytes(shim_dir, command, installed_wrapper)
     if current == expected:
@@ -321,9 +325,9 @@ __all__ = [
     "frozen_package_shim_python_path",
     "installed_package_shim_attestation_bytes",
     "normalized_package_shim_content",
+    "package_shim_integrity_ok",
     "package_shim_interpreter",
     "package_shim_interpreter_runnable",
-    "package_shim_integrity_ok",
     "package_shim_needs_shell_wrapper",
     "package_shim_shell_wrapper",
     "package_shim_wrapper_interpreter",

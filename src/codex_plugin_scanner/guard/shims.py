@@ -37,6 +37,7 @@ from .shim_probe import (
 from .sqlite_tuning import SQLITE_CONNECT_TIMEOUT_SECONDS
 from .stable_digest import stable_digest_hex
 
+
 class HarnessContextLike(Protocol):
     @property
     def home_dir(self) -> Path: ...
@@ -1066,10 +1067,6 @@ def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     )
 
 
-def _is_frozen_runtime() -> bool:
-    return bool(getattr(sys, "frozen", False))
-
-
 def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
     home_dir = context.home_dir
     protect_args = [
@@ -1080,7 +1077,7 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
         *(["--home", str(home_dir)] if home_dir else []),
         *workspace_args,
     ]
-    if _is_frozen_runtime():
+    if bool(getattr(sys, "frozen", False)):
         return [package_shim_interpreter(), *protect_args]
     return [
         sys.executable,

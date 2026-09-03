@@ -19177,15 +19177,15 @@ async function withCloudRequestTimeout(request, parentSignal) {
     parentSignal?.removeEventListener("abort", abort);
   }
 }
-async function startOrRecoverCloudConnect(signal) {
+async function startOrRecoverCloudConnect(signal, readConnect = readCloudConnect) {
   try {
-    return await withCloudRequestTimeout((nextSignal) => readCloudConnect("POST", nextSignal), signal);
+    return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
   } catch (error) {
     if (!(error instanceof CloudRequestTimeoutError)) throw error;
     try {
-      return await withCloudRequestTimeout((nextSignal) => readCloudConnect("GET", nextSignal), signal);
+      return await withCloudRequestTimeout((nextSignal) => readConnect("GET", nextSignal), signal);
     } catch {
-      return await withCloudRequestTimeout(startGuardCloudConnect, signal);
+      return await withCloudRequestTimeout((nextSignal) => readConnect("POST", nextSignal), signal);
     }
   }
 }

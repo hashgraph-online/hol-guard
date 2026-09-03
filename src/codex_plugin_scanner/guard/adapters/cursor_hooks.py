@@ -27,6 +27,7 @@ from .cursor_hook_config import (
     _merge_hook_entries,
     _strip_managed_hook_entries,
 )
+from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
 from .cursor_hook_payload import (
     _validated_hol_guard_src_path,
     cursor_hook_requires_approval_center_queue,
@@ -35,7 +36,6 @@ from .cursor_hook_payload import (
     cursor_hook_would_prompt_user,
     prepare_cursor_hook_payload,
 )
-from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
 from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
@@ -518,8 +518,7 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
 def _hook_script_mode_is_executable(mode: int) -> bool:
     """Use POSIX execute bits only on platforms where they govern launch."""
 
-    # Keep this compatibility wrapper in the public module so existing test and
-    # integration monkeypatches of cursor_hooks.os.name continue to work.
+    # Keep this wrapper public so cursor_hooks.os.name monkeypatches still work.
     return os.name == "nt" or bool(mode & stat.S_IXUSR)
 
 
@@ -532,7 +531,8 @@ __all__ = [
     "cursor_hook_requires_approval_center_queue",
     "cursor_hook_response_from_guard",
     "cursor_hook_script_source",
-    "cursor_hook_should_block", "cursor_hook_would_prompt_user",
+    "cursor_hook_should_block",
+    "cursor_hook_would_prompt_user",
     "cursor_hooks_path",
     "cursor_native_hook_state",
     "install_cursor_hooks",
