@@ -101,9 +101,14 @@ _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
         "native_pre_tool_unavailable",
         "native_post_tool_unavailable",
         "native_overloaded",
+        "native_hook_worker_unavailable",
+        "native_hook_worker_unsupported",
+        "native_hook_worker_exception",
         "daemon_hook_queue_capacity",
         "daemon_hook_deadline_exhausted",
         "daemon_hook_process_deadline_exhausted",
+        "daemon_hook_process_not_ready",
+        "daemon_hook_process_failed",
         "daemon_worker_exception",
     }
 )

@@ -369,25 +369,25 @@ def ensure_guard_daemon(
     launch_cwd = _trusted_daemon_home(home_dir)
     _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
-    existing_url = (load_guard_daemon_url if executable is None else _retain_newer_live_daemon_url)(guard_home)
+    # Retain a newer live daemon on any port when a replacement executable is set.
+    # Preferred-port matching applies only when attaching without a replacement binary.
+    existing_url = _live_or_newer_daemon_url(guard_home, executable=executable, preferred_port=preferred_port)
     if existing_url is not None:
-        existing_port = _guard_daemon_url_port(existing_url)
-        if preferred_port is None or existing_port == preferred_port:
-            _schedule_duplicate_guard_daemon_retirement(guard_home)
-            return existing_url
+        _schedule_duplicate_guard_daemon_retirement(guard_home)
+        return existing_url
 
     with _guard_daemon_start_lock(guard_home, deadline=start_deadline):
-        if executable is None:
-            existing_url = load_guard_daemon_url(guard_home)
-            if existing_url is not None:
-                existing_port = _guard_daemon_url_port(existing_url)
-                if preferred_port is None or existing_port == preferred_port:
-                    _schedule_duplicate_guard_daemon_retirement(guard_home)
-                    return existing_url
-                retire_all_guard_daemons_for_home(guard_home)
-                if not guard_daemon_retirement_is_complete(guard_home):
-                    raise RuntimeError("Existing Guard daemon could not be retired safely.")
-                clear_guard_daemon_state(guard_home)
+        # Re-check after the start lock in case another caller published a newer URL.
+        # Wrong-port current daemons are retired only when this process owns startup.
+        existing_url = _live_or_newer_daemon_url(guard_home, executable=executable, preferred_port=preferred_port)
+        if existing_url is not None:
+            _schedule_duplicate_guard_daemon_retirement(guard_home)
+            return existing_url
+        if executable is None and load_guard_daemon_url(guard_home) is not None:
+            retire_all_guard_daemons_for_home(guard_home)
+            if not guard_daemon_retirement_is_complete(guard_home):
+                raise RuntimeError("Existing Guard daemon could not be retired safely.")
+            clear_guard_daemon_state(guard_home)
         if state_path.is_file() and _load_authenticated_daemon_identity(guard_home) is None:
             retire_all_guard_daemons_for_home(guard_home)
             if not _daemon_lifecycle_artifact_is_exact_tombstone(state_path):
@@ -3112,7 +3112,7 @@ def _healthz_payload_matches_guard_home(raw_payload: str, guard_home: Path) -> b
         return Path(payload_guard_home) == guard_home
 
 
-def _retain_newer_live_daemon_url(guard_home: Path) -> str | None:
-    from .runtime_peer import retain_newer_live_daemon_url
+def _live_or_newer_daemon_url(guard_home: Path, *, executable: Path | None, preferred_port: int | None) -> str | None:
+    from .runtime_peer import live_or_newer_daemon_url as resolve_live
 
-    return retain_newer_live_daemon_url(guard_home, __version__)
+    return resolve_live(guard_home, executable=executable, preferred_port=preferred_port, current_version=__version__)

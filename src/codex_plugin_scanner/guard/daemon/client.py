@@ -374,11 +374,13 @@ class GuardSurfaceDaemonClient:
         except UnicodeDecodeError as error:
             raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         except http.client.IncompleteRead as error:
-            try:
-                with urllib.request.urlopen(request, timeout=timeout) as retry_response:
-                    return self._decode_json_response(retry_response.read().decode("utf-8"))
-            except (OSError, UnicodeDecodeError, http.client.IncompleteRead, urllib.error.URLError):
-                raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            partial = error.partial
+            if partial:
+                try:
+                    return self._decode_json_response(partial.decode("utf-8"))
+                except (UnicodeDecodeError, GuardDaemonResponseSchemaError):
+                    pass
+            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 

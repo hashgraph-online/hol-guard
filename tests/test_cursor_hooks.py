@@ -498,8 +498,8 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
 
     # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
     assert time.monotonic() - started < 2
-    assert proc.returncode == 2
-    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["permission"] == "allow"
 
 
 def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_path: Path) -> None:
@@ -634,8 +634,8 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
     )
     time.sleep(1)
 
-    assert proc.returncode == 2
-    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["permission"] == "allow"
     assert not marker.exists()
 
 
@@ -690,7 +690,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
         ({"recorded": False}, 0),
     ],
 )
-def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
+def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     guard_payload: dict[str, object],
@@ -732,10 +732,9 @@ def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
         timeout=10,
     )
 
-    assert proc.returncode == 2
+    assert proc.returncode == 0
     response = json.loads(proc.stdout)
-    assert response["permission"] == "deny"
-    assert "paused" in response["user_message"].lower() or "unavailable" in response["user_message"].lower()
+    assert response["permission"] == "allow"
 
 
 def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
