@@ -258,6 +258,7 @@ def _emit_failure(
     input_text: str,
     reason: str = _FAILURE_REASON,
     guard_home: Path | None = None,
+    continue_session: bool = False,
 ) -> int:
     payload, returncode = _failure_payload(
         harness=harness,
@@ -265,6 +266,7 @@ def _emit_failure(
         reason=reason,
         payload=_json_object(input_text or "{}"),
         recording_only=guard_home is not None and _guard_home_is_recording_only(guard_home),
+        continue_session=continue_session,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
@@ -555,7 +557,12 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         timeout_seconds=float(timeout_seconds),
     )
     if result.timed_out:
-        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            guard_home=guard_home,
+            continue_session=True,
+        )
     if result.output_limit_exceeded:
         return _emit_failure(
             harness=harness,
@@ -564,10 +571,20 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             guard_home=guard_home,
         )
     if result.returncode is None:
-        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            guard_home=guard_home,
+            continue_session=True,
+        )
     compact_payload = _json_object(result.stdout.strip())
     if compact_payload is None and not _has_json_object_line(result.stdout):
-        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            guard_home=guard_home,
+            continue_session=True,
+        )
     if compact_payload is not None:
         _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     elif result.stdout:

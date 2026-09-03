@@ -23,10 +23,8 @@ _CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
 
 # Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
 # only: fail-closing them freezes the conversation without adding an enforcement
-# boundary. When native review cannot complete, PostToolUse continues because the
-# tool already ran and withholding the turn is not a security boundary.
-# Protected/Extra careful still pause high-impact PreToolUse. Watch records
-# those actions and continues them.
+# boundary. When native review cannot complete, PreToolUse and PostToolUse continue
+# so the session stays moving. Completed policy and secret blocks still protect.
 LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
         "UserPromptSubmit",
@@ -94,7 +92,21 @@ def hook_review_is_recording_only(
 
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw", "pi", "omp"})
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
-_NATIVE_DISABLED_REASON_CODES = frozenset({"native_hook_disabled", "native_shadow_diagnostic_disabled"})
+_REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
+    {
+        "native_hook_disabled",
+        "native_shadow_diagnostic_disabled",
+        "native_policy_not_ready",
+        "native_hook_event_unavailable",
+        "native_pre_tool_unavailable",
+        "native_post_tool_unavailable",
+        "native_overloaded",
+        "daemon_hook_queue_capacity",
+        "daemon_hook_deadline_exhausted",
+        "daemon_hook_process_deadline_exhausted",
+        "daemon_worker_exception",
+    }
+)
 
 
 def hook_event_is_permission_request(event_name: str) -> bool:
@@ -175,7 +187,7 @@ def availability_harness_response(
             reason_code=reason_code,
             reason=reason,
         )
-    if reason_code in _NATIVE_DISABLED_REASON_CODES and pre_tool_event:
+    if reason_code in _REVIEW_CANNOT_FINISH_REASON_CODES and pre_tool_event:
         return recording_only_pre_tool_response(
             harness,
             reason_code=reason_code,
@@ -234,26 +246,11 @@ def cursor_fallback_permission(
 ) -> tuple[dict[str, object], int]:
     """Return Cursor hook stdout when daemon or native review cannot complete."""
 
+    del payload, workspace, home_dir, guard_home, recording_only
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if hook_review_is_recording_only(
-        guard_home=guard_home,
-        workspace=workspace,
-        recording_only=recording_only,
-    ):
-        return {"permission": "allow"}, 0
-    if compact in {"beforewritefile", "beforemcpexecution"}:
-        return dict(_CURSOR_UNAVAILABLE_DENY), 2
-    if hook_action_is_emergency_safe(payload, workspace=workspace, home_dir=home_dir):
-        return {"permission": "allow"}, 0
-    response: dict[str, object] = {
-        "permission": "deny",
-        "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
-    }
-    if compact != "beforereadfile":
-        response["agent_message"] = _CURSOR_UNAVAILABLE_MESSAGE
-    return response, 2
+    return {"permission": "allow"}, 0
 
 
 def cursor_unparseable_input_permission(

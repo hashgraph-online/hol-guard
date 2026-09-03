@@ -43,6 +43,17 @@ def _package_version_is_current_or_newer(package_version: object, current_versio
         return False
 
 
+def live_daemon_package_is_newer_than(package_version: object, current_version: str) -> bool:
+    """True when a live daemon must not be replaced by an older caller."""
+
+    if not isinstance(package_version, str) or not package_version.strip():
+        return False
+    try:
+        return Version(package_version) > Version(current_version)
+    except InvalidVersion:
+        return False
+
+
 def daemon_state_matches_current_runtime(
     payload: dict[str, object],
     *,
@@ -69,3 +80,17 @@ def daemon_state_matches_current_runtime(
     if not daemon_desktop_core_source_available(payload.get("source_root")):
         return False
     return _package_version_is_current_or_newer(payload.get("package_version"), installed_version)
+
+
+def retain_newer_live_daemon_url(guard_home: Path, current_version: str) -> str | None:
+    """Keep a newer live daemon when an older Desktop or CLI caller tries to replace it."""
+
+    from .manager import _live_guard_daemon_url, _load_authenticated_daemon_identity
+
+    identity = _load_authenticated_daemon_identity(guard_home)
+    if identity is None:
+        return None
+    payload, _auth_token = identity
+    if not live_daemon_package_is_newer_than(payload.get("package_version"), current_version):
+        return None
+    return _live_guard_daemon_url(guard_home, require_current_runtime=False)

@@ -369,13 +369,13 @@ def ensure_guard_daemon(
     launch_cwd = _trusted_daemon_home(home_dir)
     _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
-    if executable is None:
-        existing_url = load_guard_daemon_url(guard_home)
-        if existing_url is not None:
-            existing_port = _guard_daemon_url_port(existing_url)
-            if preferred_port is None or existing_port == preferred_port:
-                _schedule_duplicate_guard_daemon_retirement(guard_home)
-                return existing_url
+    existing_url = (load_guard_daemon_url if executable is None else _retain_newer_live_daemon_url)(guard_home)
+    if existing_url is not None:
+        existing_port = _guard_daemon_url_port(existing_url)
+        if preferred_port is None or existing_port == preferred_port:
+            _schedule_duplicate_guard_daemon_retirement(guard_home)
+            return existing_url
+
     with _guard_daemon_start_lock(guard_home, deadline=start_deadline):
         if executable is None:
             existing_url = load_guard_daemon_url(guard_home)
@@ -3110,3 +3110,9 @@ def _healthz_payload_matches_guard_home(raw_payload: str, guard_home: Path) -> b
         return Path(payload_guard_home).resolve() == guard_home.resolve()
     except OSError:
         return Path(payload_guard_home) == guard_home
+
+
+def _retain_newer_live_daemon_url(guard_home: Path) -> str | None:
+    from .runtime_peer import retain_newer_live_daemon_url
+
+    return retain_newer_live_daemon_url(guard_home, __version__)
