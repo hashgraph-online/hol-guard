@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
+    hook_event_is_permission_request,
 )
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
@@ -98,8 +99,12 @@ def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
 def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert _is_copilot_permission_request({"hook_name": "permissionRequestV2"}) is True
     assert _is_copilot_permission_request({"hookEventName": "PermissionRequestV2"}) is True
+    assert _is_copilot_permission_request({"hook_name": "copilotPermissionRequest"}) is True
     assert _is_copilot_permission_request({"hook_name": "PermissionDenied"}) is False
     assert _is_copilot_permission_request({"hook_name": "PermissionResponse"}) is False
+    assert hook_event_is_permission_request("copilotPermissionRequest") is True
+    assert hook_event_is_permission_request("PermissionDenied") is False
+    assert hook_event_is_permission_request("PermissionRequestFoo") is False
     camel, camel_code = failure_payload(
         harness="copilot",
         event_name="permissionRequestV2",

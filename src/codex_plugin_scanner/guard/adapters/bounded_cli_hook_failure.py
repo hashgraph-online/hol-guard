@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..daemon.hook_availability_policy import (
     EMERGENCY_SAFE_REASON,
     hook_action_is_emergency_safe,
+    hook_event_is_permission_request,
     hook_event_pauses_when_unavailable,
 )
 
@@ -12,8 +13,7 @@ _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 
 
 def _is_permission_event(event_name: str) -> bool:
-    compact = event_name.strip().lower().replace("_", "").replace("-", "")
-    return compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}
+    return hook_event_is_permission_request(event_name)
 
 
 def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
