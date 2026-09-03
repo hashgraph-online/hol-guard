@@ -164,16 +164,26 @@ def _is_managed_hook_command(command: object) -> bool:
     return Path(tokens[0]).name.lower().startswith("python") if tokens else False
 
 
+_MANAGED_CURSOR_HOOK_DOCSTRING = (
+    '"""Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""'
+)
+
+
 def _is_managed_hook_script(source: str) -> bool:
     """Return whether *source* was written by Guard's Cursor installer.
 
-    Installed scripts watermark the module docstring with
-    ``Managed by HOL Guard``. They do not embed ``HOOK_SCRIPT_NAME``, so
-    requiring that filename would treat every live Guard hook as unmanaged
-    and skip prune-safe rebind.
+    Installed scripts use a Cursor-specific module docstring and bake
+    ``GUARD_CLI``. They do not embed ``HOOK_SCRIPT_NAME``, so requiring that
+    filename would treat every live Guard hook as unmanaged and skip
+    prune-safe rebind. A mention of ``Managed by HOL Guard`` alone is not
+    ownership.
     """
 
-    return "Managed by HOL Guard" in source
+    return (
+        _MANAGED_CURSOR_HOOK_DOCSTRING in source
+        and "\nGUARD_CLI =" in source
+        and "\nGUARD_RECOVERY_COMMAND =" in source
+    )
 
 
 def _managed_hooks_payload(payload: dict[str, object]) -> dict[str, object]:
