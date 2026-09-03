@@ -149,6 +149,20 @@ def test_no_op_write_preserves_unsupported_future_schema(tmp_path: Path) -> None
     assert 'presentation_mode = "future"' in persisted
     assert "presentation_schema_version = 99" in persisted
 
+    updated_with_mode = update_guard_settings(
+        guard_home,
+        {
+            "presentation_mode": "everyday",
+            "presentation_mode_explicit": False,
+            "presentation_revision": current.presentation_revision,
+        },
+        skip_approval_gate=True,
+    )
+    assert updated_with_mode.presentation_revision == 7
+    persisted = config_path.read_text(encoding="utf-8")
+    assert 'presentation_mode = "future"' in persisted
+    assert "presentation_schema_version = 99" in persisted
+
 
 def test_revision_only_write_is_rejected(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard"
