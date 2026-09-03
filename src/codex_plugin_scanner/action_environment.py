@@ -18,11 +18,13 @@ def drop_external_analyzer_credentials(online: bool) -> tuple[str, ...]:
     """
     if online:
         return ()
-    dropped = tuple(name for name in EXTERNAL_ANALYZER_SECRET_ENV_NAMES if os.environ.pop(name, None) is not None)
+    dropped = tuple(name for name in EXTERNAL_ANALYZER_SECRET_ENV_NAMES if name in os.environ)
+    for name in dropped:
+        os.environ.pop(name, None)
     if dropped:
         print(
             "Note: online is disabled; removed "
-            f"{', '.join(dropped)} from the scan environment so repository content "
-            "cannot reach external analyzers. Set the online input to true to permit them."
+            f"{', '.join(dropped)} from the scan environment so they cannot enable "
+            "external analyzers. Set the online input to true to permit them."
         )
     return dropped

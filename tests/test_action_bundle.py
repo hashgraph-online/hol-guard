@@ -170,12 +170,18 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "printf '%s\\n' \"${{ steps.scanner_sha256.outputs.sha256 }}\" > scanner-sha256.txt" in workflow_text
     assert "git push origin HEAD:main" in workflow_text
     assert "git push origin refs/tags/v1 --force" in workflow_text
-    assert 'ACTION_TAG="${{ steps.version.outputs.tag }}"' in workflow_text
+    assert "grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$'" in workflow_text
+    assert "Computed release tag does not match the expected format" in workflow_text
+    assert "ACTION_TAG: ${{ steps.version.outputs.tag }}" in workflow_text
+    assert "readme-incoming-canonical" in workflow_text
+    assert "readme-published-canonical" in workflow_text
+    assert 'cmp -s "$RUNNER_TEMP/readme-published-canonical" "$RUNNER_TEMP/readme-incoming-canonical"' in workflow_text
+    assert "floating_refs=$(grep -c 'hashgraph-online/ai-plugin-scanner-action@v1$' README.md || true)" in workflow_text
     assert (
         'sed -i "s|hashgraph-online/ai-plugin-scanner-action@v1$'
         '|hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}|" README.md' in workflow_text
     )
-    assert "README examples pinned to immutable release tag" in workflow_text
+    assert "README usage examples were not rewritten to ${ACTION_TAG}." in workflow_text
 
 
 def test_publish_action_repo_scanner_version_heredoc_is_shell_aligned() -> None:
@@ -228,4 +234,4 @@ def test_action_online_input_documents_analyzer_credential_gating() -> None:
     assert online["default"] == "false"
     assert "MCP_SCANNER_API_KEY" in online["description"]
     assert "MCP_SCANNER_LLM_API_KEY" in online["description"]
-    assert "cannot leave the runner" in online["description"]
+    assert "cannot enable external analyzers" in online["description"]
