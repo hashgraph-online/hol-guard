@@ -1,11 +1,8 @@
-import { migrateLegacyPresentationMode } from "./presentation-migration";
-
 export const PRESENTATION_SCHEMA_VERSION = 1 as const;
 export type GuardPresentationMode = "everyday" | "technical";
 export type GuardPresentationSource =
   | "default"
   | "local-explicit"
-  | "migrated"
   | "session-preview"
   | "cloud-profile"
   | "read-error";
@@ -55,10 +52,6 @@ export function resolvePresentationMode(input: {
     : null;
   if (persistedMode !== null && input.explicit === true) {
     return resolved(persistedMode, "local-explicit", true);
-  }
-  const migratedMode = migrateLegacyPresentationMode(input.value);
-  if (migratedMode !== null) {
-    return resolved(migratedMode, "migrated", true, "migrated_legacy_presentation_mode");
   }
   const invalidDiagnostic =
     input.value !== undefined &&

@@ -1,11 +1,10 @@
 import { strict as assert } from "node:assert";
-import { migrateLegacyPresentationMode } from "./presentation-migration";
 import { defaultTechnicalDisclosure, resolvePresentationMode } from "./presentation-mode";
 
 assert.equal(resolvePresentationMode({}).value, "everyday");
-assert.equal(migrateLegacyPresentationMode("simple"), "everyday");
-assert.equal(migrateLegacyPresentationMode("advanced"), "technical");
-assert.equal(migrateLegacyPresentationMode("developer"), "technical");
+assert.deepEqual(resolvePresentationMode({ value: "advanced", explicit: true }), {
+  value: "everyday", source: "default", explicit: false, writable: true, schemaVersion: 1, revision: 0, diagnostic: "unknown_presentation_mode_fell_back_to_everyday",
+});
 assert.equal(resolvePresentationMode({ value: "technical", explicit: true, cloudProfile: "everyday" }).source, "local-explicit");
 assert.equal(resolvePresentationMode({ value: "everyday", sessionPreview: "technical" }).source, "session-preview");
 assert.deepEqual(resolvePresentationMode({ value: "technical", explicit: false, cloudProfile: "everyday" }), {

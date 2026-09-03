@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from .presentation_migration import migrate_legacy_presentation_mode
-
 GuardPresentationMode = Literal["everyday", "technical"]
 GuardPresentationSource = Literal[
     "default",
     "local-explicit",
-    "migrated",
     "session-preview",
     "cloud-profile",
     "read-error",
@@ -19,6 +16,7 @@ GuardPresentationSource = Literal[
 
 PRESENTATION_SCHEMA_VERSION = 1
 PRESENTATION_MODE_VALUES = frozenset({"everyday", "technical"})
+UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC = "unsupported_presentation_schema_fell_back_to_everyday"
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +63,7 @@ def coerce_persisted_presentation_mode(
             explicit=False,
             source="default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
-            diagnostic="unsupported_presentation_schema_fell_back_to_everyday",
+            diagnostic=UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
         )
     if isinstance(value, str) and value in PRESENTATION_MODE_VALUES:
         return PersistedPresentationMode(
@@ -73,15 +71,6 @@ def coerce_persisted_presentation_mode(
             explicit=is_explicit,
             source="local-explicit" if is_explicit else "default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
-        )
-    migrated_value = migrate_legacy_presentation_mode(value)
-    if migrated_value is not None:
-        return PersistedPresentationMode(
-            value=migrated_value,
-            explicit=True,
-            source="migrated",
-            schema_version=PRESENTATION_SCHEMA_VERSION,
-            diagnostic="migrated_legacy_presentation_mode",
         )
     if value is None or value == "":
         return PersistedPresentationMode(
@@ -135,7 +124,7 @@ def resolve_presentation_mode(
         explicit=local_explicit,
         schema_version=local_schema_version,
     )
-    if local.explicit or local.source == "migrated":
+    if local.explicit:
         return ResolvedPresentationMode(
             value=local.value,
             source=local.source,

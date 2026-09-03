@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 
 from ..dashboard_launcher import build_desktop_dashboard_session_url, desktop_bootstrap_is_preflight
 from ._commands_shared import *  # noqa: F403
+from .desktop_presentation import (
+    presentation_projection as _presentation_projection,
+)
+from .desktop_presentation import (
+    run_presentation_set_command,
+    unsupported_presentation_projection,
+)
 
 DESKTOP_BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 _MAX_PENDING_APPROVALS = 20
@@ -207,25 +214,45 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _presentation_projection(config: GuardConfig) -> dict[str, object]:
-    from ..presentation_mode import resolve_presentation_mode
-
-    resolved = resolve_presentation_mode(
-        local_value=config.presentation_mode,
-        local_explicit=config.presentation_mode_explicit,
-        local_schema_version=config.presentation_schema_version,
-        revision=config.presentation_revision,
-        writable=True,
+def _protection_summary(
+    *, runtime_status: str, managed_harnesses: int, pending_count: int, apps: list[dict[str, object]]
+) -> tuple[str, str, str, str]:
+    protected_count = sum(1 for app in apps if app["protection"] == "protected")
+    needs_repair = any(app["protection"] == "needs_repair" for app in apps)
+    if managed_harnesses == 0:
+        return (
+            "not_configured",
+            "No detected app is currently managed by Guard.",
+            "setup_required",
+            "Connect a detected AI app to start local protection.",
+        )
+    if runtime_status != "active":
+        return (
+            "degraded",
+            "Guard-managed apps exist, but the local runtime is not active.",
+            "attention_required",
+            "Guard is installed, but the local runtime needs attention.",
+        )
+    if needs_repair or protected_count < managed_harnesses:
+        return (
+            "partial",
+            "Some Guard-managed apps need repair or verification.",
+            "attention_required",
+            "Some protected apps need attention.",
+        )
+    if pending_count > 0:
+        return (
+            "protected",
+            "Guard is active and enforcing local policy.",
+            "attention_required",
+            "Guard is active. One or more requests need your decision.",
+        )
+    return (
+        "protected",
+        "Guard is active and enforcing local policy.",
+        "ready",
+        "Guard is active and this machine is protected.",
     )
-    return {
-        "mode": resolved.value,
-        "source": resolved.source,
-        "explicit": resolved.explicit,
-        "canWrite": resolved.writable,
-        "schemaVersion": resolved.schema_version,
-        "revision": resolved.revision,
-        "diagnostic": resolved.diagnostic,
-    }
 
 
 def build_desktop_bootstrap_payload(
@@ -248,34 +275,12 @@ def build_desktop_bootstrap_payload(
 
     managed_harnesses = _int(status_payload.get("managed_harnesses"))
     pending_count = _int(status_payload.get("pending_approvals"), len(pending_requests))
-    protected_count = sum(1 for app in apps if app["protection"] == "protected")
-    needs_repair = any(app["protection"] == "needs_repair" for app in apps)
-
-    if managed_harnesses == 0:
-        protection_state = "not_configured"
-        protection_detail = "No detected app is currently managed by Guard."
-        desktop_status = "setup_required"
-        message = "Connect a detected AI app to start local protection."
-    elif runtime_status != "active":
-        protection_state = "degraded"
-        protection_detail = "Guard-managed apps exist, but the local runtime is not active."
-        desktop_status = "attention_required"
-        message = "Guard is installed, but the local runtime needs attention."
-    elif needs_repair or protected_count < managed_harnesses:
-        protection_state = "partial"
-        protection_detail = "Some Guard-managed apps need repair or verification."
-        desktop_status = "attention_required"
-        message = "Some protected apps need attention."
-    elif pending_count > 0:
-        protection_state = "protected"
-        protection_detail = "Guard is active and enforcing local policy."
-        desktop_status = "attention_required"
-        message = "Guard is active. One or more requests need your decision."
-    else:
-        protection_state = "protected"
-        protection_detail = "Guard is active and enforcing local policy."
-        desktop_status = "ready"
-        message = "Guard is active and this machine is protected."
+    protection_state, protection_detail, desktop_status, message = _protection_summary(
+        runtime_status=runtime_status,
+        managed_harnesses=managed_harnesses,
+        pending_count=pending_count,
+        apps=apps,
+    )
 
     pending_projections = [
         projection
@@ -352,16 +357,7 @@ def build_desktop_bootstrap_payload(
         "recentReceipts": receipt_projections,
         "cloud": _cloud_projection(status_payload),
         "dashboard": {"available": True, "launchCommandSupported": True},
-        "presentation": presentation
-        or {
-            "mode": "everyday",
-            "source": "default",
-            "explicit": False,
-            "canWrite": False,
-            "schemaVersion": 1,
-            "revision": 0,
-            "diagnostic": "presentation_not_supported_by_core",
-        },
+        "presentation": presentation or unsupported_presentation_projection(),
     }
 
 
@@ -401,27 +397,7 @@ def _run_guard_desktop_command(
         return dashboard_update_main(argv)
     desktop_command = getattr(args, "desktop_command", None)
     if desktop_command == "presentation-set":
-        if config is None:
-            raise RuntimeError("Guard Desktop presentation update requires local Guard config")
-        from ..config import update_guard_settings
-
-        resolved_home = getattr(args, "guard_home", None) or guard_home or config.guard_home
-        update_payload: dict[str, object] = {
-            "presentation_mode": args.mode,
-            "presentation_mode_explicit": True,
-        }
-        if getattr(args, "expected_revision", None) is not None:
-            update_payload["presentation_revision"] = args.expected_revision
-        updated = update_guard_settings(
-            resolved_home,
-            update_payload,
-            event_source="desktop-presentation",
-            skip_approval_gate=True,
-        )
-        projected = _presentation_projection(updated)
-        if bool(getattr(args, "json", False)):
-            print(json.dumps(projected, sort_keys=True), file=output_stream or sys.stdout)
-        return 0
+        return run_presentation_set_command(args, guard_home=guard_home, config=config, output_stream=output_stream)
     if desktop_command != "bootstrap":
         print("Choose desktop bootstrap or presentation-set.", file=sys.stderr)
         return 2

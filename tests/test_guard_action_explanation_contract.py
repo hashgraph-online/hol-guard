@@ -56,6 +56,7 @@ def test_cloud_projection_is_strict_subset() -> None:
     technical = cast(dict[str, object], payload["technical"])
     redaction = cast(dict[str, object], payload["redaction"])
     assert technical["available"] is False
+    assert technical["action_type"] == _explanation().technical.action_type
     assert technical["command_display"] is None
     assert redaction["level"] == "redacted"
 

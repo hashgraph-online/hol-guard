@@ -35,6 +35,8 @@ def test_desktop_projection_is_core_authoritative() -> None:
         presentation_mode_explicit=True,
         presentation_schema_version=1,
         presentation_revision=7,
+        presentation_source="local-explicit",
+        presentation_diagnostic=None,
     )
     assert _presentation_projection(config) == {
         "mode": "technical",
@@ -44,6 +46,26 @@ def test_desktop_projection_is_core_authoritative() -> None:
         "schemaVersion": 1,
         "revision": 7,
         "diagnostic": None,
+    }
+
+
+def test_desktop_projection_exposes_unsupported_schema_as_read_only() -> None:
+    config = SimpleNamespace(
+        presentation_mode="everyday",
+        presentation_mode_explicit=False,
+        presentation_schema_version=1,
+        presentation_revision=7,
+        presentation_source="default",
+        presentation_diagnostic="unsupported_presentation_schema_fell_back_to_everyday",
+    )
+    assert _presentation_projection(config) == {
+        "mode": "everyday",
+        "source": "default",
+        "explicit": False,
+        "canWrite": False,
+        "schemaVersion": 1,
+        "revision": 7,
+        "diagnostic": "unsupported_presentation_schema_fell_back_to_everyday",
     }
 
 
