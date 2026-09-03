@@ -80,36 +80,34 @@ jobs:
               "from codex_plugin_scanner.guard.cli.commands_dispatch_desktop import (\n",
               "from codex_plugin_scanner.guard.cli import commands as guard_commands_module\nfrom codex_plugin_scanner.guard.cli.commands_dispatch_desktop import (\n",
           )
+          test_code = (
+              "\n\n"
+              "def test_desktop_presentation_set_requires_expected_revision() -> None:\n"
+              "    parser = argparse.ArgumentParser(prog=\"hol-guard\")\n"
+              "    guard_commands_module.add_guard_root_parser(parser)\n"
+              "\n"
+              "    with pytest.raises(SystemExit) as error:\n"
+              "        parser.parse_args([\"desktop\", \"presentation-set\", \"--mode\", \"technical\"])\n"
+              "\n"
+              "    assert error.value.code == 2\n"
+              "    parsed = parser.parse_args(\n"
+              "        [\n"
+              "            \"desktop\",\n"
+              "            \"presentation-set\",\n"
+              "            \"--mode\",\n"
+              "            \"technical\",\n"
+              "            \"--expected-revision\",\n"
+              "            \"7\",\n"
+              "        ]\n"
+              "    )\n"
+              "    assert parsed.desktop_command == \"presentation-set\"\n"
+              "    assert parsed.expected_revision == 7\n"
+          )
+          marker = "\n\ndef test_desktop_bootstrap_old_core_fallback_is_everyday_and_not_writable() -> None:\n"
           replace_once(
               test_path,
-              "\n\ndef test_desktop_bootstrap_old_core_fallback_is_everyday_and_not_writable() -> None:\n",
-              """
-
-
-def test_desktop_presentation_set_requires_expected_revision() -> None:
-    parser = argparse.ArgumentParser(prog="hol-guard")
-    guard_commands_module.add_guard_root_parser(parser)
-
-    with pytest.raises(SystemExit) as error:
-        parser.parse_args(["desktop", "presentation-set", "--mode", "technical"])
-
-    assert error.value.code == 2
-    parsed = parser.parse_args(
-        [
-            "desktop",
-            "presentation-set",
-            "--mode",
-            "technical",
-            "--expected-revision",
-            "7",
-        ]
-    )
-    assert parsed.desktop_command == "presentation-set"
-    assert parsed.expected_revision == 7
-
-
-def test_desktop_bootstrap_old_core_fallback_is_everyday_and_not_writable() -> None:
-""",
+              marker,
+              test_code + marker,
           )
           PY
 
