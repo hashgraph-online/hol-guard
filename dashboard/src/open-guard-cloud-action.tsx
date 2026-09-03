@@ -5,6 +5,7 @@ import {
 } from "react-icons/hi2";
 
 import {
+  safeCloudConnectUrl,
   startOrRecoverCloudConnect,
   waitForAuthorizeUrl,
   type GuardCloudOpenStatus,
@@ -13,6 +14,8 @@ import {
   openPackageFirewallAuthorizeFallback,
   PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
 } from "./package-firewall-connect-browser";
+
+export { safeCloudConnectUrl };
 
 type OpenGuardCloudActionState =
   | { status: "idle" }
@@ -33,21 +36,6 @@ export class GuardCloudPopupBlockedError extends Error {
     super(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
     this.name = "GuardCloudPopupBlockedError";
     this.manualUrl = manualUrl;
-  }
-}
-
-export function safeCloudConnectUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
   }
 }
 

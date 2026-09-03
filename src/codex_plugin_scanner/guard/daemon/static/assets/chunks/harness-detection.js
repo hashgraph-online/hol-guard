@@ -1,4 +1,4 @@
-import { r as reactExports, a$ as isGuardDemoMode, b0 as fetchGuardApi } from "../guard-dashboard.js";
+import { r as reactExports, b0 as isGuardDemoMode, b1 as fetchGuardApi } from "../guard-dashboard.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 async function fetchHarnessSetupItems() {
   if (isGuardDemoMode()) return [];

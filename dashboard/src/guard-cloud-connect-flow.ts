@@ -5,6 +5,23 @@ export type GuardCloudOpenStatus = GuardCloudConnectStatusResponse & {
   dashboard_url?: string | null;
 };
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+export function safeCloudConnectUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!url.hostname || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    const approvedHttps = url.protocol === "https:" && (host === "hol.org" || host.endsWith(".hol.org"));
+    const localHttp = url.protocol === "http:" && LOOPBACK_HOSTS.has(host);
+    if (!approvedHttps && !localHttp) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export class CloudRequestTimeoutError extends Error {
   constructor() {
     super("Guard Cloud did not respond within 5 seconds. Try again.");
@@ -18,16 +35,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function connectFlowFromPayload(value: unknown): GuardCloudConnectFlow | null {
   if (!isRecord(value)) return null;
-  const authorizeUrl = value.authorize_url;
-  const connectUrl = value.connect_url;
-  if (typeof connectUrl !== "string") return null;
+  const connectUrl = typeof value.connect_url === "string" ? safeCloudConnectUrl(value.connect_url) : null;
+  if (!connectUrl) return null;
   return {
     state: value.state === "starting" || value.state === "running" || value.state === "failed" ? value.state : "idle",
     title: typeof value.title === "string" ? value.title : "",
     detail: typeof value.detail === "string" ? value.detail : "",
     action_label: typeof value.action_label === "string" ? value.action_label : "",
     connect_url: connectUrl,
-    authorize_url: typeof authorizeUrl === "string" ? authorizeUrl : null,
+    authorize_url: typeof value.authorize_url === "string" ? safeCloudConnectUrl(value.authorize_url) : null,
     browser_opened: typeof value.browser_opened === "boolean" ? value.browser_opened : null,
     request_id: typeof value.request_id === "string" ? value.request_id : null,
     poll_after_ms: typeof value.poll_after_ms === "number" ? value.poll_after_ms : null,
@@ -39,7 +55,7 @@ export function parseGuardCloudConnectHttp(
   payload: unknown,
 ): GuardCloudOpenStatus {
   const record = isRecord(payload) ? payload : {};
-  const dashboardUrl = typeof record.dashboard_url === "string" ? record.dashboard_url : null;
+  const dashboardUrl = typeof record.dashboard_url === "string" ? safeCloudConnectUrl(record.dashboard_url) : null;
   if (status === 409 && record.error === "guard_cloud_connect_not_required") {
     return {
       connect_required: false,
@@ -176,7 +192,7 @@ export async function waitForAuthorizeUrl(
     const polled = await withCloudRequestTimeout((nextSignal) => poll("GET", nextSignal), signal);
     status = {
       ...polled,
-      dashboard_url: polled.dashboard_url ?? status.dashboard_url ?? null,
+      dashboard_url: safeCloudConnectUrl(polled.dashboard_url) ?? safeCloudConnectUrl(status.dashboard_url),
     };
   }
   return status;

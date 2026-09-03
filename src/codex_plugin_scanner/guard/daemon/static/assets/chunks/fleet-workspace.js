@@ -1,4 +1,4 @@
-import { r as reactExports, R as remainingProtectionRepairParts, T as ProtectionRepairFlowError, U as waitForAuthorizeUrl, V as startOrRecoverCloudConnect, X as openPackageFirewallAuthorizeFallback, Y as waitForCloudConnection, Z as activeFailedHarnesses, j as jsxRuntimeExports, _ as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, $ as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a0 as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a1 as HiMiniEye, a2 as HiMiniXCircle, a3 as HiMiniClipboardDocumentCheck, a4 as HiMiniClipboard } from "../guard-dashboard.js";
+import { r as reactExports, R as remainingProtectionRepairParts, T as ProtectionRepairFlowError, U as waitForAuthorizeUrl, V as startOrRecoverCloudConnect, X as safeCloudConnectUrl, Y as openPackageFirewallAuthorizeFallback, Z as waitForCloudConnection, _ as activeFailedHarnesses, j as jsxRuntimeExports, $ as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, a0 as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a1 as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a2 as HiMiniEye, a3 as HiMiniXCircle, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard } from "../guard-dashboard.js";
 import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
@@ -133,20 +133,6 @@ function cloudConnectButtonLabel(state, defaultLabel) {
   if (state?.status === "working") return "Starting sign-in…";
   if (state?.status === "success") return "Guard Cloud connected";
   return defaultLabel;
-}
-function safeCloudConnectUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 function FleetProtectionRecovery(props) {
   const [repairState, setRepairState] = reactExports.useState(null);

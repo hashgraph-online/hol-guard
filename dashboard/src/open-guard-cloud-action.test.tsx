@@ -61,11 +61,11 @@ const alreadyConnected = parseGuardCloudConnectHttp(409, {
   error: "guard_cloud_connect_not_required",
   connect_required: false,
   connect_flow: null,
-  dashboard_url: "https://example.com/cloud/dashboard",
+  dashboard_url: "https://hol.org/guard",
 });
 assert(alreadyConnected.connect_required === false, "409 must mean Guard Cloud is already connected");
 assert(
-  alreadyConnected.dashboard_url === "https://example.com/cloud/dashboard",
+  alreadyConnected.dashboard_url === "https://hol.org/guard",
   "409 payload must keep dashboard_url for already-connected users",
 );
 
@@ -84,8 +84,8 @@ await runWithStatus({
     title: "Finish Guard Cloud sign-in in your browser",
     detail: "HOL Guard opened the secure sign-in flow in your browser.",
     action_label: "Connect Guard Cloud",
-    authorize_url: "https://example.com/oauth/authorize?request_id=test-1",
-    connect_url: "https://example.com/guard/connect",
+    authorize_url: "https://hol.org/api/guard/oauth/authorize?request_id=test-1",
+    connect_url: "https://hol.org/guard/connect",
     browser_opened: false,
     request_id: "guard-connect-1",
     poll_after_ms: 1500,
@@ -94,22 +94,22 @@ await runWithStatus({
 
 assert(
   authorizeCalls.length === 1 &&
-    authorizeCalls[0]?.url === "https://example.com/oauth/authorize?request_id=test-1",
+    authorizeCalls[0]?.url === "https://hol.org/api/guard/oauth/authorize?request_id=test-1",
   "Open Guard Cloud should start OAuth and open authorize_url",
 );
 assert(
-  openedUrls[0] === "https://example.com/oauth/authorize?request_id=test-1",
+  openedUrls[0] === "https://hol.org/api/guard/oauth/authorize?request_id=test-1",
   "authorize_url should be opened for OAuth-required connect",
 );
 
 await runWithStatus({
   connect_required: false,
   connect_flow: null,
-  dashboard_url: "https://example.com/cloud/dashboard",
+  dashboard_url: "https://hol.org/guard",
 });
 
 assert(
-  openedUrls[0] === "https://example.com/cloud/dashboard",
+  openedUrls[0] === "https://hol.org/guard",
   "already-connected users should open dashboard_url",
 );
 
@@ -134,7 +134,7 @@ try {
       detail: "HOL Guard opened the secure sign-in flow in your browser.",
       action_label: "Connect Guard Cloud",
       authorize_url: null,
-      connect_url: "https://example.com/guard/connect",
+      connect_url: "https://hol.org/guard/connect",
       browser_opened: false,
       request_id: "guard-connect-2",
       poll_after_ms: 1500,
@@ -157,8 +157,8 @@ try {
         title: "Finish Guard Cloud sign-in in your browser",
         detail: "HOL Guard opened the secure sign-in flow in your browser.",
         action_label: "Connect Guard Cloud",
-        authorize_url: "https://example.com/oauth/authorize?request_id=blocked",
-        connect_url: "https://example.com/guard/connect",
+        authorize_url: "https://hol.org/api/guard/oauth/authorize?request_id=blocked",
+        connect_url: "https://hol.org/guard/connect",
         browser_opened: false,
         request_id: "guard-connect-3",
         poll_after_ms: 1500,
@@ -170,7 +170,7 @@ try {
 } catch (error: unknown) {
   authorizePopupBlocked = error instanceof GuardCloudPopupBlockedError
     && error.message === PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE
-    && error.manualUrl === "https://example.com/oauth/authorize?request_id=blocked";
+    && error.manualUrl === "https://hol.org/api/guard/oauth/authorize?request_id=blocked";
 }
 assert(authorizePopupBlocked, "blocked OAuth popup must throw a recoverable sign-in error");
 
@@ -181,15 +181,29 @@ try {
     {
       connect_required: false,
       connect_flow: null,
-      dashboard_url: "https://example.com/cloud/dashboard",
+      dashboard_url: "https://hol.org/guard",
     },
     mockOpenAuthorize,
     () => false,
   );
 } catch (error: unknown) {
   dashboardPopupBlocked = error instanceof GuardCloudPopupBlockedError
-    && error.manualUrl === "https://example.com/cloud/dashboard";
+    && error.manualUrl === "https://hol.org/guard";
 }
 assert(dashboardPopupBlocked, "blocked dashboard popup must not look like success");
+
+resetBrowserMocks();
+let untrustedDashboardFailed = false;
+try {
+  await runWithStatus({
+    connect_required: false,
+    connect_flow: null,
+    dashboard_url: "https://evil.example/phish",
+  });
+} catch {
+  untrustedDashboardFailed = true;
+}
+assert(untrustedDashboardFailed, "untrusted dashboard hosts must not be opened");
+assert(openedUrls.length === 0, "untrusted dashboard hosts must not open a browser");
 
 console.log("open-guard-cloud-action.test.tsx passed");
