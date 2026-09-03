@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.cursor_hook_config import _is_managed_hook_script
 from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.guard_cli_attestation import resolve_attested_guard_cli
 from codex_plugin_scanner.guard.cursor_hook_rebind import (
@@ -26,7 +27,6 @@ def _managed_hook_source(*, argv0: str) -> str:
         "from pathlib import Path\n"
         f"GUARD_CLI = {json.dumps([argv0])}\n"
         f"GUARD_RECOVERY_COMMAND = {json.dumps([argv0])}\n"
-        "HOOK_SCRIPT_NAME = 'hol-guard-cursor-hook.py'\n"
     )
 
 
@@ -57,6 +57,30 @@ def test_cursor_hook_script_source_does_not_prefix_guard_for_stable_shim(tmp_pat
     )
     assert '["guard", "hook"' not in source
     assert '"hook"' in source
+
+
+def test_installed_cursor_hook_template_is_recognized_as_managed(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard",
+        workspace_dir=tmp_path / "workspace",
+    )
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[str(tmp_path / "core" / "current-hol-guard")],
+        recovery_command=["true"],
+    )
+    assert _is_managed_hook_script(source) is True
+    assert "hol-guard-cursor-hook.py" not in source
+    assert _is_managed_hook_script("print('user owned')\n") is False
+    assert _is_managed_hook_script("# Managed by HOL Guard\nprint('user owned')\n") is False
+    assert (
+        _is_managed_hook_script(
+            '"""Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""\n'
+            "print('user owned')\n"
+        )
+        is False
+    )
 
 
 def test_cursor_hook_script_bakes_ephemeral_cli_detects_versioned_core(tmp_path: Path) -> None:
@@ -228,6 +252,27 @@ def test_rebind_does_not_overwrite_unmanaged_live_script(
     assert result["reason"] == "cursor_hook_script_unmanaged"
     assert live.read_text(encoding="utf-8") == "print('user owned')\n"
     assert "versions/3.0.57" in managed.read_text(encoding="utf-8")
+
+
+def test_rebind_does_not_overwrite_script_that_only_quotes_guard_watermark(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = _executable_file(core_dir / "versions" / "3.0.57" / "hol-guard")
+    _executable_file(core_dir / "current-hol-guard", "#!/bin/sh\nexec true\n")
+    home = tmp_path / "home"
+    live = home / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    live.parent.mkdir(parents=True)
+    source = "# Managed by HOL Guard\nUSER_SENTINEL = True\n"
+    live.write_text(source, encoding="utf-8")
+    monkeypatch.setattr("codex_plugin_scanner.guard.cursor_hook_rebind.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.guard_cli_attestation.sys.frozen", True, raising=False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.stable_guard_cli.sys.executable", str(versioned))
+    result = rebind_stale_cursor_hooks(tmp_path / "guard", home_dir=home)
+    assert result["rebound"] is False
+    assert result["reason"] == "cursor_hook_script_unmanaged"
+    assert live.read_text(encoding="utf-8") == source
 
 
 def test_rebind_reports_unreadable_non_utf8_script(
