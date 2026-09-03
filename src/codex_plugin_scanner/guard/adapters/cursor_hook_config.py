@@ -165,7 +165,15 @@ def _is_managed_hook_command(command: object) -> bool:
 
 
 def _is_managed_hook_script(source: str) -> bool:
-    return "Managed by HOL Guard" in source and HOOK_SCRIPT_NAME in source
+    """Return whether *source* was written by Guard's Cursor installer.
+
+    Installed scripts watermark the module docstring with
+    ``Managed by HOL Guard``. They do not embed ``HOOK_SCRIPT_NAME``, so
+    requiring that filename would treat every live Guard hook as unmanaged
+    and skip prune-safe rebind.
+    """
+
+    return "Managed by HOL Guard" in source
 
 
 def _managed_hooks_payload(payload: dict[str, object]) -> dict[str, object]:

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.cursor_hook_config import _is_managed_hook_script
 from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.guard_cli_attestation import resolve_attested_guard_cli
 from codex_plugin_scanner.guard.cursor_hook_rebind import (
@@ -26,7 +27,6 @@ def _managed_hook_source(*, argv0: str) -> str:
         "from pathlib import Path\n"
         f"GUARD_CLI = {json.dumps([argv0])}\n"
         f"GUARD_RECOVERY_COMMAND = {json.dumps([argv0])}\n"
-        "HOOK_SCRIPT_NAME = 'hol-guard-cursor-hook.py'\n"
     )
 
 
@@ -57,6 +57,22 @@ def test_cursor_hook_script_source_does_not_prefix_guard_for_stable_shim(tmp_pat
     )
     assert '["guard", "hook"' not in source
     assert '"hook"' in source
+
+
+def test_installed_cursor_hook_template_is_recognized_as_managed(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard",
+        workspace_dir=tmp_path / "workspace",
+    )
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[str(tmp_path / "core" / "current-hol-guard")],
+        recovery_command=["true"],
+    )
+    assert _is_managed_hook_script(source) is True
+    assert "hol-guard-cursor-hook.py" not in source
+    assert _is_managed_hook_script("print('user owned')\n") is False
 
 
 def test_cursor_hook_script_bakes_ephemeral_cli_detects_versioned_core(tmp_path: Path) -> None:
