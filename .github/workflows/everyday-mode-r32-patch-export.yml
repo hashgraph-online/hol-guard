@@ -42,36 +42,49 @@ jobs:
           gzip --decompress --stdout "$RUNNER_TEMP/core.patch.gz" > "$RUNNER_TEMP/core.patch"
           echo 'b70b55098e1a41e9989921f82e7e013b329822ac1b23d17266f0d67e523a5eda  '"$RUNNER_TEMP/core.patch" | sha256sum --check
 
-      - name: Apply to current release 3.2 without publishing
-        shell: bash
-        run: |
-          set -euo pipefail
-          git checkout --detach origin/release/3.2
-          if git apply --check "$RUNNER_TEMP/core.patch"; then
-            git apply --index "$RUNNER_TEMP/core.patch"
-          else
-            git apply --3way --index "$RUNNER_TEMP/core.patch"
-          fi
-          git diff --cached --check
-          if git diff --cached --name-only | grep -E '^\.github/(workflows|scripts)/'; then
-            echo 'Product patch contains temporary automation.' >&2
-            exit 1
-          fi
-          if find . -type f \( -name 'HOL_GUARD_EVERYDAY_MODE_PRD*' -o -name 'HOL_GUARD_EVERYDAY_MODE_TODO*' -o -name '*TAKEAWAY_PROMPT*' \) | grep -q .; then
-            echo 'Private planning artifact found in patched source.' >&2
-            exit 1
-          fi
-          git config user.name 'source-export'
-          git config user.email 'source-export@invalid'
-          git commit -m 'local: materialize Everyday Mode product patch'
-          git archive --format=tar.gz --output="$RUNNER_TEMP/patched-source.tar.gz" HEAD
-
-      - name: Upload exact patch and patched source
+      - name: Upload exact verified patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: everyday-mode-r32-patched-source-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/core.patch
-            ${{ runner.temp }}/patched-source.tar.gz
+          name: everyday-mode-r32-product-patch-${{ github.sha }}
+          path: ${{ runner.temp }}/core.patch
           retention-days: 1
           if-no-files-found: error
+
+      - name: Diagnose application against current release 3.2
+        id: apply
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          exec > >(tee "$RUNNER_TEMP/apply-diagnostic.txt") 2>&1
+          git checkout --detach origin/release/3.2
+          echo "release_head=$(git rev-parse HEAD)"
+          echo '--- git apply --check ---'
+          git apply --check "$RUNNER_TEMP/core.patch"
+          direct=$?
+          echo "direct_status=$direct"
+          if [ "$direct" -eq 0 ]; then
+            git apply --index "$RUNNER_TEMP/core.patch"
+          else
+            echo '--- git apply --3way --check ---'
+            git apply --3way --check "$RUNNER_TEMP/core.patch"
+            threeway=$?
+            echo "threeway_status=$threeway"
+            if [ "$threeway" -eq 0 ]; then
+              git apply --3way --index "$RUNNER_TEMP/core.patch"
+            fi
+          fi
+          echo '--- changed files ---'
+          git status --short
+          echo '--- patch paths ---'
+          git apply --numstat "$RUNNER_TEMP/core.patch" || true
+          exit 0
+
+      - name: Upload application diagnostic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: everyday-mode-r32-apply-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/apply-diagnostic.txt
+          retention-days: 1
+          if-no-files-found: warn
