@@ -83,7 +83,7 @@ def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
         reason_code="native_hook_disabled",
         reason="native off",
     )
-    assert permission["continue"] is False
+    assert permission["continue"] is True
     daemon_miss = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
@@ -93,7 +93,32 @@ def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert daemon_miss["policy_action"] == "block"
+    assert daemon_miss["decision"] == "allow"
+
+
+def test_native_policy_not_ready_pretool_continues(tmp_path: Path) -> None:
+    payload = availability_harness_response(
+        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
+        harness="claude-code",
+        event_name="PreToolUse",
+        reason_code="native_policy_not_ready",
+        reason="native policy was not ready",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert payload["continue"] is True
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_cursor_write_continues_when_native_unavailable() -> None:
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
+
+    allow, code = cursor_fallback_permission(
+        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Write"},
+        hook_event_name="beforeWriteFile",
+    )
+    assert code == 0
+    assert allow == {"permission": "allow"}
 
 
 def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
@@ -114,7 +139,7 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     )
     assert camel_code == 0
     assert camel["behavior"] == "deny"
-    assert camel["interrupt"] is True
+    assert camel["interrupt"] is False
     payload, code = failure_payload(
         harness="copilot",
         event_name="PermissionRequestV2",
@@ -124,7 +149,7 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     )
     assert code == 0
     assert payload["behavior"] == "deny"
-    assert payload["interrupt"] is True
+    assert payload["interrupt"] is False
     assert "permissionDecision" not in payload
     availability = availability_harness_response(
         {"hook_event_name": "PermissionRequestV2"},
@@ -134,4 +159,4 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
         reason="native unavailable",
     )
     assert availability["behavior"] == "deny"
-    assert availability["interrupt"] is True
+    assert availability["interrupt"] is False

@@ -5973,36 +5973,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
         from .hook_availability_policy import availability_harness_response
 
-        if event != "PermissionRequest":
-            payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
-            return availability_harness_response(
-                payload_dict,
-                harness=harness,
-                event_name=event,
-                reason_code=reason_code,
-                reason=reason,
-                workspace=workspace_path,
-                home_dir=home_path,
-                guard_home=guard_home,
-                recording_only=observe_mode,
-            )
-        if harness in {"pi", "omp"}:
-            return {
-                "decision": "deny",
-                "reason": reason,
-                "model_output_action": "block",
-                "notice": "warning",
-                "reason_code": reason_code,
-            }
-        if event == "PermissionRequest":
-            return {
-                "reason_code": reason_code,
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "decision": {"behavior": "deny", "message": reason},
-                },
-            }
-        return {"continue": False, "stopReason": reason, "systemMessage": reason, "reason_code": reason_code}
+        payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
+        return availability_harness_response(
+            payload_dict,
+            harness=harness,
+            event_name=event,
+            reason_code=reason_code,
+            reason=reason,
+            workspace=workspace_path,
+            home_dir=home_path,
+            guard_home=guard_home,
+            recording_only=observe_mode,
+        )
 
     def _validated_fail_safe_hook_paths(
         self,

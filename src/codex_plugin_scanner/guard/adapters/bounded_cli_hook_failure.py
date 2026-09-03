@@ -64,7 +64,7 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
             return {
                 "behavior": "deny",
                 "message": reason,
-                "interrupt": True,
+                "interrupt": False,
             }, 0
         return {
             "permissionDecision": "deny",
@@ -88,6 +88,36 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
     }, 2
 
 
+def _unavailable_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
+    if harness == "copilot":
+        if _is_permission_event(event_name):
+            return {
+                "behavior": "deny",
+                "message": reason,
+                "interrupt": False,
+            }, 0
+        return {
+            "permissionDecision": "allow",
+            "permissionDecisionReason": reason,
+        }, 0
+    if harness in _DECISION_HOOK_HARNESSES:
+        return {"decision": "allow", "reason": reason}, 0
+    if _is_permission_event(event_name):
+        return {
+            "continue": True,
+            "systemMessage": reason,
+        }, 0
+    return {
+        "continue": True,
+        "systemMessage": reason,
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "permissionDecision": "allow",
+            "permissionDecisionReason": reason,
+        },
+    }, 0
+
+
 def failure_payload(
     *,
     harness: str,
@@ -95,6 +125,7 @@ def failure_payload(
     reason: str,
     payload: dict[str, object] | None,
     recording_only: bool,
+    continue_session: bool = False,
 ) -> tuple[dict[str, object], int]:
     if recording_only:
         return watch_continue_payload(harness, event_name), 0
@@ -108,4 +139,6 @@ def failure_payload(
         return _emergency_safe_payload(harness, event_name), 0
     if not pauses:
         return _observe_payload(harness, event_name, reason), 0
+    if continue_session:
+        return _unavailable_payload(harness, event_name, reason)
     return _pause_payload(harness, event_name, reason)

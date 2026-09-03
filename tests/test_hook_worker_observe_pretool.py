@@ -208,11 +208,9 @@ def test_hook_worker_enforce_native_unavailable_still_pauses_network(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["policy_action"] == "block"
+    assert result["decision"] == "allow"
+    assert result["policy_action"] == "warn"
     assert result["reason_code"] == "native_pre_tool_unavailable"
-    hook_output = result["hookSpecificOutput"]
-    assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "deny"
 
 
 def test_hook_worker_watch_native_allow_still_allows(

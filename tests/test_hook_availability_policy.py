@@ -79,7 +79,7 @@ def test_availability_allows_inspection_and_pauses_high_impact(tmp_path: Path) -
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert allow["reason_code"] == EMERGENCY_SAFE_REASON_CODE
+    assert allow["reason_code"] == "native_pre_tool_unavailable"
     assert allow["policy_action"] == "warn"
     deny = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
@@ -91,25 +91,25 @@ def test_availability_allows_inspection_and_pauses_high_impact(tmp_path: Path) -
         home_dir=tmp_path / "home",
     )
     assert deny["reason_code"] == "native_pre_tool_unavailable"
-    assert deny["policy_action"] == "block"
+    assert deny["policy_action"] == "warn"
     output = deny["hookSpecificOutput"]
     assert isinstance(output, dict)
-    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecision"] == "allow"
 
 
-def test_cursor_fallback_allows_read_and_denies_shell() -> None:
+def test_cursor_fallback_allows_read_and_shell_when_review_cannot_finish() -> None:
     allow, allow_code = cursor_fallback_permission(
         {"hook_event_name": "beforeReadFile", "file_path": "src/app.ts", "tool_name": "Read"},
         hook_event_name="beforeReadFile",
     )
     assert allow_code == 0
     assert allow["permission"] == "allow"
-    deny, deny_code = cursor_fallback_permission(
+    shell, shell_code = cursor_fallback_permission(
         {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
         hook_event_name="beforeShellExecution",
     )
-    assert deny_code == 2
-    assert deny["permission"] == "deny"
+    assert shell_code == 0
+    assert shell["permission"] == "allow"
 
 
 def test_hol_guard_status_is_emergency_safe() -> None:
@@ -304,9 +304,9 @@ def test_before_write_file_is_not_emergency_safe(tmp_path: Path) -> None:
         "tool_name": "Write",
     }
     assert hook_action_is_emergency_safe(payload, workspace=workspace) is False
-    deny, code = cursor_fallback_permission(payload, hook_event_name="beforeWriteFile", workspace=workspace)
-    assert code == 2
-    assert deny["permission"] == "deny"
+    allow, code = cursor_fallback_permission(payload, hook_event_name="beforeWriteFile", workspace=workspace)
+    assert code == 0
+    assert allow["permission"] == "allow"
 
 
 def test_missing_workspace_rejects_absolute_paths() -> None:
@@ -445,7 +445,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert curl["policy_action"] == "block"
+    assert curl["decision"] == "allow"
     permission = availability_harness_response(
         {"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         harness="claude-code",
@@ -453,7 +453,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert permission["continue"] is False
+    assert permission["continue"] is True
     permission_v2 = availability_harness_response(
         {"hook_event_name": "PermissionRequestV2", "tool_input": {"command": "pwd"}},
         harness="claude-code",
@@ -461,7 +461,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert permission_v2["continue"] is False
+    assert permission_v2["continue"] is True
     alias = availability_harness_response(
         {"hook_event_name": "beforeShellExecution", "command": "curl https://example.test"},
         harness="cursor",
@@ -471,7 +471,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert alias["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert alias["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_cursor_unparseable_input_allows_read_and_pauses_shell() -> None:

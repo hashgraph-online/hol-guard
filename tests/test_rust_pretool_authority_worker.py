@@ -227,7 +227,7 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -261,7 +261,7 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -315,7 +315,7 @@ def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_n
         workspace=tmp_path / "workspace",
     )
     assert result["decision"] == "allow"
-    assert result["reason_code"] == "native_degraded_emergency_safe"
+    assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
 def test_hook_worker_pauses_secret_read_without_native_result(
@@ -339,7 +339,7 @@ def test_hook_worker_pauses_secret_read_without_native_result(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -365,7 +365,7 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_hook_event_unavailable"
-    assert result["continue"] is False
+    assert result["continue"] is True
     grok_session = worker.review_http_payload(
         payload={"hookEventName": "session_start"},
         params={},

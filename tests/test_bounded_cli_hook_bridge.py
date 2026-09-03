@@ -58,13 +58,13 @@ def _config(tmp_path: Path, *, harness: str) -> dict[str, object]:
 @pytest.mark.parametrize(
     ("harness", "expected"),
     [
-        ("copilot", {"permissionDecision": "deny"}),
-        ("grok", {"decision": "deny"}),
-        ("hermes", {"decision": "block"}),
-        ("openclaw", {"decision": "deny"}),
+        ("copilot", {"permissionDecision": "allow"}),
+        ("grok", {"decision": "allow"}),
+        ("hermes", {"decision": "allow"}),
+        ("openclaw", {"decision": "allow"}),
     ],
 )
-def test_timeout_emits_successful_native_deny(
+def test_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -83,7 +83,7 @@ def test_timeout_emits_successful_native_deny(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == (2 if harness == "hermes" else 0)
+    assert returncode == 0
     for key, value in expected.items():
         assert payload[key] == value
 
@@ -118,7 +118,7 @@ def test_timeout_allows_emergency_safe_read(
 
 
 @pytest.mark.parametrize("harness", ["kimi", "zcode"])
-def test_claude_shaped_timeout_emits_deny_and_block_exit(
+def test_claude_shaped_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -136,10 +136,10 @@ def test_claude_shaped_timeout_emits_deny_and_block_exit(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 2
+    assert returncode == 0
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "deny"
+    assert hook_output["permissionDecision"] == "allow"
 
 
 def test_success_preserves_child_stdout_and_returncode(
@@ -500,7 +500,7 @@ def test_frozen_fallback_accepts_normalized_json_hook_contract(
     ]
 
 
-def test_empty_failed_child_is_converted_to_native_deny(
+def test_empty_failed_child_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -517,10 +517,10 @@ def test_empty_failed_child_is_converted_to_native_deny(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
+    assert _json_object(output.getvalue())["permissionDecision"] == "allow"
 
 
-def test_malformed_success_is_converted_to_native_deny(
+def test_malformed_success_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -537,7 +537,7 @@ def test_malformed_success_is_converted_to_native_deny(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["decision"] == "deny"
+    assert _json_object(output.getvalue())["decision"] == "allow"
 
 
 def test_copilot_permission_timeout_uses_permission_request_contract(

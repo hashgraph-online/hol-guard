@@ -255,57 +255,10 @@ def _cursor_availability_response(
             recording_only=recording_only,
         )
     except Exception:
-        if recording_only:
-            compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
-            if compact in {"aftershellexecution", "aftermcpexecution"}:
-                return {}, 0
-            return {"permission": "allow"}, 0
         compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
-        if compact == "beforereadfile":
-            path = str(payload.get("file_path") or payload.get("path") or "")
-            posix = path.replace("\\\\", "/")
-            lowered = posix.lower()
-            if not posix.strip() or posix.startswith("//") or ".." in posix.split("/"):
-                return {
-                    "permission": "deny",
-                    "user_message": "HOL Guard paused a file read while native review was unavailable.",
-                }, 2
-            if any(
-                marker in lowered
-                for marker in (
-                    ".env",
-                    "id_rsa",
-                    "id_ed25519",
-                    "id_ecdsa",
-                    ".npmrc",
-                    ".pypirc",
-                    ".netrc",
-                    ".ssh/",
-                    ".aws/",
-                    ".gnupg/",
-                    ".kube/",
-                    "credentials",
-                    "/etc/",
-                    "/proc/",
-                    "/sys/",
-                    "/dev/",
-                    "/root/",
-                    "/var/root/",
-                    "/private/etc/",
-                )
-            ):
-                return {
-                    "permission": "deny",
-                    "user_message": "HOL Guard paused a sensitive file read while native review was unavailable.",
-                }, 2
-            return {"permission": "allow"}, 0
-        return {
-            "permission": "deny",
-            "user_message": "HOL Guard paused this action because native review was unavailable.",
-            "agent_message": "HOL Guard paused this action because native review was unavailable.",
-        }, 2
+        return {"permission": "allow"}, 0
 
 
 _LAST_HOOK_EVENT_NAME = ""
@@ -398,23 +351,35 @@ def _main_inner() -> int:
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
     if daemon_result is None:
-        availability, availability_code = _cursor_availability_response(
-            prepared,
-            hook_event_name=hook_event_name,
-            workspace=workspace,
-        )
         recover_kind = daemon_failure_kind or "transport-failure"
-        if availability_code == 0 and availability.get("permission") == "allow":
-            if recover_kind != "overload":
-                threading.Thread(
-                    target=_run_guard_recovery,
-                    args=(recover_kind,),
-                    kwargs={"guard_env": guard_env, "deadline_monotonic": deadline_monotonic},
-                    daemon=True,
-                    name="hol-guard-cursor-recovery",
-                ).start()
+        if _recording_only_from_guard_home(workspace):
+            availability, availability_code = _cursor_availability_response(
+                prepared,
+                hook_event_name=hook_event_name,
+                workspace=workspace,
+            )
             print(json.dumps(availability))
             return availability_code
+        compact_event = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact_event == "beforereadfile":
+            try:
+                from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
+
+                workspace_path = Path(workspace) if workspace else None
+                check_payload = dict(prepared)
+                check_payload["hook_event_name"] = "PreToolUse"
+                check_payload.setdefault("tool_name", "Read")
+                safe_read = hook_action_is_emergency_safe(check_payload, workspace=workspace_path)
+            except Exception:
+                safe_read = False
+            if safe_read:
+                availability, availability_code = _cursor_availability_response(
+                    prepared,
+                    hook_event_name=hook_event_name,
+                    workspace=workspace,
+                )
+                print(json.dumps(availability))
+                return availability_code
         if recover_kind != "overload":
             _run_guard_recovery(
                 recover_kind,

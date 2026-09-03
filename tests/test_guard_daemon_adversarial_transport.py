@@ -308,17 +308,17 @@ def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
         (
             "/v1/hooks/pi",
             {"hook_event_name": "PreToolUse", "tool_name": "read", "tool_input": {}},
-            ("decision", "deny"),
+            ("decision", "allow"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}},
-            ("permissionDecision", "deny"),
+            ("permissionDecision", "allow"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PermissionRequest", "tool_name": "Read", "tool_input": {}},
-            ("behavior", "deny"),
+            ("continue", True),
         ),
     ],
 )
@@ -327,7 +327,7 @@ def test_hook_overload_returns_native_fail_safe_response(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
     payload: dict[str, object],
-    assertion: tuple[str, str],
+    assertion: tuple[str, object],
 ) -> None:
     with _running_daemon(tmp_path, monkeypatch) as daemon:
         monkeypatch.setattr(
@@ -359,7 +359,7 @@ def test_hook_overload_returns_native_fail_safe_response(
     elif assertion[0] == "permissionDecision":
         assert result["hookSpecificOutput"]["permissionDecision"] == assertion[1]
     else:
-        assert result["hookSpecificOutput"]["decision"]["behavior"] == assertion[1]
+        assert result[assertion[0]] == assertion[1]
 
 
 def test_unknown_harnesses_share_one_bounded_capacity_bucket(tmp_path: Path) -> None:
