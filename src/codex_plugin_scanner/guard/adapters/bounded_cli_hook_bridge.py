@@ -110,7 +110,7 @@ def bounded_cli_hook_command(
 
 
 _EVENT_ALIASES = {
-    "permissionrequest": "PermissionRequest",
+    "permissionrequest": "PermissionRequest", "permissionrequestv2": "PermissionRequest",
     "pretooluse": "PreToolUse",
     "pretoolcall": "PreToolUse",
     "userpromptsubmit": "UserPromptSubmit",

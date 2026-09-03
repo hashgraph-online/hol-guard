@@ -84,6 +84,16 @@ def test_native_off_pretool_continues_without_watch(tmp_path: Path) -> None:
 def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert _is_copilot_permission_request({"hook_name": "permissionRequestV2"}) is True
     assert _is_copilot_permission_request({"hookEventName": "PermissionRequestV2"}) is True
+    camel, camel_code = failure_payload(
+        harness="copilot",
+        event_name="permissionRequestV2",
+        reason="native unavailable",
+        payload={"hook_name": "permissionRequestV2"},
+        recording_only=False,
+    )
+    assert camel_code == 0
+    assert camel["behavior"] == "deny"
+    assert camel["interrupt"] is True
     payload, code = failure_payload(
         harness="copilot",
         event_name="PermissionRequestV2",

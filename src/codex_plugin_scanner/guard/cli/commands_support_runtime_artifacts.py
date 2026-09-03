@@ -82,7 +82,7 @@ _HOOK_EVENT_NAME_MAP = {
     "userpromptsubmitted": "UserPromptSubmit",
     "pretooluse": "PreToolUse",
     "posttooluse": "PostToolUse",
-    "permissionrequest": "PermissionRequest",
+    "permissionrequest": "PermissionRequest", "permissionrequestv2": "PermissionRequest",
 }
 
 

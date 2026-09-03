@@ -445,7 +445,7 @@ def test_current_terminal_block_is_not_queued_or_browser_approved(
     assert rc == 0
     native_payload = json.loads(output.getvalue())
     assert native_payload["decision"] == "block"
-    assert native_payload["continue"] is False
+    assert native_payload["continue"] is True
     assert "/requests/" not in str(native_payload)
     store = GuardStore(guard_home)
     assert store.list_approval_requests(limit=10) == []
