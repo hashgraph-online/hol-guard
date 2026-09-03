@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     ExtensionControlMutation,
     ExtensionControlProofError,
     _require_local_terminal_confirmation,
+    _terminal_descriptors_share_session,
     _terminal_session_is_local,
     consume_extension_control_enrollment_proof,
     consume_extension_control_proof,
@@ -164,6 +165,30 @@ def test_enrollment_proof_rejects_remote_terminal(tmp_path: Path, monkeypatch: p
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
         _require_local_terminal_confirmation(_enrollment())
+
+
+def test_terminal_descriptors_accept_linux_tty_alias_and_stdin_pty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process_groups = {10: 4200, 11: 4200}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        process_groups.__getitem__,
+    )
+
+    assert _terminal_descriptors_share_session(10, 11) is True
+
+
+def test_terminal_descriptors_reject_different_terminal_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process_groups = {10: 4200, 11: 4300}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        process_groups.__getitem__,
+    )
+
+    assert _terminal_descriptors_share_session(10, 11) is False
 
 
 @pytest.mark.parametrize(
