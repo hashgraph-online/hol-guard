@@ -429,7 +429,7 @@
     "src/codex_plugin_scanner/verification.py::_check_marketplace": 115
   },
   "oversized_files": {
-    ".github/workflows/ci.yml": 633,
+    ".github/workflows/ci.yml": 671,
     ".github/workflows/desktop-core-alpha-feed.yml": 539,
     ".github/workflows/publish.yml": 1718,
     "dashboard/src/app.tsx": 1051,

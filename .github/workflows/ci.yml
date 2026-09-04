@@ -357,6 +357,42 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+  scheduling-sensitive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run scheduling-sensitive tests untraced
+        run: >-
+          uv run --no-sync pytest
+          tests/test_guard_extension_control_recovery.py
+          tests/test_guard_sandbox.py
+          tests/test_guard_js_lockfile_resolution_phase11.py
+          --tb=short
+
   compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -471,7 +507,7 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, test-plan, tests, compatibility]
+    needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -481,11 +517,13 @@ jobs:
           TEST_PLAN_RESULT: ${{ needs.test-plan.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+          SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$TEST_PLAN_RESULT" = "success"
           test "$TESTS_RESULT" = "success"
           test "$COMPATIBILITY_RESULT" = "success"
+          test "$SCHEDULING_SENSITIVE_RESULT" = "success"
 
   dashboard:
     runs-on: ubuntu-latest
