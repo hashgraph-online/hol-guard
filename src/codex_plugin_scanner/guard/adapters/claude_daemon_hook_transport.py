@@ -12,7 +12,6 @@ from pathlib import Path
 from .codex_daemon_hook_auth import (
     _assert_loopback_http_url,
     _authenticated_state,
-    _daemon_auth_token,
     _DaemonResponseError,
     _http_json_response,
     _verify_challenge_response,
@@ -75,10 +74,6 @@ def authenticated_claude_hook_response(
             state
         ) or not secrets.compare_digest(current_key, discovery_key):
             raise DaemonIdentityError("daemon state changed during identity verification")
-        try:
-            auth_token = _daemon_auth_token(state_path, state)
-        except ValueError as error:
-            raise DaemonIdentityError(str(error)) from error
         remaining = max(0.0, deadline - time.monotonic())
         if remaining < _MINIMUM_OPERATION_SECONDS:
             raise TimeoutError("daemon identity challenge exhausted the hook deadline")
@@ -92,7 +87,6 @@ def authenticated_claude_hook_response(
             headers={
                 "Content-Type": "application/json",
                 "Connection": "close",
-                "X-Guard-Token": auth_token,
                 "X-Guard-Daemon-Nonce": nonce,
                 "X-Guard-Daemon-Proof": proof,
             },

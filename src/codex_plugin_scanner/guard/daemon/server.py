@@ -256,6 +256,7 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
+from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker_responses import prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
@@ -311,7 +312,17 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
-_DAEMON_CHALLENGE_HOOK_PATHS = frozenset({"/v1/hooks/codex", "/v1/hooks/claude-code"})
+_EXTENSION_CONTROL_PATHS = frozenset(
+    {
+        "/v1/extension-controls/preview",
+        "/v1/extension-controls/test",
+        "/v1/extension-controls/apply",
+        "/v1/extension-controls/refresh",
+        "/v1/extension-controls/recover-authority",
+        "/v1/extension-controls/acknowledge-degraded",
+    }
+)
+_LOCAL_CLI_PATHS = frozenset({"/v1/local-clis/preview", "/v1/local-clis/apply", "/v1/local-clis/recognize"})
 
 
 class _HookPathValidationError(ValueError):
@@ -2598,23 +2609,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        extension_control_paths = {
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/test",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
-            "/v1/extension-controls/recover-authority",
-            "/v1/extension-controls/acknowledge-degraded",
-        }
-        local_cli_paths = {
-            "/v1/local-clis/preview",
-            "/v1/local-clis/apply",
-            "/v1/local-clis/recognize",
-        }
-        if parsed.path in extension_control_paths | local_cli_paths and not self._header_token_is_valid():
+        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path in extension_control_paths | local_cli_paths:
+        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -2658,7 +2656,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/update/reconnect/verify":
             self._handle_dashboard_reconnect_verify(payload)
             return
-        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
+        proof_authorized = challenge_auth(parsed.path, payload, self._consume_codex_daemon_challenge)
+        requires_token = self._requires_header_token(parsed.path, path_parts)
+        if not request_auth(requires_token, proof_authorized, payload, self._header_token_is_valid):
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -2683,13 +2683,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             else:
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path in _DAEMON_CHALLENGE_HOOK_PATHS and not self._consume_codex_daemon_challenge(payload):
+        if parsed.path in CHALLENGE_HOOK_PATHS and not proof_authorized:
             self._write_json(
                 {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
                 status=401,
             )
             return
-        if parsed.path in extension_control_paths:
+        if parsed.path in _EXTENSION_CONTROL_PATHS:
             try:
                 if parsed.path.endswith("/test"):
                     response = self._daemon_server().extension_control_api.test_command(payload)
@@ -2708,7 +2708,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
-        if parsed.path in local_cli_paths:
+        if parsed.path in _LOCAL_CLI_PATHS:
             try:
                 if parsed.path.endswith("/preview"):
                     response = self._daemon_server().local_cli_api.preview(payload)

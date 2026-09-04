@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...safe_output import write_text_atomic_no_follow
+from .adapter_safe_output import write_text_at_authorized_path
 from .adapter_state_integrity import (
     adapter_state_is_authenticated,
     authenticate_adapter_state,
@@ -37,6 +38,35 @@ def write_copilot_state(
         },
     )
     write_text_atomic_no_follow(state_path, json.dumps(payload, indent=2) + "\n")
+
+
+def commit_copilot_target_and_state(
+    context: HarnessContext,
+    *,
+    target_path: Path,
+    target_payload: str,
+    original_text: str | None,
+    backup_path: Path,
+    state_path: Path,
+    scope: str,
+) -> None:
+    """Write a target before its lifecycle state, restoring it if state persistence fails."""
+
+    write_text_at_authorized_path(target_path, target_payload)
+    try:
+        write_copilot_state(
+            context,
+            target_path=target_path,
+            backup_path=backup_path,
+            state_path=state_path,
+            scope=scope,
+        )
+    except BaseException:
+        if original_text is None:
+            target_path.unlink(missing_ok=True)
+        else:
+            write_text_at_authorized_path(target_path, original_text)
+        raise
 
 
 def validated_copilot_state_entries(

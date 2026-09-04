@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
+from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessContext, _ensure_path_within_root
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
@@ -107,10 +108,10 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
         guard_cli=list(guard_cli.command),
         recovery_command=_cursor_recovery_command(context, guard_cli.python),
     )
-    managed_script_path.write_text(script_source, encoding="utf-8")
+    write_text_at_authorized_path(managed_script_path, script_source)
     _make_executable(managed_script_path)
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_path.write_text(script_source, encoding="utf-8")
+    write_text_at_authorized_path(script_path, script_source)
     _make_executable(script_path)
     ensure_cursor_hook_attestation_secret(context.guard_home)
 
@@ -119,15 +120,16 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     _ensure_path_within_root(context.guard_home, backup_path, label="Cursor hook backup")
     if not backup_path.exists():
         backup_path.parent.mkdir(parents=True, exist_ok=True)
-        backup_path.write_text(
+        write_text_at_authorized_path(
+            backup_path,
             json.dumps({"existed": original_text is not None, "content": original_text}, indent=2) + "\n",
-            encoding="utf-8",
         )
     state_path = _hooks_state_path(hooks_path, context)
     _ensure_path_within_root(context.guard_home, state_path, label="Cursor hook state")
     state_path.parent.mkdir(parents=True, exist_ok=True)
     workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
-    state_path.write_text(
+    write_text_at_authorized_path(
+        state_path,
         json.dumps(
             {
                 "managed_hooks_path": str(hooks_path),
@@ -140,7 +142,6 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
             indent=2,
         )
         + "\n",
-        encoding="utf-8",
     )
 
     payload = _managed_hooks_payload(_json_object(hooks_path, recover_missing=True))
@@ -163,7 +164,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
             hooks.pop("preToolUse", None)
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text_at_authorized_path(hooks_path, json.dumps(payload, indent=2) + "\n")
     _cleanup_legacy_project_cursor_hooks(context)
     hook_state = cursor_native_hook_state(context)
     if hook_state["protection_active"] is not True:
@@ -215,7 +216,7 @@ def _uninstall_cursor_hooks_at_paths(
     if backup_payload["readable"] is True:
         if backup_payload["existed"] and isinstance(backup_payload["content"], str):
             hooks_path.parent.mkdir(parents=True, exist_ok=True)
-            hooks_path.write_text(str(backup_payload["content"]), encoding="utf-8")
+            write_text_at_authorized_path(hooks_path, str(backup_payload["content"]))
             restored = True
         elif backup_payload["existed"] is not True and hooks_path.is_file():
             hooks_path.unlink()
@@ -329,7 +330,7 @@ def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool
         return False
     if has_other_hooks:
         payload["hooks"] = cleaned_hooks
-        hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        write_text_at_authorized_path(hooks_path, json.dumps(payload, indent=2) + "\n")
     else:
         hooks_path.unlink()
     return True

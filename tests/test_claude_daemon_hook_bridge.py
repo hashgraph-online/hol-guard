@@ -129,7 +129,7 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     assert payload["marker"] == "from-real-daemon"
     assert _CapturingProxyHandler.captured_paths == []
     assert _AuthenticatedDaemonHandler.captured_challenge_guard_token is None
-    assert _AuthenticatedDaemonHandler.captured_guard_token == _AuthenticatedDaemonHandler.auth_token
+    assert _AuthenticatedDaemonHandler.captured_guard_token is None
 
 
 def test_post_to_loopback_daemon_does_not_send_token_before_identity_proof(tmp_path: Path) -> None:

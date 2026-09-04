@@ -19,7 +19,7 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .copilot_state_paths import validated_copilot_state_entries, write_copilot_state
+from .copilot_state_paths import commit_copilot_target_and_state, validated_copilot_state_entries
 from .hook_payloads import inline_hooks_payload
 from .mcp_servers import (
     ManagedMcpServer,
@@ -477,13 +477,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
             state_path = self._state_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, state_path, label="Copilot state")
             state_paths.append(str(state_path))
-            write_copilot_state(
-                context,
-                target_path=target_mcp_path,
-                backup_path=backup_path,
-                state_path=state_path,
-                scope=self._scope_for(context, target_mcp_path),
-            )
             mcp_payload = _copilot_json_payload(target_mcp_path)
             existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
             normalized_servers = dict(existing_servers) if isinstance(existing_servers, dict) else {}
@@ -518,7 +511,15 @@ class CopilotHarnessAdapter(HarnessAdapter):
             alternate_key = "servers" if payload_key == "mcpServers" else "mcpServers"
             mcp_payload.pop(alternate_key, None)
             target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
-            write_text_at_authorized_path(target_mcp_path, json.dumps(mcp_payload, indent=2) + "\n")
+            commit_copilot_target_and_state(
+                context,
+                target_path=target_mcp_path,
+                target_payload=json.dumps(mcp_payload, indent=2) + "\n",
+                original_text=original_text,
+                backup_path=backup_path,
+                state_path=state_path,
+                scope=self._scope_for(context, target_mcp_path),
+            )
         shim_manifest = install_guard_shim(self.harness, context)
         primary_target_mcp_path = target_mcp_paths[0]
         primary_backup_path = backup_paths[0]

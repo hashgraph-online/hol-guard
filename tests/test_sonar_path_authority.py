@@ -10,9 +10,16 @@ import pytest
 import yaml
 
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters import copilot_state_paths
+from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_hooks import managed_hook_script_path, uninstall_cursor_hooks
+from codex_plugin_scanner.guard.adapters.cursor_hooks import (
+    cursor_hooks_path,
+    install_cursor_hooks,
+    managed_hook_script_path,
+    uninstall_cursor_hooks,
+)
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state, ensure_daemon_discovery_key
@@ -159,6 +166,27 @@ def test_copilot_unsigned_legacy_state_cannot_authorize_other_workspace(tmp_path
     assert state_path.exists() is True
 
 
+def test_copilot_install_restores_target_when_state_commit_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    target = context.home_dir / ".copilot" / "mcp-config.json"
+    original = {"mcpServers": {"user": {"command": "user-command"}}}
+    _write_json(target, original)
+
+    def fail_state_commit(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated state persistence failure")
+
+    monkeypatch.setattr(copilot_state_paths, "write_copilot_state", fail_state_commit)
+
+    with pytest.raises(OSError, match="state persistence"):
+        CopilotHarnessAdapter().install(context)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == original
+    assert list((context.guard_home / "managed" / "copilot").glob("*.state.json")) == []
+
+
 def test_hermes_uninstall_authenticates_external_recorded_config_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -282,6 +310,35 @@ def test_cursor_uninstall_does_not_unlink_managed_copy_symlink(tmp_path: Path) -
 
     assert outside_script.read_text(encoding="utf-8") == "# user-owned\n"
     assert managed_script.is_symlink()
+
+
+def test_cursor_install_replaces_final_symlink_without_modifying_external_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=tmp_path / "guard-home")
+    outside_hooks = tmp_path / "outside-hooks.json"
+    outside_hooks.write_text('{"version":1,"hooks":{"user":[]}}\n', encoding="utf-8")
+    hooks_path = cursor_hooks_path(context)
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text('{"version":1,"hooks":{}}\n', encoding="utf-8")
+    safe_write = cursor_hooks_module.write_text_at_authorized_path
+
+    def swap_after_validation(path: Path, payload: str) -> None:
+        if path == hooks_path:
+            path.unlink()
+            path.symlink_to(outside_hooks)
+        safe_write(path, payload)
+
+    monkeypatch.setattr(cursor_hooks_module, "write_text_at_authorized_path", swap_after_validation)
+
+    install_cursor_hooks(context)
+
+    assert outside_hooks.read_text(encoding="utf-8") == '{"version":1,"hooks":{"user":[]}}\n'
+    assert hooks_path.is_symlink() is False
+    assert "beforeShellExecution" in json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
 
 
 def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -> None:
