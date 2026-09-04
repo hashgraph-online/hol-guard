@@ -21,6 +21,7 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
     "beforeReadFile",
+    "beforeWriteFile",
 )
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
@@ -271,7 +272,7 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
 
     Exact attested CLI/script identity stays repair work. Extra third-party
     hook entries must not fail machine-wide protection health while Guard still
-    intercepts shell, MCP, and file-read events.
+    intercepts shell, MCP, file-read, and file-write events.
     """
 
     if not isinstance(hooks, dict):

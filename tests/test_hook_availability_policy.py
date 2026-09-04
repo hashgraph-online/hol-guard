@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
-    EMERGENCY_SAFE_REASON_CODE,
     availability_harness_response,
     cursor_fallback_permission,
     cursor_unparseable_input_permission,

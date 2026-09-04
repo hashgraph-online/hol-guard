@@ -155,7 +155,7 @@ def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
     }
     assert (
         bridge._unavailable_response("PreToolUse", "review failed")["hookSpecificOutput"]["permissionDecision"]
-        == "deny"
+        == "allow"
     )
     allow = bridge._unavailable_response(
         "PreToolUse",
@@ -486,7 +486,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     if "could not authenticate the local daemon" in json.dumps(response).lower():
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert response["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(

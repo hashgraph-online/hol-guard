@@ -23,6 +23,7 @@ def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
         "beforeShellExecution": entry,
         "beforeMCPExecution": entry,
         "beforeReadFile": entry,
+        "beforeWriteFile": entry,
     }
 
 

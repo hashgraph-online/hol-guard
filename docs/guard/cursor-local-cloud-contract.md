@@ -6,7 +6,7 @@ Cursor support is split by surface so the dashboard does not imply protection th
 
 | Surface | What Guard installs | What is intercepted |
 | ------- | ------------------- | ----------------- |
-| **Editor (IDE)** | MCP proxies in `.cursor/mcp.json` and native hooks in `.cursor/hooks.json` | Agent `beforeShellExecution`, `beforeMCPExecution`, `preToolUse` (Shell/MCP/Read), and `beforeReadFile` |
+| **Editor (IDE)** | MCP proxies in `.cursor/mcp.json` and native hooks in `.cursor/hooks.json` | Agent `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, and `beforeWriteFile` |
 | **CLI** | `guard-cursor-agent` and `guard-cursor` shims on `PATH` | Launches routed through `hol-guard run cursor` before the real Cursor CLI agent starts |
 
 Run `hol-guard apps connect cursor --surface all` (or `hol-guard install cursor` for both surfaces) to enable editor hooks and CLI shims.
@@ -27,12 +27,12 @@ CLI install prepends `$HOL_GUARD_HOME/bin` to your shell profile when needed. Re
 Guard installs command hooks documented by Cursor:
 
 - `beforeShellExecution` and `beforeMCPExecution` with `failClosed: true` so hook failures block risky actions
-- `preToolUse` with matchers for Shell, MCP, Bash, and Read tools
 - `beforeReadFile` for sensitive file reads before they reach the model
+- `beforeWriteFile` for file writes before they reach disk
 
 Hooks call a managed bridge script (`.cursor/hooks/hol-guard-cursor-hook.py`) through the attested Guard Python interpreter, so a missing execute bit cannot freeze the IDE. The script forwards stdin JSON to the local daemon first, then `hol-guard hook --harness cursor --json`, and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`).
 
-When native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. Local inspection (workspace source reads, grep/glob/`rg`/`cat`, `git status`/`diff`/`log`, `hol-guard status`/`doctor`) continues under the emergency-safe action-class floor without waiting for daemon recovery. Mutating, network, secret, destructive, MCP, and uncertain actions still pause. Empty or malformed Cursor input remains deny.
+When native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. PreToolUse continues so the session stays moving. Forged launchers, oversized input, unauthenticated hook payloads, and retained-byte limit failures still deny. Empty Cursor stdin with no baked event allows. A known shell event with unparseable input still denies unless Watch/observe is on.
 
 Restart Cursor after install so hook config reloads.
 

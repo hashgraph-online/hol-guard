@@ -117,11 +117,8 @@ def _trusted_cursor_after_shell_env(
 def test_managed_hook_events_exclude_pretooluse() -> None:
     assert "preToolUse" not in _MANAGED_HOOK_EVENTS
     assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-        "afterShellExecution",
-        "afterMCPExecution",
+        "beforeShellExecution", "beforeMCPExecution", "beforeReadFile",
+        "beforeWriteFile", "afterShellExecution", "afterMCPExecution",
     )
 
 
