@@ -43,6 +43,7 @@ from .extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     current_extension_control_snapshot,
 )
+from .extension_trust import filter_inert_external_observations
 from .github_capability_contract import github_capability_contract
 from .github_command_capabilities import classify_github_cli
 from .github_workflow_authorization import (
@@ -140,7 +141,7 @@ def evaluate_command(
     control_layers = runtime_snapshot.layers if runtime_snapshot is not None else (extension_control_layers or ())
 
     command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    observations = registry.observations(command)
+    observations = filter_inert_external_observations(registry.observations(command), control_layers)
     structured = tuple(
         (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
     )

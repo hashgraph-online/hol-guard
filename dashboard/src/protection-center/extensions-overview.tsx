@@ -37,6 +37,7 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
  */
 function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
   if (state === "Blocked" || state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
+  if (extension.trust_class === "external" && !extension.enabled) return "Off until you turn it on";
   const executables = extension.executables.join(" · ").trim();
   return executables || extension.description;
 }
@@ -58,6 +59,7 @@ function CatalogExtensionRow(props: {
       description={props.extension.description}
       behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
       required={props.extension.required}
+      external={props.extension.trust_class === "external"}
       managed={cloudSource || sourceIsManaged(props.effective, props.extension.extension_id)}
       managedLabel={cloudSource ? source : undefined}
       executables={props.extension.executables}

@@ -133,6 +133,8 @@ packages = ["src/codex_plugin_scanner"]
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
+"contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
+"contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 
 [tool.hatch.build]
 artifacts = [

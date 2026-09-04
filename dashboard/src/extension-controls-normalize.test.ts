@@ -69,6 +69,10 @@ function catalog() {
       description: "Protects Git command workflows.",
       enabled: true,
       required: false,
+      trust_class: "first-party",
+      activation: "default-on",
+      publisher: { id: "hol", displayName: "Hashgraph Online" },
+      icon: { kind: "none" },
       source: "built-in",
       aliases: ["command.scm"],
       dependencies: [],
@@ -121,6 +125,8 @@ function effective() {
 }
 
 const normalizedCatalog = normalizeExtensionCatalog(catalog());
+assert.equal(normalizedCatalog.extensions[0]?.trust_class, "first-party");
+assert.equal(normalizedCatalog.extensions[0]?.activation, "default-on");
 assert.equal(normalizedCatalog.extensions[0]?.rules[0]?.rule_id, "command.git.reset-hard");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.safer_guidance[0], "Create a checkpoint first.");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.example_command, "git reset --hard");
@@ -172,6 +178,7 @@ function rejects(mutator: (payload: ReturnType<typeof catalog>) => void, pattern
 }
 
 rejects((payload) => { payload.extensions[0]!.extension_id = "../../secret"; }, /not canonical/);
+rejects((payload) => { delete (payload.extensions[0] as { trust_class?: string }).trust_class; }, /trust_class must be a string/);
 rejects((payload) => { payload.extensions[0]!.rules[0]!.severity = "super-critical"; }, /unsupported value/);
 rejects((payload) => { payload.extensions[0]!.rules.push(rule()); payload.extensions[0]!.rule_count = 2; }, /duplicate rule IDs/);
 rejects((payload) => { payload.extensions[0]!.permissions.push(permission()); payload.extensions[0]!.permission_count = 2; }, /duplicate permission IDs/);

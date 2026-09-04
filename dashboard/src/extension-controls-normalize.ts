@@ -63,6 +63,25 @@ function catalogText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function publisher(value: unknown, label: string): { id: string; displayName: string; url?: string } {
+  const item = record(value, label);
+  const url = item.url;
+  return {
+    id: string(item.id, `${label}.id`),
+    displayName: string(item.displayName, `${label}.displayName`),
+    ...(url === undefined ? {} : { url: string(url, `${label}.url`) }),
+  };
+}
+
+function icon(value: unknown, label: string): { kind: "react-icon" | "svg-ref" | "none"; name?: string; background?: string } {
+  if (value === undefined || value === null) return { kind: "none" };
+  const item = record(value, label);
+  const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"] as const);
+  const name = item.name === undefined ? undefined : string(item.name, `${label}.name`);
+  const background = item.background === undefined ? undefined : string(item.background, `${label}.background`);
+  return { kind, ...(name ? { name } : {}), ...(background ? { background } : {}) };
+}
+
 function bool(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
@@ -204,6 +223,10 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     description: string(item.description, `${label}.description`),
     enabled: bool(item.enabled, `${label}.enabled`),
     required: bool(item.required, `${label}.required`),
+    trust_class: enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"] as const),
+    activation: enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"] as const),
+    publisher: publisher(item.publisher, `${label}.publisher`),
+    icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"] as const),
     version: version(item.version, `${label}.version`),
     aliases: idList(item.aliases, `${label}.aliases`, EXTENSION_ID),
