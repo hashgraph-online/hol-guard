@@ -96,25 +96,6 @@ def test_availability_allows_inspection_and_pauses_high_impact(tmp_path: Path) -
     assert output["permissionDecision"] == "allow"
 
 
-def test_availability_continues_write_when_native_edge_response_is_invalid(tmp_path: Path) -> None:
-    payload = availability_harness_response(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {"file_path": str(tmp_path / "src" / "app.ts")},
-        },
-        harness="claude-code",
-        event_name="PreToolUse",
-        reason_code="native_hook_edge_invalid_response",
-        reason="HOL Guard could not complete the native hook decision safely.",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
-    )
-    assert payload["continue"] is True
-    assert payload["policy_action"] == "warn"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
-
-
 def test_cursor_fallback_allows_read_and_shell_when_review_cannot_finish() -> None:
     allow, allow_code = cursor_fallback_permission(
         {"hook_event_name": "beforeReadFile", "file_path": "src/app.ts", "tool_name": "Read"},

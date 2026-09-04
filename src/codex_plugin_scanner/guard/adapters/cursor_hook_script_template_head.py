@@ -438,41 +438,22 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
         prepared["tool_input"] = tool_input
         prepared["cursor_source_hook_event"] = "beforeMCPExecution"
         return prepared
-    if raw_event == "beforereadfile":
+    if raw_event in {"beforereadfile", "beforewritefile"}:
+        write = raw_event == "beforewritefile"
         normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Read")
+        normalized.setdefault("tool_name", "Write" if write else "Read")
         tool_input = _tool_input_dict(normalized.get("tool_input"))
         file_path = normalized.get("file_path")
         if isinstance(file_path, str) and file_path.strip():
             tool_input.setdefault("file_path", file_path.strip())
             tool_input.setdefault("path", file_path.strip())
         normalized["tool_input"] = tool_input
-        return normalized
-    if raw_event == "beforewritefile":
-        normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Write")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
-        file_path = normalized.get("file_path")
-        if isinstance(file_path, str) and file_path.strip():
-            tool_input.setdefault("file_path", file_path.strip())
-            tool_input.setdefault("path", file_path.strip())
-        normalized["tool_input"] = tool_input
-        normalized["cursor_source_hook_event"] = "beforeWriteFile"
+        if write:
+            normalized["cursor_source_hook_event"] = "beforeWriteFile"
         return normalized
     if raw_event == "pretooluse":
         normalized["hook_event_name"] = "PreToolUse"
     return normalized
-
-
-def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
-    del guard_payload
-    if policy_action not in GUARD_ACTIONS:
-        return "deny"
-    if policy_action in {"block", "sandbox-required"}:
-        return "deny"
-    if policy_action in {"require-reapproval", "review"}:
-        return "ask"
-    return "allow"
 
 
 def _cursor_read_file_permission(permission: str) -> str:

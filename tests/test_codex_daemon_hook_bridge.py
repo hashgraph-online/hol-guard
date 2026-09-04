@@ -163,10 +163,6 @@ def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
         json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
     )
     assert allow["hookSpecificOutput"]["permissionDecision"] == "allow"
-    permission = bridge._unavailable_response("PermissionRequest", "review failed")
-    assert permission["continue"] is True
-    assert permission["hookSpecificOutput"] == {"hookEventName": "PermissionRequest"}
-    assert "behavior" not in permission["hookSpecificOutput"]
 
 
 def test_launcher_integrity_failure_does_not_stop_user_prompt(

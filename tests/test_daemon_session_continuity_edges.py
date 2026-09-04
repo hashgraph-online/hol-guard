@@ -302,3 +302,20 @@ def test_bounded_cli_cannot_finish_without_policy_action_allows_write() -> None:
     payload = json.loads(stdout)
     assert code == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    invalid_stdout, _invalid_stderr, invalid_code = _daemon_response_to_native(
+        {"policy_action": "invalid", "reason": "nope"},
+        harness="kimi",
+        event_name="PreToolUse",
+    )
+    assert invalid_code == 2
+    assert json.loads(invalid_stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_codex_unavailable_permission_request_continues_without_auto_allow() -> None:
+    from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+
+    permission = bridge._unavailable_response("PermissionRequest", "review failed")
+    assert permission["continue"] is True
+    assert permission["hookSpecificOutput"] == {"hookEventName": "PermissionRequest"}
+    assert "behavior" not in permission["hookSpecificOutput"]
+

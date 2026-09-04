@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
+from ..action_lattice import is_guard_action
 from ..codex_hook_launch_runtime import (
     isolated_guard_cli_command,
     isolated_hook_environment,
@@ -325,6 +326,16 @@ def _native_hook_permission_decision(policy_action: str) -> str | None:
     return None
 
 
+def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
+    reason_code = str(daemon_response.get("reason_code") or "")
+    if hook_reason_continues_session(reason_code):
+        return "warn"
+    raw_policy_action = daemon_response.get("policy_action")
+    if isinstance(raw_policy_action, str) and is_guard_action(raw_policy_action.strip()):
+        return raw_policy_action.strip()
+    return "block"
+
+
 def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
     """Mirror _should_emit_native_hook_exit_block."""
     canonical = harness.strip().lower().replace("_", "-")
@@ -386,14 +397,7 @@ def _daemon_response_to_native(
                 stderr = reason
         return stdout, stderr, exit_code
 
-    reason_code = str(daemon_response.get("reason_code") or "")
-    raw_policy_action = daemon_response.get("policy_action")
-    if isinstance(raw_policy_action, str) and raw_policy_action.strip():
-        policy_action = raw_policy_action.strip()
-    elif hook_reason_continues_session(reason_code):
-        policy_action = "warn"
-    else:
-        policy_action = "block"
+    policy_action = _policy_action_from_daemon(daemon_response)
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
 
     # Build harness-native response
