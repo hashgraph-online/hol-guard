@@ -56,14 +56,10 @@ def resolve_presentation_settings_update(
     if requested:
         expected_revision = payload.get("presentation_revision")
         if expected_revision is not None and expected_revision != current_revision:
-            raise ValueError(
-                "Presentation preference changed on another surface. Reload settings and try again."
-            )
+            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
         # Unsupported future-schema state is read-only instead of being silently downgraded.
         if changed and not current_writable:
-            raise ValueError(
-                "Presentation settings use a newer schema and cannot be changed by this Guard version."
-            )
+            raise ValueError("Presentation settings use a newer schema and cannot be changed by this Guard version.")
     return PresentationSettingsUpdate(
         requested=requested,
         changed=changed,
