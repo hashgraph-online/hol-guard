@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import { HiMiniArrowLeft, HiMiniArrowTopRightOnSquare, HiMiniLockClosed } from "react-icons/hi2";
 
-import { controlProvenance, permissionForRule, treatmentLabel, type ExtensionDetailUrlState } from "../extension-control-center-model";
+import {
+  controlProvenance,
+  extensionEffectiveState,
+  permissionForRule,
+  treatmentLabel,
+  type ExtensionDetailUrlState,
+} from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import { ExtensionPolicyPanel } from "../extension-policy-panel";
 import type { GuardRuntimeSnapshot } from "../guard-types";
@@ -35,6 +41,19 @@ export function canonicalProtectionDetailTab(tab: ExtensionDetailUrlState["tab"]
 function requiredLine(extension: ExtensionCatalogItem): string | null {
   if (!extension.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
+}
+
+function availabilityCopy(extension: ExtensionCatalogItem, enabled: boolean): string {
+  if (extension.trust_class === "external") {
+    if (enabled) {
+      return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
+    }
+    return "This community tool stays off until you turn it on.";
+  }
+  if (enabled) {
+    return "Matching commands follow the protection settings below. Turn off to block every command this tool owns on this device.";
+  }
+  return "Every command this tool owns is blocked on this device. Turn on to follow the protection settings below.";
 }
 
 function protectionStateLabel(state: "allowed" | "blocked" | "partial" | "required" | "lockdown"): string {
@@ -171,9 +190,7 @@ export function ProtectionModuleDetail(props: {
     };
   }, [props.extension.extension_id, props.extension.rules]);
   const requiredNote = requiredLine(props.extension);
-  const extensionEnabled = !props.effective.layers.some((layer) =>
-    layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled"),
-  );
+  const extensionEnabled = extensionEffectiveState(props.effective, props.extension) === "enabled";
   const requestExtensionChange = props.extension.required ? undefined : props.onRequestExtensionChange;
   const activeTab = canonicalProtectionDetailTab(props.urlState?.tab ?? "overview");
   const protectionView = buildLocalProtectionView(
@@ -271,9 +288,7 @@ export function ProtectionModuleDetail(props: {
             <div>
               <p className="text-sm font-semibold text-brand-dark">Commands available</p>
               <p className="text-xs leading-5 text-brand-dark/75">
-                {extensionEnabled
-                  ? "Matching commands follow the protection settings below. Turn off to block every command this tool owns on this device."
-                  : "Every command this tool owns is blocked on this device. Turn on to follow the protection settings below."}
+                {availabilityCopy(props.extension, extensionEnabled)}
               </p>
             </div>
           </div>

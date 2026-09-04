@@ -64,6 +64,19 @@ export type ExtensionPermission = {
   family: string | null;
 };
 
+export type ExtensionTrustClass = "first-party" | "trusted-library" | "external";
+export type ExtensionActivation = "default-on" | "opt-in";
+export type ExtensionPublisher = {
+  id: string;
+  displayName: string;
+  url?: string;
+};
+export type ExtensionIcon = {
+  kind: "react-icon" | "svg-ref" | "none";
+  name?: string;
+  background?: string;
+};
+
 export type ExtensionCatalogItem = {
   schema_version: number;
   extension_id: string;
@@ -71,6 +84,10 @@ export type ExtensionCatalogItem = {
   description: string;
   enabled: boolean;
   required: boolean;
+  trust_class: ExtensionTrustClass;
+  activation: ExtensionActivation;
+  publisher: ExtensionPublisher;
+  icon: ExtensionIcon;
   source: "built-in" | "local-admin" | "signed-cloud";
   version: string;
   aliases: string[];

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_operand_matchers import (
     OperandGatedFlagMatcher,
@@ -17,7 +17,6 @@ from codex_plugin_scanner.guard.runtime.command_operand_matchers import (
     TrailingOperandRemoteAliasMatcher,
 )
 from tests.command_extension_contracts import (
-    assert_reviewed_command_cases,
     assert_safe_command_cases,
 )
 
@@ -156,8 +155,11 @@ BLITCP_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def test_blitcp_rules_feed_runtime_hooks(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(BLITCP_REVIEW_CASES, tmp_path)
+def test_blitcp_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in BLITCP_REVIEW_CASES:
+        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        assert evaluation.controlling_rule_id != rule_id
+        assert all(item.extension.extension_id != "command.blitcp" for item in evaluation.extension_observations)
 
 
 BLITCP_SAFE_COMMANDS: tuple[str, ...] = (
@@ -263,10 +265,11 @@ def test_blitcp_option_values_cannot_forge_a_local_destination(tmp_path: Path) -
         "blitcp /data smb://fileserver/share --smb-user backup-svc",
         "blitcp /data az://container/nightly --az-account storageacct",
     ):
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-
-        assert payload["status"] == "review", command
-        assert payload["controlling_rule_id"] == "command.blitcp.remote-destination", command
+        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
+            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+        )
+        rule_ids = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.blitcp"}
+        assert "command.blitcp.remote-destination" in rule_ids, command
 
 
 def test_trailing_operand_matcher_ignores_prefixes_in_earlier_operands(tmp_path: Path) -> None:

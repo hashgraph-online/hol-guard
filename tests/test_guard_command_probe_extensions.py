@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 from codex_plugin_scanner.guard.redaction import redact_sensitive_text
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.command_extension_contracts import assert_safe_command_cases
 
 _RUN_ACTION = "Probe request execution command"
 _WRITE_ACTION = "Probe workspace mutation command"
@@ -85,8 +84,11 @@ PROBE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def test_probe_commands_feed_runtime_hooks(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(PROBE_REVIEW_CASES, tmp_path)
+def test_probe_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in PROBE_REVIEW_CASES:
+        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        assert evaluation.controlling_rule_id != rule_id
+        assert all(item.extension.extension_id != "command.probe" for item in evaluation.extension_observations)
 
 
 PROBE_SAFE_COMMANDS = (
@@ -141,29 +143,26 @@ PROBE_CHAINED_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def test_probe_help_segment_cannot_hide_chained_destructive_command(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(PROBE_CHAINED_REVIEW_CASES, tmp_path)
+def test_probe_chained_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in PROBE_CHAINED_REVIEW_CASES:
+        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        assert evaluation.controlling_rule_id != rule_id
+        assert all(item.extension.extension_id != "command.probe" for item in evaluation.extension_observations)
 
 
 def test_probe_output_adds_local_write_evidence_without_replacing_run_classification(tmp_path: Path) -> None:
-    payload = inspect_command(
+    from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+
+    command = parse_shell_command(
         "probe request run api.yml items/0 --output response.json",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
-
-    classification = payload["classification"]
-    rules = payload["rules"]
-    assert isinstance(classification, dict)
-    assert isinstance(rules, list)
-    assert classification["action_class"] == _RUN_ACTION
-    rule_ids: set[str] = set()
-    for rule in cast(list[object], rules):
-        if not isinstance(rule, dict):
-            continue
-        typed_rule = cast(dict[str, object], rule)
-        if isinstance(rule_id := typed_rule.get("rule_id"), str):
-            rule_ids.add(rule_id)
+    rule_ids = {
+        item.rule.rule_id
+        for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(command)
+        if item.extension.extension_id == "command.probe"
+    }
     assert rule_ids >= {
         "command.probe.request-run",
         "command.probe.request-output",
