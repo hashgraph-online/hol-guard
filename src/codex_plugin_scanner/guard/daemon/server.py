@@ -76,12 +76,12 @@ from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
     _persist_oauth_local_credentials,
-    apply_guard_connect_sync_result,
     exchange_guard_authorization_code,
     resolve_connect_url,
     resolve_guard_oauth_client_config,
     start_guard_browser_session,
 )
+from ..cli.connect_sync_result import apply_guard_connect_sync_result
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_setup_plan,

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
-from .connect_flow import apply_guard_connect_sync_result
+from .connect_sync_result import apply_guard_connect_sync_result
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
