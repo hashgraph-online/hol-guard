@@ -18,12 +18,8 @@ CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
 def desktop_core_shim_for_executable(executable: Path) -> Path | None:
     """Return the stable ``current-hol-guard`` launcher next to a versioned Core."""
 
-    versions_dir = executable.parent.parent
-    if versions_dir.name == "versions":
-        parent = versions_dir.parent
-    elif len(executable.parents) > 4 and executable.parents[3].name == "bundled":
-        parent = executable.parents[4]
-    else:
+    parent = _desktop_core_root(executable)
+    if parent is None:
         return None
     unix = parent / CURRENT_HOL_GUARD_SHIM
     windows = parent / f"{CURRENT_HOL_GUARD_SHIM}.cmd"
@@ -34,6 +30,26 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
             return unix
         return windows
     return unix
+
+
+def _desktop_core_root(executable: Path) -> Path | None:
+    executable_name = executable.name.lower()
+    if executable_name not in {"hol-guard", "hol-guard.exe"}:
+        return None
+    for ancestor in executable.parents:
+        try:
+            relative_parts = executable.relative_to(ancestor).parts
+        except ValueError:
+            continue
+        if ancestor.name == "versions" and len(relative_parts) == 2:
+            return ancestor.parent
+        if ancestor.name != "bundled":
+            continue
+        if len(relative_parts) == 3 and relative_parts[1] == "bin":
+            return ancestor.parent
+        if len(relative_parts) == 4 and relative_parts[1:3] == ("lib", "hol-guard-core"):
+            return ancestor.parent
+    return None
 
 
 def frozen_cli_path_is_runnable(path: Path) -> bool:
