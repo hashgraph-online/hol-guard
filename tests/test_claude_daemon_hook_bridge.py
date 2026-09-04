@@ -298,8 +298,8 @@ def test_oversized_permission_request_uses_nested_deny() -> None:
     prompt = json.loads(bridge._limit_denied("hook input", "UserPromptSubmit"))
     assert prompt["decision"] == "block"
     notice = json.loads(bridge._limit_denied("hook input", "Notification"))
-    assert notice["continue"] is True
-    assert "permissionDecision" not in notice.get("hookSpecificOutput", {})
+    assert notice["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert notice["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:

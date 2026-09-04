@@ -69,7 +69,10 @@ def main(
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
-        sys.stdout.write(_limit_denied("hook input", _event_name(body)))
+        event = _event_name(body)
+        if not event.startswith("Permission"):
+            event = "PreToolUse"
+        sys.stdout.write(_limit_denied("hook input", event))
         return 0
     data = body.strip() or "{}"
     recovery_command = _recovery_command(state_path, query)
@@ -301,11 +304,8 @@ def _deny_event(event: str, message: str) -> str:
     if event in {"UserPromptSubmit", "PostToolUse", "Stop"}:
         body = {"decision": "block", "reason": message, "hookSpecificOutput": {"hookEventName": event}}
         return json.dumps(body, separators=(",", ":"))
-    if event and event != "PreToolUse":
-        body = {"continue": True, "systemMessage": message, "hookSpecificOutput": {"hookEventName": event}}
-        return json.dumps(body, separators=(",", ":"))
     output = {
-        "hookEventName": event or "PreToolUse",
+        "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
         "permissionDecisionReason": message,
     }

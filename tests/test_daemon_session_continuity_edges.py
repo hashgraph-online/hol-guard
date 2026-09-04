@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import json
+import sys
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.adapters.cline_bridge import plugin_after_tool_replacement
@@ -319,4 +323,24 @@ def test_codex_unavailable_permission_request_continues_without_auto_allow() -> 
     assert permission["continue"] is True
     assert permission["hookSpecificOutput"] == {"hookEventName": "PermissionRequest"}
     assert "behavior" not in permission["hookSpecificOutput"]
+
+
+def test_claude_oversized_forged_notification_still_denies(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as claude
+
+    body = '{"hook_event_name":"Notification","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)
+    monkeypatch.setattr("sys.stdin", io.StringIO(body))
+    result = claude.main(
+        state_path="/missing/state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
+        query="",
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert result == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
