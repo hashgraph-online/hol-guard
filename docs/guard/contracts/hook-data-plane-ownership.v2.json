@@ -236,6 +236,7 @@
       "class": "python_transport",
       "paths": [
         "src/codex_plugin_scanner/guard/daemon/server.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_request_auth.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_capacity.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_protocol.py",
