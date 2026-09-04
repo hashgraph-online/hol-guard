@@ -230,7 +230,7 @@ jobs:
         run: |
           shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
-          PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
+          PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
             uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
