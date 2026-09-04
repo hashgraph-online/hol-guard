@@ -35,7 +35,7 @@ _ARTIFACT_LABELS = {
 }
 
 _DIRECT_INTERACTION_ARTIFACT_TYPES = frozenset(
-    {"tool_call", "tool_action_request", "file_read_request", "prompt_request"}
+    {"tool_call", "file_read_request", "prompt_request"}
 )
 
 
@@ -238,10 +238,14 @@ def _launch_summary(
             prompt_summary = artifact.metadata.get("prompt_summary")
             if isinstance(prompt_summary, str) and prompt_summary:
                 return prompt_summary
-        return "Guard reviewed this interaction directly. No shell launch command was recorded."
+        if artifact_type != "tool_call" or artifact is None or "mcp_tool_identity" in artifact.metadata:
+            return "Guard reviewed this interaction directly. No shell launch command was recorded."
     if launch_target:
         return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
+        if artifact_type == "tool_action_request" and artifact.command:
+            command_parts = [artifact.command, *artifact.args]
+            return f"Launches with `{_truncate(' '.join(command_parts))}`."
         request_summary = artifact.metadata.get("request_summary")
         if isinstance(request_summary, str) and request_summary:
             return request_summary

@@ -151,7 +151,7 @@ def test_populated_mcp_tool_call_does_not_turn_tool_name_into_shell_launch() -> 
     )
 
 
-def test_command_bearing_native_request_keeps_validated_request_summary() -> None:
+def test_command_bearing_native_request_keeps_command_over_generic_summary() -> None:
     artifact = GuardArtifact(
         artifact_id="copilot:project:tool-action:rm",
         name="bash destructive shell command",
@@ -160,7 +160,7 @@ def test_command_bearing_native_request_keeps_validated_request_summary() -> Non
         source_scope="project",
         config_path="/workspace/.github/hooks/guard.json",
         command="rm -f /workspace/project/output.txt",
-        metadata={"request_summary": "Requested `bash` action `rm -f /workspace/project/output.txt`."},
+        metadata={"request_summary": "Guard requires approval because no command rule matched this tool action."},
     )
 
     incident = build_incident_context(
@@ -177,7 +177,7 @@ def test_command_bearing_native_request_keeps_validated_request_summary() -> Non
         risk_summary=None,
     )
 
-    assert incident["launch_summary"] == artifact.metadata["request_summary"]
+    assert incident["launch_summary"] == "Launches with `rm -f /workspace/project/output.txt`."
 
 
 @pytest.mark.parametrize(
