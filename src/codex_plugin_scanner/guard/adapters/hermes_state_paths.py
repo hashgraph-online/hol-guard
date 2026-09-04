@@ -87,12 +87,13 @@ def _safe_legacy_cleanup_values(
     guard_home_values = {str(context.guard_home), str(context.guard_home.resolve())}
     for name, config in servers.items():
         args = config.get("args") if isinstance(config, dict) else None
+        guard_home_value = args[len(marker)] if isinstance(args, list) and len(args) > len(marker) else None
         if (
             isinstance(name, str)
             and isinstance(args, list)
             and args[: len(marker)] == marker
-            and len(args) > len(marker)
-            and args[len(marker)] in guard_home_values
+            and isinstance(guard_home_value, str)
+            and guard_home_value in guard_home_values
         ):
             managed.append(name)
     current_guard = inspection.payload.get("guard")

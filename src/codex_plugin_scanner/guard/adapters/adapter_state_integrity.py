@@ -99,7 +99,7 @@ def _load_or_create_key(guard_home: Path) -> tuple[str, bytes]:
     path = _key_path(guard_home)
     _ensure_path_within_root(guard_home, path, label="adapter state key")
     if os.name == "posix":
-        parent_descriptor = _private_key_directory_descriptor(path.parent)
+        parent_descriptor = _private_key_directory_descriptor(path.parent, create=True)
         try:
             payload: dict[str, object] = {
                 "key": base64.urlsafe_b64encode(secrets.token_bytes(_KEY_BYTES)).decode("ascii"),
@@ -156,7 +156,7 @@ def _load_key(guard_home: Path) -> tuple[str, bytes]:
     path = _key_path(guard_home)
     _ensure_path_within_root(guard_home, path, label="adapter state key")
     if os.name == "posix":
-        parent_descriptor = _private_key_directory_descriptor(path.parent)
+        parent_descriptor = _private_key_directory_descriptor(path.parent, create=False)
         try:
             return _load_key_from_descriptor(parent_descriptor)
         finally:
@@ -172,14 +172,21 @@ def _load_key(guard_home: Path) -> tuple[str, bytes]:
     return _parse_key(value)
 
 
-def _private_key_directory_descriptor(path: Path) -> int:
-    path.mkdir(parents=True, exist_ok=True)
+def _private_key_directory_descriptor(path: Path, *, create: bool) -> int:
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     descriptor = os.open(path, flags)
     try:
-        # Owner-only access is required because this directory contains HMAC key material.
-        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
-        os.fchmod(descriptor, 0o700)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("adapter state key parent is not a directory")
+        if create:
+            # Owner-only access is required because this directory contains HMAC key material.
+            # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+            os.fchmod(descriptor, 0o700)
+        elif stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise ValueError("adapter state key parent permissions are not private")
     except BaseException:
         os.close(descriptor)
         raise
