@@ -213,11 +213,6 @@ def _cursor_permission_for_policy(
     reason_code = str(payload.get("reason_code") or "")
     if hook_reason_continues_session(reason_code):
         return "allow"
-    hook_output = payload.get("hookSpecificOutput")
-    if isinstance(hook_output, Mapping) and hook_output.get("permissionDecision") == "allow":
-        return "allow"
-    if payload.get("decision") in {"allow", "warn"}:
-        return "allow"
     if not is_guard_action(policy_action):
         return "deny"
     if policy_action in {"block", "sandbox-required"}:

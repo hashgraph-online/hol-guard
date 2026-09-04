@@ -245,11 +245,18 @@ def _event_name(data: str) -> str:
     try:
         payload = json.loads(data or "{}")
     except json.JSONDecodeError:
-        return "PreToolUse"
-    if not isinstance(payload, dict):
-        return "PreToolUse"
-    event = payload.get("hook_event_name", payload.get("event", "PreToolUse"))
-    return str(event or "PreToolUse")
+        payload = None
+    if isinstance(payload, dict):
+        return str(payload.get("hook_event_name") or payload.get("event") or "PreToolUse")
+    prefix = data[:4096]
+    for key in ("hook_event_name", "event"):
+        start = prefix.find(f'"{key}"')
+        colon = prefix.find(":", start, start + 64) if start >= 0 else -1
+        quote = prefix.find('"', colon + 1, colon + 80) if colon >= 0 else -1
+        end = prefix.find('"', quote + 1, quote + 80) if quote >= 0 else -1
+        if quote >= 0 and end > quote:
+            return prefix[quote + 1 : end] or "PreToolUse"
+    return "PreToolUse"
 
 
 def _prompt_text(data: str) -> str:
@@ -281,18 +288,27 @@ def _degraded_prompt(data: str) -> str:
 
 
 def _limit_denied(kind: str, event: str = "PreToolUse") -> str:
-    message = f"HOL Guard blocked this action because {kind} exceeded the safe size limit."
+    return _deny_event(event, f"HOL Guard blocked this action because {kind} exceeded the safe size limit.")
+
+
+def _deny_event(event: str, message: str) -> str:
     if event.startswith("Permission"):
         output: dict[str, object] = {
             "hookEventName": event,
             "decision": {"behavior": "deny", "message": message},
         }
-    else:
-        output = {
-            "hookEventName": event or "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": message,
-        }
+        return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
+    if event in {"UserPromptSubmit", "PostToolUse", "Stop"}:
+        body = {"decision": "block", "reason": message, "hookSpecificOutput": {"hookEventName": event}}
+        return json.dumps(body, separators=(",", ":"))
+    if event and event != "PreToolUse":
+        body = {"continue": True, "systemMessage": message, "hookSpecificOutput": {"hookEventName": event}}
+        return json.dumps(body, separators=(",", ":"))
+    output = {
+        "hookEventName": event or "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": message,
+    }
     return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
 
 
@@ -319,13 +335,9 @@ def _degraded(reason: str, data: str) -> str:
 def _authenticated_control_plane_failure(reason: str, data: str) -> str:
     message = f"HOL Guard denied the action because daemon authentication failed: {reason}"
     event = _event_name(data)
-    if event.startswith("Permission"):
-        output: dict[str, object] = {"hookEventName": event, "decision": {"behavior": "deny", "message": message}}
-    elif event == "PreToolUse":
-        output = {"hookEventName": event, "permissionDecision": "deny", "permissionDecisionReason": message}
-    else:
-        return json.dumps({"continue": True, "stopReason": message}, separators=(",", ":"))
-    return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
+    if event.startswith("Permission") or event == "PreToolUse":
+        return _deny_event(event, message)
+    return json.dumps({"continue": True, "stopReason": message}, separators=(",", ":"))
 
 
 def _should_suppress_output(data: str, response_body: str) -> bool:

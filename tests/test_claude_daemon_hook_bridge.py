@@ -293,6 +293,13 @@ def test_oversized_permission_request_uses_nested_deny() -> None:
     assert payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
     assert decision["behavior"] == "deny"
     assert "exceeded the safe size limit" in decision["message"]
+    truncated = '{"hook_event_name":"PermissionRequest","tool_name":"Write","prompt":"' + "x" * 80
+    assert bridge._event_name(truncated) == "PermissionRequest"
+    prompt = json.loads(bridge._limit_denied("hook input", "UserPromptSubmit"))
+    assert prompt["decision"] == "block"
+    notice = json.loads(bridge._limit_denied("hook input", "Notification"))
+    assert notice["continue"] is True
+    assert "permissionDecision" not in notice.get("hookSpecificOutput", {})
 
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:

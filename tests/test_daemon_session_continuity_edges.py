@@ -239,18 +239,19 @@ def test_cursor_maps_cannot_finish_block_to_allow() -> None:
     assert response["permission"] == "allow"
 
 
-def test_cursor_honors_allow_permission_even_when_policy_action_is_block() -> None:
+def test_cursor_completed_block_ignores_stale_allow_permission() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
 
     response = cursor_hook_response_from_guard(
         policy_action="block",
         guard_payload={
-            "reason_code": "unlisted_native_miss",
+            "reason_code": "secret_pattern",
+            "decision": "allow",
             "hookSpecificOutput": {"permissionDecision": "allow"},
         },
         hook_event_name="beforeShellExecution",
     )
-    assert response["permission"] == "allow"
+    assert response["permission"] == "deny"
 
 
 def test_invalid_hook_payload_reference_stays_fail_closed(tmp_path: Path) -> None:

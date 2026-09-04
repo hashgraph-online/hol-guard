@@ -146,3 +146,31 @@ def test_empty_stdin_before_shell_pauses_when_event_is_baked(
     assert main() == 2
     payload = json.loads(capsys.readouterr().out)
     assert payload["permission"] == "deny"
+
+
+def test_generated_cursor_hook_ignores_stale_allow_on_completed_block(tmp_path: Path) -> None:
+    permission = _cursor_permission(
+        tmp_path,
+        'mode = "prompt"\nprotection_posture = "protected"\n',
+    )
+    assert (
+        permission(
+            "block",
+            {
+                "reason_code": "secret_pattern",
+                "decision": "allow",
+                "hookSpecificOutput": {"permissionDecision": "allow"},
+            },
+        )
+        == "deny"
+    )
+    assert (
+        permission(
+            "block",
+            {
+                "reason_code": "native_hook_edge_invalid_response",
+                "hookSpecificOutput": {"permissionDecision": "deny"},
+            },
+        )
+        == "allow"
+    )

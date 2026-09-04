@@ -25,11 +25,6 @@ def _cursor_permission(policy_action: str, guard_payload: dict[str, object], wor
             return "allow"
     except Exception:
         pass
-    hook_output = guard_payload.get("hookSpecificOutput")
-    if isinstance(hook_output, dict) and hook_output.get("permissionDecision") == "allow":
-        return "allow"
-    if guard_payload.get("decision") in {"allow", "warn"}:
-        return "allow"
     if policy_action not in GUARD_ACTIONS:
         return "deny"
     if policy_action in {"block", "sandbox-required"}:
