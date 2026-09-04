@@ -33,11 +33,11 @@ def test_guard_daemon_hook_path_denial_survives_audit_timeout(tmp_path, monkeypa
         )
         with pytest.raises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(request, timeout=2)
+        assert error.value.code == 400
+        payload = json.loads(error.value.read().decode("utf-8"))
     finally:
         daemon.stop()
 
-    assert error.value.code == 400
-    payload = json.loads(error.value.read().decode("utf-8"))
     assert payload["error"] == "invalid_hook_workspace_path"
     assert store.list_events(event_name="daemon.hook.path_rejected") == []
 
@@ -58,10 +58,10 @@ def test_guard_daemon_query_token_denial_survives_audit_timeout(tmp_path, monkey
         )
         with pytest.raises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(request, timeout=2)
+        assert error.value.code == 401
+        payload = json.loads(error.value.read().decode("utf-8"))
     finally:
         daemon.stop()
 
-    assert error.value.code == 401
-    payload = json.loads(error.value.read().decode("utf-8"))
     assert payload["error"] == "unauthorized"
     assert store.list_events(event_name="daemon.auth.query_token_rejected") == []
