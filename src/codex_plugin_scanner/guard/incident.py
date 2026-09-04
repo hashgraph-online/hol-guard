@@ -27,6 +27,10 @@ _ARTIFACT_LABELS = {
     "package_request": "Package request",
     "prompt_request": "Prompt request",
     "file_read_request": "File read request",
+    "skill": "Skill",
+    "skill_file": "Skill file",
+    "extension": "Extension",
+    "instruction": "Instruction",
     "artifact": "Artifact",
 }
 
@@ -82,7 +86,12 @@ def build_incident_context(
             f"`{short_config_path}` for {harness_label}."
         )
     why_now = _why_now_text(changed_fields, presentation_action, harness_label, artifact_type)
-    launch_summary = _launch_summary(artifact=artifact, launch_target=launch_target)
+    launch_summary = _launch_summary(
+        artifact=artifact,
+        launch_target=launch_target,
+        artifact_type=artifact_type,
+        config_path=config_path,
+    )
     risk_headline = risk_summary or _fallback_risk_headline(policy_action)
     return {
         "artifact_label": artifact_label,
@@ -210,7 +219,13 @@ def _trigger_verb(*, policy_action: GuardAction, changed_fields: list[str]) -> s
     return "paused"
 
 
-def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None) -> str:
+def _launch_summary(
+    *,
+    artifact: GuardArtifact | None,
+    launch_target: str | None,
+    artifact_type: str | None,
+    config_path: str | None,
+) -> str:
     if launch_target:
         return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
@@ -225,7 +240,14 @@ def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None
         if artifact.command:
             command_parts = [artifact.command, *artifact.args]
             return f"Launches with `{_truncate(' '.join(command_parts))}`."
-    return "Launch details were not available."
+    if config_path:
+        return (
+            f"Guard reviewed the definition at `{_short_config_path(config_path)}`. "
+            "No separate shell launch command was recorded for this item."
+        )
+    if artifact_type in {"tool_call", "tool_action_request", "file_read_request", "prompt_request"}:
+        return "Guard reviewed this interaction directly; it did not use a shell launch command."
+    return "Guard reviewed this item directly. No shell launch command was recorded."
 
 
 def _short_config_path(config_path: str | None) -> str:

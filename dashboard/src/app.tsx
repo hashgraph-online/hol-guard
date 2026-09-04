@@ -558,6 +558,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenApprovalSettings = useCallback(() => navigate("/settings?section=approval"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -993,7 +994,10 @@ export function App() {
       extensionsContent={
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
-            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} />
+            <ExtensionsWorkspace
+              runtime={runtime.kind === "ready" ? runtime.snapshot : null}
+              onOpenApprovalSettings={handleOpenApprovalSettings}
+            />
           </Suspense>
         </ErrorBoundary>
       }

@@ -4058,7 +4058,7 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
-function authorityNoticeView(health) {
+function authorityNoticeView(health, approvalGateConfigured) {
   switch (health) {
     case "tampered":
     case "recovery-required":
@@ -4101,6 +4101,20 @@ function authorityNoticeView(health) {
         terminalSummary: "Run this in your terminal to rebuild the trusted settings."
       };
     default:
+      if (approvalGateConfigured === false) {
+        return {
+          tone: "info",
+          title: "Set up approval before enrollment",
+          body: "Extension controls require a local approval password or Authenticator before this device can create trusted protection settings. Set up approval first, then return here to enroll.",
+          action: { kind: "configure-approval" },
+          actionLabel: "Set up approval",
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
       return {
         tone: "info",
         title: "Finish setting up protection",
@@ -4118,7 +4132,7 @@ function authorityNoticeView(health) {
 function ProtectionAuthorityNotice(props) {
   const health = props.effective.health;
   if (health === "protected") return null;
-  const view = authorityNoticeView(health);
+  const view = authorityNoticeView(health, props.approvalGate?.configured ?? null);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
@@ -4150,6 +4164,10 @@ function ProtectionAuthorityNotice(props) {
               "aria-busy": props.busy,
               disabled: props.busy || gatePending,
               onClick: () => {
+                if (view.action.kind === "configure-approval") {
+                  props.onOpenApprovalSettings();
+                  return;
+                }
                 setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
                 setProofOpen(true);
               },
@@ -4185,7 +4203,7 @@ function ProtectionAuthorityNotice(props) {
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
+        view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning2 ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
@@ -4205,10 +4223,10 @@ function ProtectionAuthorityNotice(props) {
               }
             )
           ] })
-        ] })
+        ] }) : null
       ] })
     ] }),
-    proofOpen && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    proofOpen && (view.action.kind === "repair" || view.action.kind === "acknowledge") ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {
         title: view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state",
@@ -5893,7 +5911,8 @@ function ProtectionCenterWorkspace(props) {
         status: recoveryStatus,
         approvalGate: resolvedApprovalGate,
         onAction: handleAuthorityAction,
-        onCheckAgain: handleCheckAgain
+        onCheckAgain: handleCheckAgain,
+        onOpenApprovalSettings: props.onOpenApprovalSettings
       }
     ) : null,
     state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 text-sm font-medium text-emerald-800", children: recoveryStatus }) : null,

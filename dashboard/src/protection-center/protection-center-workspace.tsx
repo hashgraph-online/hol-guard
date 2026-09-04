@@ -124,7 +124,10 @@ export function buildExtensionMutation(
   };
 }
 
-export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapshot | null }) {
+export function ProtectionCenterWorkspace(props: {
+  runtime?: GuardRuntimeSnapshot | null;
+  onOpenApprovalSettings: () => void;
+}) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [routeState, setRouteState] = useState<RouteState>(() => currentExtensionRouteState());
   const [pending, setPending] = useState<ProtectionPendingChange | null>(null);
@@ -347,6 +350,7 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
           approvalGate={resolvedApprovalGate}
           onAction={handleAuthorityAction}
           onCheckAgain={handleCheckAgain}
+          onOpenApprovalSettings={props.onOpenApprovalSettings}
         />
       ) : null}
       {state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? (

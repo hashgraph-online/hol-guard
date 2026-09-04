@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.incident import build_incident_context
-from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 
 
 @pytest.mark.parametrize(
@@ -66,6 +66,56 @@ def test_allowed_removal_is_recorded_instead_of_presented_as_a_pause() -> None:
     assert incident["trigger_summary"].startswith("HOL Guard reviewed")
     assert incident["why_now"].startswith("HOL Guard recorded")
     assert "allows the action to continue" in incident["why_now"]
+
+
+def test_non_launch_skill_summary_identifies_the_reviewed_definition() -> None:
+    artifact = GuardArtifact(
+        artifact_id="omp:project:skill:memory-interaction",
+        name="memory-interaction",
+        harness="omp",
+        source_scope="project",
+        artifact_type="skill",
+        config_path="/home/vye/.omp/skills/memory-interaction/SKILL.md",
+    )
+
+    incident = build_incident_context(
+        harness="omp",
+        artifact=artifact,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        changed_fields=["first_seen"],
+        policy_action="review",
+        launch_target=None,
+        risk_summary=None,
+    )
+
+    assert incident["artifact_label"] == "Skill"
+    assert "memory-interaction/SKILL.md" in incident["launch_summary"]
+    assert "No separate shell launch command" in incident["launch_summary"]
+    assert "details were not available" not in incident["launch_summary"].lower()
+
+
+def test_direct_tool_interaction_explains_why_no_launch_command_exists() -> None:
+    incident = build_incident_context(
+        harness="omp",
+        artifact=None,
+        artifact_id="omp:project:memory-interaction",
+        artifact_name="memory-interaction",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path=None,
+        changed_fields=["first_seen"],
+        policy_action="review",
+        launch_target=None,
+        risk_summary=None,
+    )
+
+    assert incident["launch_summary"] == (
+        "Guard reviewed this interaction directly; it did not use a shell launch command."
+    )
 
 
 @pytest.mark.parametrize(
