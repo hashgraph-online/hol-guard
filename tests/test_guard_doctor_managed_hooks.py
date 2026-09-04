@@ -78,6 +78,13 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     assert any("do not match this Guard CLI" in warning for warning in payload["warnings"])
 
 
+def _write_cursor_hook_script(context: HarnessContext) -> Path:
+    script_path = context.home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text("# managed cursor hook\n", encoding="utf-8")
+    return script_path
+
+
 def test_doctor_treats_managed_cursor_hooks_as_guard_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -87,8 +94,9 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
     hooks_path = context.home_dir / ".cursor" / "hooks.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
+    script_path = _write_cursor_hook_script(context)
     command = (
-        "current-hol-guard __guard-cursor-hook ./hooks/hol-guard-cursor-hook.py "
+        f"current-hol-guard __guard-cursor-hook {script_path} "
         "--cursor-hook-event beforeShellExecution"
     )
     hooks_path.write_text(
@@ -147,3 +155,62 @@ def test_doctor_ignores_name_only_cursor_hook_marker(
 
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in payload["artifacts"])
     assert payload["setup_status"] != "active"
+
+
+def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    hooks_path = context.home_dir / ".cursor" / "hooks.json"
+    script_path = context.home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    command = (
+        f"current-hol-guard __guard-cursor-hook {script_path} "
+        "--cursor-hook-event beforeShellExecution"
+    )
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "beforeShellExecution": [{"command": command, "timeout": 45, "failClosed": True}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: True,
+    )
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    adapter = get_adapter("cursor")
+    missing_payload = adapter.diagnostics(context)
+    assert not any(artifact["artifact_type"] == "guard_hook" for artifact in missing_payload["artifacts"])
+    assert missing_payload["setup_status"] != "active"
+
+    _write_cursor_hook_script(context)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "beforeShellExecution": [
+                        {
+                            "command": command,
+                            "timeout": 45,
+                            "failClosed": True,
+                            "enabled": False,
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    disabled_payload = adapter.diagnostics(context)
+    assert not any(artifact["artifact_type"] == "guard_hook" for artifact in disabled_payload["artifacts"])
+    assert disabled_payload["setup_status"] != "active"

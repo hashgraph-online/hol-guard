@@ -343,8 +343,13 @@ def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
             if (
                 not isinstance(command, str)
                 or command in seen
+                or entry.get("enabled") is False
+                or entry.get("disabled") is True
                 or not _is_structured_managed_cursor_hook_command(command)
             ):
+                continue
+            script_path = _live_cursor_hook_script_path(command)
+            if script_path is None or not script_path.is_file():
                 continue
             seen.add(command)
             commands.append(command)
