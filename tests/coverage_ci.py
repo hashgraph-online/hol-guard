@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+UNDER_COVERAGE_TRACING = os.environ.get("GUARD_PYTEST_UNDER_COVERAGE") == "1"
+
 
 def under_coverage_scale(scale: float) -> float:
     """Return `scale` when the CI run traces coverage, else 1.0.
@@ -12,4 +14,4 @@ def under_coverage_scale(scale: float) -> float:
     fail without any product regression; covered CI runs scale their
     budgets, untraced runs keep the real values.
     """
-    return scale if os.environ.get("GUARD_PYTEST_UNDER_COVERAGE") == "1" else 1.0
+    return scale if UNDER_COVERAGE_TRACING else 1.0
