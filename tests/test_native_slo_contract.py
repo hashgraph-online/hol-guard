@@ -152,35 +152,6 @@ def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
     )
     assert not all_gates_pass(failing)
     assert all(not result for result in failing.values())
-    noisy = gate_results(
-        resident_share=1.0,
-        safe_fail_rate=0.0,
-        warm_p95_ms=20.0,
-        size_p95_ms={"250k": 50.0, "1m": 120.0, "5m": 350.0},
-        cold_p95_ms=100.0,
-        readiness_p95_ms=250.0,
-        concurrent_p99_ms=100.0,
-        rss_growth=0.101827,
-        rss_baseline_bytes=1,
-        errors=0,
-        errors_64=0,
-        python_fallback_decisions=0,
-    )
-    assert noisy["rss"] is True
-    assert gate_results(
-        resident_share=1.0,
-        safe_fail_rate=0.0,
-        warm_p95_ms=20.0,
-        size_p95_ms={"250k": 50.0, "1m": 120.0, "5m": 350.0},
-        cold_p95_ms=100.0,
-        readiness_p95_ms=250.0,
-        concurrent_p99_ms=100.0,
-        rss_growth=0.11,
-        rss_baseline_bytes=1,
-        errors=0,
-        errors_64=0,
-        python_fallback_decisions=0,
-    )["rss"] is False
 
 
 def test_installed_latency_budget_is_the_existing_normal_hook_budget() -> None:
@@ -418,6 +389,20 @@ def test_rss_measurement_is_current_and_requires_ten_percent_bound() -> None:
         python_fallback_decisions=0,
     )
     assert passing["rss"]
+    assert gate_results(
+        resident_share=1.0,
+        safe_fail_rate=0.0,
+        warm_p95_ms=20.0,
+        size_p95_ms={"250k": 50.0, "1m": 120.0, "5m": 350.0},
+        cold_p95_ms=100.0,
+        readiness_p95_ms=250.0,
+        concurrent_p99_ms=100.0,
+        rss_growth=0.101827,
+        rss_baseline_bytes=resources.rss_bytes,
+        errors=0,
+        errors_64=0,
+        python_fallback_decisions=0,
+    )["rss"]
     assert not gate_results(
         resident_share=1.0,
         safe_fail_rate=0.0,
