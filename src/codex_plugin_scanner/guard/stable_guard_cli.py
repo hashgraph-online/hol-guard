@@ -37,13 +37,14 @@ def _desktop_core_root(executable: Path) -> Path | None:
     if executable_name not in {"hol-guard", "hol-guard.exe"}:
         return None
     for ancestor in executable.parents:
+        ancestor_name = ancestor.name.lower()
         try:
             relative_parts = executable.relative_to(ancestor).parts
         except ValueError:
             continue
-        if ancestor.name == "versions" and len(relative_parts) == 2:
+        if ancestor_name == "versions" and len(relative_parts) == 2:
             return ancestor.parent
-        if ancestor.name != "bundled":
+        if ancestor_name != "bundled":
             continue
         if len(relative_parts) == 3 and relative_parts[1] == "bin":
             return ancestor.parent

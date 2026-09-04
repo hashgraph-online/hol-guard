@@ -27,14 +27,15 @@ def _desktop_core_shim_for_executable(executable: Path) -> Path | None:
         return None
     parent = None
     for ancestor in executable.parents:
+        ancestor_name = ancestor.name.lower()
         try:
             relative_parts = executable.relative_to(ancestor).parts
         except ValueError:
             continue
-        if ancestor.name == "versions" and len(relative_parts) == 2:
+        if ancestor_name == "versions" and len(relative_parts) == 2:
             parent = ancestor.parent
             break
-        if ancestor.name != "bundled":
+        if ancestor_name != "bundled":
             continue
         if len(relative_parts) == 3 and relative_parts[1] == "bin":
             parent = ancestor.parent

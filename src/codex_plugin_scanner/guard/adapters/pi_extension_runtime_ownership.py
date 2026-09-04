@@ -70,8 +70,8 @@ def _stable_guard_cli_command(home_dir: Path) -> str:
             continue
         path = Path(candidate).expanduser().absolute()
         try:
-            resolved = path.resolve(strict=True)
-        except (OSError, RuntimeError):
+            resolved = path.resolve(strict=False)
+        except RuntimeError:
             continue
         normalized = str(path).replace("\\", "/").lower()
         if "/tmp/.mount_" in normalized or "/private/tmp/.mount_" in normalized:
@@ -80,6 +80,8 @@ def _stable_guard_cli_command(home_dir: Path) -> str:
         if desktop_shim is not None:
             if desktop_shim.is_file() and os.access(desktop_shim, os.X_OK):
                 return str(desktop_shim)
+            # A versioned Desktop executable is not durable enough to own a
+            # generated extension. Continue to the official install instead.
             continue
         if path.is_file() and os.access(path, os.X_OK):
             return str(path)
