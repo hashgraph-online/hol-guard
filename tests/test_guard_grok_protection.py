@@ -243,3 +243,27 @@ def test_scoped_grok_approval_keeps_unrelated_queue() -> None:
     assert result["resolved"] is True
     assert result["remaining_pending_count"] == 1
     assert result["remaining_pending_summaries"][0]["request_id"] == "codex-pending"
+
+
+def test_grok_protection_checks_flag_literal_home_prefix_deny_rules(tmp_path: Path, monkeypatch) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
+        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+    )
+    GrokHarnessAdapter().install(ctx)
+    (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
+    (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
+    managed_config = ctx.home_dir / ".grok" / "managed_config.toml"
+    managed_text = managed_config.read_text(encoding="utf-8")
+    legacy_text = managed_text.replace(
+        "Read(**/.ssh/**)",
+        "Read(~/.ssh/**)",
+    )
+    assert legacy_text != managed_text
+    managed_config.write_text(legacy_text, encoding="utf-8")
+
+    checks = _grok_protection_checks(ctx)
+
+    assert checks["ready"] is False
+    assert any("literal home prefixes" in warning for warning in checks["warnings"])

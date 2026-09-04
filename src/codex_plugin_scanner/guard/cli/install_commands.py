@@ -507,7 +507,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
             "Grok managed permission rules are missing from ~/.grok/managed_config.toml. "
             "Re-run `hol-guard apps connect grok`."
         )
-    elif "Read(~/" in managed_text or "Read(~/" in managed_text:
+    elif "Read(~/" in managed_text:
         warnings.append(
             "Grok managed deny rules still use literal home prefixes that Grok does not expand. "
             "Re-run `hol-guard apps repair grok`."

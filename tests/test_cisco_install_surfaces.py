@@ -123,7 +123,9 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
-    assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
+    assert "scripts/ci/generate_release_notes.py" in publish_workflow
+    release_notes_script = (ROOT / "scripts" / "ci" / "generate_release_notes.py").read_text(encoding="utf-8")
+    assert 'uv tool install "hol-guard[cisco]==' in release_notes_script
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
     assert "FROM python:3.13-slim@" in dockerfile
     assert "FROM python:3.14-slim" not in dockerfile

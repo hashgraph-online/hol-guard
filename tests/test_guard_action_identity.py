@@ -152,7 +152,9 @@ class TestMcpIdentityNormalization:
             "arguments": {"path": "/tmp/test"},
             "schema_hash": "hash-001",
         }
-        assert normalize_mcp_identity(call) == normalize_mcp_identity(call)
+        first = normalize_mcp_identity(call)
+        second = normalize_mcp_identity(call)
+        assert first == second
 
 
 class TestBrowserMcpIdentityNormalization:
