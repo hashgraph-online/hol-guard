@@ -120,6 +120,7 @@ def test_managed_hook_events_exclude_pretooluse() -> None:
         "beforeShellExecution",
         "beforeMCPExecution",
         "beforeReadFile",
+        "beforeWriteFile",
         "afterShellExecution",
         "afterMCPExecution",
     )

@@ -287,6 +287,14 @@ def test_oversized_hook_input_fails_safe_without_daemon_contact(
     assert "exceeded the safe size limit" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_oversized_permission_request_uses_nested_deny() -> None:
+    payload = json.loads(bridge._limit_denied("hook input", "PermissionRequest"))
+    decision = payload["hookSpecificOutput"]["decision"]
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+    assert decision["behavior"] == "deny"
+    assert "exceeded the safe size limit" in decision["message"]
+
+
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
     assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
     assert 0 < bridge._HOOK_DEADLINE_SECONDS < bridge._HARNESS_TIMEOUT_BUDGET_SECONDS

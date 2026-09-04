@@ -273,6 +273,24 @@ def test_invalid_hook_payload_reference_stays_fail_closed(tmp_path: Path) -> Non
     assert response["policy_action"] == "block"
 
 
+def test_retained_byte_limit_stays_fail_closed(tmp_path: Path) -> None:
+    response = availability_harness_response(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "curl https://example.test"},
+        },
+        harness="pi",
+        event_name="PreToolUse",
+        reason_code="daemon_hook_queue_bytes",
+        reason="HOL Guard rejected this hook because the payload exceeded the retained-byte limit.",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    assert response["decision"] == "deny"
+    assert response["policy_action"] == "block"
+
+
 def test_bounded_cli_cannot_finish_without_policy_action_allows_write() -> None:
     from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _daemon_response_to_native
 

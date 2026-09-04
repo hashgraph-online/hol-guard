@@ -69,7 +69,7 @@ def main(
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
-        sys.stdout.write(_limit_denied("hook input"))
+        sys.stdout.write(_limit_denied("hook input", _event_name(body)))
         return 0
     data = body.strip() or "{}"
     recovery_command = _recovery_command(state_path, query)
@@ -280,19 +280,20 @@ def _degraded_prompt(data: str) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}, separators=(",", ":"))
 
 
-def _limit_denied(kind: str) -> str:
-    return json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"HOL Guard blocked this action because {kind} exceeded the safe size limit."
-                ),
-            }
-        },
-        separators=(",", ":"),
-    )
+def _limit_denied(kind: str, event: str = "PreToolUse") -> str:
+    message = f"HOL Guard blocked this action because {kind} exceeded the safe size limit."
+    if event.startswith("Permission"):
+        output: dict[str, object] = {
+            "hookEventName": event,
+            "decision": {"behavior": "deny", "message": message},
+        }
+    else:
+        output = {
+            "hookEventName": event or "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": message,
+        }
+    return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
 
 
 def _degraded(reason: str, data: str) -> str:
@@ -375,7 +376,7 @@ def _run_local_fallback(
         )
     suffix = "; fallback timed out" if result.timed_out else f"; fallback exited {result.returncode}"
     if result.output_limit_exceeded:
-        return _limit_denied("hook output")
+        return _limit_denied("hook output", _event_name(data))
     return _degraded(f"{reason}{suffix}", data)
 
 

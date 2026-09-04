@@ -135,10 +135,7 @@ def _unavailable_response(
         return {
             "continue": True,
             "systemMessage": reason,
-            "hookSpecificOutput": {
-                "hookEventName": event_name,
-                "decision": {"behavior": "allow", "message": reason},
-            },
+            "hookSpecificOutput": {"hookEventName": event_name},
         }
     if event_name == "PreToolUse":
         return {

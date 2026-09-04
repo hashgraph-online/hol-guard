@@ -126,6 +126,7 @@ _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
 _INTEGRITY_FAIL_CLOSED_REASON_CODES = frozenset(
     {
         "invalid_hook_payload_reference",
+        "daemon_hook_queue_bytes",
     }
 )
 
