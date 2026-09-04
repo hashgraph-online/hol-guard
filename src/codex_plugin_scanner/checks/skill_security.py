@@ -27,13 +27,16 @@ class SkillSecurityContext:
 _RISKY_SKILL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"cat\s+\.env", re.IGNORECASE), "reads the local .env file"),
     # Unrolled skip loops keep these linear on adversarial skill content while
-    # matching the same leftmost spans the lazy .*? forms matched.
+    # matching the same leftmost spans the lazy .*? forms matched. The skip
+    # lookahead mirrors the full scheme+value match so a failed early candidate
+    # (for example "https://" followed by a backtick) is skipped like the lazy
+    # form skipped it, instead of stalling the loop.
     (
-        re.compile(r"curl\s+(?:[^h\n]|h(?!ttps?://))*https?://[^\s`\"']+", re.IGNORECASE),
+        re.compile(r"curl\s+(?:[^h\n]|h(?!ttps?:\/\/[^\s`\"']))*https?://[^\s`\"']+", re.IGNORECASE),
         "sends workspace data to a remote endpoint",
     ),
     (
-        re.compile(r"wget\s+(?:[^h\n]|h(?!ttps?://))*https?://[^\s`\"']+", re.IGNORECASE),
+        re.compile(r"wget\s+(?:[^h\n]|h(?!ttps?:\/\/[^\s`\"']))*https?://[^\s`\"']+", re.IGNORECASE),
         "downloads or sends data over the network",
     ),
     (re.compile(r"\b(?:bash|sh)\s+-lc\b", re.IGNORECASE), "runs through a shell wrapper"),

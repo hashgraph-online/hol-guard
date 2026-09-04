@@ -124,12 +124,27 @@ def test_risky_skill_url_patterns_match_same_spans_as_pre_fix_form() -> None:
         "curl hhhhhhhhhhhhhhhhttps://x",
         "curl 'a b' https://x",
         "no curl here at all",
+        # A scheme candidate whose value is an excluded delimiter must be
+        # skipped so the later valid URL is still detected, as the lazy form did.
+        "curl https://` https://evil.example",
+        'curl https://" https://evil.example',
+        "curl https:// https://evil.example",
+        "curl https://a https://",
+        "wget https://` wget https://evil.example",
+        "curl http://` https://evil.example",
+        "curl https://`",
+        "curl https://`x",
+        "CURL HTTPS://` HTTPS://EVIL.EXAMPLE",
     ]
     rng = random.Random(20260904)
     alphabet = "curlwget htps:/x'\"`\n"
     randomized = ["".join(rng.choice(alphabet) for _ in range(rng.randrange(1, 48))) for _ in range(4000)]
+    # Token-level sequences explore scheme/delimiter adjacency that raw
+    # character sampling rarely reaches.
+    tokens = ("curl", "wget", "https://", "http://", "htps:/", "`", "'", '"', "x", " ", "a.b")
+    tokenized = ["".join(parts) for length in range(1, 5) for parts in itertools.product(tokens, repeat=length)]
 
-    for sample in handcrafted + randomized:
+    for sample in handcrafted + randomized + tokenized:
         for name in ("curl", "wget"):
             expected = [m.span() for m in references[name].finditer(sample)]
             actual = [m.span() for m in current[name].finditer(sample)]
