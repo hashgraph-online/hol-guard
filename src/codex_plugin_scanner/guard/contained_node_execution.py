@@ -120,6 +120,21 @@ def try_execute_contained_node_command(
         executable_digest=node_digest,
         operation_id=evidence.operation_id,
     )
+    return _complete_contained_node_command(
+        request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+        operation_id=evidence.operation_id,
+    )
+
+
+def _complete_contained_node_command(
+    request: ContainmentRequest,
+    *,
+    guard_home: Path,
+    timeout_seconds: float,
+    operation_id: str,
+) -> ContainedNodeResult | None:
     try:
         health, runtime_fingerprint = _load_current_containment_health(guard_home)
     except (OSError, RuntimeError, TypeError, ValueError):
@@ -133,7 +148,7 @@ def try_execute_contained_node_command(
         return None
     decision = _contained_decision(
         proof,
-        operation_id=evidence.operation_id,
+        operation_id=operation_id,
         producer_ref="containment:local-node-v1",
     )
     if decision.disposition is not FinalDisposition.SILENT_CONTAINED:
@@ -144,7 +159,7 @@ def try_execute_contained_node_command(
         result.stderr,
         proof,
         decision,
-        evidence.operation_id,
+        operation_id,
     )
 
 
