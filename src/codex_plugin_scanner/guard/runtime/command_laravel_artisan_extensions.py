@@ -2,55 +2,164 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from dataclasses import dataclass
+
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafeVariant, CommandSafetyRule
+from .command_matcher_contracts import MatcherEvidence
+from .command_model import CanonicalCommand, CommandSegment
+from .command_rules import CommandSafeVariant, CommandSafetyRule, _segment_matches_executable
 
 # Current Laravel framework source defines `migrate:fresh` as dropping all
 # tables before re-running migrations, and `db:wipe` as dropping all tables
 # (plus views/types when requested). Keep this first extension deliberately
 # narrow around those explicit destructive database-reset operations.
 #
-# Supported launchers cover the ordinary Laravel application entry point,
-# direct executable Artisan scripts, and Laravel Sail's Artisan forwarding.
-_PHP_LEADING_OPTIONS_WITH_VALUES = frozenset({"-c", "-d"})
-_PHP_GLOBAL_FLAGS = frozenset({"-n"})
+# Laravel adds --env to Symfony Console's global option surface. The matcher
+# accepts those global options before the command and supports the ordinary PHP,
+# direct Artisan, and Laravel Sail launch paths without retokenizing shell text.
+_ARTISAN_EXECUTABLES = frozenset({"artisan", "artisan.cmd", "artisan.exe"})
+_PHP_EXECUTABLES = frozenset({"php", "php.exe"})
+_SAIL_EXECUTABLES = frozenset({"sail", "sail.cmd", "sail.exe"})
+_ARTISAN_GLOBAL_FLAGS = frozenset(
+    {
+        "--ansi",
+        "--no-ansi",
+        "--no-interaction",
+        "--quiet",
+        "--verbose",
+        "-n",
+        "-q",
+        "-v",
+        "-vv",
+        "-vvv",
+    }
+)
+_ARTISAN_GLOBAL_OPTIONS_WITH_VALUES = frozenset({"--env"})
+_HELP_FLAGS = frozenset({"--help", "-h"})
+_PHP_FLAG_OPTIONS = frozenset({"-n", "-q"})
+_PHP_VALUE_OPTIONS = frozenset({"-c", "-d"})
 
 
-def _artisan_command(command: str) -> AnyMatcher:
-    return AnyMatcher(
-        matchers=(
-            executable_matcher(
-                "php",
-                "artisan",
-                command,
-                allow_leading_options=True,
-                leading_options_with_values=_PHP_LEADING_OPTIONS_WITH_VALUES,
-                global_flags=_PHP_GLOBAL_FLAGS,
-            ),
-            executable_matcher("artisan", command),
-            executable_matcher("sail", "artisan", command),
-        )
-    )
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
-_LARAVEL_MIGRATE_FRESH = _artisan_command("migrate:fresh")
-_LARAVEL_DB_WIPE = _artisan_command("db:wipe")
+def _php_artisan_arguments(arguments: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Return Artisan arguments for supported PHP file-execution forms."""
+
+    index = 0
+    while index < len(arguments):
+        token = arguments[index].lower()
+        if token in _PHP_FLAG_OPTIONS:
+            index += 1
+            continue
+        if token in _PHP_VALUE_OPTIONS:
+            if index + 1 >= len(arguments):
+                return None
+            index += 2
+            continue
+        if any(token.startswith(option) and len(token) > len(option) for option in _PHP_VALUE_OPTIONS):
+            index += 1
+            continue
+        if token == "-f":
+            if index + 1 >= len(arguments) or _basename(arguments[index + 1]) != "artisan":
+                return None
+            return arguments[index + 2 :]
+        if token.startswith("-f") and len(token) > 2:
+            if _basename(token[2:]) != "artisan":
+                return None
+            return arguments[index + 1 :]
+        if token.startswith("-"):
+            # Other PHP modes such as -r/-B/-R/-F do not execute the following
+            # token as the application script, so do not infer an Artisan run.
+            return None
+        if _basename(arguments[index]) != "artisan":
+            return None
+        return arguments[index + 1 :]
+    return None
 
 
-def _help_variants(matcher: AnyMatcher, prefix: str) -> tuple[CommandSafeVariant, ...]:
+def _artisan_arguments(segment: CommandSegment) -> tuple[str, ...] | None:
+    if _segment_matches_executable(segment, _ARTISAN_EXECUTABLES):
+        return segment.arguments
+    if _segment_matches_executable(segment, _PHP_EXECUTABLES):
+        return _php_artisan_arguments(segment.arguments)
+    if _segment_matches_executable(segment, _SAIL_EXECUTABLES):
+        if not segment.arguments or _basename(segment.arguments[0]) != "artisan":
+            return None
+        return segment.arguments[1:]
+    return None
+
+
+def _contains_artisan_command(arguments: tuple[str, ...], command: str) -> bool:
+    """Find a command while respecting known global option values."""
+
+    index = 0
+    while index < len(arguments):
+        token = arguments[index].lower()
+        if token in _ARTISAN_GLOBAL_OPTIONS_WITH_VALUES:
+            if index + 1 >= len(arguments):
+                return False
+            index += 2
+            continue
+        if any(token.startswith(f"{option}=") for option in _ARTISAN_GLOBAL_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if token in _ARTISAN_GLOBAL_FLAGS or token in _HELP_FLAGS:
+            index += 1
+            continue
+        if token == command:
+            return True
+        if not token.startswith("-"):
+            # The first non-option token is the Symfony command name. Once it is
+            # another command, later arguments cannot turn this invocation into
+            # the destructive command we are protecting.
+            return False
+        # Unknown leading options fail secure: keep scanning for the explicit
+        # destructive command rather than treating an unfamiliar option as a
+        # reason to silently bypass review.
+        index += 1
+    return False
+
+
+@dataclass(frozen=True, slots=True)
+class LaravelArtisanCommandMatcher:
+    """Match one Laravel Artisan command across supported launcher forms."""
+
+    command_name: str
+    require_help: bool = False
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            artisan_arguments = _artisan_arguments(segment)
+            if artisan_arguments is None:
+                continue
+            lowered_arguments = tuple(argument.lower() for argument in artisan_arguments)
+            if not _contains_artisan_command(lowered_arguments, self.command_name):
+                continue
+            if self.require_help and not _HELP_FLAGS.intersection(lowered_arguments):
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail=f"Matched Laravel Artisan {self.command_name} command.",
+                )
+            )
+        return tuple(evidence)
+
+
+_LARAVEL_MIGRATE_FRESH = LaravelArtisanCommandMatcher("migrate:fresh")
+_LARAVEL_DB_WIPE = LaravelArtisanCommandMatcher("db:wipe")
+
+
+def _help_variant(command: str, prefix: str) -> tuple[CommandSafeVariant, ...]:
     return (
-        safe_flag_variant(
-            matcher,
+        CommandSafeVariant(
             variant_id=f"{prefix}-help",
             title="Laravel Artisan command help",
-            flag="--help",
-        ),
-        safe_flag_variant(
-            matcher,
-            variant_id=f"{prefix}-short-help",
-            title="Laravel Artisan short command help",
-            flag="-h",
+            matcher=LaravelArtisanCommandMatcher(command, require_help=True),
         ),
     )
 
@@ -75,7 +184,7 @@ LARAVEL_ARTISAN_COMMAND_RULES = (
         ),
         matcher=_LARAVEL_MIGRATE_FRESH,
         default_mode="review",
-        safe_variants=_help_variants(_LARAVEL_MIGRATE_FRESH, "migrate-fresh"),
+        safe_variants=_help_variant("migrate:fresh", "migrate-fresh"),
     ),
     CommandSafetyRule(
         rule_id="command.laravel-artisan.db-wipe",
@@ -92,7 +201,7 @@ LARAVEL_ARTISAN_COMMAND_RULES = (
         ),
         matcher=_LARAVEL_DB_WIPE,
         default_mode="review",
-        safe_variants=_help_variants(_LARAVEL_DB_WIPE, "db-wipe"),
+        safe_variants=_help_variant("db:wipe", "db-wipe"),
     ),
 )
 
@@ -118,11 +227,12 @@ LARAVEL_ARTISAN_COMMAND_EXTENSION_SPECS = (
                 "FreshCommand.php"
             ),
             "https://github.com/laravel/framework/blob/13.x/src/Illuminate/Database/Console/WipeCommand.php",
+            "https://github.com/laravel/framework/blob/13.x/src/Illuminate/Console/Application.php",
             "https://laravel.com/ai/boost",
         ),
         ecosystem_ids=("laravel",),
         executables=("php", "artisan", "sail"),
-        project_markers=("artisan", "composer.json"),
+        project_markers=("artisan",),
         example_command="php artisan migrate:fresh",
     ),
 )
