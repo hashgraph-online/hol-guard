@@ -44,6 +44,7 @@ BULLETED_SECTIONS = {"feat", "fix"}
 
 MAX_SUMMARY_BULLETS = 3
 MAX_BULLET_CHARS = 220
+MAX_RENDERED_CHANGES = 80
 
 
 @dataclass
@@ -322,6 +323,25 @@ def render_sections(changes: Sequence[Change], repo: str) -> str:
     return "\n\n".join(blocks)
 
 
+def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
+    """Summarize very large histories (no previous tag) instead of listing every entry.
+
+    GitHub caps release bodies at 125,000 characters; a first-of-channel release
+    covering the full project history would exceed that, so render per-section
+    counts plus a link into the commit history.
+    """
+    counts: list[tuple[str, int]] = []
+    for section in SECTION_ORDER:
+        entries = [change for change in changes if change.section == section]
+        if entries:
+            counts.append((SECTION_TITLES.get(section, "Internal"), len(entries)))
+    lines = ["## Changes by category", ""]
+    lines.extend(f"- **{title}**: {count}" for title, count in counts)
+    lines.append("")
+    lines.append(f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha}).")
+    return "\n".join(lines)
+
+
 def render_notes(
     changes: Sequence[Change],
     *,
@@ -361,16 +381,25 @@ def render_notes(
         since = f" since [Guard {previous_version}](https://github.com/{repo}/releases/tag/{previous_tag})"
         lines.append(f"**{' • '.join(heading_stats)}**{since}." if heading_stats else f"Released{since}.")
     elif heading_stats:
-        lines.append(f"**{' • '.join(heading_stats)}**.")
+        scope_note = (
+            " — the first release on this channel, covering the full history to this point"
+            if changes
+            else ""
+        )
+        lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
-    sections = render_sections(changes, repo)
-    if sections:
-        lines.append(sections)
+    if len(changes) > MAX_RENDERED_CHANGES:
+        lines.append(render_condensed_sections(changes))
         lines.append("")
     else:
-        lines.append("This release ships no user-facing changes; it refreshes release artifacts only.")
-        lines.append("")
+        sections = render_sections(changes, repo)
+        if sections:
+            lines.append(sections)
+            lines.append("")
+        else:
+            lines.append("This release ships no user-facing changes; it refreshes release artifacts only.")
+            lines.append("")
 
     lines.append("## Install")
     lines.append("")

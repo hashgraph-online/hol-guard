@@ -163,6 +163,35 @@ def test_render_notes_groups_sections_and_links_everything() -> None:
     assert "@Michael Kantor" not in notes
 
 
+def test_render_notes_condenses_histories_too_large_to_list() -> None:
+    changes = [
+        _change(
+            sha=f"{i:040x}",
+            subject=f"fix(guard): repair thing {i} (#{i + 1})",
+            type="fix" if i % 2 else "feat",
+            scope="guard",
+            description=f"repair thing {i}",
+            pr_number=i + 1,
+        )
+        for i in range(200)
+    ]
+    notes = render_notes(
+        changes,
+        version="2.1.0a1",
+        channel="alpha",
+        repo=REPO,
+        tag="alpha/v2.1.0a1",
+        previous_tag=None,
+        source_sha="e" * 40,
+    )
+    assert "first release on this channel" in notes
+    assert "## Changes by category" in notes
+    assert "- **Features**: 100" in notes and "- **Fixes**: 100" in notes
+    assert "full commit history" in notes
+    assert "repair thing 5" not in notes
+    assert len(notes) < 10000
+
+
 def test_render_notes_alpha_channel_and_empty_history() -> None:
     alpha = render_notes(
         [_change()],
