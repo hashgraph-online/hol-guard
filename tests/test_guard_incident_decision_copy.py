@@ -195,6 +195,63 @@ def test_command_bearing_native_request_keeps_command_over_generic_summary() -> 
     assert incident["launch_summary"] == "Launches with `rm -f /workspace/project/output.txt`."
 
 
+def test_native_raw_command_credentials_are_redacted_in_incident_copy() -> None:
+    retained_tail = "retained-command-tail-" + ("x" * 180)
+    raw_command = (
+        f"bash -lc 'rm -f /workspace/project/output.txt --token=sk-testcredential123 --marker={retained_tail}'"
+    )
+    request = extract_sensitive_tool_action_request("bash", {"command": raw_command})
+    assert request is not None
+    assert request.raw_command_text == raw_command
+    artifact = build_tool_action_request_artifact(
+        "copilot",
+        request,
+        config_path="/workspace/.github/hooks/guard.json",
+        source_scope="project",
+    )
+
+    incident = build_incident_context(
+        harness="copilot",
+        artifact=artifact,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        changed_fields=["tool_action_request"],
+        policy_action="require-reapproval",
+        launch_target=str(artifact.metadata["request_summary"]),
+        risk_summary=None,
+    )
+
+    assert "sk-testcredential123" not in incident["launch_summary"]
+    assert "--token=sk-*****" in incident["launch_summary"]
+    assert retained_tail in incident["launch_summary"]
+
+
+def test_native_raw_launch_target_is_redacted_without_truncating_command_tail() -> None:
+    retained_tail = "raw-target-tail-" + ("y" * 180)
+    raw_target = f"rm -f /workspace/project/output.txt --token=sk-testcredential123 --marker={retained_tail}"
+
+    incident = build_incident_context(
+        harness="copilot",
+        artifact=None,
+        artifact_id="copilot:project:tool-action",
+        artifact_name="bash destructive shell command",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/workspace/.github/hooks/guard.json",
+        changed_fields=["tool_action_request"],
+        policy_action="require-reapproval",
+        launch_target=raw_target,
+        risk_summary=None,
+    )
+
+    assert "sk-testcredential123" not in incident["launch_summary"]
+    assert "--token=sk-*****" in incident["launch_summary"]
+    assert retained_tail in incident["launch_summary"]
+
+
 @pytest.mark.parametrize(
     ("policy_action", "expected_trigger", "headline_fragment"),
     [

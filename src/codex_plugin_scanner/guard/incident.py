@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .models import GuardAction, GuardArtifact
+from .redaction import redact_text
 
 _HARNESS_LABELS = {
     "codex": "Codex",
@@ -34,9 +35,7 @@ _ARTIFACT_LABELS = {
     "artifact": "Artifact",
 }
 
-_DIRECT_INTERACTION_ARTIFACT_TYPES = frozenset(
-    {"tool_call", "file_read_request", "prompt_request"}
-)
+_DIRECT_INTERACTION_ARTIFACT_TYPES = frozenset({"tool_call", "file_read_request", "prompt_request"})
 
 
 def build_incident_context(
@@ -242,8 +241,10 @@ def _launch_summary(
             return "Guard reviewed this interaction directly. No shell launch command was recorded."
     if artifact_type == "tool_action_request" and artifact is not None and artifact.command:
         command_parts = [artifact.command, *artifact.args]
-        return f"Launches with `{_truncate(' '.join(command_parts))}`."
+        return f"Launches with `{_redacted_command(command_parts)}`."
     if launch_target:
+        if artifact_type == "tool_action_request":
+            return f"Launches with `{redact_text(launch_target).text}`."
         return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
         request_summary = artifact.metadata.get("request_summary")
@@ -256,7 +257,7 @@ def _launch_summary(
             return f"Connects to `{artifact.url}`."
         if artifact.command:
             command_parts = [artifact.command, *artifact.args]
-            return f"Launches with `{_truncate(' '.join(command_parts))}`."
+            return f"Launches with `{_truncate(_redacted_command(command_parts))}`."
     if config_path:
         return (
             f"Guard reviewed the definition at {_short_config_path(config_path)}. "
@@ -290,3 +291,7 @@ def _truncate(value: str, limit: int = 140) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 1]}…"
+
+
+def _redacted_command(parts: list[str]) -> str:
+    return redact_text(" ".join(parts)).text

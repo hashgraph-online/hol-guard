@@ -14633,8 +14633,16 @@ function resolveStoppedCommandText(item) {
       return envelopeText;
     }
   }
-  if (item.launch_target?.trim()) {
-    return item.launch_target;
+  const launchTarget = item.launch_target?.trim();
+  const launchTargetIsRequestSummary = item.artifact_type === "tool_action_request" && launchTarget?.startsWith("Requested `") && launchTarget.includes(" action `");
+  if (launchTargetIsRequestSummary && item.launch_summary?.trim()) {
+    const launchSummaryCommand = item.launch_summary.match(/^Launches with `(.+)`\.$/);
+    if (launchSummaryCommand?.[1]) {
+      return launchSummaryCommand[1];
+    }
+  }
+  if (launchTarget) {
+    return launchTarget;
   }
   if (item.launch_summary?.trim()) {
     const commandMatch = item.launch_summary.match(/`([^`]+)`/);
