@@ -231,7 +231,16 @@ jobs:
           shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
-            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short
+            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
+            --cov --cov-branch --cov-report=
+      - name: Upload pytest coverage data artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-coverage-${{ matrix.shard-index }}
+          path: .coverage
+          if-no-files-found: warn
+          retention-days: 1
       - name: Upload pytest duration artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -272,6 +281,80 @@ jobs:
           path: pytest-duration-manifest-candidate.json.gz
           if-no-files-found: error
           retention-days: 90
+
+  sonar-guard:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      has-token: ${{ steps.token-presence.outputs.has-token }}
+    steps:
+      - name: Check for SonarQube Cloud token
+        id: token-presence
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if test -n "$SONAR_TOKEN"; then
+            echo "has-token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-token=false" >> "$GITHUB_OUTPUT"
+            echo "SONAR_TOKEN secret is not set; skipping SonarQube Cloud analysis"
+          fi
+
+  sonar:
+    needs: [sonar-guard, tests]
+    if: needs.sonar-guard.outputs.has-token == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Download pytest coverage data
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pytest-coverage-*
+          path: coverage-data
+      - name: Combine shard coverage and generate XML report
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          reports=(coverage-data/**/.coverage)
+          echo "Combining ${#reports[@]} shard coverage files"
+          test "${#reports[@]}" -eq 96
+          uv run --no-sync coverage combine "${reports[@]}"
+          uv run --no-sync coverage xml
+      - name: Analyze with SonarQube Cloud
+        uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: SonarQube Quality Gate check
+        uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   compatibility:
     runs-on: ubuntu-latest

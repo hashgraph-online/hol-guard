@@ -184,6 +184,12 @@ markers = [
   "compat: verifies a supported Python or platform compatibility contract",
 ]
 
+[tool.coverage.run]
+source_pkgs = ["codex_plugin_scanner"]
+branch = true
+# SonarQube Cloud requires repo-relative paths so CI-generated reports match checked-out sources.
+relative_files = true
+
 [tool.mutmut]
 source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
 also_copy = [
