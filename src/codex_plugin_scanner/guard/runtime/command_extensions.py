@@ -100,13 +100,14 @@ class CommandSafetyExtension:
         object.__setattr__(self, "permissions", permissions)
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        from .extension_trust import catalog_trust_fields
+
+        payload: dict[str, object] = {
             "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
             "extension_id": self.extension_id,
             "version": self.version,
             "name": self.name,
             "description": self.description,
-            "enabled": True,
             "required": self.required,
             "source": self.source,
             "aliases": list(self.aliases),
@@ -125,6 +126,8 @@ class CommandSafetyExtension:
             "permission_count": len(self.permissions),
             "permissions": [permission.to_dict() for permission in self.permissions],
         }
+        payload.update(catalog_trust_fields(self.extension_id, required=self.required))
+        return payload
 
 
 @final
