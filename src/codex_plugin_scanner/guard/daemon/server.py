@@ -81,7 +81,11 @@ from ..cli.connect_flow import (
     resolve_guard_oauth_client_config,
     start_guard_browser_session,
 )
-from ..cli.connect_sync_result import apply_guard_connect_sync_result
+from ..cli.connect_sync_result import (
+    apply_guard_connect_sync_result,
+    failed_browser_connect_flow_state,
+    headless_sync_retry_summary,
+)
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_setup_plan,
@@ -1189,31 +1193,6 @@ def _headless_action_state_payload(
     }
 
 
-def _headless_sync_retry_summary(
-    store: GuardStore,
-    *,
-    status: str,
-    error: BaseException,
-    repair: dict[str, object],
-    recorded_at: str,
-    record_retry: bool = False,
-) -> dict[str, object]:
-    if record_retry:
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
-            now=recorded_at,
-            reason=str(error),
-        )
-    summary = {
-        "status": status,
-        "message": str(error),
-        "authorization_repair": repair,
-    }
-    store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-    return summary
-
-
 def _run_headless_cloud_sync(
     *,
     store: GuardStore,
@@ -1278,7 +1257,7 @@ def _run_headless_cloud_sync(
             except GuardSyncAuthorizationExpiredError as retry_error:
                 auth_error = retry_error
             except GuardSyncNotConfiguredError as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="not_configured",
                     error=retry_error,
@@ -1287,7 +1266,7 @@ def _run_headless_cloud_sync(
                     record_retry=True,
                 )
             except GuardSyncNotAvailableError as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="not_available",
                     error=retry_error,
@@ -1295,7 +1274,7 @@ def _run_headless_cloud_sync(
                     recorded_at=recorded_at,
                 )
             except Exception as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="pending",
                     error=retry_error,
@@ -1323,7 +1302,7 @@ def _run_headless_cloud_sync(
             try:
                 summary = _perform_sync()
             except GuardSyncAuthorizationExpiredError as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="auth_expired",
                     error=retry_error,
@@ -1334,7 +1313,7 @@ def _run_headless_cloud_sync(
             except GuardSyncNotConfiguredError as retry_error:
                 config_error = retry_error
             except GuardSyncNotAvailableError as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="not_available",
                     error=retry_error,
@@ -1342,7 +1321,7 @@ def _run_headless_cloud_sync(
                     recorded_at=recorded_at,
                 )
             except Exception as retry_error:
-                return _headless_sync_retry_summary(
+                return headless_sync_retry_summary(
                     store,
                     status="pending",
                     error=retry_error,
@@ -1930,7 +1909,7 @@ def _finalize_daemon_guard_connect_payload(
             managed_controls_publish,
         )
     except GuardSyncNotAvailableError as error:
-        apply_guard_connect_sync_result(
+        payload = apply_guard_connect_sync_result(
             store,
             payload,
             now=now,
@@ -1992,16 +1971,6 @@ def _finalize_daemon_guard_connect_payload(
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
     return payload
-
-
-def _failed_browser_connect_flow_state(running_state: dict[str, object], *, detail: str) -> dict[str, object]:
-    return {
-        **running_state,
-        "state": "failed",
-        "title": "Guard Cloud sign-in needs attention",
-        "detail": detail,
-        "poll_after_ms": None,
-    }
 
 
 def _complete_browser_oauth_connect(
@@ -4022,12 +3991,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    _failed_browser_connect_flow_state(running_state, detail=repair_message),
+                    failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    _failed_browser_connect_flow_state(running_state, detail=str(error)),
+                    failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
@@ -4145,12 +4114,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    _failed_browser_connect_flow_state(running_state, detail=repair_message),
+                    failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    _failed_browser_connect_flow_state(running_state, detail=str(error)),
+                    failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
