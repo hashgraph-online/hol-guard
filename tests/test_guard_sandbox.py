@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.sandbox import (
@@ -185,14 +186,28 @@ def test_run_sandbox_fork_bomb_limited() -> None:
     assert result.timed_out or result.failure_safe or result.exit_code is not None
 
 
+def _interpreter_sandbox_timeout_seconds() -> float:
+    # Coverage tracers slow interpreter startup beyond any plausible product
+    # regression, so covered CI runs scale the request timeout; untraced runs
+    # keep the real 5s budget.
+    coverage_scale = 6.0 if os.environ.get("GUARD_PYTEST_UNDER_COVERAGE") == "1" else 1.0
+    return 5.0 * coverage_scale
+
+
 def test_run_sandbox_python_script_path() -> None:
-    req = SandboxRequest(language="python", command="print('python-sandbox-ok')", timeout_seconds=5.0)
+    req = SandboxRequest(
+        language="python", command="print('python-sandbox-ok')", timeout_seconds=_interpreter_sandbox_timeout_seconds()
+    )
     result = run_sandbox(req, analysis_mode="strict")
     assert "python-sandbox-ok" in result.stdout or result.failure_safe
 
 
 def test_run_sandbox_node_script_path() -> None:
-    req = SandboxRequest(language="node", command="console.log('node-sandbox-ok')", timeout_seconds=5.0)
+    req = SandboxRequest(
+        language="node",
+        command="console.log('node-sandbox-ok')",
+        timeout_seconds=_interpreter_sandbox_timeout_seconds(),
+    )
     result = run_sandbox(req, analysis_mode="strict")
     ran_ok = "node-sandbox-ok" in result.stdout
     restricted = result.exit_code is not None and result.exit_code != 0
