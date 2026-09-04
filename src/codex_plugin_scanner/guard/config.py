@@ -680,6 +680,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "install_owner": config.install_owner,
     }
 
+
 # The daemon serves settings writes from a bounded threading HTTP server, so
 # the read/validate/write sequence below must be serialized per process to keep
 # optimistic presentation-revision checks meaningful.
