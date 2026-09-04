@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { GuardApprovalRequest } from "./guard-types";
-import { resolveSecondaryRiskSummary } from "./secondary-risk-dedupe";
+import { resolveSecondaryRiskSummary, resolveStoppedCommandText } from "./secondary-risk-dedupe";
 
 const BASE_REQUEST: GuardApprovalRequest = {
   request_id: "srd-req-1",
@@ -32,6 +32,9 @@ const BASE_REQUEST: GuardApprovalRequest = {
 
 const COMPOUND_SHELL_PRIMARY_DETAIL =
   "Sensitive native tool action (unresolved shell execution context): Guard could not prove the working directory for every shell segment and requires one conservative decision before the user confirms execution (shell_cwd_workspace_escape). Use a literal, existing in-workspace directory with deterministic cd/pushd/popd control flow, or run the command from the intended directory.";
+
+const definitionSummary = "Guard reviewed the definition at /workspace/.omp/skills/memory/SKILL.md. No separate shell launch command was recorded for this item.";
+assert.equal(resolveStoppedCommandText({ ...BASE_REQUEST, artifact_type: "skill", launch_summary: definitionSummary }), definitionSummary);
 
 const COMPOUND_FINDINGS_DUPLICATE_RISK_REQUEST: GuardApprovalRequest = {
   ...BASE_REQUEST,

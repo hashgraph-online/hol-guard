@@ -114,7 +114,7 @@ def test_direct_tool_interaction_explains_why_no_launch_command_exists() -> None
     )
 
     assert incident["launch_summary"] == (
-        "Guard reviewed this interaction directly; it did not use a shell launch command."
+        "Guard reviewed this interaction directly. No shell launch command was recorded."
     )
 
 

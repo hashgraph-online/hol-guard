@@ -242,11 +242,11 @@ def _launch_summary(
             return f"Launches with `{_truncate(' '.join(command_parts))}`."
     if config_path:
         return (
-            f"Guard reviewed the definition at `{_short_config_path(config_path)}`. "
+            f"Guard reviewed the definition at {_short_config_path(config_path)}. "
             "No separate shell launch command was recorded for this item."
         )
     if artifact_type in {"tool_call", "tool_action_request", "file_read_request", "prompt_request"}:
-        return "Guard reviewed this interaction directly; it did not use a shell launch command."
+        return "Guard reviewed this interaction directly. No shell launch command was recorded."
     return "Guard reviewed this item directly. No shell launch command was recorded."
 
 
