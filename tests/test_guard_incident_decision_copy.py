@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.incident import build_incident_context
+from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 
 
@@ -116,6 +117,67 @@ def test_direct_tool_interaction_explains_why_no_launch_command_exists() -> None
     assert incident["launch_summary"] == (
         "Guard reviewed this interaction directly. No shell launch command was recorded."
     )
+
+
+def test_populated_mcp_tool_call_does_not_turn_tool_name_into_shell_launch() -> None:
+    artifact = build_tool_call_artifact(
+        harness="omp",
+        server_name="filesystem",
+        tool_name="read_file",
+        source_scope="project",
+        config_path="/workspace/.mcp.json",
+        transport="stdio",
+    )
+
+    incident = build_incident_context(
+        harness="omp",
+        artifact=artifact,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        changed_fields=["runtime_tool_call"],
+        policy_action="review",
+        launch_target=(
+            'read_file {"path":"/workspace/project/README.md"} '
+            "[arguments-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef]"
+        ),
+        risk_summary=None,
+    )
+
+    assert incident["launch_summary"] == (
+        "Guard reviewed this interaction directly. No shell launch command was recorded."
+    )
+
+
+def test_command_bearing_native_request_keeps_validated_request_summary() -> None:
+    artifact = GuardArtifact(
+        artifact_id="copilot:project:tool-action:rm",
+        name="bash destructive shell command",
+        harness="copilot",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/workspace/.github/hooks/guard.json",
+        command="rm -f /workspace/project/output.txt",
+        metadata={"request_summary": "Requested `bash` action `rm -f /workspace/project/output.txt`."},
+    )
+
+    incident = build_incident_context(
+        harness="copilot",
+        artifact=artifact,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        changed_fields=["tool_action_request"],
+        policy_action="require-reapproval",
+        launch_target="rm -f /workspace/project/output.txt",
+        risk_summary=None,
+    )
+
+    assert incident["launch_summary"] == artifact.metadata["request_summary"]
 
 
 @pytest.mark.parametrize(

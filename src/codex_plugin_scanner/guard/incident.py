@@ -34,6 +34,10 @@ _ARTIFACT_LABELS = {
     "artifact": "Artifact",
 }
 
+_DIRECT_INTERACTION_ARTIFACT_TYPES = frozenset(
+    {"tool_call", "tool_action_request", "file_read_request", "prompt_request"}
+)
+
 
 def build_incident_context(
     *,
@@ -226,6 +230,15 @@ def _launch_summary(
     artifact_type: str | None,
     config_path: str | None,
 ) -> str:
+    if artifact_type in _DIRECT_INTERACTION_ARTIFACT_TYPES:
+        if artifact is not None:
+            request_summary = artifact.metadata.get("request_summary")
+            if isinstance(request_summary, str) and request_summary:
+                return request_summary
+            prompt_summary = artifact.metadata.get("prompt_summary")
+            if isinstance(prompt_summary, str) and prompt_summary:
+                return prompt_summary
+        return "Guard reviewed this interaction directly. No shell launch command was recorded."
     if launch_target:
         return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
@@ -245,8 +258,6 @@ def _launch_summary(
             f"Guard reviewed the definition at {_short_config_path(config_path)}. "
             "No separate shell launch command was recorded for this item."
         )
-    if artifact_type in {"tool_call", "tool_action_request", "file_read_request", "prompt_request"}:
-        return "Guard reviewed this interaction directly. No shell launch command was recorded."
     return "Guard reviewed this item directly. No shell launch command was recorded."
 
 
