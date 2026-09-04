@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_rules import AnyMatcher, CommandSafeVariant, CommandSafetyRule
 
 # Current Laravel framework source defines `migrate:fresh` as dropping all
 # tables before re-running migrations, and `db:wipe` as dropping all tables
@@ -38,7 +38,7 @@ _LARAVEL_MIGRATE_FRESH = _artisan_command("migrate:fresh")
 _LARAVEL_DB_WIPE = _artisan_command("db:wipe")
 
 
-def _help_variants(matcher: AnyMatcher, prefix: str) -> tuple:
+def _help_variants(matcher: AnyMatcher, prefix: str) -> tuple[CommandSafeVariant, ...]:
     return (
         safe_flag_variant(
             matcher,
@@ -68,7 +68,10 @@ LARAVEL_ARTISAN_COMMAND_RULES = (
         action_classes=("Laravel fresh migration database reset command",),
         safer_alternatives=(
             "Run `php artisan migrate:status` first and confirm the selected database connection.",
-            "Use ordinary `php artisan migrate` when the goal is to apply pending migrations without dropping existing tables.",
+            (
+                "Use ordinary `php artisan migrate` when the goal is to apply pending migrations "
+                "without dropping existing tables."
+            ),
         ),
         matcher=_LARAVEL_MIGRATE_FRESH,
         default_mode="review",
@@ -110,7 +113,10 @@ LARAVEL_ARTISAN_COMMAND_EXTENSION_SPECS = (
             "Prefer ordinary migrations when existing application data should be preserved.",
         ),
         reference_urls=(
-            "https://github.com/laravel/framework/blob/13.x/src/Illuminate/Database/Console/Migrations/FreshCommand.php",
+            (
+                "https://github.com/laravel/framework/blob/13.x/src/Illuminate/Database/Console/Migrations/"
+                "FreshCommand.php"
+            ),
             "https://github.com/laravel/framework/blob/13.x/src/Illuminate/Database/Console/WipeCommand.php",
             "https://laravel.com/ai/boost",
         ),
