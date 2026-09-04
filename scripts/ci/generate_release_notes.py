@@ -390,7 +390,7 @@ def render_notes(
     lines.append("")
 
     if len(changes) > MAX_RENDERED_CHANGES:
-        lines.append(render_condensed_sections(changes))
+        lines.append(render_condensed_sections(changes, repo))
         lines.append("")
     else:
         sections = render_sections(changes, repo)
