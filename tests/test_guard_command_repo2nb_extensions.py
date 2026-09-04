@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
-    assert_reviewed_command_cases,
     assert_safe_command_cases,
 )
 
@@ -101,9 +101,10 @@ def test_repo2nb_module_and_wrapper_invocations_reach_review(tmp_path: Path) -> 
     """Indirect module and wrapper invocations reach review and attribute to repo2nb rules."""
 
     for command, expected_rule in REPO2NB_WRAPPER_REVIEW_COMMANDS:
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-        matched = {rule.get("rule_id") for rule in payload.get("rules", []) if isinstance(rule, dict)}
-        assert payload["status"] == "review", command
+        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
+            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+        )
+        matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.repo2nb"}
         assert expected_rule in matched, command
 
 
@@ -128,8 +129,11 @@ REPO2NB_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def test_repo2nb_rules_feed_runtime_hooks(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(REPO2NB_REVIEW_CASES, tmp_path)
+def test_repo2nb_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in REPO2NB_REVIEW_CASES:
+        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        assert evaluation.controlling_rule_id != rule_id
+        assert all(item.extension.extension_id != "command.repo2nb" for item in evaluation.extension_observations)
 
 
 REPO2NB_SAFE_COMMANDS: tuple[str, ...] = (
