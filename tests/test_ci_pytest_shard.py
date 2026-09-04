@@ -51,7 +51,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "python scripts/ci/pytest_shard.py" not in tests_job
     assert 'test "${#reports[@]}" -eq 96' in workflow
     assert "name: ci (3.12)" in workflow
-    assert "needs: [quality, test-plan, tests, compatibility]" in workflow
+    assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
 
     cache_consumers = (
         ("compatibility", "deep-compatibility", 1),

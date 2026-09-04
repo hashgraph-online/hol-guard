@@ -41,6 +41,7 @@ from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessRev
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 
 class _MutableUnicodeBuffer(Protocol):
@@ -432,7 +433,8 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
     assert {result.reason_code for result in results if result.reason_code is not None} <= {
         "daemon_hook_process_not_ready"
     }
-    assert elapsed < 1.0
+    # Coverage tracing inflates the prewarmed fan-in wall clock; scale the bound in covered CI runs.
+    assert elapsed < 1.0 * under_coverage_scale(3.0)
 
 
 def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
