@@ -14,9 +14,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -26,9 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
-    _daemon_response_once,
-)
+from ci.native_runtime.installed_hook_client import installed_hook_request as _installed_hook_request
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
@@ -137,40 +132,6 @@ def _ownership_routes() -> dict[str, dict[str, str]]:
     return decoded
 
 
-def _installed_hook_request(
-    daemon: GuardDaemonServer,
-    guard_home: Path,
-    workspace: Path,
-    harness: str,
-    event: str,
-    payload: dict[str, object],
-) -> dict[str, object] | None:
-    query = urllib.parse.urlencode({"home": str(guard_home), "workspace": str(workspace)})
-    encoded = json.dumps(payload, separators=(",", ":"))
-    if harness == "codex":
-        return _daemon_response_once(
-            state_path=guard_home / "daemon-state.json",
-            query=query,
-            data=encoded,
-            timeout_seconds=5,
-        )
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-        data=encoded.encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            decoded = json.loads(response.read().decode("utf-8"))
-            return decoded if isinstance(decoded, dict) else None
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")[:512]
-        raise RuntimeError(
-            f"installed hook corpus request failed: harness={harness} event={event} status={error.code} body={detail}"
-        ) from error
-
-
 def _exercise_installed_routes(
     daemon: GuardDaemonServer,
     guard_home: Path,
@@ -248,8 +209,7 @@ def _exercise_mode_invariants(
             _require(
                 response.get("continue") is True
                 and response.get("policy_action") == "allow"
-                and response.get("reason_code")
-                in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
+                and response.get("reason_code") in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
                 {"mode": mode, "response": response},
             )
             mode_invariants[mode] = {

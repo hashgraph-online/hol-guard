@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_hook_test_client import open_authenticated_claude_request
 
 _DEADLINE_REASON = "daemon_hook_process_deadline_exhausted"
 
@@ -49,7 +50,12 @@ def _review_request(
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=5) as response:
+    response_context = (
+        open_authenticated_claude_request(daemon, request, timeout=5)
+        if endpoint == "claude-code"
+        else urllib.request.urlopen(request, timeout=5)
+    )
+    with response_context as response:
         assert response.status == 200
         payload = json.loads(response.read())
     assert isinstance(payload, dict)

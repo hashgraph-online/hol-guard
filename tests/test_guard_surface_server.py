@@ -39,11 +39,11 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifac
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime, _browser_url_for_review
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_hook_test_client import open_authenticated_claude_request
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
     Also installs a test-only resolver override so sync-path exercises stay hermetic
     (no OAuth token refresh against the network). Tests that need real sync against a
     local server pass sync_url=<url>.
@@ -1001,7 +1001,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, hook_request, timeout=5) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1191,7 +1191,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(pretool_request, timeout=5):
+            with open_authenticated_claude_request(daemon, pretool_request, timeout=5):
                 pass
 
             notification_request = urllib.request.Request(
@@ -1214,7 +1214,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(notification_request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, notification_request, timeout=5) as response:
                 notification_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1249,7 +1249,7 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
+                open_authenticated_claude_request(daemon, request, timeout=5)
         finally:
             daemon.stop()
 
@@ -2005,7 +2005,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -2047,7 +2047,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -2086,7 +2086,7 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
+                open_authenticated_claude_request(daemon, request, timeout=5)
         finally:
             daemon.stop()
 
@@ -2121,7 +2121,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -2148,7 +2148,7 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
+                open_authenticated_claude_request(daemon, request, timeout=5)
         finally:
             daemon.stop()
 
@@ -2185,7 +2185,7 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
+                open_authenticated_claude_request(daemon, request, timeout=5)
         finally:
             daemon.stop()
 
@@ -2758,7 +2758,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, hook_request, timeout=5) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -2793,7 +2793,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, hook_request, timeout=5) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -2831,7 +2831,7 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with open_authenticated_claude_request(daemon, hook_request, timeout=5) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
