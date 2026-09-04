@@ -47,6 +47,14 @@ assert.equal(
   "rm -f /workspace/project/output.txt",
   "SRD-00: dashboard prefers the full native command over a nested request summary target",
 );
+assert.equal(
+  resolveStoppedCommandText({
+    ...NATIVE_TOOL_ACTION_REQUEST,
+    launch_summary: "  Launches with `rm -f /workspace/project/output.txt`.  ",
+  }),
+  "rm -f /workspace/project/output.txt",
+  "SRD-00a: dashboard trims padded native launch summaries before extraction",
+);
 
 const LONG_NATIVE_COMMAND = `rm -f ${"x".repeat(200)}`;
 assert.equal(

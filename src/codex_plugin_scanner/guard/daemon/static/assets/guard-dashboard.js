@@ -14635,8 +14635,9 @@ function resolveStoppedCommandText(item) {
   }
   const launchTarget = item.launch_target?.trim();
   const launchTargetIsRequestSummary = item.artifact_type === "tool_action_request" && launchTarget?.startsWith("Requested `") && launchTarget.includes(" action `");
-  if (launchTargetIsRequestSummary && item.launch_summary?.trim()) {
-    const launchSummaryCommand = item.launch_summary.match(/^Launches with `(.+)`\.$/);
+  const launchSummary = item.launch_summary?.trim();
+  if (launchTargetIsRequestSummary && launchSummary) {
+    const launchSummaryCommand = launchSummary.match(/^Launches with `(.+)`\.$/);
     if (launchSummaryCommand?.[1]) {
       return launchSummaryCommand[1];
     }
