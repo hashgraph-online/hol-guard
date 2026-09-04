@@ -32,7 +32,7 @@ _VECTOR_PATH = (
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
 _GUARD_RELEASE_CATALOG_DIGEST = "930ff4f2330aa408c20977a09dd0118504dfe931f0d12262c720770a411e6e4b"
-_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:3475562fd3076d07aad8f58106546af3d7b8fc34bed8b15d914f19aca28fe5e3"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:164e7eeb8ddd52ce4aecdd7d9558302cab02f73394ffa97e2bf8c37e78dbc18b"
 
 
 class _Response:
