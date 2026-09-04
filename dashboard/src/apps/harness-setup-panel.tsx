@@ -201,7 +201,7 @@ export function HarnessSetupPanel(props: {
 
   return (
     <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <SectionLabel>Local harness install</SectionLabel>
           <h3 className="mt-2 text-lg font-semibold text-brand-dark">
@@ -213,7 +213,7 @@ export function HarnessSetupPanel(props: {
               : "Guard will install the local managed hooks through the daemon. No copied shell command required."}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2 max-xl:w-full max-xl:justify-start">
           {!active && (
             <ActionButton onClick={handleConnect} disabled={busy} data-primary="true">
               <HiMiniRocketLaunch className="h-4 w-4" aria-hidden="true" />

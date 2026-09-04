@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./app";
-import "./styles.css";
+import "./tailwind-root.css";
 import "./shell-navigation.css";
 import "./open-guard-cloud-action.css";
 import "./shell-navigation-status.css";
