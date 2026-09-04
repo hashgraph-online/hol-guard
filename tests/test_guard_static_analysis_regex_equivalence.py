@@ -57,7 +57,7 @@ def _exhaustive(alphabet: str, max_length: int) -> list[str]:
 
 def test_secret_assignment_re_matches_same_spans_as_pre_fix_form() -> None:
     corpus = (
-        _exhaustive("a\\\"':=; ", 6)
+        _exhaustive("a\\\"':=; \n", 6)
         + _exhaustive("a\\\"'=tpk", 5)
         + [
             'access_token = "abc\\"def"',
@@ -77,6 +77,14 @@ def test_secret_assignment_re_matches_same_spans_as_pre_fix_form() -> None:
             "\\\\",
             'token = "\\\\"',
             "token = '\\\\'",
+            # Escaped and bare newlines must stay inside quoted values so the
+            # whole assignment is scrubbed, as the pre-fix pattern did.
+            'token = "first\\\nsecond"',
+            "token = 'first\\\nsecond'",
+            'token = "a\nb"',
+            "token = 'a\nb'",
+            'token = "first\\"\\\n"',
+            "token = 'x\\'\\\ny'",
         ]
     )
     for sample in corpus:

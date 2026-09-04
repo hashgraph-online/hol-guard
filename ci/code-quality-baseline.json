@@ -567,7 +567,7 @@
     "src/codex_plugin_scanner/guard/runtime/kubernetes_commands.py": 607,
     "src/codex_plugin_scanner/guard/runtime/linux_artifact_lifecycle.py": 678,
     "src/codex_plugin_scanner/guard/runtime/linux_udp_dns_enforcement.py": 579,
-    "src/codex_plugin_scanner/guard/runtime/local_request_snapshots.py": 1648,
+    "src/codex_plugin_scanner/guard/runtime/local_request_snapshots.py": 1650,
     "src/codex_plugin_scanner/guard/runtime/mcp_skill_firewall.py": 541,
     "src/codex_plugin_scanner/guard/runtime/oci_isolation_provider.py": 1088,
     "src/codex_plugin_scanner/guard/runtime/oci_plan_generator.py": 1134,
