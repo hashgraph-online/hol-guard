@@ -63,6 +63,9 @@ export function parseGuardCloudConnectHttp(
       dashboard_url: dashboardUrl,
     };
   }
+  if (status === 401 || status === 403) {
+    throw new Error("This Guard window needs a signed local session before Guard Cloud sign-in can start.");
+  }
   if (status < 200 || status >= 300) {
     const message = typeof record.message === "string" && record.message.trim()
       ? record.message

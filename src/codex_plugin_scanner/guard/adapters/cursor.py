@@ -18,7 +18,8 @@ from .cursor_cli import (
     cursor_cli_command_available,
     resolve_cursor_cli_entry,
 )
-from .cursor_hooks import install_cursor_hooks, uninstall_cursor_hooks
+from .cursor_hook_config import detect_managed_cursor_hook_artifact
+from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -144,6 +145,11 @@ class CursorHarnessAdapter(HarnessAdapter):
                         )
                     )
                 )
+        hooks_path = cursor_hooks_path(context)
+        hook_artifact = detect_managed_cursor_hook_artifact(hooks_path, _json_payload(hooks_path))
+        if hook_artifact is not None:
+            found_paths.append(hook_artifact.config_path)
+            artifacts.append(hook_artifact)
         cli_available = cursor_cli_command_available(context)
         detection = HarnessDetection(
             harness=self.harness,
@@ -418,7 +424,7 @@ class CursorHarnessAdapter(HarnessAdapter):
     ) -> list[str]:
         warnings = super().diagnostic_warnings(detection, runtime_probe)
         reported_artifacts = runtime_probe.get("reported_artifacts") if runtime_probe is not None else None
-        if detection.artifacts and reported_artifacts == 0:
+        if any(artifact.artifact_type == "mcp_server" for artifact in detection.artifacts) and reported_artifacts == 0:
             warnings.append(
                 "Cursor CLI reported no MCP servers, but Guard found local definitions. "
                 "Cursor may be using a different config root than Guard."

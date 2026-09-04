@@ -23,6 +23,16 @@ assert(
   "409 payload must keep dashboard_url",
 );
 
+let unauthorizedConnectFailed = false;
+try {
+  parseGuardCloudConnectHttp(401, { error: "unauthorized" });
+} catch (error: unknown) {
+  unauthorizedConnectFailed = error instanceof Error
+    && error.message.includes("signed local session")
+    && !error.message.includes("unauthorized");
+}
+assert(unauthorizedConnectFailed, "401 must use a signed-session message, not raw unauthorized");
+
 assert(
   parseGuardCloudConnectHttp(409, {
     error: "guard_cloud_connect_not_required",
