@@ -214,7 +214,7 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     output = capsys.readouterr().out
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_run_local_fallback_degrades_invalid_json() -> None:
@@ -226,7 +226,7 @@ def test_run_local_fallback_degrades_invalid_json() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
@@ -255,8 +255,7 @@ def test_valid_hook_json_degrades_empty_daemon_body() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "full HOL Guard approval flow" in payload["systemMessage"]
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_daemon_response_body_is_size_bounded() -> None:
@@ -284,7 +283,23 @@ def test_oversized_hook_input_fails_safe_without_daemon_contact(
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "exceeded the safe size limit" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_oversized_permission_request_uses_nested_deny() -> None:
+    payload = json.loads(bridge._limit_denied("hook input", "PermissionRequest"))
+    decision = payload["hookSpecificOutput"]["decision"]
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+    assert decision["behavior"] == "deny"
+    assert "exceeded the safe size limit" in decision["message"]
+    truncated = '{"hook_event_name":"PermissionRequest","tool_name":"Write","prompt":"' + "x" * 80
+    assert bridge._event_name(truncated) == "PermissionRequest"
+    prompt = json.loads(bridge._limit_denied("hook input", "UserPromptSubmit"))
+    assert prompt["decision"] == "block"
+    notice = json.loads(bridge._limit_denied("hook input", "Notification"))
+    assert notice["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert notice["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
@@ -445,7 +460,7 @@ def test_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
     )
     time.sleep(0.4)
 
-    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert not marker.exists()
 
 

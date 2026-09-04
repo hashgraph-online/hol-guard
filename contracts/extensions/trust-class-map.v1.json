@@ -53,6 +53,7 @@
       "command.dns",
       "command.email",
       "command.feature-flags",
+      "command.framework.laravel",
       "command.github",
       "command.infrastructure-as-code",
       "command.kubernetes-operations",

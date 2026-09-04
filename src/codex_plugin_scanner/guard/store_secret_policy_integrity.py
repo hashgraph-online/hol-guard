@@ -721,50 +721,14 @@ class StoreSecretPolicyIntegrityMixin:
         key_id: str,
         trusted_state: dict[str, object],
     ) -> dict[str, object]:
-        current_generation = _mapping_int(trusted_state, "generation")
-        if current_generation is None:
-            raise RuntimeError("Guard policy integrity control state is invalid.")
-        pending_generation = trusted_state.get("pending_generation")
-        if not isinstance(pending_generation, int) or pending_generation <= current_generation:
+        next_state = self._resolved_policy_integrity_pending_generation(
+            connection,
+            key=key,
+            key_id=key_id,
+            trusted_state=trusted_state,
+        )
+        if next_state is trusted_state:
             return trusted_state
-        rows = self._load_local_policy_rows(connection)
-        next_state: dict[str, object]
-        if not rows:
-            next_state = {
-                "cutover_complete": True,
-                "generation": pending_generation,
-                "pending_generation": None,
-                "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-            }
-        else:
-            (
-                has_legacy_rows,
-                pending_candidates,
-                pending_valid,
-                current_valid,
-            ) = self._classify_policy_integrity_pending_generation_rows(
-                rows,
-                key=key,
-                key_id=key_id,
-                current_generation=current_generation,
-                pending_generation=pending_generation,
-            )
-            if has_legacy_rows:
-                next_state = dict(trusted_state)
-                if pending_candidates > 0 and current_valid == len(rows):
-                    next_state["pending_generation"] = None
-            elif pending_valid == len(rows):
-                next_state = {
-                    "cutover_complete": True,
-                    "generation": pending_generation,
-                    "pending_generation": None,
-                    "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-                }
-            elif current_valid == len(rows):
-                next_state = dict(trusted_state)
-                next_state["pending_generation"] = None
-            else:
-                next_state = dict(trusted_state)
         if not self._store_policy_integrity_control_state(next_state):
             raise RuntimeError("Guard could not persist the policy integrity control state.")
         return next_state

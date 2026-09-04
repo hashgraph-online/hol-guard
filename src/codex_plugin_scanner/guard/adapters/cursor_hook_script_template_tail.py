@@ -15,9 +15,16 @@ HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home(workspace: st
 
 
 def _cursor_permission(policy_action: str, guard_payload: dict[str, object], workspace: str | None = None) -> str:
-    del guard_payload
     if _recording_only_from_guard_home(workspace):
         return "allow"
+    reason_code = str(guard_payload.get("reason_code") or "")
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_reason_continues_session
+
+        if hook_reason_continues_session(reason_code):
+            return "allow"
+    except Exception:
+        pass
     if policy_action not in GUARD_ACTIONS:
         return "deny"
     if policy_action in {"block", "sandbox-required"}:

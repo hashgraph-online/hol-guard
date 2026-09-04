@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .containment_execution_support import (
+    contained_process_effect_decision as _contained_decision,
+)
+from .containment_execution_support import (
     containment_positive_proof as _proof_from_result,
 )
 from .containment_execution_support import (
@@ -25,28 +28,7 @@ from .runtime.contained_execution_common import (
 )
 from .runtime.containment_contract import ContainmentPolicy, ContainmentRequest
 from .runtime.containment_executor import execute_contained, file_sha256
-from .runtime.effect_contract import (
-    ContainmentRequirement,
-    DecisionBasis,
-    EffectAssessment,
-    EffectBlastRadius,
-    EffectConfidence,
-    EffectEvidenceSource,
-    EffectKind,
-    EffectReversibility,
-    EffectTargetScope,
-    ProofRequirement,
-    ProofRoute,
-)
-from .runtime.effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
-    EffectDecisionRequest,
-    FinalDisposition,
-    PositiveProof,
-    evaluate_effect_decision,
-)
+from .runtime.effect_decision import EffectDecision, FinalDisposition, PositiveProof
 from .runtime.local_node_runner_evidence import build_local_node_runner_evidence
 from .runtime.package_intent_parser import parse_package_intent
 from .runtime.workspace_snapshot_inputs import complete_workspace_snapshot, reject_external_node_modules
@@ -138,6 +120,21 @@ def try_execute_contained_node_command(
         executable_digest=node_digest,
         operation_id=evidence.operation_id,
     )
+    return _complete_contained_node_command(
+        request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+        operation_id=evidence.operation_id,
+    )
+
+
+def _complete_contained_node_command(
+    request: ContainmentRequest,
+    *,
+    guard_home: Path,
+    timeout_seconds: float,
+    operation_id: str,
+) -> ContainedNodeResult | None:
     try:
         health, runtime_fingerprint = _load_current_containment_health(guard_home)
     except (OSError, RuntimeError, TypeError, ValueError):
@@ -149,7 +146,11 @@ def try_execute_contained_node_command(
         proof = _proof_from_result(result, request, health, runtime_fingerprint)
     except ValueError:
         return None
-    decision = _contained_decision(proof, operation_id=evidence.operation_id)
+    decision = _contained_decision(
+        proof,
+        operation_id=operation_id,
+        producer_ref="containment:local-node-v1",
+    )
     if decision.disposition is not FinalDisposition.SILENT_CONTAINED:
         return None
     return ContainedNodeResult(
@@ -158,48 +159,7 @@ def try_execute_contained_node_command(
         result.stderr,
         proof,
         decision,
-        evidence.operation_id,
-    )
-
-
-def _contained_decision(proof: PositiveProof, *, operation_id: str) -> EffectDecision:
-    requirements = frozenset(
-        {
-            ProofRequirement.OPERATION_AND_TARGETS,
-            ProofRequirement.WORKSPACE_IDENTITY,
-            ProofRequirement.WORKING_DIRECTORY_IDENTITY,
-            ProofRequirement.EXECUTABLE_IDENTITY,
-            ProofRequirement.LAUNCH_CHAIN,
-            ProofRequirement.PARSER_CONFIDENCE,
-            ProofRequirement.EXPECTED_EFFECTS,
-            ProofRequirement.CONTAINMENT_IDENTITY,
-        }
-    )
-    assessment = EffectAssessment(
-        kind=EffectKind.PROCESS_EXECUTION,
-        target_scope=EffectTargetScope.WORKSPACE,
-        reversibility=EffectReversibility.TRIVIALLY_RECOVERABLE,
-        blast_radius=EffectBlastRadius.WORKSPACE,
-        evidence_source=EffectEvidenceSource.CONTAINMENT,
-        confidence=EffectConfidence.STRONG,
-        containment=ContainmentRequirement.REQUIRED,
-        proof_requirements=requirements,
-    )
-    return evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=(
-                DecisionFactor(
-                    source=DecisionFactorSource.EFFECT,
-                    reason_code=f"routine-{operation_id}-contained",
-                    basis=DecisionBasis("allow", ProofRoute.CONTAINED),
-                    operation_ref=f"operation:{operation_id}",
-                    producer_ref="containment:local-node-v1",
-                    evidence_digest=proof.binding_digest,
-                    assessment=assessment,
-                    proof=proof,
-                ),
-            )
-        )
+        operation_id,
     )
 
 

@@ -234,6 +234,40 @@ def post_tool_fail_safe_response(
     )
 
 
+def integrity_fail_closed_pre_tool_response(
+    harness: str,
+    *,
+    reason: str,
+    reason_code: str,
+) -> dict[str, object]:
+    """Deny PreToolUse when hook payload authenticity cannot be proven."""
+
+    canonical = _canonical_hook_harness(harness)
+    if canonical in {"pi", "omp"}:
+        return {
+            "decision": "deny",
+            "reason": reason,
+            "policy_action": "block",
+            "reason_code": reason_code,
+        }
+    if canonical in {"grok", "hermes", "openclaw"}:
+        return {
+            "decision": "block" if canonical == "hermes" else "deny",
+            "reason": reason,
+            "policy_action": "block",
+            "reason_code": reason_code,
+        }
+    return {
+        "policy_action": "block",
+        "reason_code": reason_code,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        },
+    }
+
+
 def permission_unavailable_response(
     harness: str,
     *,
@@ -327,6 +361,7 @@ __all__ = [
     "harness_json_from_native_post_tool",
     "harness_json_from_native_pre_tool",
     "harness_json_from_review_response",
+    "integrity_fail_closed_pre_tool_response",
     "observe_lifecycle_fail_safe_response",
     "permission_unavailable_response",
     "post_tool_fail_safe_response",

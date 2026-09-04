@@ -1,4 +1,4 @@
-"""Harness responses for the emergency-safe floor when native review cannot complete."""
+"""Harness responses when native review cannot complete without stopping the session."""
 
 from __future__ import annotations
 
@@ -102,14 +102,31 @@ _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
         "native_post_tool_unavailable",
         "native_overloaded",
         "native_hook_worker_unavailable",
+        "native_hook_worker_unavailable_before_compatibility",
         "native_hook_worker_unsupported",
         "native_hook_worker_exception",
+        "native_hook_compatibility_disabled",
+        "native_hook_edge_invalid_response",
+        "native_hook_edge_unavailable",
+        "python_hook_oracle_unavailable",
+        "python_oracle_exception",
+        "watch_recording_only",
         "daemon_hook_queue_capacity",
         "daemon_hook_deadline_exhausted",
         "daemon_hook_process_deadline_exhausted",
         "daemon_hook_process_not_ready",
         "daemon_hook_process_failed",
+        "daemon_hook_process_invalid_request",
+        "daemon_hook_process_guard_home_mismatch",
         "daemon_worker_exception",
+        "harness_not_managed",
+        "native_degraded_emergency_safe",
+    }
+)
+_INTEGRITY_FAIL_CLOSED_REASON_CODES = frozenset(
+    {
+        "invalid_hook_payload_reference",
+        "daemon_hook_queue_bytes",
     }
 )
 
@@ -118,13 +135,22 @@ def hook_event_is_permission_request(event_name: str) -> bool:
     return _compact_hook_event_name(event_name) in _PERMISSION_REQUEST_EVENTS
 
 
+def hook_reason_continues_session(reason_code: str) -> bool:
+    """True when this availability reason must not stop the harness."""
+
+    code = reason_code.strip()
+    if code in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
+        return False
+    return code in _REVIEW_CANNOT_FINISH_REASON_CODES
+
+
 def recording_only_pre_tool_response(
     harness: str,
     *,
     reason_code: str,
     reason: str,
 ) -> dict[str, object]:
-    """Continue a PreToolUse hook in Watch without changing Protected fail-closed JSON."""
+    """Continue PreToolUse when native review cannot finish."""
 
     from .hook_worker_responses import harness_json_from_native_pre_tool
 
@@ -161,42 +187,15 @@ def availability_harness_response(
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
-    from .hook_worker_responses import (
-        harness_json_from_native_pre_tool,
-        observe_lifecycle_fail_safe_response,
-    )
+    from .hook_worker_responses import observe_lifecycle_fail_safe_response
 
+    del payload, workspace, home_dir, guard_home, recording_only
     canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
     if canonical_lifecycle is not None:
         return observe_lifecycle_fail_safe_response(
             harness,
             event_name=canonical_lifecycle,
             reason_code=reason_code,
-        )
-    watch_only = hook_review_is_recording_only(
-        guard_home=guard_home,
-        workspace=workspace,
-        recording_only=recording_only,
-    )
-    compact = _compact_hook_event_name(event_name)
-    pre_tool_event = compact in {"pretooluse", "pretool"} or compact.startswith("before")
-    if watch_only:
-        if not pre_tool_event:
-            return observe_lifecycle_fail_safe_response(
-                harness,
-                event_name=event_name,
-                reason_code=reason_code,
-            )
-        return recording_only_pre_tool_response(
-            harness,
-            reason_code=reason_code,
-            reason=reason,
-        )
-    if reason_code in _REVIEW_CANNOT_FINISH_REASON_CODES and pre_tool_event:
-        return recording_only_pre_tool_response(
-            harness,
-            reason_code=reason_code,
-            reason=reason,
         )
     if hook_event_is_permission_request(event_name):
         from .hook_worker_responses import permission_unavailable_response
@@ -207,36 +206,26 @@ def availability_harness_response(
             reason=reason,
             reason_code=reason_code,
         )
-    if not hook_event_pauses_when_unavailable(event_name):
-        return observe_lifecycle_fail_safe_response(
+    compact = _compact_hook_event_name(event_name)
+    pre_tool_event = compact in {"pretooluse", "pretool"} or compact.startswith("before")
+    if pre_tool_event and reason_code.strip() in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
+        from .hook_worker_responses import integrity_fail_closed_pre_tool_response
+
+        return integrity_fail_closed_pre_tool_response(
             harness,
-            event_name=event_name,
+            reason=reason,
             reason_code=reason_code,
         )
-    if not hook_action_is_emergency_safe(
-        payload,
-        workspace=workspace,
-        home_dir=home_dir,
-    ):
-        return harness_json_from_native_pre_tool(
+    if pre_tool_event:
+        return recording_only_pre_tool_response(
             harness,
-            {
-                "decision": "deny",
-                "minimum_action": "block",
-                "policy_action": "block",
-                "reason_code": reason_code,
-                "reason": reason,
-            },
+            reason_code=reason_code,
+            reason=reason,
         )
-    return harness_json_from_native_pre_tool(
+    return observe_lifecycle_fail_safe_response(
         harness,
-        {
-            "decision": "allow",
-            "minimum_action": "warn",
-            "policy_action": "warn",
-            "reason_code": EMERGENCY_SAFE_REASON_CODE,
-            "reason": EMERGENCY_SAFE_REASON,
-        },
+        event_name=event_name,
+        reason_code=reason_code,
     )
 
 
@@ -283,6 +272,7 @@ __all__ = [
     "hook_action_is_emergency_safe",
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
+    "hook_reason_continues_session",
     "hook_review_is_recording_only",
     "lifecycle_event_is_observe_only",
     "recording_only_pre_tool_response",
