@@ -141,7 +141,9 @@ assert.equal(mutationState.effective.layers[0]?.controls.length, 1, "builder mus
 
 const extension: ExtensionCatalogItem = {
   schema_version: 2, extension_id: "command.git", name: "Git", description: "Protects source-control commands.",
-  enabled: true, required: false, source: "built-in", version: "1.2.3", aliases: ["command.scm"],
+  enabled: true, required: false, trust_class: "first-party", activation: "default-on",
+  publisher: { id: "hol", displayName: "Hashgraph Online" }, icon: { kind: "none" },
+  source: "built-in", version: "1.2.3", aliases: ["command.scm"],
   dependencies: [], conflicts: [], delegated_protection: null, ecosystem_ids: ["git"], executables: ["git"],
   project_markers: [".git"], reference_urls: [], action_classes: ["git.history.rewrite"],
   risk_classes: ["history-rewrite"], safer_alternatives: [], rule_count: 1,
@@ -232,6 +234,40 @@ assert.equal(extensionEffectiveState(effective, extension), "enabled");
 assert.equal(permissionEffectiveState(effective, extension, extension.permissions[0]!), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, global_lockdown: true }, { ...extension, required: true }), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, health: "tampered" }, extension), "disabled");
+const noodle = {
+  ...extension,
+  extension_id: "command.noodle",
+  name: "Noodle",
+  enabled: false,
+  trust_class: "external" as const,
+  activation: "opt-in" as const,
+};
+assert.equal(extensionEffectiveState(effective, noodle), "disabled");
+assert.equal(extensionEffectiveState({
+  ...effective,
+  layers: [{
+    schema_version: "1.0.0",
+    kind: "local-admin",
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: false,
+    controls: [{ target_kind: "extension", target_id: "command.noodle", state: "enabled" }],
+  }],
+  projection: {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: 7,
+    catalog_digest: effective.catalog_digest,
+    health: "protected",
+    extensions: [{
+      extension_id: "command.noodle",
+      effective_state: "allowed",
+      local_state: "enabled",
+      managed_state: "inherited",
+      required: false,
+      reason_codes: [],
+    }],
+    permissions: [],
+  },
+}, noodle), "enabled");
 
 assert.equal(extensionPolicyRadioTabStop([
   { value: "inherit" },
