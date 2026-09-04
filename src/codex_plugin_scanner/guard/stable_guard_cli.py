@@ -1,7 +1,8 @@
 """Stable Guard CLI resolution for Desktop-managed frozen runtimes.
 
-Desktop Core lives under ``versions/<release>/`` and that directory is pruned
-on update. Hooks and package-manager shims must not bake that ephemeral path.
+Desktop Core lives under ``versions/<release>/`` or ``bundled/<release>/`` and
+those directories can be replaced on update. Hooks and package-manager shims
+must not bake either ephemeral path.
 """
 
 from __future__ import annotations
@@ -18,9 +19,12 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
     """Return the stable ``current-hol-guard`` launcher next to a versioned Core."""
 
     versions_dir = executable.parent.parent
-    if versions_dir.name != "versions":
+    if versions_dir.name == "versions":
+        parent = versions_dir.parent
+    elif len(executable.parents) > 4 and executable.parents[3].name == "bundled":
+        parent = executable.parents[4]
+    else:
         return None
-    parent = versions_dir.parent
     unix = parent / CURRENT_HOL_GUARD_SHIM
     windows = parent / f"{CURRENT_HOL_GUARD_SHIM}.cmd"
     if sys.platform == "win32":
