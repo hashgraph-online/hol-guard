@@ -30,7 +30,9 @@ def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None
         destination = data_root / destination_name
         assert destination.read_text(encoding="utf-8") == source_name
     assert (data_root / "extensions" / "__init__.py").is_file()
+    assert (data_root / "extensions" / "contributions" / "__init__.py").is_file()
     assert (data_root / "extensions" / "trust-class-map.v1.json").is_file()
+    assert not (data_root / "guard-cloud-review" / "__init__.py").exists()
 
 
 def test_stage_artifacts_fails_closed_when_source_is_missing(tmp_path: Path) -> None:
@@ -39,3 +41,15 @@ def test_stage_artifacts_fails_closed_when_source_is_missing(tmp_path: Path) -> 
 
     with pytest.raises(FileNotFoundError, match=r"contract\.json"):
         MODULE.stage_artifacts(tmp_path)
+
+
+def test_stage_artifacts_includes_existing_package_inits(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    data_root = tmp_path / "src/codex_plugin_scanner/guard/contracts/data"
+    extensions = data_root / "extensions"
+    extensions.mkdir(parents=True, exist_ok=True)
+    (extensions / "__init__.py").write_text("", encoding="utf-8")
+
+    staged = MODULE.stage_artifacts(tmp_path)
+
+    assert extensions / "__init__.py" in staged

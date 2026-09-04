@@ -39,12 +39,12 @@ def stage_artifacts(source_root: Path) -> tuple[Path, ...]:
         data_root,
         data_root / "extensions",
         data_root / "extensions" / "contributions",
-        data_root / "guard-cloud-review",
     ):
+        package.mkdir(parents=True, exist_ok=True)
         init_path = package / "__init__.py"
         if not init_path.is_file():
             init_path.write_text("", encoding="utf-8")
-            staged.append(init_path)
+        staged.append(init_path)
     return tuple(staged)
 
 
