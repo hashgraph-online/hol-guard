@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.daemon.extension_control_projection import (
     build_effective_extension_control_projection,
 )
+from codex_plugin_scanner.guard.runtime import extension_trust as extension_trust_module
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -234,3 +239,40 @@ def test_disabling_aws_still_blocks(tmp_path: Path) -> None:
         extension_control_layers=(_disable_layer("command.cloud.aws"),),
     )
     assert evaluation.minimum_action == "block"
+
+
+def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust-class-map.v1.json"
+    target = (
+        tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions" / "trust-class-map.v1.json"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    def missing_package(_name: str) -> object:
+        raise ModuleNotFoundError("missing packaged extensions")
+
+    monkeypatch.setattr(extension_trust_module.resources, "files", missing_package)
+    extension_trust_module._trust_map.cache_clear()
+    try:
+        assert trust_class_for("command.noodle") == "external"
+    finally:
+        extension_trust_module._trust_map.cache_clear()
+
+
+def test_frozen_trust_map_fails_closed_without_package_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    def missing_package(_name: str) -> object:
+        raise ModuleNotFoundError("missing packaged extensions")
+
+    monkeypatch.setattr(extension_trust_module.resources, "files", missing_package)
+    extension_trust_module._trust_map.cache_clear()
+    try:
+        with pytest.raises(FileNotFoundError, match="trust-class map"):
+            trust_class_for("command.noodle")
+    finally:
+        extension_trust_module._trust_map.cache_clear()

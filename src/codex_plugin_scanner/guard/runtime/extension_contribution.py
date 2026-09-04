@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping
 from functools import lru_cache
 from importlib import resources
@@ -13,6 +14,19 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 _SCHEMA_VERSION: Final = "guard.extension-contribution.v1"
+_PACKAGE_DATA: Final = ("codex_plugin_scanner", "guard", "contracts", "data")
+
+
+def frozen_package_data(*parts: str) -> Path | None:
+    """Return a packaged contract path extracted into a frozen runtime."""
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not bool(getattr(sys, "frozen", False)) or not isinstance(meipass, str):
+        return None
+    path = Path(meipass).joinpath(*_PACKAGE_DATA, *parts)
+    return path if path.is_file() or path.is_dir() else None
+
+
 _MODULE_PREFIX: Final = "codex_plugin_scanner.guard.runtime."
 _ALLOWED_ICON_NAMES: Final = frozenset(
     {
@@ -107,7 +121,10 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions") / "contributions"
         names = [item for item in root.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
     except (FileNotFoundError, ModuleNotFoundError, OSError, AttributeError):
-        return ()
+        frozen = frozen_package_data("extensions", "contributions")
+        if frozen is None or not frozen.is_dir():
+            return ()
+        names = [item for item in frozen.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
     if not names:
         return ()
     payloads: list[dict[str, object]] = []
@@ -144,6 +161,11 @@ def _schema_bytes() -> bytes:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         return (root / "contribution.v1.schema.json").read_bytes()
     except (FileNotFoundError, ModuleNotFoundError, OSError):
+        frozen = frozen_package_data("extensions", "contribution.v1.schema.json")
+        if frozen is not None and frozen.is_file():
+            return frozen.read_bytes()
+        if bool(getattr(sys, "frozen", False)):
+            raise FileNotFoundError("frozen Guard is missing packaged extension contribution schema") from None
         repo_schema = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "contribution.v1.schema.json"
         return repo_schema.read_bytes()
 

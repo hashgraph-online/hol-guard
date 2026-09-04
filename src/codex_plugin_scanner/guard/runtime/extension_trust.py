@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterable, Sequence
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeVar, cast
 
-from .extension_contribution import contribution_catalog_overlay
+from .extension_contribution import contribution_catalog_overlay, frozen_package_data
 from .extension_control_contract import (
     ControlLayerKind,
     ControlState,
@@ -65,7 +66,11 @@ def _trust_map() -> dict[str, TrustClass]:
 
 def _load_map() -> dict[str, object]:
     packaged = _packaged_map_bytes()
-    raw = packaged if packaged is not None else _repo_map_path().read_bytes()
+    if packaged is None:
+        if bool(getattr(sys, "frozen", False)):
+            raise FileNotFoundError("frozen Guard is missing packaged extension trust-class map")
+        packaged = _repo_map_path().read_bytes()
+    raw = packaged
     payload = json.loads(raw.decode("utf-8"))
     if not isinstance(payload, dict) or payload.get("schemaVersion") != _MAP_SCHEMA:
         raise ValueError("invalid trust-class map")
@@ -77,7 +82,8 @@ def _packaged_map_bytes() -> bytes | None:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         return (root / "trust-class-map.v1.json").read_bytes()
     except (FileNotFoundError, ModuleNotFoundError, OSError):
-        return None
+        frozen = frozen_package_data("extensions", "trust-class-map.v1.json")
+        return frozen.read_bytes() if frozen is not None and frozen.is_file() else None
 
 
 def _repo_map_path() -> Path:

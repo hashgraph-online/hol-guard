@@ -24,10 +24,13 @@ def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None
 
     staged = MODULE.stage_artifacts(tmp_path)
 
-    assert len(staged) == 4
+    data_root = tmp_path / "src/codex_plugin_scanner/guard/contracts/data"
+    assert len(staged) >= len(MODULE._ARTIFACTS)
     for source_name, destination_name in MODULE._ARTIFACTS.items():
-        destination = tmp_path / "src/codex_plugin_scanner/guard/contracts/data/guard-cloud-review" / destination_name
+        destination = data_root / destination_name
         assert destination.read_text(encoding="utf-8") == source_name
+    assert (data_root / "extensions" / "__init__.py").is_file()
+    assert (data_root / "extensions" / "trust-class-map.v1.json").is_file()
 
 
 def test_stage_artifacts_fails_closed_when_source_is_missing(tmp_path: Path) -> None:
