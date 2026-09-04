@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
+from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    build_tool_action_request_artifact,
+    extract_sensitive_tool_action_request,
+)
 
 
 @pytest.mark.parametrize(
@@ -152,15 +158,24 @@ def test_populated_mcp_tool_call_does_not_turn_tool_name_into_shell_launch() -> 
 
 
 def test_command_bearing_native_request_keeps_command_over_generic_summary() -> None:
-    artifact = GuardArtifact(
-        artifact_id="copilot:project:tool-action:rm",
-        name="bash destructive shell command",
-        harness="copilot",
-        artifact_type="tool_action_request",
-        source_scope="project",
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "rm -f /workspace/project/output.txt"},
+    )
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "copilot",
+        request,
         config_path="/workspace/.github/hooks/guard.json",
-        command="rm -f /workspace/project/output.txt",
-        metadata={"request_summary": "Guard requires approval because no command rule matched this tool action."},
+        source_scope="project",
+    )
+    runtime_launch_target = str(artifact.metadata["request_summary"])
+    artifact = replace(
+        artifact,
+        metadata={
+            **artifact.metadata,
+            "request_summary": "Guard requires approval because no command rule matched this tool action.",
+        },
     )
 
     incident = build_incident_context(
@@ -173,7 +188,7 @@ def test_command_bearing_native_request_keeps_command_over_generic_summary() -> 
         config_path=artifact.config_path,
         changed_fields=["tool_action_request"],
         policy_action="require-reapproval",
-        launch_target="rm -f /workspace/project/output.txt",
+        launch_target=runtime_launch_target,
         risk_summary=None,
     )
 
