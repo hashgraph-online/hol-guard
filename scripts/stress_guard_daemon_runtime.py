@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
@@ -198,7 +199,7 @@ def health_probe_status(daemon_url: str) -> HealthProbeStatus:
                     continue
                 return "transient"
             return "unhealthy"
-        except (OSError, urllib.error.URLError):
+        except (http.client.IncompleteRead, OSError, urllib.error.URLError):
             if attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
                 continue
             return "transient"
