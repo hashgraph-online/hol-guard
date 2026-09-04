@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
-from .base import HarnessContext
+from .base import HarnessContext, _ensure_path_within_root
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
@@ -40,6 +40,7 @@ from .cursor_hook_payload import (
 from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
+from .cursor_path_cleanup import prune_empty_project_cursor_dir
 from .guard_cli_attestation import resolve_attested_guard_cli
 from .hook_python import HookPythonAttestation
 
@@ -97,6 +98,9 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     hooks_path = cursor_hooks_path(context)
     script_path = cursor_hook_script_path(context)
     managed_script_path = managed_hook_script_path(context)
+    _ensure_path_within_root(context.home_dir, hooks_path, label="Cursor hooks")
+    _ensure_path_within_root(context.home_dir, script_path, label="Cursor hook script")
+    _ensure_path_within_root(context.guard_home, managed_script_path, label="Cursor managed hook script")
     managed_script_path.parent.mkdir(parents=True, exist_ok=True)
     script_source = cursor_hook_script_source(
         context,
@@ -112,6 +116,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
 
     original_text = hooks_path.read_text(encoding="utf-8") if hooks_path.is_file() else None
     backup_path = _hooks_backup_path(hooks_path, context)
+    _ensure_path_within_root(context.guard_home, backup_path, label="Cursor hook backup")
     if not backup_path.exists():
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         backup_path.write_text(
@@ -119,6 +124,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
             encoding="utf-8",
         )
     state_path = _hooks_state_path(hooks_path, context)
+    _ensure_path_within_root(context.guard_home, state_path, label="Cursor hook state")
     state_path.parent.mkdir(parents=True, exist_ok=True)
     workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
     state_path.write_text(
@@ -177,9 +183,14 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
 def uninstall_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     """Remove Guard-managed Cursor hooks and restore prior hooks.json."""
 
+    hooks_path = cursor_hooks_path(context)
+    script_path = cursor_hook_script_path(context)
+    _ensure_path_within_root(context.home_dir, hooks_path, label="Cursor hooks")
+    _ensure_path_within_root(context.home_dir, script_path, label="Cursor hook script")
     return _uninstall_cursor_hooks_at_paths(
-        hooks_path=cursor_hooks_path(context),
-        script_path=cursor_hook_script_path(context),
+        hooks_path=hooks_path,
+        script_path=script_path,
+        authorized_root=context.home_dir,
         context=context,
         remove_managed_copy=True,
     )
@@ -189,11 +200,16 @@ def _uninstall_cursor_hooks_at_paths(
     *,
     hooks_path: Path,
     script_path: Path,
+    authorized_root: Path,
     context: HarnessContext,
     remove_managed_copy: bool,
 ) -> dict[str, object]:
+    _ensure_path_within_root(authorized_root, hooks_path, label="Cursor hooks")
+    _ensure_path_within_root(authorized_root, script_path, label="Cursor hook script")
     backup_path = _hooks_backup_path(hooks_path, context)
     state_path = _hooks_state_path(hooks_path, context)
+    _ensure_path_within_root(context.guard_home, backup_path, label="Cursor hook backup")
+    _ensure_path_within_root(context.guard_home, state_path, label="Cursor hook state")
     backup_payload = _backup_payload(backup_path)
     restored = False
     if backup_payload["readable"] is True:
@@ -273,32 +289,11 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
     _uninstall_cursor_hooks_at_paths(
         hooks_path=hooks_path,
         script_path=script_path,
+        authorized_root=context.workspace_dir,
         context=context,
         remove_managed_copy=False,
     )
-    _prune_empty_project_cursor_dir(context.workspace_dir)
-
-
-def _prune_empty_project_cursor_dir(workspace_dir: Path) -> None:
-    hooks_dir = workspace_dir / ".cursor" / "hooks"
-    cursor_dir = workspace_dir / ".cursor"
-    if hooks_dir.is_dir():
-        try:
-            if not any(hooks_dir.iterdir()):
-                hooks_dir.rmdir()
-        except OSError:
-            return
-    if not cursor_dir.is_dir():
-        return
-    try:
-        remaining = list(cursor_dir.iterdir())
-    except OSError:
-        return
-    if not remaining:
-        try:
-            cursor_dir.rmdir()
-        except OSError:
-            return
+    prune_empty_project_cursor_dir(context.workspace_dir)
 
 
 def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool:

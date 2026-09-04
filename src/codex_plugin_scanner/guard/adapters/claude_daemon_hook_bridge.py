@@ -20,6 +20,7 @@ from ..codex_hook_launch_runtime import (
 )
 from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
+from .claude_daemon_state import canonical_daemon_state_path, daemon_port_from_state, state_path_for_query
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = (
@@ -66,6 +67,7 @@ def main(
     """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
 
     _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
+    state_path = state_path_for_query(state_path, query)
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
@@ -192,7 +194,7 @@ def _blocking_post_to_loopback_daemon(
     state_path: str | Path,
     timeout_seconds: float,
 ) -> str:
-    auth_token = load_guard_daemon_auth_token(Path(state_path).parent)
+    auth_token = load_guard_daemon_auth_token(canonical_daemon_state_path(state_path).parent)
     headers = {"Content-Type": "application/json"}
     if isinstance(auth_token, str) and auth_token.strip():
         headers["X-Guard-Token"] = auth_token
@@ -230,15 +232,9 @@ def _read_bounded_response(response: _ResponseReader, *, deadline: float | None 
 
 
 def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
-    path = Path(state_path)
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            port = payload.get("port")
-            if isinstance(port, int):
-                return f"http://127.0.0.1:{port}/"
-    except (OSError, ValueError):
-        pass
+    port = daemon_port_from_state(state_path)
+    if port is not None:
+        return f"http://127.0.0.1:{port}/"
     normalized = fallback_daemon_url.rstrip("/") + "/"
     _assert_loopback_http_url(normalized)
     return normalized

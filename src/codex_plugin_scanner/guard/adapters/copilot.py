@@ -16,8 +16,9 @@ from ...ecosystems.opencode import _strip_jsonc
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
+from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
+from .copilot_state_paths import validated_copilot_state_entries, write_copilot_state
 from .hook_payloads import inline_hooks_payload
 from .mcp_servers import (
     ManagedMcpServer,
@@ -27,7 +28,7 @@ from .mcp_servers import (
     proxy_process_env,
     skipped_stdio_server_names,
 )
-from .state_files import load_backup_payload, load_string_state_payload
+from .state_files import load_backup_payload
 from .workspace_overrides import should_skip_workspace_override
 
 _MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
@@ -462,30 +463,25 @@ class CopilotHarnessAdapter(HarnessAdapter):
         backup_paths: list[str] = []
         state_paths: list[str] = []
         for target_mcp_path in target_mcp_paths:
+            target_root = context.workspace_dir if context.workspace_dir is not None else context.home_dir
+            _ensure_path_within_root(target_root, target_mcp_path, label="Copilot MCP")
             original_text = target_mcp_path.read_text(encoding="utf-8") if target_mcp_path.is_file() else None
             backup_path = self._backup_path(target_mcp_path, context)
+            _ensure_path_within_root(context.guard_home, backup_path, label="Copilot backup")
             backup_paths.append(str(backup_path))
             if not backup_path.exists():
                 backup_path.parent.mkdir(parents=True, exist_ok=True)
                 backup_payload = {"existed": original_text is not None, "content": original_text}
                 backup_path.write_text(json.dumps(backup_payload, indent=2) + "\n", encoding="utf-8")
             state_path = self._state_path(target_mcp_path, context)
+            _ensure_path_within_root(context.guard_home, state_path, label="Copilot state")
             state_paths.append(str(state_path))
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(
-                json.dumps(
-                    {
-                        "managed_config_path": str(target_mcp_path),
-                        "backup_path": str(backup_path),
-                        "scope": self._scope_for(context, target_mcp_path),
-                        "workspace_dir": (
-                            str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
-                        ),
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
+            write_copilot_state(
+                context,
+                target_path=target_mcp_path,
+                backup_path=backup_path,
+                state_path=state_path,
+                scope=self._scope_for(context, target_mcp_path),
             )
             mcp_payload = _copilot_json_payload(target_mcp_path)
             existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
@@ -527,6 +523,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
         config_path = self._config_path(context)
+        _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
         config_payload = self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
         hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False)
@@ -536,6 +533,9 @@ class CopilotHarnessAdapter(HarnessAdapter):
         config_path.write_text(json.dumps(config_payload, indent=2) + "\n", encoding="utf-8")
         managed_hook_path = self._hook_path(context)
         if managed_hook_path is not None:
+            if context.workspace_dir is None:
+                raise ValueError("Copilot workspace hook requires a workspace root")
+            _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
             managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
             managed_workspace_hooks = managed_hook_payload["hooks"]
             managed_workspace_entry = _hook_entry(context, include_workspace=True)
@@ -802,20 +802,13 @@ class CopilotHarnessAdapter(HarnessAdapter):
         digest = sha256(target.encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "copilot" / f"{digest}.state.json"
 
-    _state_payload = staticmethod(load_string_state_payload)
-
     @classmethod
-    def _state_entries(cls, context: HarnessContext) -> list[tuple[Path, Path, Path, dict[str, str]]]:
-        state_dir = context.guard_home / "managed" / "copilot"
-        entries: list[tuple[Path, Path, Path, dict[str, str]]] = []
-        for state_path in sorted(state_dir.glob("*.state.json")):
-            payload = cls._state_payload(state_path)
-            managed_config_path = payload.get("managed_config_path")
-            backup_path = payload.get("backup_path")
-            if not isinstance(managed_config_path, str) or not isinstance(backup_path, str):
-                continue
-            entries.append((state_path, Path(managed_config_path), Path(backup_path), payload))
-        return entries
+    def _state_entries(cls, context: HarnessContext) -> list[tuple[Path, Path, Path, dict[str, object]]]:
+        return validated_copilot_state_entries(
+            context,
+            state_path_for=cls._state_path,
+            backup_path_for=cls._backup_path,
+        )
 
     @classmethod
     def _uninstall_targets(cls, context: HarnessContext) -> list[tuple[Path, Path, Path]]:

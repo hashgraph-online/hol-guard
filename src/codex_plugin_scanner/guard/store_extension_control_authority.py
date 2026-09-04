@@ -115,7 +115,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
                 if view.health is AuthorityHealth.PROTECTED:
                     key = self._authority_key(required=True)
-                    assert key is not None
+                    if key is None:
+                        raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
                     self._record_catalog_manifest(registry, key=key)
                 if include_managed_controls:
                     return self._with_managed_controls_activation(view)
@@ -124,7 +125,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             return self._tampered_view(catalog_digest)
         except Exception:
             return self._degraded_view(catalog_digest)
-
     def _with_managed_controls_activation(
         self,
         view: ExtensionControlAuthorityView,

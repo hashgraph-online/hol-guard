@@ -12,7 +12,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
+from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 from .cursor_cli import (
     CURSOR_CLI_SHIM_COMMANDS,
     cursor_cli_command_available,
@@ -237,8 +237,10 @@ class CursorHarnessAdapter(HarnessAdapter):
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
         target_path = self._target_editor_config_path(context)
+        _ensure_path_within_root(context.home_dir, target_path, label="Cursor editor")
         original_text = target_path.read_text(encoding="utf-8") if target_path.is_file() else None
         backup_path = self._backup_path(target_path, context)
+        _ensure_path_within_root(context.guard_home, backup_path, label="Cursor backup")
         if not backup_path.exists():
             backup_path.parent.mkdir(parents=True, exist_ok=True)
             backup_path.write_text(
@@ -246,6 +248,7 @@ class CursorHarnessAdapter(HarnessAdapter):
                 encoding="utf-8",
             )
         state_path = self._state_path(target_path, context)
+        _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
         state_path.parent.mkdir(parents=True, exist_ok=True)
         workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
         state_path.write_text(
@@ -307,6 +310,9 @@ class CursorHarnessAdapter(HarnessAdapter):
         target_path = self._target_editor_config_path(context)
         backup_path = self._backup_path(target_path, context)
         state_path = self._state_path(target_path, context)
+        _ensure_path_within_root(context.home_dir, target_path, label="Cursor editor")
+        _ensure_path_within_root(context.guard_home, backup_path, label="Cursor backup")
+        _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
         backup_payload = self._backup_payload(backup_path)
         restored = False
         if backup_payload["readable"] is True:

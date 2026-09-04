@@ -204,7 +204,7 @@ def test_main_degrades_when_daemon_returns_malformed_json(
             state_path=state_path,
             fallback_daemon_url=f"http://127.0.0.1:{daemon_port}",
             fallback_command=("python3", "-c", "print('{}')"),
-            query="guard-home=%2Ftmp",
+            query=f"guard-home={guard_home}",
         )
         assert exit_code == 0
     finally:
@@ -275,10 +275,10 @@ def test_oversized_hook_input_fails_safe_without_daemon_contact(
     monkeypatch.setattr("sys.stdin", io.StringIO("x" * (bridge._MAX_HOOK_INPUT_BYTES + 1)))
 
     result = bridge.main(
-        state_path="/missing/state.json",
+        state_path="/missing/daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
+        query="guard-home=/missing",
     )
 
     assert result == 0
@@ -362,7 +362,7 @@ def test_main_recovers_missing_daemon_and_retries_hook(
         state_path=tmp_path / "guard-home" / "daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=("python3", "-c", "raise SystemExit(99)"),
-        query="guard-home=%2Ftmp",
+        query=f"guard-home={tmp_path / 'guard-home'}",
     )
 
     assert result == 0
@@ -394,7 +394,7 @@ def test_authenticated_daemon_failure_denies_without_local_fallback(
         state_path=tmp_path / "daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=("python3", "-c", "print('{}')"),
-        query="guard-home=%2Ftmp",
+        query=f"guard-home={tmp_path}",
     )
 
     payload = json.loads(capsys.readouterr().out)

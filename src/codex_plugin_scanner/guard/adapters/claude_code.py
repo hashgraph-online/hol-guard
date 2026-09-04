@@ -429,6 +429,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
         settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
@@ -437,7 +438,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         resolved_executable = self.resolved_executable(context)
         if resolved_executable is None:
