@@ -205,8 +205,10 @@ def health_probe_status(daemon_url: str) -> HealthProbeStatus:
         except Exception:
             return "unhealthy"
 
-        if not isinstance(body, bytes) or time.monotonic() > deadline or len(body) > _MAX_RESPONSE_BYTES:
+        if not isinstance(body, bytes) or len(body) > _MAX_RESPONSE_BYTES:
             return "unhealthy"
+        if time.monotonic() > deadline:
+            return "transient"
         try:
             payload = cast(object, json.loads(body.decode("utf-8")))
         except (UnicodeDecodeError, json.JSONDecodeError):
