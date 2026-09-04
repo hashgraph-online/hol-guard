@@ -59,6 +59,16 @@ LARAVEL_ARTISAN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.laravel-artisan.migrate-fresh",
     ),
     (
+        "php --file ./artisan migrate:fresh",
+        "Laravel fresh migration database reset command",
+        "command.laravel-artisan.migrate-fresh",
+    ),
+    (
+        "php --file=artisan db:wipe",
+        "Laravel database wipe command",
+        "command.laravel-artisan.db-wipe",
+    ),
+    (
         "./artisan --env=production migrate:fresh",
         "Laravel fresh migration database reset command",
         "command.laravel-artisan.migrate-fresh",
