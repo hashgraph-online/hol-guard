@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import adapter_state_integrity as adapter_state_integrity_module
 from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
@@ -161,6 +162,63 @@ def test_adapter_state_verification_does_not_create_or_chmod_key_directory(tmp_p
         is False
     )
     assert (missing_guard_home / "managed").exists() is False
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key loading")
+def test_adapter_state_verification_rejects_oversized_multibyte_key_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    managed = guard_home / "managed"
+    managed.mkdir(parents=True, mode=0o700)
+    key_path = managed / "adapter-state.key"
+    key_path.write_bytes(('{"padding":"' + ("é" * 8192) + '"}\n').encode("utf-8"))
+    key_path.chmod(0o600)
+
+    assert key_path.stat().st_size > 16_384
+    real_fdopen = adapter_state_integrity_module.os.fdopen
+    bytes_read: list[int] = []
+
+    class TrackingHandle:
+        def __init__(self, handle: object) -> None:
+            self._handle = handle
+
+        def __enter__(self) -> TrackingHandle:
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, *args: object) -> object:
+            return self._handle.__exit__(*args)
+
+        def fileno(self) -> int:
+            return self._handle.fileno()
+
+        def read(self, size: int = -1) -> object:
+            data = self._handle.read(size)
+            bytes_read.append(len(data) if isinstance(data, bytes) else len(data.encode("utf-8")))
+            return data
+
+    def tracking_fdopen(fd: int, mode: str = "r", *args: object, **kwargs: object) -> TrackingHandle:
+        return TrackingHandle(real_fdopen(fd, mode, *args, **kwargs))
+
+    monkeypatch.setattr(adapter_state_integrity_module.os, "fdopen", tracking_fdopen)
+    assert (
+        adapter_state_is_authenticated(
+            guard_home,
+            harness="copilot",
+            payload={
+                "state_authentication": {
+                    "algorithm": "hmac-sha256",
+                    "key_id": "missing",
+                    "mac": "0" * 64,
+                    "schema_version": 1,
+                }
+            },
+        )
+        is False
+    )
+    assert bytes_read == [16_385]
 
 
 def test_hermes_legacy_cleanup_accepts_resolved_guard_home_marker(tmp_path: Path) -> None:

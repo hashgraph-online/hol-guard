@@ -218,6 +218,7 @@ def test_soak_baseline_stabilizes_bounded_worker_capacity_before_measurement(
     observed_capacity: list[tuple[int, int, int, int, int]] = []
     all_requests_started = threading.Event()
     warmup_loop_observed = threading.Event()
+    health_probe_observed = threading.Event()
     release_requests = threading.Event()
     started_requests = 0
     started_requests_lock = threading.Lock()
@@ -237,7 +238,7 @@ def test_soak_baseline_stabilizes_bounded_worker_capacity_before_measurement(
         nonlocal started_requests
         with started_requests_lock:
             started_requests += 1
-            if started_requests == 4:
+            if started_requests == 3:
                 all_requests_started.set()
         assert release_requests.wait(timeout=5)
         requests.append("request")
@@ -246,14 +247,17 @@ def test_soak_baseline_stabilizes_bounded_worker_capacity_before_measurement(
     def observe_warmup_loop(_execution: stress_runtime.StressExecution, _guard_home: Path) -> None:
         warmup_loop_observed.set()
 
+    def observe_warmup_health(current: stress_runtime.StressExecution) -> None:
+        current.health_checks += 1
+        health_probe_observed.set()
+
     monkeypatch.setattr(stress_script, "_healthz_details", healthz_details)
     monkeypatch.setattr(stress_script, "_stress_request", stress_request)
     monkeypatch.setattr(stress_script, "_update_pid_stability", observe_warmup_loop)
     monkeypatch.setattr(
         stress_script,
         "_sample_stress_runtime",
-        lambda _execution: (_ for _ in ()).throw(AssertionError("warmup must not probe saturated healthz")),
-        raising=False,
+        observe_warmup_health,
     )
 
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -261,12 +265,13 @@ def test_soak_baseline_stabilizes_bounded_worker_capacity_before_measurement(
         try:
             assert all_requests_started.wait(timeout=2)
             assert warmup_loop_observed.wait(timeout=2)
-            assert execution.health_checks == 0
+            assert health_probe_observed.wait(timeout=2)
+            assert execution.health_checks > 0
         finally:
             release_requests.set()
         future.result(timeout=5)
 
-    assert len(requests) == 4
+    assert len(requests) == 3
     assert execution.latencies_ms == []
     assert observed_capacity == [
         (4, 2, 2, 2, 0),

@@ -199,16 +199,20 @@ def _load_key_from_descriptor(parent_descriptor: int) -> tuple[str, bytes]:
         os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
         dir_fd=parent_descriptor,
     )
-    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+    with os.fdopen(descriptor, "rb") as handle:
         metadata = os.fstat(handle.fileno())
         if not stat.S_ISREG(metadata.st_mode):
             raise ValueError("adapter state key is not a regular file")
         if stat.S_IMODE(metadata.st_mode) & 0o077:
             raise ValueError("adapter state key permissions are not private")
         raw = handle.read(16_385)
-    if len(raw.encode("utf-8")) > 16_384:
+    if len(raw) > 16_384:
         raise ValueError("adapter state key has an invalid format")
-    value = json.loads(raw)
+    try:
+        decoded = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("adapter state key has an invalid format") from error
+    value = json.loads(decoded)
     if not isinstance(value, dict):
         raise ValueError("adapter state key has an invalid format")
     return _parse_key(value)
