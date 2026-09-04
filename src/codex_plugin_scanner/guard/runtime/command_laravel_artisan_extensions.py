@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
+from .command_option_parsing import matches_subcommands_conservatively
 from .command_rules import CommandSafeVariant, CommandSafetyRule, _segment_matches_executable
 
 # Current Laravel framework source defines `migrate:fresh` as dropping all
@@ -92,34 +93,14 @@ def _artisan_arguments(segment: CommandSegment) -> tuple[str, ...] | None:
 
 
 def _contains_artisan_command(arguments: tuple[str, ...], command: str) -> bool:
-    """Find a command while respecting known global option values."""
+    """Match a command while conservatively parsing global options."""
 
-    index = 0
-    while index < len(arguments):
-        token = arguments[index].lower()
-        if token in _ARTISAN_GLOBAL_OPTIONS_WITH_VALUES:
-            if index + 1 >= len(arguments):
-                return False
-            index += 2
-            continue
-        if any(token.startswith(f"{option}=") for option in _ARTISAN_GLOBAL_OPTIONS_WITH_VALUES):
-            index += 1
-            continue
-        if token in _ARTISAN_GLOBAL_FLAGS or token in _HELP_FLAGS:
-            index += 1
-            continue
-        if token == command:
-            return True
-        if not token.startswith("-"):
-            # The first non-option token is the Symfony command name. Once it is
-            # another command, later arguments cannot turn this invocation into
-            # the destructive command we are protecting.
-            return False
-        # Unknown leading options fail secure: keep scanning for the explicit
-        # destructive command rather than treating an unfamiliar option as a
-        # reason to silently bypass review.
-        index += 1
-    return False
+    return matches_subcommands_conservatively(
+        tuple(argument.lower() for argument in arguments),
+        (command,),
+        options_with_values=_ARTISAN_GLOBAL_OPTIONS_WITH_VALUES,
+        known_flags=_ARTISAN_GLOBAL_FLAGS | _HELP_FLAGS,
+    )
 
 
 @dataclass(frozen=True, slots=True)
