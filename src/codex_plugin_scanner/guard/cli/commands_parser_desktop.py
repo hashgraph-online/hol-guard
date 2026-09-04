@@ -25,7 +25,7 @@ def _configure_guard_desktop_parser(
     presentation_parser = desktop_subparsers.add_parser("presentation-set", help=argparse.SUPPRESS)
     _add_guard_common_args(presentation_parser, suppress_defaults=True)
     presentation_parser.add_argument("--mode", choices=("everyday", "technical"), required=True)
-    presentation_parser.add_argument("--expected-revision", type=int, default=None)
+    presentation_parser.add_argument("--expected-revision", type=int, required=True)
     presentation_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     dashboard_update_parser = desktop_subparsers.add_parser("dashboard-update", help=argparse.SUPPRESS)
     _add_guard_common_args(dashboard_update_parser, suppress_defaults=True)

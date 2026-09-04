@@ -95,3 +95,36 @@ def test_invalid_local_value_and_cloud_profile_keep_core_dashboard_parity() -> N
     assert resolved.value == "technical"
     assert resolved.source == "cloud-profile"
     assert resolved.diagnostic == "unknown_presentation_mode_fell_back_to_everyday"
+
+
+def test_desktop_presentation_set_requires_expected_revision(tmp_path) -> None:
+    import pytest
+
+    from codex_plugin_scanner.cli import _build_parser
+
+    parser = _build_parser("hol-guard", program_mode="guard")
+    args = parser.parse_args(
+        [
+            "desktop",
+            "presentation-set",
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--mode",
+            "technical",
+            "--expected-revision",
+            "3",
+        ]
+    )
+    assert args.desktop_command == "presentation-set"
+    assert args.expected_revision == 3
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "desktop",
+                "presentation-set",
+                "--guard-home",
+                str(tmp_path / "guard-home"),
+                "--mode",
+                "technical",
+            ]
+        )
