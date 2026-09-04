@@ -343,4 +343,17 @@ def test_claude_oversized_forged_notification_still_denies(
     assert result == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO('{"hook_event_name":"UserPromptSubmit","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)),
+    )
+    prompt_result = claude.main(
+        state_path="/missing/state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
+        query="",
+    )
+    prompt = json.loads(capsys.readouterr().out)
+    assert prompt_result == 0
+    assert prompt["decision"] == "block"
 

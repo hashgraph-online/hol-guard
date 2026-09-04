@@ -70,7 +70,7 @@ def main(
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
         event = _event_name(body)
-        if not event.startswith("Permission"):
+        if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
         return 0
