@@ -63,6 +63,28 @@ def adapter_state_is_authenticated(
     return hmac.compare_digest(supplied_mac, expected)
 
 
+def authenticated_adapter_path(
+    guard_home: Path,
+    *,
+    harness: str,
+    payload: dict[str, object],
+    field: str,
+) -> Path | None:
+    """Return a canonical path only when its complete state payload authenticates."""
+
+    if not adapter_state_is_authenticated(guard_home, harness=harness, payload=payload):
+        return None
+    value = payload.get(field)
+    if not isinstance(value, str) or not value or "\x00" in value:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        return None
+    # The HMAC above authenticates this complete payload before the stored path
+    # is resolved; Sonar cannot model that application-level sanitizer.
+    return path.resolve()  # NOSONAR
+
+
 def _message(harness: str, payload: dict[str, object]) -> bytes:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return f"hol-guard.adapter-state.v1\0{harness}\0{canonical}".encode()

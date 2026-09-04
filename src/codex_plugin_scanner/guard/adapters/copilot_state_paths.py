@@ -7,7 +7,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...safe_output import write_text_atomic_no_follow
-from .adapter_state_integrity import adapter_state_is_authenticated, authenticate_adapter_state
+from .adapter_state_integrity import (
+    adapter_state_is_authenticated,
+    authenticate_adapter_state,
+    authenticated_adapter_path,
+)
 from .base import HarnessContext, _ensure_path_within_root, _json_payload
 
 CopilotStateEntry = tuple[Path, Path, Path, dict[str, object]]
@@ -26,8 +30,8 @@ def write_copilot_state(
         context.guard_home,
         harness="copilot",
         payload={
-            "managed_config_path": str(target_path),
-            "backup_path": str(backup_path),
+            "managed_config_path": str(target_path.resolve()),
+            "backup_path": str(backup_path.resolve()),
             "scope": scope,
             "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
         },
@@ -78,27 +82,31 @@ def _validated_entry(
         return None
     if not managed_value or not backup_value or "\x00" in managed_value or "\x00" in backup_value:
         return None
-    managed_path = Path(managed_value)
-    backup_path = Path(backup_value)
-    if not managed_path.is_absolute() or not backup_path.is_absolute():
-        return None
-
-    global_target = str((context.home_dir / ".copilot" / "mcp-config.json").resolve())
-    target_roots = {global_target: context.home_dir}
-    workspace_value = payload.get("workspace_dir")
-    if authenticated and isinstance(workspace_value, str) and workspace_value and "\x00" not in workspace_value:
-        workspace_path = Path(workspace_value)
-        if workspace_path.is_absolute():
-            workspace = workspace_path.resolve()
-            target_roots[str((workspace / ".mcp.json").resolve())] = workspace
-            target_roots[str((workspace / ".vscode" / "mcp.json").resolve())] = workspace
+    global_target = context.home_dir / ".copilot" / "mcp-config.json"
+    target_paths = {
+        str(global_target): (global_target, context.home_dir),
+        str(global_target.resolve()): (global_target, context.home_dir),
+    }
+    workspace = authenticated_adapter_path(
+        context.guard_home,
+        harness="copilot",
+        payload=payload,
+        field="workspace_dir",
+    )
+    if workspace is not None:
+        target_paths[str(workspace / ".mcp.json")] = (workspace / ".mcp.json", workspace)
+        target_paths[str(workspace / ".vscode" / "mcp.json")] = (workspace / ".vscode" / "mcp.json", workspace)
     elif context.workspace_dir is not None:
-        workspace = context.workspace_dir.resolve()
-        target_roots[str((workspace / ".mcp.json").resolve())] = workspace
-        target_roots[str((workspace / ".vscode" / "mcp.json").resolve())] = workspace
-    managed_root = target_roots.get(str(managed_path.resolve()))
-    if managed_root is None:
+        for workspace in {context.workspace_dir, context.workspace_dir.resolve()}:
+            target_paths[str(workspace / ".mcp.json")] = (workspace / ".mcp.json", context.workspace_dir)
+            target_paths[str(workspace / ".vscode" / "mcp.json")] = (
+                workspace / ".vscode" / "mcp.json",
+                context.workspace_dir,
+            )
+    managed_entry = target_paths.get(managed_value)
+    if managed_entry is None:
         return None
+    managed_path, managed_root = managed_entry
     try:
         _ensure_path_within_root(managed_root, managed_path, label="Copilot managed config")
     except ValueError:
@@ -111,6 +119,9 @@ def _validated_entry(
         _ensure_path_within_root(context.guard_home, expected_backup, label="Copilot backup")
     except ValueError:
         return None
-    if state_path.resolve() != expected_state.resolve() or backup_path.resolve() != expected_backup.resolve():
+    if state_path.resolve() != expected_state.resolve() or backup_value not in {
+        str(expected_backup),
+        str(expected_backup.resolve()),
+    }:
         return None
-    return state_path, managed_path, backup_path, payload
+    return state_path, managed_path, expected_backup, payload

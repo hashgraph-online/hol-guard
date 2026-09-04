@@ -75,8 +75,12 @@ def main(
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
         return 0
-    state_path = state_path_for_query(state_path, query)
     data = body.strip() or "{}"
+    try:
+        state_path = state_path_for_query(state_path, query)
+    except ValueError as error:
+        sys.stdout.write(_run_local_fallback(_daemon_failure_reason(error), data, fallback_command, deadline=deadline))
+        return 0
     recovery_command = _recovery_command(state_path, query)
     try:
         endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")

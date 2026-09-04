@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
@@ -53,6 +54,25 @@ def test_claude_daemon_url_uses_authenticated_local_state(tmp_path: Path) -> Non
     state_path.chmod(0o600)
 
     assert bridge._daemon_url(state_path, "http://127.0.0.1:5474/") == "http://127.0.0.1:6553/"
+
+
+def test_claude_bridge_falls_back_when_hook_state_binding_is_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"hook_event_name":"PreToolUse"}'))
+    monkeypatch.setattr(bridge, "_run_local_fallback", lambda *args, **kwargs: '{"fallback":true}')
+
+    result = bridge.main(
+        state_path=tmp_path / "old-home" / "daemon-state.json",
+        fallback_daemon_url="http://127.0.0.1:5474/",
+        fallback_command=("trusted-guard", "hook"),
+        query=f"guard-home={tmp_path / 'new-home'}",
+    )
+
+    assert result == 0
+    assert json.loads(capsys.readouterr().out) == {"fallback": True}
 
 
 def test_copilot_uninstall_ignores_tampered_lifecycle_paths(tmp_path: Path) -> None:
@@ -214,6 +234,22 @@ def test_hermes_uninstall_ignores_tampered_auxiliary_cleanup_state(tmp_path: Pat
     config_after = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert config_after["mcp_servers"]["github"] == {"command": "npx"}
     assert config_after["guard"] == {"enabled": False}
+
+
+def test_hermes_uninstall_preserves_current_guard_section_when_state_key_is_missing(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    config_path = context.home_dir / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("mcp_servers: {}\nguard:\n  enabled: false\n", encoding="utf-8")
+    adapter = HermesHarnessAdapter()
+    adapter.install(context)
+    (context.guard_home / "managed" / "adapter-state.key").unlink()
+    installed_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    adapter.uninstall(context)
+
+    config_after = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert config_after["guard"] == installed_config["guard"]
 
 
 def test_hermes_launch_environment_rejects_tampered_managed_paths(tmp_path: Path) -> None:

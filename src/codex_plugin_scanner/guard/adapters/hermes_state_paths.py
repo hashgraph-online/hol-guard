@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .adapter_state_integrity import adapter_state_is_authenticated
+from .adapter_state_integrity import adapter_state_is_authenticated, authenticated_adapter_path
 from .base import HarnessContext, _ensure_path_within_root, _json_payload
 from .hermes_file_inspection import inspect_hermes_config
 
@@ -43,8 +43,7 @@ def hermes_uninstall_state(
     return manifest, validated_hermes_config_path(
         context,
         current_home,
-        manifest.get("hermes_config_yaml_path"),
-        authenticated_resolved_path=manifest.get("hermes_config_yaml_resolved_path"),
+        manifest,
         authenticated=authenticated,
     )
 
@@ -70,23 +69,27 @@ def hermes_cleanup_values(
         previous = manifest.get("previous_guard_section")
         managed_names = [name for name in names if isinstance(name, str)] if isinstance(names, list) else []
         return managed_names, previous if isinstance(previous, dict) else None
-    return _legacy_guard_proxy_names(context, config_path), None
+    return _safe_legacy_cleanup_values(context, config_path)
 
 
-def _legacy_guard_proxy_names(context: HarnessContext, config_path: Path) -> list[str]:
+def _safe_legacy_cleanup_values(
+    context: HarnessContext,
+    config_path: Path,
+) -> tuple[list[str], dict[str, object] | None]:
     inspection = inspect_hermes_config(config_path, syntax="yaml")
     if not inspection.complete or inspection.payload is None:
-        return []
+        return [], None
     servers = inspection.payload.get("mcp_servers")
     if not isinstance(servers, dict):
-        return []
+        servers = {}
     managed: list[str] = []
     marker = ["-m", "codex_plugin_scanner.cli", "hermes", "mcp-proxy", "--guard-home", str(context.guard_home)]
     for name, config in servers.items():
         args = config.get("args") if isinstance(config, dict) else None
         if isinstance(name, str) and isinstance(args, list) and args[: len(marker)] == marker:
             managed.append(name)
-    return managed
+    current_guard = inspection.payload.get("guard")
+    return managed, current_guard if isinstance(current_guard, dict) else None
 
 
 def remove_hermes_managed_files(context: HarnessContext, managed_root: Path) -> list[str]:
@@ -128,11 +131,7 @@ def validated_hermes_managed_paths(
         return None
     if not isinstance(pretool_value, str) or not pretool_value or "\x00" in pretool_value:
         return None
-    overlay_path = Path(overlay_value)
-    pretool_path = Path(pretool_value)
-    if not overlay_path.is_absolute() or not pretool_path.is_absolute():
-        return None
-    if overlay_path.resolve() != expected_overlay.resolve() or pretool_path.resolve() != expected_pretool.resolve():
+    if overlay_value != str(expected_overlay) or pretool_value != str(expected_pretool):
         return None
     return expected_overlay, expected_pretool
 
@@ -140,21 +139,24 @@ def validated_hermes_managed_paths(
 def validated_hermes_config_path(
     context: HarnessContext,
     current_home: Path,
-    value: object,
+    manifest: dict[str, object],
     *,
-    authenticated_resolved_path: object = None,
     authenticated: bool,
 ) -> Path | None:
-    candidate = current_home / "config.yaml" if not isinstance(value, str) or not value else Path(value)
-    if "\x00" in str(candidate) or not candidate.is_absolute() or candidate.name != "config.yaml":
-        return None
     if authenticated:
+        authenticated_resolved_path = manifest.get("hermes_config_yaml_resolved_path")
         if not isinstance(authenticated_resolved_path, str) or "\x00" in authenticated_resolved_path:
             return None
-        expected_resolved = Path(authenticated_resolved_path)
-        if not expected_resolved.is_absolute() or candidate.resolve() != expected_resolved:
+        candidate = authenticated_adapter_path(
+            context.guard_home,
+            harness="hermes",
+            payload=manifest,
+            field="hermes_config_yaml_path",
+        )
+        if candidate is None or str(candidate) != authenticated_resolved_path or candidate.name != "config.yaml":
             return None
         return candidate
+    candidate = current_home / "config.yaml"
     for allowed_root in (context.home_dir, current_home):
         try:
             _ensure_path_within_root(allowed_root, candidate, label="Hermes config")

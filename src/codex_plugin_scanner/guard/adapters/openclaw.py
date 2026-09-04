@@ -52,17 +52,13 @@ def _validated_managed_paths(
         return None
     if not overlay_value or not pretool_value or "\x00" in overlay_value or "\x00" in pretool_value:
         return None
-    overlay_path = Path(overlay_value)
-    pretool_path = Path(pretool_value)
-    if not overlay_path.is_absolute() or not pretool_path.is_absolute():
-        return None
     try:
         _ensure_path_within_root(context.guard_home, root, label="OpenClaw managed")
         _ensure_path_within_root(root, expected_overlay, label="OpenClaw overlay")
         _ensure_path_within_root(root, expected_pretool, label="OpenClaw hook")
     except ValueError:
         return None
-    if overlay_path.resolve() != expected_overlay.resolve() or pretool_path.resolve() != expected_pretool.resolve():
+    if overlay_value != str(expected_overlay) or pretool_value != str(expected_pretool):
         return None
     return expected_overlay, expected_pretool
 
