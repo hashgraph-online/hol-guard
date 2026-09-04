@@ -90,6 +90,12 @@ Protection model meanings:
 | `command.remote.scp` | Reviews SCP transfers that can overwrite local or remote destination files. | 1 | Built in |
 | `command.remote.ssh` | Reviews SSH invocations that explicitly execute a remote command. | 2 | Built in |
 
+### Frameworks
+
+| Extension | What it protects | Rules | Protection model |
+| :--- | :--- | ---: | :--- |
+| `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
+
 ### Managed services
 
 | Extension | What it protects | Rules | Protection model |

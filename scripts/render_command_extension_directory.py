@@ -21,6 +21,7 @@ CATEGORY_ORDER = (
     "Cloud and infrastructure",
     "Data and resilience",
     "Delivery and remote operations",
+    "Frameworks",
     "Managed services",
     "Package supply chain",
     "Specialized tools",
@@ -61,6 +62,8 @@ def _category(extension_id: str) -> str:
         ("command.cicd.", "command.platform.", "command.remote.")
     ):
         return "Delivery and remote operations"
+    if extension_id.startswith("command.framework."):
+        return "Frameworks"
     if extension_id in {
         "command.email",
         "command.feature-flags",
