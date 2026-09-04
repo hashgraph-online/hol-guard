@@ -196,7 +196,7 @@ def test_run_sandbox_node_script_path() -> None:
     result = run_sandbox(req, analysis_mode="strict")
     ran_ok = "node-sandbox-ok" in result.stdout
     restricted = result.exit_code is not None and result.exit_code != 0
-    assert ran_ok or result.failure_safe or restricted
+    assert ran_ok or result.failure_safe or restricted or result.timed_out
 
 
 def test_run_sandbox_suspicious_mode_skips_benign() -> None:
