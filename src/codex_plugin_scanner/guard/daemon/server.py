@@ -4909,9 +4909,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json({"error": "unsupported_protection_check"}, status=400)
 
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
+        self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
-            self._write_json({"error": "invalid_settings"}, status=400)
+            self._write_json({"error": missing_error}, status=400)
             return
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
@@ -4991,62 +4994,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_settings_import(self, payload: dict[str, object]) -> None:
-        settings = payload.get("settings")
-        if not isinstance(settings, dict):
-            self._write_json({"error": "invalid_settings_import"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        gate_payload = settings.get("approval_gate")
-        gate_input = (
-            approval_gate_input_from_mapping({"approval_gate": gate_payload})
-            if isinstance(gate_payload, dict)
-            else None
-        )
-        if payload.get("approval_password") or payload.get("approval_totp_code"):
-            proof_input = approval_gate_input_from_mapping(payload)
-            if proof_input is not None:
-                gate_input = proof_input
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=gate_input,
-            )
-            if isinstance(gate_payload, dict):
-                validate_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
-            config = update_guard_settings(
-                guard_home,
-                config_settings,
-                approval_gate_grant=approval_gate_grant,
-                cloud_sync_entitled=bool(entitlement.get("allowed")),
-            )
-            if isinstance(gate_payload, dict):
-                update_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-                config = load_guard_config(guard_home)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
-            return
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+        self._apply_settings_payload(payload, missing_error="invalid_settings_import")
 
     def _handle_settings_reset(self, payload: dict[str, object]) -> None:
         confirm = payload.get("confirm")
