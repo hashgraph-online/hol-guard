@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
@@ -341,17 +342,27 @@ def test_hook_overload_returns_native_fail_safe_response(
                 "workspace": str(tmp_path),
             }
         )
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}{path}?{query}",
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": daemon._server.auth_token,
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=1) as response:
-            result = json.loads(response.read())
+        if path == "/v1/hooks/claude-code":
+            result = json.loads(
+                authenticated_claude_hook_response(
+                    state_path=daemon._server.store.guard_home / "daemon-state.json",
+                    query=query,
+                    data=json.dumps(payload),
+                    timeout_seconds=1,
+                )
+            )
+        else:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}{path}?{query}",
+                data=json.dumps(payload).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=1) as response:
+                result = json.loads(response.read())
 
     assert result["reason_code"] == "daemon_hook_queue_capacity"
     if assertion[0] == "decision":

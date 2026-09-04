@@ -14,8 +14,16 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
+from typing_extensions import override
 
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import DaemonIdentityError
+from tests.codex_daemon_hook_bridge_fixtures import (
+    _DaemonHandler as _AuthenticatedDaemonHandler,
+)
+from tests.codex_daemon_hook_bridge_fixtures import (
+    _write_authenticated_daemon_files,
+)
 
 
 class _CapturingProxyHandler(BaseHTTPRequestHandler):
@@ -53,41 +61,14 @@ def test_daemon_url_rejects_non_loopback_fallback() -> None:
         bridge._daemon_url("/nonexistent/daemon-state.json", "http://proxy.internal:5474/")
 
 
-class _DaemonHandler(BaseHTTPRequestHandler):
-    response_marker = "from-real-daemon"
-    captured_guard_token: ClassVar[str | None] = None
-    raw_response_body: ClassVar[bytes | None] = None
-
-    def do_POST(self) -> None:
-        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
-        length = int(self.headers.get("Content-Length", "0"))
-        _ = self.rfile.read(length)
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        if type(self).raw_response_body is not None:
-            self.wfile.write(type(self).raw_response_body)
-            return
-        self.wfile.write(
-            json.dumps(
-                {
-                    "marker": type(self).response_marker,
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                    },
-                }
-            ).encode("utf-8")
-        )
-
-    def log_message(self, fmt: str, *args: object) -> None:
-        return
-
-
-class _StreamingDaemonHandler(BaseHTTPRequestHandler):
+class _StreamingDaemonHandler(_AuthenticatedDaemonHandler):
     status_code = 200
 
+    @override
     def do_POST(self) -> None:
+        if self.path == "/v1/daemon/identity-challenge":
+            super().do_POST()
+            return
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
         self.send_response(self.status_code)
@@ -115,21 +96,16 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     proxy_thread = threading.Thread(target=proxy_server.serve_forever, daemon=True)
     proxy_thread.start()
 
-    auth_token = "test-guard-token"
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
-    token_path = guard_home / "daemon-auth-token"
-    token_path.write_text(auth_token, encoding="utf-8")
-    if os.name != "nt":
-        os.chmod(token_path, 0o600)
     state_path = guard_home / "daemon-state.json"
 
-    daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
-    _DaemonHandler.captured_guard_token = None
-    _DaemonHandler.raw_response_body = None
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.response_body = json.dumps({"marker": "from-real-daemon"}).encode()
 
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_server.server_address[1]}")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy_server.server_address[1]}")
@@ -138,8 +114,8 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
 
     try:
         response_body = bridge._post_to_loopback_daemon(
-            f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home=%2Ftmp",
-            "{}",
+            f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home={guard_home}",
+            '{"hook_event_name":"PreToolUse"}',
             state_path=state_path,
         )
     finally:
@@ -147,11 +123,39 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
         daemon_server.shutdown()
         proxy_thread.join(timeout=5)
         daemon_thread.join(timeout=5)
+        _AuthenticatedDaemonHandler.response_body = b"{}"
 
     payload = json.loads(response_body)
-    assert payload["marker"] == _DaemonHandler.response_marker
+    assert payload["marker"] == "from-real-daemon"
     assert _CapturingProxyHandler.captured_paths == []
-    assert _DaemonHandler.captured_guard_token == auth_token
+    assert _AuthenticatedDaemonHandler.captured_challenge_guard_token is None
+    assert _AuthenticatedDaemonHandler.captured_guard_token == _AuthenticatedDaemonHandler.auth_token
+
+
+def test_post_to_loopback_daemon_does_not_send_token_before_identity_proof(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
+    daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
+    daemon_thread.start()
+    daemon_port = daemon_server.server_address[1]
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.challenge_mode = "wrong-proof"
+
+    try:
+        with pytest.raises(DaemonIdentityError, match="authentication failed"):
+            bridge._post_to_loopback_daemon(
+                f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code",
+                '{"hook_event_name":"PreToolUse"}',
+                state_path=guard_home / "daemon-state.json",
+            )
+    finally:
+        daemon_server.shutdown()
+        daemon_thread.join(timeout=5)
+        _AuthenticatedDaemonHandler.challenge_mode = "valid"
+
+    assert _AuthenticatedDaemonHandler.captured_challenge_guard_token is None
+    assert _AuthenticatedDaemonHandler.captured_guard_token is None
 
 
 @pytest.mark.parametrize("handler", [_StreamingDaemonHandler, _StreamingErrorDaemonHandler])
@@ -161,15 +165,15 @@ def test_post_to_loopback_daemon_enforces_absolute_streaming_deadline(
 ) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
-    (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     server.daemon_threads = True
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+    _write_authenticated_daemon_files(guard_home, server.server_address[1])
     started_at = time.monotonic()
 
     try:
-        with pytest.raises(TimeoutError, match="absolute deadline"):
+        with pytest.raises(TimeoutError, match="deadline"):
             bridge._post_to_loopback_daemon(
                 f"http://127.0.0.1:{server.server_address[1]}/v1/hooks/claude-code",
                 "{}",
@@ -191,12 +195,12 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     state_path = guard_home / "daemon-state.json"
-    daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
-    _DaemonHandler.captured_guard_token = None
-    _DaemonHandler.raw_response_body = b"not-json"
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.response_body = b"not-json"
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
@@ -210,7 +214,7 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     finally:
         daemon_server.shutdown()
         daemon_thread.join(timeout=5)
-        _DaemonHandler.raw_response_body = None
+        _AuthenticatedDaemonHandler.response_body = b"{}"
     output = capsys.readouterr().out
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"

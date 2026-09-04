@@ -18,9 +18,10 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
-from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
-from .claude_daemon_state import canonical_daemon_state_path, daemon_port_from_state, state_path_for_query
+from .claude_daemon_hook_transport import authenticated_claude_hook_response
+from .claude_daemon_state import daemon_port_from_state, state_path_for_query
+from .codex_daemon_hook_auth import _DaemonResponseError
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = (
@@ -198,22 +199,16 @@ def _blocking_post_to_loopback_daemon(
     state_path: str | Path,
     timeout_seconds: float,
 ) -> str:
-    auth_token = load_guard_daemon_auth_token(canonical_daemon_state_path(state_path).parent)
-    headers = {"Content-Type": "application/json"}
-    if isinstance(auth_token, str) and auth_token.strip():
-        headers["X-Guard-Token"] = auth_token
-    request = urllib.request.Request(
-        endpoint,
-        data=data.encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    opener = _build_loopback_opener()
-    with opener.open(request, timeout=timeout_seconds) as response:
-        final_url = response.geturl()
-        if final_url:
-            _assert_loopback_http_url(final_url)
-        return _read_bounded_response(response, deadline=time.monotonic() + timeout_seconds)
+    _assert_loopback_http_url(endpoint)
+    try:
+        return authenticated_claude_hook_response(
+            state_path=state_path,
+            query=urlparse(endpoint).query,
+            data=data,
+            timeout_seconds=timeout_seconds,
+        )
+    except _DaemonResponseError as error:
+        raise _DaemonHTTPError(error.status, error.detail) from error
 
 
 def _read_bounded_response(response: _ResponseReader, *, deadline: float | None = None) -> str:

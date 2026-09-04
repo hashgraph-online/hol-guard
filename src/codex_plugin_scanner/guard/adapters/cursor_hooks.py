@@ -243,6 +243,7 @@ def _uninstall_cursor_hooks_at_paths(
             script_path.unlink()
     if remove_managed_copy:
         managed_script_path = managed_hook_script_path(context)
+        _ensure_path_within_root(context.guard_home, managed_script_path, label="Cursor managed hook script")
         if managed_script_path.is_file():
             managed_script_path.unlink()
     return {

@@ -39,6 +39,13 @@ def _openclaw_manifest(context: HarnessContext) -> dict[str, object]:
     return _json_payload(manifest_path)
 
 
+def _runtime_manifest(context: HarnessContext) -> dict[str, object]:
+    try:
+        return _openclaw_manifest(context)
+    except ValueError:
+        return {}
+
+
 def _validated_managed_paths(
     context: HarnessContext,
     manifest: dict[str, object],
@@ -174,7 +181,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         }
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        manifest = _openclaw_manifest(context)
+        manifest = _runtime_manifest(context)
         managed_paths = _validated_managed_paths(context, manifest)
         if managed_paths is None:
             return {}
@@ -193,7 +200,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        manifest = _openclaw_manifest(context)
+        manifest = _runtime_manifest(context)
         managed_paths = _validated_managed_paths(context, manifest)
         overlay_path, pretool_path = managed_paths or (None, None)
         return {

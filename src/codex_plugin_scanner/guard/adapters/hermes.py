@@ -24,6 +24,7 @@ from ..skill_directory_identity import (
     skill_directory_identity_metadata,
 )
 from . import hermes_runtime_hooks
+from .adapter_safe_output import write_text_at_authorized_path
 from .adapter_state_integrity import authenticate_adapter_state
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
@@ -1348,10 +1349,7 @@ def _write_guard_to_hermes_config_yaml(
         hermes_home=config_yaml_path.parent,
     )
 
-    config_yaml_path.write_text(
-        _yaml.dump(existing, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    write_text_at_authorized_path(config_yaml_path, _yaml.dump(existing, default_flow_style=False, sort_keys=False))
     return new_managed, previous_guard, True
 
 
@@ -1383,10 +1381,7 @@ def _remove_guard_from_hermes_config_yaml(
     else:
         raw.pop(_GUARD_CONFIG_KEY, None)
 
-    config_yaml_path.write_text(
-        _yaml.dump(raw, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    write_text_at_authorized_path(config_yaml_path, _yaml.dump(raw, default_flow_style=False, sort_keys=False))
 
 
 def _install_state(

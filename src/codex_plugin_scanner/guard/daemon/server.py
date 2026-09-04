@@ -311,6 +311,7 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
+_DAEMON_CHALLENGE_HOOK_PATHS = frozenset({"/v1/hooks/codex", "/v1/hooks/claude-code"})
 
 
 class _HookPathValidationError(ValueError):
@@ -2682,7 +2683,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             else:
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path == "/v1/hooks/codex" and not self._consume_codex_daemon_challenge(payload):
+        if parsed.path in _DAEMON_CHALLENGE_HOOK_PATHS and not self._consume_codex_daemon_challenge(payload):
             self._write_json(
                 {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
                 status=401,

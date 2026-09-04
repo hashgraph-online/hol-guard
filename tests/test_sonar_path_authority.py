@@ -12,7 +12,9 @@ import yaml
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cursor_hooks import managed_hook_script_path, uninstall_cursor_hooks
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state, ensure_daemon_discovery_key
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
@@ -264,6 +266,43 @@ def test_hermes_launch_environment_rejects_tampered_managed_paths(tmp_path: Path
     assert adapter.launch_environment(context) == {}
     runtime_probe = adapter.runtime_probe(context)
     assert runtime_probe is not None
+    assert runtime_probe["managed_install_ready"] is False
+
+
+def test_cursor_uninstall_does_not_unlink_managed_copy_symlink(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    outside_script = tmp_path / "outside.py"
+    outside_script.write_text("# user-owned\n", encoding="utf-8")
+    managed_script = managed_hook_script_path(context)
+    managed_script.parent.mkdir(parents=True)
+    managed_script.symlink_to(outside_script)
+
+    with pytest.raises(ValueError, match="Cursor managed hook script"):
+        uninstall_cursor_hooks(context)
+
+    assert outside_script.read_text(encoding="utf-8") == "# user-owned\n"
+    assert managed_script.is_symlink()
+
+
+def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    outside_root = tmp_path / "outside-openclaw"
+    outside_root.mkdir()
+    _write_json(
+        outside_root / "manifest.json",
+        {
+            "managed_overlay_path": str(outside_root / "overlay.json"),
+            "pretool_hook_path": str(outside_root / "pretool-hook.json"),
+        },
+    )
+    context.guard_home.mkdir()
+    (context.guard_home / "openclaw").symlink_to(outside_root, target_is_directory=True)
+    adapter = OpenClawHarnessAdapter()
+
+    assert adapter.launch_environment(context) == {}
+    runtime_probe = adapter.runtime_probe(context)
+    assert runtime_probe is not None
+    assert runtime_probe["managed_install_present"] is False
     assert runtime_probe["managed_install_ready"] is False
 
 
