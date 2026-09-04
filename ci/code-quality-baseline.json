@@ -555,7 +555,7 @@
     "src/codex_plugin_scanner/guard/runtime/browser_mcp_intent.py": 971,
     "src/codex_plugin_scanner/guard/runtime/command_capability.py": 623,
     "src/codex_plugin_scanner/guard/runtime/command_critical_floors.py": 509,
-    "src/codex_plugin_scanner/guard/runtime/command_rules.py": 547,
+    "src/codex_plugin_scanner/guard/runtime/command_rules.py": 541,
     "src/codex_plugin_scanner/guard/runtime/compound_git_inspection.py": 567,
     "src/codex_plugin_scanner/guard/runtime/data_flow_rules.py": 610,
     "src/codex_plugin_scanner/guard/runtime/decisions.py": 1071,

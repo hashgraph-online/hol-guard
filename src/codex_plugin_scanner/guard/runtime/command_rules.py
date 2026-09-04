@@ -470,12 +470,6 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
     if structured_hints is not None:
         executables, keywords = structured_hints
         return MatcherIndexHints(executables=executables, keywords=keywords)
-    from .command_framework_extensions import framework_matcher_index_hints
-
-    framework_hints = framework_matcher_index_hints(matcher)
-    if framework_hints is not None:
-        executables, keywords = framework_hints
-        return MatcherIndexHints(executables=executables, keywords=keywords)
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):
