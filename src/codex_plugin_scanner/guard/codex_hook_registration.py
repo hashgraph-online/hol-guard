@@ -171,6 +171,17 @@ _FROZEN_GUARD_CLI_NAMES = {
 }
 
 
+_LIVE_OWNED_FALLBACK_REASONS = frozenset(
+    {
+        "codex_hook_interpreter_path_mismatch",
+        "codex_hook_manifest_packaged_files_stale",
+        "codex_hook_manifest_package_version_stale",
+        "codex_hook_manifest_registration_stale",
+        "codex_hook_manifest_schema_unsupported",
+    }
+)
+
+
 def _is_live_guard_codex_hook_command(command: str) -> bool:
     tokens = _command_tokens(command)
     if not tokens:
@@ -178,10 +189,10 @@ def _is_live_guard_codex_hook_command(command: str) -> bool:
     first_path = Path(tokens[0])
     first = first_path.name.lower()
     rest = tokens[1:]
-    if first_path.name == "codex_daemon_hook_bridge.py" or "hol-guard-codex-hook" in first:
-        return True
     payload = _skip_leading_flags(rest)
-    if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
+    if first_path.name == "codex_daemon_hook_bridge.py":
+        return True
+    if "hol-guard-codex-hook" in first:
         return True
     if first.startswith("python"):
         if not payload:
@@ -191,6 +202,8 @@ def _is_live_guard_codex_hook_command(command: str) -> bool:
             return "codex_plugin_scanner.cli" in script and "guard" in script.split() and "hook" in script.split()
         return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
     if first in _FROZEN_GUARD_CLI_NAMES:
+        if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
+            return True
         return "hook" in rest and _has_codex_harness(" ".join(rest))
     return False
 
@@ -387,12 +400,56 @@ def install_managed_codex_hook_groups(
         ]
 
 
+def overlay_live_owned_event_matches(integrity: Mapping[str, object], hooks: object) -> dict[str, bool]:
+    """Keep stale-CLI ownership, but never treat missing or tampered manifests as installed."""
+
+    event_matches_value = integrity.get("event_matches")
+    event_matches = event_matches_value if isinstance(event_matches_value, dict) else {}
+    matches = {event_name: event_matches.get(event_name) is True for event_name in MANAGED_CODEX_HOOK_EVENTS}
+    if integrity.get("integrity_status") == "valid":
+        return matches
+    if integrity.get("integrity_reason") not in _LIVE_OWNED_FALLBACK_REASONS:
+        return matches
+    live_matches = live_owned_codex_event_matches(hooks)
+    return {
+        event_name: matches[event_name] or live_matches.get(event_name) is True
+        for event_name in MANAGED_CODEX_HOOK_EVENTS
+    }
+
+
+def codex_hook_doctor_warnings(hook_state: Mapping[str, object]) -> list[str]:
+    """Return doctor copy for Codex native-hook state."""
+
+    warnings: list[str] = []
+    if not bool(hook_state.get("config_present")):
+        return warnings
+    if not bool(hook_state.get("codex_hooks_enabled")):
+        warnings.append(
+            "Codex config was found, but native hooks are disabled. Run `hol-guard install codex` or "
+            "`hol-guard update` to repair protection."
+        )
+    if not bool(hook_state.get("managed_hook_installed")):
+        warnings.append(
+            "Codex config was found, but Guard's managed Codex hooks are missing. Run "
+            "`hol-guard install codex` or `hol-guard update` to repair protection."
+        )
+        return warnings
+    if hook_state.get("integrity_status") != "valid":
+        warnings.append(
+            "Codex hooks are installed but do not match this Guard CLI. Run "
+            "`hol-guard install codex` or `hol-guard update` to rebind them."
+        )
+    return warnings
+
+
 __all__ = [
+    "codex_hook_doctor_warnings",
     "exact_legacy_hook_bindings",
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",
     "live_owned_codex_event_matches",
+    "overlay_live_owned_event_matches",
     "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
 ]

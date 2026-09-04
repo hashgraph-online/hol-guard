@@ -40,7 +40,6 @@ from ..codex_hook_inventory import (
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
-    MANAGED_CODEX_HOOK_EVENTS,
     CodexHookManifestSpec,
     build_authenticated_hook_manifest,
     load_hook_manifest_baseline,
@@ -53,9 +52,10 @@ from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from ..codex_hook_registration import (
+    codex_hook_doctor_warnings,
     exact_legacy_hook_bindings,
     install_managed_codex_hook_groups,
-    live_owned_codex_event_matches,
+    overlay_live_owned_event_matches,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -875,14 +875,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     json_hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
     hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
-    event_matches_value = integrity.get("event_matches")
-    event_matches = event_matches_value if isinstance(event_matches_value, dict) else {}
-    if integrity.get("integrity_status") != "valid":
-        live_matches = live_owned_codex_event_matches(hooks)
-        event_matches = {
-            event_name: event_matches.get(event_name) is True or live_matches.get(event_name) is True
-            for event_name in MANAGED_CODEX_HOOK_EVENTS
-        }
+    event_matches = overlay_live_owned_event_matches(integrity, hooks)
     pre_tool_hook_installed = event_matches.get("PreToolUse") is True
     permission_hook_installed = event_matches.get("PermissionRequest") is True
     prompt_hook_installed = event_matches.get("UserPromptSubmit") is True
@@ -1373,25 +1366,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         warnings = (
             [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
         )
-        if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
-            warnings.append(
-                "Codex config was found, but native hooks are disabled. Run `hol-guard install codex` or "
-                "`hol-guard update` to repair protection."
-            )
-        if bool(hook_state["config_present"]) and not bool(hook_state["managed_hook_installed"]):
-            warnings.append(
-                "Codex config was found, but Guard's managed Codex hooks are missing. Run "
-                "`hol-guard install codex` or `hol-guard update` to repair protection."
-            )
-        elif (
-            bool(hook_state["config_present"])
-            and bool(hook_state["managed_hook_installed"])
-            and hook_state.get("integrity_status") != "valid"
-        ):
-            warnings.append(
-                "Codex hooks are installed but do not match this Guard CLI. Run "
-                "`hol-guard install codex` or `hol-guard update` to rebind them."
-            )
+        warnings.extend(codex_hook_doctor_warnings(hook_state))
         payload["warnings"] = warnings
         if payload.get("setup_status") == "active" and _warnings_include_setup_failure(warnings):
             payload["setup_status"] = "broken"

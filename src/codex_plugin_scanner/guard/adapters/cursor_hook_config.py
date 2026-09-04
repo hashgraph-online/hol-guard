@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 
+from ..models import GuardArtifact
 from .base import HarnessContext
 from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from .hook_payloads import inline_hooks_payload
@@ -298,8 +299,35 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
     return True
 
 
+_FROZEN_CURSOR_LAUNCHERS = {
+    "current-hol-guard",
+    "current-hol-guard.cmd",
+    "current-hol-guard.exe",
+    "hol-guard",
+    "hol-guard.exe",
+}
+
+
+def _is_structured_managed_cursor_hook_command(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return False
+    first = Path(tokens[0]).name.lower()
+    if first == HOOK_SCRIPT_NAME.lower():
+        return True
+    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        return first in _FROZEN_CURSOR_LAUNCHERS and Path(tokens[2]).name.lower() == HOOK_SCRIPT_NAME.lower()
+    if first.startswith("python"):
+        payload = _skip_leading_flags(tokens[1:])
+        return bool(payload) and Path(payload[0]).name.lower() == HOOK_SCRIPT_NAME.lower()
+    return False
+
+
 def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
-    """Return Guard-owned Cursor hook commands from a live hooks payload."""
+    """Return structured Guard-owned Cursor hook commands from a live hooks payload."""
 
     if not isinstance(hooks, dict):
         return ()
@@ -312,11 +340,35 @@ def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
             if not isinstance(entry, dict):
                 continue
             command = entry.get("command")
-            if not isinstance(command, str) or not _is_managed_hook_command(command) or command in seen:
+            if (
+                not isinstance(command, str)
+                or command in seen
+                or not _is_structured_managed_cursor_hook_command(command)
+            ):
                 continue
             seen.add(command)
             commands.append(command)
     return tuple(commands)
+
+
+def detect_managed_cursor_hook_artifact(hooks_path: Path, payload: object) -> GuardArtifact | None:
+    """Return a Guard hook artifact when Cursor still routes a structured Guard command."""
+
+    if not isinstance(payload, dict):
+        return None
+    nested = payload.get("hooks")
+    commands = managed_cursor_hook_commands(nested if isinstance(nested, dict) else payload)
+    if not commands:
+        return None
+    return GuardArtifact(
+        artifact_id="cursor:global:managed-hooks",
+        name="HOL Guard Cursor hooks",
+        harness="cursor",
+        artifact_type="guard_hook",
+        source_scope="global",
+        config_path=str(hooks_path),
+        command=commands[0],
+    )
 
 
 def _make_executable(path: Path) -> None:
