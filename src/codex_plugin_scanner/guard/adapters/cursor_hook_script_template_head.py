@@ -441,7 +441,7 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
     if raw_event in {"beforereadfile", "beforewritefile"}:
         write = raw_event == "beforewritefile"
         normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Write" if write else "Read")
+        normalized["tool_name"] = "Write" if write else "Read"
         tool_input = _tool_input_dict(normalized.get("tool_input"))
         file_path = normalized.get("file_path")
         if isinstance(file_path, str) and file_path.strip():

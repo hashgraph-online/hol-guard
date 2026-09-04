@@ -222,7 +222,7 @@ def test_cursor_maps_cannot_finish_block_to_allow() -> None:
     )
 
     mapped = prepare_cursor_hook_payload(
-        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts"}
+        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
     )
     assert mapped["hook_event_name"] == "PreToolUse"
     assert mapped["tool_name"] == "Write"

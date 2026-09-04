@@ -84,7 +84,7 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
         return prepared
     if raw_event == "beforereadfile":
         normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Read")
+        normalized["tool_name"] = "Read"
         tool_input = _tool_input_dict(normalized.get("tool_input"))
         file_path = normalized.get("file_path")
         if isinstance(file_path, str) and file_path.strip():
@@ -94,7 +94,7 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
         return normalized
     if raw_event == "beforewritefile":
         normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Write")
+        normalized["tool_name"] = "Write"
         tool_input = _tool_input_dict(normalized.get("tool_input"))
         file_path = normalized.get("file_path")
         if isinstance(file_path, str) and file_path.strip():

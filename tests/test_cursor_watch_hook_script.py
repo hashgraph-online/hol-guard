@@ -174,3 +174,24 @@ def test_generated_cursor_hook_ignores_stale_allow_on_completed_block(tmp_path: 
         )
         == "allow"
     )
+
+
+def test_generated_cursor_hook_write_overrides_conflicting_tool_name(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "prompt"\nprotection_posture = "protected"\n',
+        encoding="utf-8",
+    )
+    source = cursor_hook_script_source(
+        HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=tmp_path)
+    )
+    script_globals: dict[str, object] = {"__name__": "cursor_hook"}
+    exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
+    prepare = script_globals["_prepare_cursor_hook_payload"]
+    assert callable(prepare)
+    mapped = prepare(
+        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
+    )
+    assert isinstance(mapped, dict)
+    assert mapped["tool_name"] == "Write"
