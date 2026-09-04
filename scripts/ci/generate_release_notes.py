@@ -64,6 +64,8 @@ class Change:
 
     @property
     def section(self) -> str:
+        if self.type == "build":
+            return "ci"
         return self.type if self.type in SECTION_TITLES else "internal"
 
     @property
@@ -77,6 +79,11 @@ class Change:
     @property
     def contributor(self) -> str:
         return self.pr_author or self.author
+
+    @property
+    def is_login_contributor(self) -> bool:
+        """Whether the contributor name is a verified GitHub login from PR metadata."""
+        return self.pr_author is not None
 
 
 def parse_subject(subject: str) -> dict | None:
@@ -268,15 +275,21 @@ def enrich_with_pull_requests(changes: list[Change], repo: str) -> None:
             change.description = parsed["description"]
 
 
-def human_contributors(changes: Sequence[Change]) -> list[str]:
-    names: list[str] = []
+def human_contributors(changes: Sequence[Change]) -> list[tuple[str, bool]]:
+    """Distinct human contributors as ``(name, is_github_login)`` pairs.
+
+    A name is only a verified login when it came from PR metadata; fallback
+    Git display names are plain text so they never render as @mentions.
+    """
+    contributors: list[tuple[str, bool]] = []
     for change in changes:
         name = change.contributor
         if not name or name.endswith("[bot]") or name == "anonymous":
             continue
-        if name not in names:
-            names.append(name)
-    return names
+        entry = (name, change.is_login_contributor)
+        if entry not in contributors:
+            contributors.append(entry)
+    return contributors
 
 
 def entry_line(change: Change, repo: str) -> str:
@@ -374,7 +387,8 @@ def render_notes(
         )
         lines.append("")
     if contributors:
-        lines.append(f"Thanks {', '.join(f'@{name}' for name in contributors)}!")
+        credited = [f"@{name}" if is_login else name for name, is_login in contributors]
+        lines.append(f"Thanks {', '.join(credited)}!")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

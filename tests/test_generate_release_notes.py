@@ -131,6 +131,14 @@ def test_render_notes_groups_sections_and_links_everything() -> None:
             pr_number=2760,
             pr_title="refactor(guard)!: share duplicated helpers",
         ),
+        _change(
+            sha="d" * 40,
+            subject="build(wheels): pin the native toolchain",
+            type="build",
+            scope="wheels",
+            description="pin the native toolchain",
+            pr_number=None,
+        ),
     ]
     notes = render_notes(
         changes,
@@ -142,15 +150,17 @@ def test_render_notes_groups_sections_and_links_everything() -> None:
         source_sha="a" * 40,
     )
     assert "Guard 3.0.68 is a stable release cut from [`aaaaaaa`]" in notes
-    assert "**3 commits • 3 merged pull requests • 2 contributors** since [Guard 3.0.67]" in notes
+    assert "**4 commits • 3 merged pull requests • 2 contributors** since [Guard 3.0.67]" in notes
     assert "## Features" in notes and "## Fixes" not in notes
     assert "## CI & automation" in notes and "## Refactoring" in notes
+    assert "Pin the native toolchain" in notes
     assert "[#2761](https://github.com/hashgraph-online/hol-guard/pull/2761)" in notes
     assert "  - Reviews destructive Artisan operations" in notes
     assert "**(breaking)**" in notes
     assert 'uv tool install "hol-guard[cisco]==3.0.68"' in notes
     assert "[v3.0.67...v3.0.68](https://github.com/hashgraph-online/hol-guard/compare/v3.0.67...v3.0.68)" in notes
-    assert "Thanks @kantorcodes, @Michael Kantor!" in notes
+    assert "Thanks @kantorcodes, Michael Kantor!" in notes
+    assert "@Michael Kantor" not in notes
 
 
 def test_render_notes_alpha_channel_and_empty_history() -> None:

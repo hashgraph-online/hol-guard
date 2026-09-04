@@ -1414,6 +1414,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1450,13 +1451,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-        run: |
-          python3 scripts/ci/generate_release_notes.py \
-            --version "$VERSION" \
-            --channel "$CHANNEL" \
-            --repo "$GITHUB_REPOSITORY" \
-            --source-sha "$SOURCE_SHA" \
-            --output "$RUNNER_TEMP/release-notes.md"
+        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1524,6 +1519,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1560,13 +1556,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-        run: |
-          python3 scripts/ci/generate_release_notes.py \
-            --version "$VERSION" \
-            --channel "$CHANNEL" \
-            --repo "$GITHUB_REPOSITORY" \
-            --source-sha "$SOURCE_SHA" \
-            --output "$RUNNER_TEMP/release-notes.md"
+        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable alpha prerelease
         env:
           GH_TOKEN: ${{ github.token }}
