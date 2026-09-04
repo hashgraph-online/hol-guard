@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineEx
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 from tests.test_guard_js_supply_chain_phase11 import (
     WORKSPACE_ID,
     _artifact_from_command,
@@ -316,7 +316,7 @@ def test_representative_large_bun_lockfile_completes_within_scaled_budget(monkey
 
     # Coverage tracers slow the parser beyond any plausible product regression, so
     # covered CI runs scale the parse deadline; untraced runs keep the real budget.
-    coverage_scale = 4.0 if os.environ.get("GUARD_PYTEST_UNDER_COVERAGE") == "1" else 1.0
+    coverage_scale = under_coverage_scale(4.0)
     if coverage_scale > 1.0:
         for budget_constant in (
             "_LOCKFILE_PARSE_BUDGET_SECONDS",

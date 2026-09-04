@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.sandbox import (
@@ -14,6 +13,7 @@ from codex_plugin_scanner.guard.runtime.sandbox import (
     _redact_env,
     run_sandbox,
 )
+from tests.coverage_ci import under_coverage_scale
 
 
 def test_sandbox_result_is_dataclass() -> None:
@@ -187,11 +187,7 @@ def test_run_sandbox_fork_bomb_limited() -> None:
 
 
 def _interpreter_sandbox_timeout_seconds() -> float:
-    # Coverage tracers slow interpreter startup beyond any plausible product
-    # regression, so covered CI runs scale the request timeout; untraced runs
-    # keep the real 5s budget.
-    coverage_scale = 6.0 if os.environ.get("GUARD_PYTEST_UNDER_COVERAGE") == "1" else 1.0
-    return 5.0 * coverage_scale
+    return 5.0 * under_coverage_scale(6.0)
 
 
 def test_run_sandbox_python_script_path() -> None:
