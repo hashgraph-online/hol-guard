@@ -137,6 +137,11 @@ class ShimRefreshTest(unittest.TestCase):
         self.assertEqual(result.refreshed, ("kimi",))
         self.assertEqual(completed.returncode, 0)
         self.assertTrue(path.read_text(encoding="utf-8").startswith("#!/bin/sh\n"))
+        windows_source = path.with_suffix(".cmd").read_text(encoding="utf-8")
+        self.assertIn("run-shim", windows_source)
+        self.assertIn(str(stable_cli), windows_source)
+        self.assertNotIn(str(path), windows_source)
+        self.assertIn(" -- %*", windows_source)
         self.assertEqual(
             capture_path.read_text(encoding="utf-8").splitlines(),
             [
@@ -148,6 +153,40 @@ class ShimRefreshTest(unittest.TestCase):
                 str(self.home_dir),
                 "--arg=--help",
             ],
+        )
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX harness launcher contract")
+    def test_frozen_durable_runtime_remains_a_launcher_fallback(self) -> None:
+        capture_path = self.home_dir / "captured-args"
+        runtime = self.home_dir / "Applications" / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+        runtime.parent.mkdir(parents=True)
+        runtime.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {str(capture_path)!r}\n",
+            encoding="utf-8",
+        )
+        runtime.chmod(0o755)
+
+        with (
+            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", True, create=True),
+            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(runtime)),
+            mock.patch(
+                "codex_plugin_scanner.guard.shims._is_transient_path",
+                side_effect=lambda path: ".mount_" in str(path),
+            ),
+            mock.patch.dict(
+                "codex_plugin_scanner.guard.durable_harness_launcher.os.environ",
+                {"HOL_GUARD_DESKTOP_RUNTIME_OWNER": ""},
+                clear=False,
+            ),
+        ):
+            path = self._install("kimi")
+            completed = subprocess.run([str(path), "--version"], check=False)
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn(str(runtime), path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            capture_path.read_text(encoding="utf-8").splitlines()[-1],
+            "--arg=--version",
         )
 
     def test_stale_shim_is_refreshed_with_current_generator_content(self) -> None:

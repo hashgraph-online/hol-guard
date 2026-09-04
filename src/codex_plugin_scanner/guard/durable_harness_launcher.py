@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -45,6 +47,7 @@ def build_harness_shim(
             workspace_args,
             home_override_args=home_override_args,
             is_transient_path=is_transient_path,
+            runtime_executable=executable,
         )
     command_args = [
         executable,
@@ -96,7 +99,37 @@ def build_windows_script(executable: str, posix_path: Path) -> str:
                 "",
             )
         )
+    harness_command = _generated_harness_command(posix_path)
+    if harness_command is not None:
+        guard_cli, _, harness, *context_args = harness_command
+        command = [guard_cli, "run-shim", *context_args, harness, "--"]
+        return "\r\n".join(("@echo off", f"{subprocess.list2cmdline(command)} %*", ""))
     return "\r\n".join(("@echo off", f'"{executable}" "{posix_path}" %*', ""))
+
+
+def _generated_harness_command(posix_path: Path) -> list[str] | None:
+    if not posix_path.name.startswith("guard-"):
+        return None
+    try:
+        source = posix_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    prefix = "# base_command = "
+    command_line = next((line[len(prefix) :] for line in source.splitlines() if line.startswith(prefix)), None)
+    if command_line is None:
+        return None
+    try:
+        command = ast.literal_eval(command_line)
+    except (SyntaxError, ValueError):
+        return None
+    if (
+        not isinstance(command, list)
+        or len(command) < 3
+        or not all(isinstance(value, str) for value in command)
+        or command[1] != "run"
+    ):
+        return None
+    return command
 
 
 def build_durable_cli_shim(
@@ -106,6 +139,7 @@ def build_durable_cli_shim(
     *,
     home_override_args: Sequence[str],
     is_transient_path: Callable[[Path], bool],
+    runtime_executable: str | None = None,
 ) -> str:
     fixed_args = [
         "run",
@@ -116,7 +150,11 @@ def build_durable_cli_shim(
         *workspace_args,
     ]
     quoted_args = " ".join(shlex.quote(arg) for arg in fixed_args)
-    official_cli = durable_guard_cli_path(context, is_transient_path=is_transient_path)
+    official_cli = durable_guard_cli_path(
+        context,
+        is_transient_path=is_transient_path,
+        runtime_executable=runtime_executable,
+    )
     metadata_command = [str(official_cli or "hol-guard"), *fixed_args]
     quoted_cli = shlex.quote(str(official_cli)) if official_cli is not None else "''"
     return "\n".join(
@@ -143,10 +181,12 @@ def durable_guard_cli_path(
     context: HarnessContextLike,
     *,
     is_transient_path: Callable[[Path], bool],
+    runtime_executable: str | None = None,
 ) -> Path | None:
     candidates = (
         os.environ.get("HOL_GUARD_DESKTOP_RUNTIME_OWNER"),
         str(context.home_dir / ".local" / "bin" / "hol-guard"),
+        runtime_executable,
     )
     for candidate in candidates:
         if not candidate:
