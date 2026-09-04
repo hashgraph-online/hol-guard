@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import shlex
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
+
+from .stable_guard_cli import desktop_core_shim_for_executable
 
 
 class HarnessContextLike(Protocol):
@@ -35,7 +38,7 @@ def build_harness_shim(
     home_override_args: Sequence[str],
     is_transient_path: Callable[[Path], bool],
 ) -> str:
-    if is_transient_appimage_path(executable):
+    if getattr(sys, "frozen", False) or is_transient_appimage_path(executable):
         return build_durable_cli_shim(
             harness,
             context,
@@ -152,6 +155,20 @@ def durable_guard_cli_path(
         try:
             resolved_path = invocation_path.resolve(strict=True)
         except (OSError, RuntimeError):
+            continue
+        desktop_shim = desktop_core_shim_for_executable(resolved_path)
+        if desktop_shim is not None:
+            try:
+                resolved_shim = desktop_shim.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue
+            if (
+                desktop_shim.is_file()
+                and os.access(desktop_shim, os.X_OK)
+                and not is_transient_path(desktop_shim)
+                and not is_transient_path(resolved_shim)
+            ):
+                return desktop_shim
             continue
         if not invocation_path.is_file() or not os.access(invocation_path, os.X_OK):
             continue
