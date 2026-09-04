@@ -8,13 +8,21 @@ from codex_plugin_scanner.guard.cli.commands_dispatch_desktop import (
 )
 
 
-def _status_payload(*, managed: int, runtime: str = "active", pending: int = 0) -> dict[str, object]:
+def _status_payload(
+    *,
+    managed: int,
+    runtime: str = "active",
+    pending: int = 0,
+    review_count: int = 0,
+    warning_count: int = 0,
+    cloud_state: str = "local_only",
+) -> dict[str, object]:
     return {
         "runtime_status": runtime,
         "managed_harnesses": managed,
         "receipt_count": 2,
         "pending_approvals": pending,
-        "cloud_state": "local_only",
+        "cloud_state": cloud_state,
         "last_sync_at": None,
         "harnesses": [
             {
@@ -22,8 +30,8 @@ def _status_payload(*, managed: int, runtime: str = "active", pending: int = 0) 
                 "installed": True,
                 "command_available": True,
                 "artifact_count": 2,
-                "review_count": 0,
-                "warning_count": 0,
+                "review_count": review_count,
+                "warning_count": warning_count,
                 "managed": managed > 0,
                 "config_paths": ["~/sensitive/project/.codex/config.toml"],
                 "shim_path": "~/sensitive/bin/codex",
@@ -126,6 +134,45 @@ def test_desktop_bootstrap_fails_closed_when_guard_is_not_configured() -> None:
     assert payload["daemon"] == {"running": False}
     assert payload["protection"]["state"] == "not_configured"
     assert payload["apps"][0]["protection"] == "detected"
+
+
+def test_desktop_bootstrap_keeps_managed_app_protected_when_review_count_is_nonzero() -> None:
+    payload = build_desktop_bootstrap_payload(
+        status_payload=_status_payload(managed=1, review_count=53),
+        pending_requests=[],
+        approval_history=[],
+        receipts=[],
+        core_version="3.0.0",
+    )
+
+    assert payload["status"] == "ready"
+    assert payload["protection"]["state"] == "protected"
+    assert payload["apps"][0]["protection"] == "protected"
+
+
+def test_desktop_bootstrap_treats_paired_active_cloud_as_connected() -> None:
+    payload = build_desktop_bootstrap_payload(
+        status_payload=_status_payload(managed=1, cloud_state="paired_active"),
+        pending_requests=[],
+        approval_history=[],
+        receipts=[],
+        core_version="3.0.0",
+    )
+
+    assert payload["cloud"]["status"] == "connected"
+
+
+def test_desktop_bootstrap_repairs_managed_app_when_warnings_remain() -> None:
+    payload = build_desktop_bootstrap_payload(
+        status_payload=_status_payload(managed=1, review_count=53, warning_count=1),
+        pending_requests=[],
+        approval_history=[],
+        receipts=[],
+        core_version="3.0.0",
+    )
+
+    assert payload["apps"][0]["protection"] == "needs_repair"
+    assert payload["status"] == "attention_required"
 
 
 def test_desktop_bootstrap_degrades_managed_app_when_runtime_is_inactive() -> None:

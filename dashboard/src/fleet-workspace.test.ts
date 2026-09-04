@@ -164,13 +164,19 @@ const failedCloudProof = cloudPolicyRecoveryHint({
   cloudState: "paired_active",
   cloudSyncState: "failed",
   cloudPolicySyncError: null,
-  connectUrl: urls.fleet_url,
+  connectUrl: urls.connect_url,
+  dashboardUrl: urls.dashboard_url,
 });
 assert(
   failedCloudProof?.actionLabel === "Open Guard Cloud" &&
     failedCloudProof.detail.includes("separate from local repair") &&
-    failedCloudProof.startsOAuth === false,
+    failedCloudProof.startsOAuth === false &&
+    failedCloudProof.href === urls.dashboard_url,
   "failed Cloud proof remains an independent Cloud action",
+);
+assert(
+  failedCloudProof.href !== urls.connect_url,
+  "already-connected Cloud recovery must not open the connect page",
 );
 assert(
   recoverySummary(1, 0, false, ["App hooks"]) ===
@@ -230,6 +236,20 @@ const targetedRepairs = repairHarnessesFor(
 assert(
   targetedRepairs.length === 2 && targetedRepairs[0] === "grok" && targetedRepairs[1] === "cursor",
   "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
+);
+
+const watchModeCodexHealth = {
+  harness: "codex",
+  state: "degraded" as const,
+  label: "Degraded",
+  detail: "Watch posture is observe-only.",
+  evidence_gap: false,
+  checks: [{ check_id: "harness_hooks", status: "pass" as const, reason_code: "hooks_verified" }],
+  reason_codes: ["hooks_verified"],
+};
+assert(
+  resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true) === "partial",
+  "active Codex with passing hooks is not a repair loop when global protection is Watch",
 );
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];

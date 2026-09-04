@@ -338,6 +338,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
             cloudSyncState: props.runtime.cloud_sync_health.state,
             cloudPolicySyncError: props.runtime.cloud_policy_sync_error,
             connectUrl: props.runtime.connect_url,
+            dashboardUrl: props.runtime.dashboard_url,
           }}
           health={protectionHealth}
           repairHarness={repairHarness}

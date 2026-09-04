@@ -75,7 +75,9 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     assert payload["native_hook_state"]["integrity_status"] != "valid"
     assert payload["setup_status"] != "broken"
     assert not any("managed Codex hooks are missing" in warning for warning in payload["warnings"])
+    assert not any("Guard is not installed" in warning for warning in payload["warnings"])
     assert any("do not match this Guard CLI" in warning for warning in payload["warnings"])
+    assert payload["setup_status"] == "active"
 
 
 def _write_cursor_hook_script(context: HarnessContext) -> Path:
@@ -95,10 +97,7 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
     script_path = _write_cursor_hook_script(context)
-    command = (
-        f"current-hol-guard __guard-cursor-hook {script_path} "
-        "--cursor-hook-event beforeShellExecution"
-    )
+    command = f"current-hol-guard __guard-cursor-hook {script_path} --cursor-hook-event beforeShellExecution"
     hooks_path.write_text(
         json.dumps(
             {
@@ -164,10 +163,7 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
     context = _context(tmp_path)
     hooks_path = context.home_dir / ".cursor" / "hooks.json"
     script_path = context.home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
-    command = (
-        f"current-hol-guard __guard-cursor-hook {script_path} "
-        "--cursor-hook-event beforeShellExecution"
-    )
+    command = f"current-hol-guard __guard-cursor-hook {script_path} --cursor-hook-event beforeShellExecution"
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     hooks_path.write_text(
         json.dumps(
@@ -214,3 +210,23 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
     disabled_payload = adapter.diagnostics(context)
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in disabled_payload["artifacts"])
     assert disabled_payload["setup_status"] != "active"
+
+
+def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
+    from codex_plugin_scanner.guard.codex_hook_registration import finalize_codex_doctor_warnings
+
+    warnings = finalize_codex_doctor_warnings(
+        [
+            "codex config was found, but Guard is not installed for this harness. "
+            "Run `hol-guard install codex` to enable protection."
+        ],
+        {
+            "config_present": True,
+            "codex_hooks_enabled": True,
+            "managed_hook_installed": True,
+            "integrity_status": "stale",
+        },
+    )
+
+    assert not any("Guard is not installed" in warning for warning in warnings)
+    assert any("do not match this Guard CLI" in warning for warning in warnings)

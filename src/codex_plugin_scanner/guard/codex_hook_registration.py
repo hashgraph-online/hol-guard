@@ -442,9 +442,26 @@ def codex_hook_doctor_warnings(hook_state: Mapping[str, object]) -> list[str]:
     return warnings
 
 
+_FALSE_UNINSTALLED_MARKER = "guard is not installed for this harness"
+
+
+def finalize_codex_doctor_warnings(
+    warnings: Sequence[str],
+    hook_state: Mapping[str, object],
+) -> list[str]:
+    """Keep Codex hook warnings and drop the false uninstalled copy when hooks exist."""
+
+    merged = [str(item) for item in warnings]
+    merged.extend(codex_hook_doctor_warnings(hook_state))
+    if not bool(hook_state.get("managed_hook_installed")):
+        return merged
+    return [warning for warning in merged if _FALSE_UNINSTALLED_MARKER not in warning.lower()]
+
+
 __all__ = [
     "codex_hook_doctor_warnings",
     "exact_legacy_hook_bindings",
+    "finalize_codex_doctor_warnings",
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",
