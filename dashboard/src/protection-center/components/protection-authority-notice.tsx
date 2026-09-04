@@ -31,7 +31,7 @@ type AuthorityNoticeView = {
  */
 function authorityNoticeView(
   health: EffectiveExtensionControls["health"],
-  approvalGateConfigured: boolean | null,
+  approvalGateReady: boolean | null,
 ): AuthorityNoticeView {
   switch (health) {
     case "tampered":
@@ -75,7 +75,21 @@ function authorityNoticeView(
         terminalSummary: "Run this in your terminal to rebuild the trusted settings.",
       };
     default:
-      if (approvalGateConfigured === false) {
+      if (approvalGateReady === null) {
+        return {
+          tone: "info",
+          title: "Checking approval setup",
+          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
+          action: { kind: "none" },
+          actionLabel: null,
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: "",
+        };
+      }
+      if (!approvalGateReady) {
         return {
           tone: "info",
           title: "Set up approval before enrollment",
@@ -115,8 +129,10 @@ export function ProtectionAuthorityNotice(props: {
   onOpenApprovalSettings: () => void;
 }) {
   const health = props.effective.health;
-  if (health === "protected") return null;
-  const view = authorityNoticeView(health, props.approvalGate?.configured ?? null);
+  const approvalGateReady = props.approvalGate === null
+    ? null
+    : props.approvalGate.configured && props.approvalGate.enabled;
+  const view = authorityNoticeView(health, approvalGateReady);
   const [proofOpen, setProofOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"repair" | "acknowledge" | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -125,6 +141,7 @@ export function ProtectionAuthorityNotice(props: {
   useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
+  if (health === "protected") return null;
   const gatePending = props.approvalGate === null;
 
   const copyCommand = async () => {
@@ -164,7 +181,7 @@ export function ProtectionAuthorityNotice(props: {
             }}
             className="inline-flex min-h-11 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
           >{gatePending && !props.error ? "Loading approval settings…" : view.actionLabel}</button> : null}
-          {view.action.kind === "none" ? <button
+          {view.action.kind === "none" && view.command ? <button
             type="button"
             onClick={() => { void copyCommand(); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark"

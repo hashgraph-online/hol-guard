@@ -75,7 +75,7 @@ def test_non_launch_skill_summary_identifies_the_reviewed_definition() -> None:
         harness="omp",
         source_scope="project",
         artifact_type="skill",
-        config_path="/home/vye/.omp/skills/memory-interaction/SKILL.md",
+        config_path="/workspace/.omp/skills/memory-interaction/SKILL.md",
     )
 
     incident = build_incident_context(

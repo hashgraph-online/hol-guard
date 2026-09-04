@@ -4058,7 +4058,7 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
-function authorityNoticeView(health, approvalGateConfigured) {
+function authorityNoticeView(health, approvalGateReady) {
   switch (health) {
     case "tampered":
     case "recovery-required":
@@ -4101,7 +4101,21 @@ function authorityNoticeView(health, approvalGateConfigured) {
         terminalSummary: "Run this in your terminal to rebuild the trusted settings."
       };
     default:
-      if (approvalGateConfigured === false) {
+      if (approvalGateReady === null) {
+        return {
+          tone: "info",
+          title: "Checking approval setup",
+          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
+          action: { kind: "none" },
+          actionLabel: null,
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
+      if (!approvalGateReady) {
         return {
           tone: "info",
           title: "Set up approval before enrollment",
@@ -4131,14 +4145,15 @@ function authorityNoticeView(health, approvalGateConfigured) {
 }
 function ProtectionAuthorityNotice(props) {
   const health = props.effective.health;
-  if (health === "protected") return null;
-  const view = authorityNoticeView(health, props.approvalGate?.configured ?? null);
+  const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
+  const view = authorityNoticeView(health, approvalGateReady);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
   reactExports.useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
+  if (health === "protected") return null;
   const gatePending = props.approvalGate === null;
   const copyCommand = async () => {
     try {
@@ -4175,7 +4190,7 @@ function ProtectionAuthorityNotice(props) {
               children: gatePending && !props.error ? "Loading approval settings…" : view.actionLabel
             }
           ) : null,
-          view.action.kind === "none" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          view.action.kind === "none" && view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
               type: "button",
@@ -5730,7 +5745,7 @@ function ProtectionCenterWorkspace(props) {
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState(null);
-  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
   const localClis = useLocalCliCatalog();
@@ -5874,10 +5889,13 @@ function ProtectionCenterWorkspace(props) {
   const handleCheckAgain = reactExports.useCallback(() => {
     void load();
     setRecoveryError(null);
-    void resolveApprovalGate({ failClosed: true }).catch(() => {
+    void refreshApprovalGate({ failClosed: true }).catch(() => {
       setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
     });
-  }, [load, resolveApprovalGate]);
+  }, [load, refreshApprovalGate]);
+  const handleOpenApprovalSettings = reactExports.useCallback(() => {
+    props.onNavigate("/settings?section=approval");
+  }, [props.onNavigate]);
   const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
   reactExports.useEffect(() => {
     if (!authorityNeedsAttention) return;
@@ -5912,7 +5930,7 @@ function ProtectionCenterWorkspace(props) {
         approvalGate: resolvedApprovalGate,
         onAction: handleAuthorityAction,
         onCheckAgain: handleCheckAgain,
-        onOpenApprovalSettings: props.onOpenApprovalSettings
+        onOpenApprovalSettings: handleOpenApprovalSettings
       }
     ) : null,
     state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 text-sm font-medium text-emerald-800", children: recoveryStatus }) : null,

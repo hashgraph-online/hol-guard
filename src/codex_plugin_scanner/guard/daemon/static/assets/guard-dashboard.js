@@ -31598,7 +31598,6 @@ function App() {
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
-  const handleOpenApprovalSettings = reactExports.useCallback(() => navigate("/settings?section=approval"), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
   reactExports.useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
@@ -31973,13 +31972,7 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ExtensionsWorkspace,
-          {
-            runtime: runtime.kind === "ready" ? runtime.snapshot : null,
-            onOpenApprovalSettings: handleOpenApprovalSettings
-          }
-        ) }) }),
+        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime.kind === "ready" ? runtime.snapshot : null, onNavigate: navigate }) }) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
         supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SupplyChainHubWorkspace,
