@@ -420,7 +420,6 @@ def test_authenticated_failure_denies_permission_request_behavior() -> None:
     assert v2["hookSpecificOutput"]["decision"]["behavior"] == "deny"
 
 
-
 def test_recovery_only_restarts_for_transport_and_server_failures() -> None:
     assert not bridge._daemon_failure_is_recoverable(ValueError("invalid loopback URL"))
     assert not bridge._daemon_failure_is_recoverable(

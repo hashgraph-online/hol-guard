@@ -79,6 +79,9 @@ def _load_or_create_key(guard_home: Path) -> tuple[str, bytes]:
         return _load_key(guard_home)
     path.parent.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
+        # Semgrep recommends 0o644 here, which would expose signing material;
+        # owner-only access is required for authenticated adapter state.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.chmod(path.parent, 0o700)
     payload: dict[str, object] = {
         "key": base64.urlsafe_b64encode(secrets.token_bytes(_KEY_BYTES)).decode("ascii"),

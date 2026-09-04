@@ -39,7 +39,6 @@ _merge_hook_group = _hook_config.merge_hook_group
 _prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
-
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 
 
@@ -438,6 +437,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         resolved_executable = self.resolved_executable(context)
         if resolved_executable is None:

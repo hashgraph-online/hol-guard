@@ -67,7 +67,6 @@ def main(
     """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
 
     _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
-    state_path = state_path_for_query(state_path, query)
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
@@ -76,6 +75,7 @@ def main(
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
         return 0
+    state_path = state_path_for_query(state_path, query)
     data = body.strip() or "{}"
     recovery_command = _recovery_command(state_path, query)
     try:

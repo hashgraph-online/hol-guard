@@ -34,9 +34,7 @@ def test_claude_daemon_url_does_not_follow_state_symlink(tmp_path: Path) -> None
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "daemon-state.json").symlink_to(external_state)
-    assert bridge._daemon_url(guard_home / "daemon-state.json", "http://127.0.0.1:5474/") == (
-        "http://127.0.0.1:5474/"
-    )
+    assert bridge._daemon_url(guard_home / "daemon-state.json", "http://127.0.0.1:5474/") == ("http://127.0.0.1:5474/")
 
 
 def test_claude_daemon_url_uses_authenticated_local_state(tmp_path: Path) -> None:

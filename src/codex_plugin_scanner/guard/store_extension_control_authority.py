@@ -125,6 +125,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             return self._tampered_view(catalog_digest)
         except Exception:
             return self._degraded_view(catalog_digest)
+
     def _with_managed_controls_activation(
         self,
         view: ExtensionControlAuthorityView,
@@ -618,8 +619,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         key: bytes | None,
         reason: str,
     ) -> ExtensionControlAuthorityView:
-        # Authenticated recovery must not import rows whose chain cannot be
-        # verified. Re-establish an empty, protected local authority instead.
+        # Never import rows with an unverifiable chain; re-establish an empty protected authority.
         reset_at = _now()
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
