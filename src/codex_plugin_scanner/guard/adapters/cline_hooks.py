@@ -11,9 +11,12 @@ import time
 from hashlib import sha256
 from pathlib import Path
 
-from ..windows_paths import trusted_windows_system_executable
 from .base import HarnessContext
 from .cline_paths import cline_hook_roots as _resolve_cline_hook_roots
+from .cline_paths import ensure_safe_cline_destination
+from .cline_state_paths import canonical_cline_state_path as _canonical_state_path
+from .cline_state_paths import cline_hook_command as _hook_command
+from .cline_state_paths import uninstall_persisted_cline_hooks as uninstall_cline_hooks
 from .guard_cli_attestation import resolve_attested_guard_cli
 
 _MARKER = "HOL_GUARD_MANAGED_CLINE_HOOK_V1"
@@ -63,80 +66,6 @@ def _slot_for_event(root: Path, event: str, *, windows: bool | None = None) -> P
     if path.exists() and not _managed(path):
         raise RuntimeError(f"Cline already has a user-owned {event} hook in {root}; Guard will not overwrite it")
     return path
-
-
-def _canonical_state_path(
-    context: HarnessContext,
-    event: str,
-    value: object,
-    *,
-    worker: bool = False,
-    saved_root: object | None = None,
-) -> Path | None:
-    """Bind a persisted path to a Cline slot derived from the current context."""
-
-    if not isinstance(value, str) or not value or "\x00" in value:
-        return None
-    recorded = Path(value)
-    if not recorded.is_absolute():
-        return None
-    if worker:
-        candidates = (_worker_path(context, event),)
-    else:
-        suffix = ".ps1" if os.name == "nt" else ""
-        roots = list(cline_hook_roots(context))
-        persisted_root = _canonical_saved_hook_root(context, saved_root)
-        if persisted_root is not None and persisted_root not in roots:
-            roots.append(persisted_root)
-        candidates = tuple(root / f"{event}{suffix}" for root in roots)
-    try:
-        recorded_resolved = recorded.resolve(strict=True)
-    except (OSError, RuntimeError):
-        return None
-    for candidate in candidates:
-        try:
-            _safe_destination(candidate, context)
-            candidate_resolved = candidate.resolve(strict=True)
-        except (OSError, RuntimeError):
-            continue
-        if recorded_resolved == candidate_resolved:
-            return candidate_resolved
-    return None
-
-
-def _canonical_saved_hook_root(context: HarnessContext, value: object) -> Path | None:
-    """Recover an installed custom hook root after its environment override changes."""
-
-    if not isinstance(value, str) or not value or "\x00" in value:
-        return None
-    recorded = Path(value)
-    if not recorded.is_absolute() or recorded.name.lower() != "hooks":
-        return None
-    probe = recorded / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
-    try:
-        _safe_destination(probe, context)
-        resolved = recorded.resolve(strict=True)
-    except (OSError, RuntimeError):
-        return None
-    home = context.home_dir.resolve(strict=False)
-    if resolved != home and not resolved.is_relative_to(home):
-        return None
-    return resolved
-
-
-def _safe_destination(path: Path, context: HarnessContext) -> None:
-    home = context.home_dir.resolve(strict=False)
-    guard_home = context.guard_home.resolve(strict=False)
-    parent = path.parent.resolve(strict=False)
-    if not parent.is_relative_to(home) and not parent.is_relative_to(guard_home):
-        raise RuntimeError("Cline hook destination escapes Guard-managed roots")
-    current = path.parent
-    while current not in {home, guard_home, current.parent}:
-        if current.exists() and current.is_symlink():
-            raise RuntimeError(f"Cline hook parent is a symlink: {current}")
-        current = current.parent
-    if path.exists() and path.is_symlink():
-        raise RuntimeError(f"Cline hook destination is a symlink: {path}")
 
 
 def _write(path: Path, text: str, *, executable: bool = False) -> None:
@@ -500,16 +429,6 @@ def _load_state(context: HarnessContext) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
 
 
-def _hook_command(path: Path) -> list[str]:
-    if path.suffix.lower() == ".ps1":
-        try:
-            shell = trusted_windows_system_executable("WindowsPowerShell", "v1.0", "powershell.exe")
-        except OSError:
-            return []
-        return [str(shell), "-NoProfile", "-File", str(path)]
-    return [str(path)]
-
-
 def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     """Install global Cline hooks, then run a synthetic wire-contract canary."""
 
@@ -526,8 +445,8 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     for event in _EVENTS:
         slot = _slot_for_event(root, event)
         worker = _worker_path(context, event)
-        _safe_destination(slot, context)
-        _safe_destination(worker, context)
+        ensure_safe_cline_destination(context, slot)
+        ensure_safe_cline_destination(context, worker)
         worker_source = _hook_source(context, event_name=event, guard_cli=guard)
         _write(worker, worker_source)
         if os.name == "nt":
@@ -683,50 +602,6 @@ def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "missing_events": missing,
         "modified_events": modified,
         "ready": not missing and not modified and canary.get("ok") is True and pretool_blocking_proven,
-    }
-
-
-def uninstall_cline_hooks(context: HarnessContext) -> dict[str, object]:
-    state = _load_state(context)
-    removed: list[str] = []
-    retained: list[str] = []
-    for group, worker in ((state.get("paths"), False), (state.get("workers"), True)):
-        if not isinstance(group, dict):
-            continue
-        for event in _EVENTS:
-            value = group.get(event)
-            if not isinstance(value, str):
-                continue
-            path = _canonical_state_path(
-                context,
-                event,
-                value,
-                worker=worker,
-                saved_root=state.get("root"),
-            )
-            if path is None:
-                try:
-                    exists = Path(value).exists()
-                except (OSError, ValueError):
-                    exists = False
-                if exists:
-                    retained.append(value)
-                continue
-            if _managed(path):
-                try:
-                    path.unlink()
-                    removed.append(str(path))
-                except OSError:
-                    retained.append(str(path))
-            else:
-                retained.append(str(path))
-    if not retained and _state_path(context).is_file():
-        _state_path(context).unlink()
-    return {
-        "transport": "hooks",
-        "removed": removed,
-        "retained_modified_or_unowned": retained,
-        "complete": not retained,
     }
 
 

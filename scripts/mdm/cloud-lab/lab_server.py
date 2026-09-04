@@ -15,22 +15,8 @@ from lab_support import (
     read_json,
 )
 
+from codex_plugin_scanner.guard.json_transport import escape_json_for_html
 from codex_plugin_scanner.guard.mdm.cloud_control import ContractError
-
-_JSON_RESPONSE_TRANSLATION = str.maketrans(
-    {
-        "&": "\\u0026",
-        "<": "\\u003c",
-        ">": "\\u003e",
-    }
-)
-
-
-def _json_response_bytes(payload: object) -> bytes:
-    """Return transport JSON that cannot be interpreted as HTML markup."""
-
-    encoded = json_bytes(payload).decode("utf-8")
-    return encoded.translate(_JSON_RESPONSE_TRANSLATION).encode("utf-8")
 
 
 class CloudHandler(BaseHTTPRequestHandler):
@@ -50,7 +36,7 @@ class CloudHandler(BaseHTTPRequestHandler):
         payload: object | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> None:
-        body = b"" if payload is None else _json_response_bytes(payload)
+        body = b"" if payload is None else escape_json_for_html(json_bytes(payload))
         self.send_response(status)
         for key, value in (headers or {}).items():
             self.send_header(key, value)

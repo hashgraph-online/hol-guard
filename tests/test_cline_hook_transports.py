@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import cline_hooks as cline_hooks_module
+from codex_plugin_scanner.guard.adapters import cline_state_paths as cline_state_paths_module
 from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_hooks import (
@@ -162,7 +163,7 @@ def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monke
         powershell = tmp_path / "PowerShell Dir" / "powershell.exe"
         powershell.parent.mkdir()
         powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_hooks_module, "trusted_windows_system_executable", lambda *_parts: powershell)
+        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
 
     assert run_cline_hook_canary(context) == {"ok": True}
     observed_command = observed["command"]
@@ -181,7 +182,7 @@ def test_cline_powershell_command_never_uses_ambient_path(tmp_path: Path, monkey
     def unavailable_system_shell(*_parts: str) -> Path:
         raise OSError("trusted Windows PowerShell unavailable")
 
-    monkeypatch.setattr(cline_hooks_module, "trusted_windows_system_executable", unavailable_system_shell)
+    monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", unavailable_system_shell)
 
     assert _hook_command(tmp_path / "PreToolUse.ps1") == []
 
@@ -232,7 +233,7 @@ def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, mon
         powershell = tmp_path / "trusted" / "powershell.exe"
         powershell.parent.mkdir()
         powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_hooks_module, "trusted_windows_system_executable", lambda *_parts: powershell)
+        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
 
     health = cline_native_hook_state(context)
     assert health["installed"] is True

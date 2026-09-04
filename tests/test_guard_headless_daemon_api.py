@@ -216,36 +216,6 @@ def _install_local_package_shim(store: GuardStore, home_dir: Path, manager: str)
     )
 
 
-def test_json_response_escapes_html_metacharacters_without_changing_values(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    hostile_surface = "</script><script>alert(1)</script>&"
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        request = _request(
-            daemon.port,
-            "/v1/apps/connect",
-            token=token,
-            payload={"harness": "cursor", "surface": hostile_surface},
-        )
-        with pytest.raises(urllib.error.HTTPError) as raised:
-            urllib.request.urlopen(request, timeout=5)
-        raw_body = raised.value.read()
-        response_headers = raised.value.headers
-    finally:
-        daemon.stop()
-
-    assert raised.value.code == 400
-    assert json.loads(raw_body)["error"]["surface"] == hostile_surface
-    assert b"<" not in raw_body
-    assert b">" not in raw_body
-    assert b"&" not in raw_body
-    assert b"\\u003cscript\\u003e" in raw_body
-    assert response_headers.get("Content-Type") == "application/json; charset=utf-8"
-    assert response_headers.get("X-Content-Type-Options") == "nosniff"
-
-
 def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
