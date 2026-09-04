@@ -32,6 +32,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     plan_job = _workflow_job(workflow, "test-plan", "tests")
     tests_job = _workflow_job(workflow, "tests", "duration-manifest-candidate")
+    sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
 
     assert "cancel-in-progress: true" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
@@ -50,6 +51,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "shard-%02d.txt" in tests_job
     assert "python scripts/ci/pytest_shard.py" not in tests_job
     assert 'test "${#reports[@]}" -eq 96' in workflow
+    assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
 

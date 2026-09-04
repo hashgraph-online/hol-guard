@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.sandbox import (
     SandboxRequest,
     SandboxResult,
@@ -72,21 +74,41 @@ def test_detect_network_attempts_benign() -> None:
     assert results == []
 
 
-def test_build_env_clean_has_minimal_keys() -> None:
-    env = _build_env("clean")
+def test_build_env_clean_has_minimal_keys(tmp_path: Path) -> None:
+    env = _build_env("clean", private_root=tmp_path)
     assert "PATH" in env
-    assert "HOME" in env
+    assert env["HOME"] == str(tmp_path)
+    assert env["TMPDIR"] == str(tmp_path)
+    assert env["TEMP"] == str(tmp_path)
+    assert env["TMP"] == str(tmp_path)
     sensitive_keys = {k for k in env if any(s in k.upper() for s in ("TOKEN", "SECRET", "AWS", "KEY"))}
     assert sensitive_keys == set()
 
 
-def test_build_env_minimal_no_sensitive() -> None:
-    import os
+def test_build_env_minimal_preserves_inherited_paths_without_sensitive_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOME", "/inherited/home")
+    monkeypatch.setenv("TMPDIR", "/inherited/tmp")
+    monkeypatch.setenv("TEST_SECRET_TOKEN_GUARD", "supersecret")
 
-    os.environ["TEST_SECRET_TOKEN_GUARD"] = "supersecret"
-    env = _build_env("minimal")
-    os.environ.pop("TEST_SECRET_TOKEN_GUARD", None)
+    env = _build_env("minimal", private_root=tmp_path)
+
+    assert env["HOME"] == "/inherited/home"
+    assert env["TMPDIR"] == "/inherited/tmp"
     assert "TEST_SECRET_TOKEN_GUARD" not in env
+
+
+def test_build_env_passthrough_preserves_inherited_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_SANDBOX_PASSTHROUGH", "present")
+
+    env = _build_env("passthrough", private_root=tmp_path)
+
+    assert env["TEST_SANDBOX_PASSTHROUGH"] == "present"
 
 
 def test_redact_env_hides_token() -> None:
@@ -110,6 +132,26 @@ def test_run_sandbox_benign_shell_script() -> None:
     result = run_sandbox(req, analysis_mode="strict")
     assert result.timed_out is False
     assert "guard-sandbox-test-ok" in result.stdout or result.failure_safe
+
+
+def test_run_sandbox_clean_env_uses_private_workspace_for_home_and_tmpdir() -> None:
+    req = SandboxRequest(
+        language="python",
+        command=(
+            "import os; "
+            "print(os.environ['HOME']); print(os.environ['TMPDIR']); "
+            "print(os.environ['TEMP']); print(os.environ['TMP'])"
+        ),
+        timeout_seconds=5.0,
+    )
+
+    result = run_sandbox(req, analysis_mode="strict")
+
+    assert result.failure_safe is False
+    home, tmpdir, temp, tmp = result.stdout.strip().splitlines()
+    assert home == tmpdir == temp == tmp
+    assert Path(home).name.startswith("guard-sandbox-")
+    assert not Path(home).exists()
 
 
 def test_run_sandbox_detects_network_attempt_statically() -> None:
@@ -207,7 +249,8 @@ def test_run_sandbox_node_script_path() -> None:
     result = run_sandbox(req, analysis_mode="strict")
     ran_ok = "node-sandbox-ok" in result.stdout
     restricted = result.exit_code is not None and result.exit_code != 0
-    assert ran_ok or result.failure_safe or restricted or result.timed_out
+    assert not result.timed_out
+    assert ran_ok or result.failure_safe or restricted
 
 
 def test_run_sandbox_suspicious_mode_skips_benign() -> None:

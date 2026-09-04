@@ -1640,7 +1640,7 @@ def _runtime_package_path() -> Path:
 
 def _runtime_installer_kind() -> str | None:
     for parent in _runtime_package_path().parents:
-        normalized_parent = parent.as_posix().lower()
+        normalized_parent = os.fspath(parent).replace(os.sep, "/").lower()
         if "/pipx/venvs/" in normalized_parent and (parent / "pipx_metadata.json").is_file():
             return "pipx"
         if "/uv/tools/" in normalized_parent and (parent / "pyvenv.cfg").is_file():
