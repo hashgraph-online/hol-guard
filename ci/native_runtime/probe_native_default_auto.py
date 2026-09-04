@@ -89,6 +89,38 @@ def _require(condition: bool, detail: object) -> None:
         raise RuntimeError(f"native_default_auto_probe_failed: {detail}")
 
 
+def _receipt_corpus_is_complete(stats: Mapping[str, object], *, expected: int) -> bool:
+    return (
+        stats.get("receipt_accepted") == expected
+        and stats.get("receipt_processed") == expected
+        and stats.get("receipt_dropped") == 0
+        and stats.get("receipt_failures") == 0
+        and stats.get("receipt_durable_pending") == 0
+    )
+
+
+def _wait_for_receipt_corpus(writer: object, *, expected: int, timeout_seconds: float = 5.0) -> Mapping[str, object]:
+    """Let the evidence writer finish receipts before daemon shutdown expires them."""
+
+    stats_fn = getattr(writer, "stats", None)
+    if not callable(stats_fn):
+        raise RuntimeError("native_default_auto_probe_failed: evidence writer has no stats()")
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    stats = cast(object, stats_fn())
+    if not isinstance(stats, Mapping):
+        raise RuntimeError(f"native_default_auto_probe_failed: invalid evidence stats: {stats}")
+    current = cast(Mapping[str, object], stats)
+    while time.monotonic() < deadline:
+        if _receipt_corpus_is_complete(current, expected=expected):
+            return current
+        time.sleep(0.05)
+        stats = cast(object, stats_fn())
+        if not isinstance(stats, Mapping):
+            raise RuntimeError(f"native_default_auto_probe_failed: invalid evidence stats: {stats}")
+        current = cast(Mapping[str, object], stats)
+    return current
+
+
 def _permission_decision(response: Mapping[str, object]) -> str | None:
     specific = response.get("hookSpecificOutput")
     if not isinstance(specific, Mapping):
@@ -287,6 +319,8 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     routes = _ownership_routes()
     daemon.start()
     mode_invariants: dict[str, dict[str, object]] = {}
+    worker_stats: Mapping[str, object] | None = None
+    evidence_stats: Mapping[str, object] | None = None
     try:
         readiness_started = time.monotonic()
         prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
@@ -305,22 +339,22 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = daemon._server.hook_worker.metrics.snapshot()
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
+        evidence_stats = _wait_for_receipt_corpus(writer, expected=len(route_receipts))
     finally:
         daemon.stop()
+    if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
+        raise RuntimeError("native_default_auto_probe_failed: hook corpus stats missing")
 
     expected = len(route_receipts)
     observed_routes_raw = worker_stats["routes"]
     if not isinstance(observed_routes_raw, dict):
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
-    evidence_stats = writer.stats()
     _require(expected > 0, "installed hook corpus is empty")
     _require(expected == 21, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
-    _require(evidence_stats["receipt_accepted"] == expected, evidence_stats)
-    _require(evidence_stats["receipt_processed"] == expected, evidence_stats)
-    _require(evidence_stats["receipt_dropped"] == 0, evidence_stats)
+    _require(_receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
     return {
         "routes": route_receipts,
         "route_count": expected,

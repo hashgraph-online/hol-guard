@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from pathlib import Path
@@ -185,7 +186,12 @@ def health_is_ready(daemon_url: str) -> bool:
                 if getattr(response, "status", 200) != 200:
                     return False
                 body = response.read(_MAX_RESPONSE_BYTES + 1)
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as exc:
+            with suppress(Exception):
+                _ = exc.read()
+            # Bounded admission answers busy hook batches with retryable 503.
+            if exc.code == 503 and attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
+                continue
             return False
         except (OSError, urllib.error.URLError):
             if attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
