@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
 from collections.abc import Mapping
 from functools import lru_cache
 from importlib import resources
@@ -13,6 +15,19 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 _SCHEMA_VERSION: Final = "guard.extension-contribution.v1"
+_PACKAGE_DATA: Final = ("codex_plugin_scanner", "guard", "contracts", "data")
+
+
+def frozen_package_data(*parts: str) -> Path | None:
+    """Return a packaged contract path extracted into a frozen runtime."""
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not bool(getattr(sys, "frozen", False)) or not isinstance(meipass, str):
+        return None
+    path = Path(meipass).joinpath(*_PACKAGE_DATA, *parts)
+    return path if path.is_file() or path.is_dir() else None
+
+
 _MODULE_PREFIX: Final = "codex_plugin_scanner.guard.runtime."
 _ALLOWED_ICON_NAMES: Final = frozenset(
     {
@@ -102,13 +117,24 @@ def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
     return tuple(validate_contribution_file(path) for path in sorted(directory.glob("command.*.json")))
 
 
+def _frozen_runtime() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
     try:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions") / "contributions"
         names = [item for item in root.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
     except (FileNotFoundError, ModuleNotFoundError, OSError, AttributeError):
-        return ()
+        frozen = frozen_package_data("extensions", "contributions")
+        if frozen is None or not frozen.is_dir():
+            if _frozen_runtime():
+                raise FileNotFoundError("frozen Guard is missing packaged extension contributions") from None
+            return ()
+        names = [item for item in frozen.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
     if not names:
+        if _frozen_runtime():
+            raise FileNotFoundError("frozen Guard is missing packaged extension contributions")
         return ()
     payloads: list[dict[str, object]] = []
     for item in sorted(names, key=lambda entry: entry.name):
@@ -144,6 +170,11 @@ def _schema_bytes() -> bytes:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         return (root / "contribution.v1.schema.json").read_bytes()
     except (FileNotFoundError, ModuleNotFoundError, OSError):
+        frozen = frozen_package_data("extensions", "contribution.v1.schema.json")
+        if frozen is not None and frozen.is_file():
+            return frozen.read_bytes()
+        if _frozen_runtime():
+            raise FileNotFoundError("frozen Guard is missing packaged extension contribution schema") from None
         repo_schema = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "contribution.v1.schema.json"
         return repo_schema.read_bytes()
 
@@ -153,12 +184,19 @@ def _expected_detector_module(extension_id: str) -> str:
     return f"{_MODULE_PREFIX}command_{suffix}_extensions"
 
 
+def _detector_source_path(module_leaf: str) -> Path:
+    return Path(__file__).with_name(f"{module_leaf}.py")
+
+
 def _bind_detector(extension_id: str, module_name: str, filename: str) -> None:
     if module_name != _expected_detector_module(extension_id):
         raise ValueError(f"{filename} detector is not bound to {extension_id}")
     module_leaf = module_name.rsplit(".", 1)[-1]
-    path = Path(__file__).with_name(f"{module_leaf}.py")
-    if not path.is_file():
-        raise ValueError(f"{filename} detector module is missing")
-    if f'"{extension_id}"' not in path.read_text(encoding="utf-8"):
-        raise ValueError(f"{filename} detector does not define {extension_id}")
+    path = _detector_source_path(module_leaf)
+    if path.is_file():
+        if f'"{extension_id}"' not in path.read_text(encoding="utf-8"):
+            raise ValueError(f"{filename} detector does not define {extension_id}")
+        return
+    if _frozen_runtime() and importlib.util.find_spec(module_name) is not None:
+        return
+    raise ValueError(f"{filename} detector module is missing")
