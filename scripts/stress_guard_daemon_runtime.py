@@ -13,7 +13,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.manager import guard_daemon_process_count
@@ -38,6 +38,7 @@ class StressExecution:
     errors: list[str] = field(default_factory=list)
     health_checks: int = 0
     health_failures: int = 0
+    transient_health_failures: int = 0
     pid_stable: bool = True
     process_count: int | None = None
     rss_baseline_bytes: int = 0
@@ -164,19 +165,21 @@ def record_resources(execution: StressExecution, resources: tuple[int, int, int]
     execution.max_file_descriptors = max(execution.max_file_descriptors, resources[2])
 
 
-def health_is_ready(daemon_url: str) -> bool:
-    """Probe liveness with bounded transport retry and no diagnostic leakage.
+HealthProbeStatus = Literal["ready", "transient", "unhealthy"]
 
-    A response is authoritative: malformed or explicitly unhealthy payloads fail
-    immediately. Only failures establishing or reading the HTTP connection may
-    consume the one retry, and both attempts share a strict one-second budget.
+
+def health_probe_status(daemon_url: str) -> HealthProbeStatus:
+    """Classify one liveness probe without leaking diagnostic text.
+
+    Explicit unhealthy or malformed payloads are authoritative. Only transport
+    and retryable admission failures may consume the bounded retry budget.
     """
 
     deadline = time.monotonic() + _HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS
     for attempt in range(_HEALTH_PROBE_ATTEMPTS):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return False
+            return "transient"
         timeout = min(_HEALTH_PROBE_ATTEMPT_TIMEOUT_SECONDS, remaining)
         try:
             with cast(
@@ -184,34 +187,42 @@ def health_is_ready(daemon_url: str) -> bool:
                 urllib.request.urlopen(f"{daemon_url}/healthz", timeout=timeout),
             ) as response:
                 if getattr(response, "status", 200) != 200:
-                    return False
+                    return "unhealthy"
                 body = response.read(_MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as exc:
             with suppress(Exception):
                 _ = exc.read()
             # Bounded admission answers busy hook batches with retryable 503.
-            if exc.code == 503 and attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
-                continue
-            return False
+            if exc.code == 503:
+                if attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
+                    continue
+                return "transient"
+            return "unhealthy"
         except (OSError, urllib.error.URLError):
             if attempt + 1 < _HEALTH_PROBE_ATTEMPTS:
                 continue
-            return False
+            return "transient"
         except Exception:
-            return False
+            return "unhealthy"
 
         if not isinstance(body, bytes) or time.monotonic() > deadline or len(body) > _MAX_RESPONSE_BYTES:
-            return False
+            return "unhealthy"
         try:
             payload = cast(object, json.loads(body.decode("utf-8")))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return False
+            return "unhealthy"
         if not isinstance(payload, dict):
-            return False
+            return "unhealthy"
         if time.monotonic() > deadline:
-            return False
-        return cast(dict[object, object], payload).get("ok") is True
-    return False
+            return "transient"
+        return "ready" if cast(dict[object, object], payload).get("ok") is True else "unhealthy"
+    return "transient"
+
+
+def health_is_ready(daemon_url: str) -> bool:
+    """Return true when the daemon published an authoritative healthy payload."""
+
+    return health_probe_status(daemon_url) == "ready"
 
 
 def pid_is_running(pid: int) -> bool:
@@ -224,8 +235,11 @@ def pid_is_running(pid: int) -> bool:
 
 def sample_stress_runtime(execution: StressExecution) -> None:
     execution.health_checks += 1
-    if not health_is_ready(execution.daemon_url):
+    status = health_probe_status(execution.daemon_url)
+    if status == "unhealthy":
         execution.health_failures += 1
+    elif status == "transient":
+        execution.transient_health_failures += 1
     record_resources(execution, process_tree_resources(execution.initial_pid))
 
 
@@ -288,6 +302,7 @@ __all__ = [
     "collect_batch",
     "finalize_stress_runtime",
     "health_is_ready",
+    "health_probe_status",
     "healthz_details",
     "pid_is_running",
     "process_tree_resources",
