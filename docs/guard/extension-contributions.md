@@ -24,7 +24,7 @@ Icons must use an allowlisted `react-icon` name or `kind: none`. Remote icon URL
 ## Review bar
 
 - The detector must live in this repository. Guard does not download contribution code.
-- New catalog ids default to external unless the trust-class map is updated in the same change.
-- Unmapped ids stay external at runtime. Harness-only `command.test` ids stay first-party.
+- New catalog ids must be added to the trust-class map in the same change. CI fails if a built-in id is missing.
+- Custom device CLIs and unmapped local/test ids stay first-party. Only ids listed as `external` stay off until a local-admin enable.
 - Tests must prove the contribution stays inert until a local-admin enable layer exists.
 - A signed-cloud enable cannot turn an external contribution on. Local-admin enable is required.

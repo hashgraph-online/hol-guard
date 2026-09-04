@@ -38,7 +38,6 @@ Activation = Literal["default-on", "opt-in"]
 
 _MAP_SCHEMA: Final = "guard.extension-trust-class-map.v1"
 _VALID_CLASSES: Final = frozenset({"first-party", "trusted-library", "external"})
-_TEST_ID: Final = "command.test"
 _HOL_PUBLISHER: Final = {"id": "hol", "displayName": "Hashgraph Online"}
 _CURATED_PUBLISHER: Final = {"id": "hol-curated", "displayName": "HOL curated library"}
 
@@ -86,14 +85,17 @@ def _repo_map_path() -> Path:
 
 
 def trust_class_for(extension_id: str) -> TrustClass:
-    """Return the curated class, or external for unmapped production ids."""
+    """Return the curated class.
+
+    Unmapped ids stay first-party so custom device CLIs and test registries
+    remain on. Production catalog ids must appear in the trust-class map;
+    CI fails if a built-in id is missing.
+    """
 
     mapped = _trust_map().get(extension_id)
     if mapped is not None:
         return mapped
-    if extension_id == _TEST_ID or extension_id.startswith(f"{_TEST_ID}."):
-        return "first-party"
-    return "external"
+    return "first-party"
 
 
 def activation_for(extension_id: str) -> Activation:

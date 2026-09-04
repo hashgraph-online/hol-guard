@@ -94,7 +94,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert trust_class_for("command.cloud.aws") == "trusted-library"
     assert trust_class_for("command.cloud.azure") == "trusted-library"
     assert trust_class_for("command.noodle") == "external"
-    assert trust_class_for("command.unmapped-community") == "external"
+    assert trust_class_for("command.unmapped-community") == "first-party"
     assert trust_class_for("command.test") == "first-party"
 
 

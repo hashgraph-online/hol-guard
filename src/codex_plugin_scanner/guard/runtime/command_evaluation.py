@@ -118,6 +118,24 @@ class CompositeCommandEvaluation:
         }
 
 
+def _accepted_compatibility_rule(
+    registry: CommandSafetyExtensionRegistry,
+    compatibility_action_class: str | None,
+    control_layers: tuple[ExtensionControlLayer, ...],
+) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule] | None, str | None]:
+    """Keep unknown legacy classes, but drop inert external owners."""
+
+    if compatibility_action_class is None:
+        return None, None
+    extension = registry.for_action_class(compatibility_action_class)
+    rule = registry.rule_for_action_class(compatibility_action_class)
+    if extension is None or rule is None:
+        return None, compatibility_action_class
+    if not extension_is_active(extension.extension_id, control_layers, required=extension.required):
+        return None, None
+    return (extension, rule), compatibility_action_class
+
+
 def evaluate_command(
     command_text: str,
     *,
@@ -147,25 +165,11 @@ def evaluate_command(
     )
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
-    compatibility_rule: tuple[CommandSafetyExtension, CommandSafetyRule] | None = None
-    effective_compatibility_class = compatibility_action_class
-    if compatibility_action_class is not None:
-        extension = registry.for_action_class(compatibility_action_class)
-        rule = registry.rule_for_action_class(compatibility_action_class)
-        if (
-            extension is not None
-            and rule is not None
-            and extension_is_active(
-                extension.extension_id,
-                control_layers,
-                required=extension.required,
-            )
-        ):
-            compatibility_rule = (extension, rule)
-            if rule.rule_id not in selected_rule_ids:
-                selected.append((extension, rule, ()))
-        else:
-            effective_compatibility_class = None
+    compatibility_rule, effective_compatibility_class = _accepted_compatibility_rule(
+        registry, compatibility_action_class, control_layers
+    )
+    if compatibility_rule is not None and compatibility_rule[1].rule_id not in selected_rule_ids:
+        selected.append((compatibility_rule[0], compatibility_rule[1], ()))
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
