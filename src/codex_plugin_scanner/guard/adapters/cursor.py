@@ -18,7 +18,8 @@ from .cursor_cli import (
     cursor_cli_command_available,
     resolve_cursor_cli_entry,
 )
-from .cursor_hooks import install_cursor_hooks, uninstall_cursor_hooks
+from .cursor_hook_config import managed_cursor_hook_commands
+from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -142,6 +143,26 @@ class CursorHarnessAdapter(HarnessAdapter):
                             transport="http" if isinstance(url, str) else "stdio",
                             metadata=metadata,
                         )
+                    )
+                )
+        hooks_path = cursor_hooks_path(context)
+        hooks_payload = _json_payload(hooks_path)
+        if hooks_payload:
+            nested_hooks = hooks_payload.get("hooks")
+            managed_commands = managed_cursor_hook_commands(
+                nested_hooks if isinstance(nested_hooks, dict) else hooks_payload
+            )
+            if managed_commands:
+                found_paths.append(str(hooks_path))
+                artifacts.append(
+                    GuardArtifact(
+                        artifact_id="cursor:global:managed-hooks",
+                        name="HOL Guard Cursor hooks",
+                        harness=self.harness,
+                        artifact_type="guard_hook",
+                        source_scope="global",
+                        config_path=str(hooks_path),
+                        command=managed_commands[0],
                     )
                 )
         cli_available = cursor_cli_command_available(context)

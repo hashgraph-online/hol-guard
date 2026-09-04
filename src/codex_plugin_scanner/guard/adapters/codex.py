@@ -40,6 +40,7 @@ from ..codex_hook_inventory import (
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
+    MANAGED_CODEX_HOOK_EVENTS,
     CodexHookManifestSpec,
     build_authenticated_hook_manifest,
     load_hook_manifest_baseline,
@@ -54,6 +55,7 @@ from ..codex_hook_manifest import (
 from ..codex_hook_registration import (
     exact_legacy_hook_bindings,
     install_managed_codex_hook_groups,
+    live_owned_codex_event_matches,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -67,6 +69,7 @@ from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resol
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
+from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
 from .codex_remote_control import (
     codex_remote_launch_environment,
@@ -241,8 +244,10 @@ def _local_hook_command_parts_for_home_mode(
 
 
 def _guard_python_executable() -> str:
-    """Use an absolute interpreter invocation while preserving virtualenv identity."""
+    """Use a prune-safe frozen launcher, else the current interpreter identity."""
 
+    if bool(getattr(sys, "frozen", False)):
+        return resolve_frozen_guard_cli()
     return str(Path(sys.executable).expanduser().absolute())
 
 
@@ -872,6 +877,12 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
     event_matches_value = integrity.get("event_matches")
     event_matches = event_matches_value if isinstance(event_matches_value, dict) else {}
+    if integrity.get("integrity_status") != "valid":
+        live_matches = live_owned_codex_event_matches(hooks)
+        event_matches = {
+            event_name: event_matches.get(event_name) is True or live_matches.get(event_name) is True
+            for event_name in MANAGED_CODEX_HOOK_EVENTS
+        }
     pre_tool_hook_installed = event_matches.get("PreToolUse") is True
     permission_hook_installed = event_matches.get("PermissionRequest") is True
     prompt_hook_installed = event_matches.get("UserPromptSubmit") is True
@@ -1371,6 +1382,15 @@ class CodexHarnessAdapter(HarnessAdapter):
             warnings.append(
                 "Codex config was found, but Guard's managed Codex hooks are missing. Run "
                 "`hol-guard install codex` or `hol-guard update` to repair protection."
+            )
+        elif (
+            bool(hook_state["config_present"])
+            and bool(hook_state["managed_hook_installed"])
+            and hook_state.get("integrity_status") != "valid"
+        ):
+            warnings.append(
+                "Codex hooks are installed but do not match this Guard CLI. Run "
+                "`hol-guard install codex` or `hol-guard update` to rebind them."
             )
         payload["warnings"] = warnings
         if payload.get("setup_status") == "active" and _warnings_include_setup_failure(warnings):

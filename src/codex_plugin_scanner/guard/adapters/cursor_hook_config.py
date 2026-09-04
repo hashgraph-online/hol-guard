@@ -298,5 +298,26 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
     return True
 
 
+def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
+    """Return Guard-owned Cursor hook commands from a live hooks payload."""
+
+    if not isinstance(hooks, dict):
+        return ()
+    commands: list[str] = []
+    seen: set[str] = set()
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = entry.get("command")
+            if not isinstance(command, str) or not _is_managed_hook_command(command) or command in seen:
+                continue
+            seen.add(command)
+            commands.append(command)
+    return tuple(commands)
+
+
 def _make_executable(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

@@ -162,23 +162,35 @@ def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
     return rest
 
 
+_FROZEN_GUARD_CLI_NAMES = {
+    "current-hol-guard",
+    "current-hol-guard.cmd",
+    "current-hol-guard.exe",
+    "hol-guard",
+    "hol-guard.exe",
+}
+
+
 def _is_live_guard_codex_hook_command(command: str) -> bool:
     tokens = _command_tokens(command)
     if not tokens:
         return False
-    first = Path(tokens[0]).name.lower()
+    first_path = Path(tokens[0])
+    first = first_path.name.lower()
     rest = tokens[1:]
-    if Path(tokens[0]).name == "codex_daemon_hook_bridge.py":
+    if first_path.name == "codex_daemon_hook_bridge.py" or "hol-guard-codex-hook" in first:
+        return True
+    payload = _skip_leading_flags(rest)
+    if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
         return True
     if first.startswith("python"):
-        payload = _skip_leading_flags(rest)
         if not payload:
             return False
         if payload[0] == "-c":
             script = " ".join(payload[1:])
             return "codex_plugin_scanner.cli" in script and "guard" in script.split() and "hook" in script.split()
         return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
-    if first in {"hol-guard", "hol-guard.exe"}:
+    if first in _FROZEN_GUARD_CLI_NAMES:
         return "hook" in rest and _has_codex_harness(" ".join(rest))
     return False
 
@@ -199,8 +211,8 @@ def _matcher_covers_shell(matcher: object) -> bool:
     return text in {"", "*"} or "Bash" in text
 
 
-def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
-    if not _hook_entry_is_active(group) or not _matcher_covers_shell(group.get("matcher")):
+def _group_has_active_guard_handler(group: Mapping[str, object]) -> bool:
+    if not _hook_entry_is_active(group):
         return False
     handlers = group.get("hooks")
     if isinstance(handlers, list):
@@ -213,6 +225,30 @@ def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
         )
     command = group.get("command")
     return isinstance(command, str) and _is_live_guard_codex_hook_command(command)
+
+
+def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
+    return _group_has_active_guard_handler(group) and _matcher_covers_shell(group.get("matcher"))
+
+
+def live_owned_codex_event_matches(hooks: object) -> dict[str, bool]:
+    """Return which managed Codex events still route a live Guard handler.
+
+    Authenticated interpreter identity stays a repair contract. Doctor and
+    repair copy must not say those events are missing while Guard still owns them.
+    """
+
+    matches = {event_name: False for event_name in MANAGED_CODEX_HOOK_EVENTS}
+    if not isinstance(hooks, dict):
+        return matches
+    for event_name in MANAGED_CODEX_HOOK_EVENTS:
+        groups = hooks.get(event_name)
+        if not isinstance(groups, list):
+            continue
+        matches[event_name] = any(
+            isinstance(group, dict) and _group_has_active_guard_handler(group) for group in groups
+        )
+    return matches
 
 
 def live_guard_codex_hooks_intercept(hooks: object) -> bool:
@@ -356,6 +392,7 @@ __all__ = [
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",
+    "live_owned_codex_event_matches",
     "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
 ]
