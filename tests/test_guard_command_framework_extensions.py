@@ -117,6 +117,16 @@ FRAMEWORK_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "Laravel destructive rebuild command",
         "command.framework.laravel.migrate-fresh",
     ),
+    (
+        "php artisan --env --help db:wipe",
+        "Laravel database wipe command",
+        "command.framework.laravel.database-wipe",
+    ),
+    (
+        "php /app/artisan --env --pretend migrate:rollback",
+        "Laravel migration rollback command",
+        "command.framework.laravel.migrate-rollback",
+    ),
 )
 
 

@@ -9,6 +9,7 @@ from .command_extension_matchers import executable_matcher, with_required_flag
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand
+from .command_option_parsing import argument_semantics
 from .command_rules import (
     AnyMatcher,
     CommandRuleSeverity,
@@ -64,7 +65,11 @@ class PhpArtisanScriptMatcher:
             if not operands or operands[0].replace("\\", "/").rsplit("/", 1)[-1] != "artisan":
                 continue
             artisan_arguments = operands[1:]
-            if not self.required_flags <= frozenset(artisan_arguments):
+            artisan_semantics = argument_semantics(
+                artisan_arguments,
+                options_with_values=_ARTISAN_GLOBAL_OPTIONS,
+            )
+            if not self.required_flags <= artisan_semantics.present_flags:
                 continue
             _artisan_flags, subcommand_operands = leading_flags_and_operands(
                 artisan_arguments,
