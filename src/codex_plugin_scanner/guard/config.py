@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -679,6 +680,11 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "install_owner": config.install_owner,
     }
 
+# The daemon serves settings writes from a bounded threading HTTP server, so
+# the read/validate/write sequence below must be serialized per process to keep
+# optimistic presentation-revision checks meaningful.
+_GUARD_SETTINGS_WRITE_LOCK = threading.Lock()
+
 
 def update_guard_settings(
     guard_home: Path,
@@ -690,6 +696,27 @@ def update_guard_settings(
     skip_approval_gate: bool = False,
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
+
+    with _GUARD_SETTINGS_WRITE_LOCK:
+        return _update_guard_settings_locked(
+            guard_home,
+            payload,
+            approval_gate_grant=approval_gate_grant,
+            cloud_sync_entitled=cloud_sync_entitled,
+            event_source=event_source,
+            skip_approval_gate=skip_approval_gate,
+        )
+
+
+def _update_guard_settings_locked(
+    guard_home: Path,
+    payload: dict[str, object],
+    *,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+    cloud_sync_entitled: bool = False,
+    event_source: str = "settings",
+    skip_approval_gate: bool = False,
+) -> GuardConfig:
 
     if not skip_approval_gate:
         require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)

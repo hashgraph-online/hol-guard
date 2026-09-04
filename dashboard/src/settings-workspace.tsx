@@ -79,13 +79,20 @@ import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/sett
 import {
   applyPresentationMode,
   buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
   normalizePresentationSettings,
   parsePresentationMode,
   presentationModeOptions,
   presentationModeStatus,
+  presentationOnlySavePayload,
   resolveSettingsPresentation,
 } from "./settings-presentation";
-export { buildSettingsUpdatePayload, resolveSettingsPresentation } from "./settings-presentation";
+export {
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
@@ -832,11 +839,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      const settingsToSave: Partial<GuardSettings> = {
-        ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate,
-      };
+      // A presentation-only save is a free preference change: the daemon
+      // accepts it without the high-risk gate, so it must carry only the
+      // presentation keys (no approval_gate, no risk_actions).
+      const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+      const settingsToSave: Partial<GuardSettings> = presentationOnlyPayload !== null
+        ? presentationOnlyPayload
+        : {
+          ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+          risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+          approval_gate: approvalGateUpdate,
+        };
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -1043,7 +1056,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       draftGateEnabled: approvalGateEnabled,
       changingPassword: false,
     });
-    if (requiresSettingsSaveProof(proofKind)) {
+    // A presentation-only change bypasses the settings gate on the daemon, so
+    // it never needs the save-proof modal.
+    if (requiresSettingsSaveProof(proofKind) && !isPresentationOnlyChange(draft, savedSettingsRef.current)) {
       openProofModal(proofKind!, { kind: "save" });
       return;
     }

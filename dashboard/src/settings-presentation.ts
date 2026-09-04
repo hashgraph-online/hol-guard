@@ -122,3 +122,80 @@ export function presentationModeStatus(presentation: ResolvedGuardPresentationMo
   }
   return presentation.explicit ? "Chosen on this device." : "Recommended default.";
 }
+
+const PRESENTATION_PAYLOAD_KEYS: ReadonlySet<string> = new Set([
+  "presentation_mode",
+  "presentation_mode_explicit",
+  "presentation_schema_version",
+  "presentation_revision",
+]);
+
+function settingsValueEquals(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => settingsValueEquals(item, b[index]));
+  }
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object") {
+    const aRecord = a as Record<string, unknown>;
+    const bRecord = b as Record<string, unknown>;
+    const aKeys = Object.keys(aRecord);
+    const bKeys = Object.keys(bRecord);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    return aKeys.every((key) => settingsValueEquals(aRecord[key], bRecord[key]));
+  }
+  return false;
+}
+
+/**
+ * A save is presentation-only when the presentation preference changed and no
+ * other settings value (including the approval gate and risk actions) differs
+ * from the saved settings. The daemon accepts such a save without the
+ * high-risk settings gate, so the UI must send only the presentation keys.
+ */
+export function isPresentationOnlyChange(draft: GuardSettings, saved: GuardSettings | null): boolean {
+  const previous = saved ?? draft;
+  const presentationChanged = (
+    draft.presentation_mode !== previous.presentation_mode
+    || draft.presentation_mode_explicit !== previous.presentation_mode_explicit
+  );
+  if (!presentationChanged) {
+    return false;
+  }
+  for (const key of Object.keys(draft) as (keyof GuardSettings)[]) {
+    if (key === "presentation" || key === "presentation_diagnostic") {
+      continue;
+    }
+    if (PRESENTATION_PAYLOAD_KEYS.has(key)) {
+      continue;
+    }
+    if (!settingsValueEquals(draft[key], previous[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The exact request body for a presentation-only save, or null when the save
+ * is not presentation-only. The daemon grants the settings-gate bypass only
+ * when the request carries nothing beyond the presentation keys.
+ */
+export function presentationOnlySavePayload(
+  draft: GuardSettings,
+  saved: GuardSettings | null,
+): Partial<GuardSettings> | null {
+  if (!isPresentationOnlyChange(draft, saved)) {
+    return null;
+  }
+  const base = buildSettingsUpdatePayload(draft, saved);
+  return {
+    presentation_mode: base.presentation_mode,
+    presentation_mode_explicit: base.presentation_mode_explicit,
+    presentation_schema_version: base.presentation_schema_version,
+    presentation_revision: base.presentation_revision,
+  };
+}

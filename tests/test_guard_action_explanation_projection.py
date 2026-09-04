@@ -78,3 +78,55 @@ def test_network_and_mcp_projections_use_typed_targets_only() -> None:
     assert network.everyday.targets[0].label == f"the service {network_input['network_hosts'][0]}"
     assert mcp is not None and mcp.kind == "mcp_tool"
     assert "github / create_issue" in mcp.everyday.summary
+
+
+def test_long_command_projection_truncates_within_schema_limits() -> None:
+    envelope = {
+        "action_id": "action:long-command",
+        "action_type": "shell_command",
+        "command": "echo " + ("a" * 5000),
+        "target_paths": [],
+    }
+    explanation = project_action_explanation(
+        envelope,
+        action_identity="action:long-command",
+        actor_label="Codex",
+        exact_details_authorized=True,
+    )
+    assert explanation is not None
+    assert explanation.technical.command_display is not None
+    assert len(explanation.technical.command_display) <= 4096
+    assert "technical.command_display" in explanation.redaction.truncated_fields
+
+
+def test_maximum_length_network_host_stays_within_target_label_limit() -> None:
+    envelope = {
+        "action_id": "network:max-host",
+        "action_type": "network_request",
+        "network_hosts": ["h" * 253],
+    }
+    explanation = project_action_explanation(
+        envelope,
+        action_identity="network:max-host",
+        actor_label="Claude Code",
+    )
+    assert explanation is not None
+    assert len(explanation.everyday.targets[0].label) <= 240
+    assert "everyday.targets.label" in explanation.redaction.truncated_fields
+
+
+def test_long_mcp_names_stay_within_target_label_limit() -> None:
+    envelope = {
+        "action_id": "mcp:long-names",
+        "action_type": "mcp_tool",
+        "mcp_server": "s" * 120,
+        "mcp_tool": "t" * 120,
+    }
+    explanation = project_action_explanation(
+        envelope,
+        action_identity="mcp:long-names",
+        actor_label="Codex",
+    )
+    assert explanation is not None
+    assert len(explanation.everyday.targets[0].label) <= 240
+    assert "everyday.targets.label" in explanation.redaction.truncated_fields

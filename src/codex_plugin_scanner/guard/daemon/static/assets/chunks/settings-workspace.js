@@ -2603,6 +2603,62 @@ function presentationModeStatus(presentation) {
   }
   return presentation.explicit ? "Chosen on this device." : "Recommended default.";
 }
+const PRESENTATION_PAYLOAD_KEYS = /* @__PURE__ */ new Set([
+  "presentation_mode",
+  "presentation_mode_explicit",
+  "presentation_schema_version",
+  "presentation_revision"
+]);
+function settingsValueEquals(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => settingsValueEquals(item, b[index]));
+  }
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object") {
+    const aRecord = a;
+    const bRecord = b;
+    const aKeys = Object.keys(aRecord);
+    const bKeys = Object.keys(bRecord);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    return aKeys.every((key) => settingsValueEquals(aRecord[key], bRecord[key]));
+  }
+  return false;
+}
+function isPresentationOnlyChange(draft, saved) {
+  const previous = saved ?? draft;
+  const presentationChanged = draft.presentation_mode !== previous.presentation_mode || draft.presentation_mode_explicit !== previous.presentation_mode_explicit;
+  if (!presentationChanged) {
+    return false;
+  }
+  for (const key of Object.keys(draft)) {
+    if (key === "presentation" || key === "presentation_diagnostic") {
+      continue;
+    }
+    if (PRESENTATION_PAYLOAD_KEYS.has(key)) {
+      continue;
+    }
+    if (!settingsValueEquals(draft[key], previous[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+function presentationOnlySavePayload(draft, saved) {
+  if (!isPresentationOnlyChange(draft, saved)) {
+    return null;
+  }
+  const base = buildSettingsUpdatePayload(draft, saved);
+  return {
+    presentation_mode: base.presentation_mode,
+    presentation_mode_explicit: base.presentation_mode_explicit,
+    presentation_schema_version: base.presentation_schema_version,
+    presentation_revision: base.presentation_revision
+  };
+}
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function resolveInitialSettingsTab(search) {
   const section = new URLSearchParams(search).get("section");
@@ -3217,7 +3273,8 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         ...proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {},
         ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
       };
-      const settingsToSave = {
+      const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+      const settingsToSave = presentationOnlyPayload !== null ? presentationOnlyPayload : {
         ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
         risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
         approval_gate: approvalGateUpdate
@@ -3416,7 +3473,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       wasConfigured: savedGateConfig?.configured === true,
       draftGateEnabled: approvalGateEnabled
     });
-    if (requiresSettingsSaveProof(proofKind)) {
+    if (requiresSettingsSaveProof(proofKind) && !isPresentationOnlyChange(draft, savedSettingsRef.current)) {
       openProofModal(proofKind, { kind: "save" });
       return;
     }
@@ -4573,6 +4630,8 @@ export {
   hasApprovalGateSettingsChanged,
   hasUnsavedChanges,
   isFineTuningEditable,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
   resolveApprovalPasswordSectionCopy,
   resolveFineTuningSectionDescription,
   resolveInitialSettingsTab,

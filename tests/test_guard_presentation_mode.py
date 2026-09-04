@@ -161,3 +161,43 @@ def test_action_explanation_schema_is_strict() -> None:
     assert schema["properties"]["schema_version"]["const"] == "guard.action-explanation.v1"
     assert schema["additionalProperties"] is False
     assert "unknown_action" in schema["properties"]["kind"]["enum"]
+
+
+def test_concurrent_competing_presentation_updates_apply_exactly_once(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('mode = "observe"\n', encoding="utf-8")
+    initial = load_guard_config(guard_home)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def flip(mode: str) -> tuple[bool, str | None]:
+        try:
+            update_guard_settings(
+                guard_home,
+                {
+                    "presentation_mode": mode,
+                    "presentation_mode_explicit": True,
+                    "presentation_schema_version": PRESENTATION_SCHEMA_VERSION,
+                    "presentation_revision": initial.presentation_revision,
+                },
+                skip_approval_gate=True,
+            )
+        except ValueError as error:
+            return False, str(error)
+        return True, None
+
+    modes = ["technical"] * 4 + ["everyday"] * 4
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(flip, modes))
+
+    successes = [result for result, _ in results if result]
+    stale = [message for ok, message in results if not ok and "Presentation preference changed" in (message or "")]
+    # The winning preference applies once; its three same-value peers are
+    # idempotent no-ops. Every competing-value peer must be rejected on the
+    # stale revision instead of silently overwriting the winner.
+    assert len(successes) == 4, results
+    assert len(stale) == 4, results
+    final = load_guard_config(guard_home)
+    assert final.presentation_mode_explicit is True
+    assert final.presentation_revision == initial.presentation_revision + 1

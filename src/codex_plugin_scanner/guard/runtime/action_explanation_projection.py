@@ -21,6 +21,10 @@ from .action_explanation_contract import (
     parse_action_explanation,
 )
 
+# Schema v1 field limits the projection must enforce before final validation.
+TARGET_LABEL_MAX_LENGTH = 240
+COMMAND_DISPLAY_MAX_LENGTH = 4096
+
 _KIND_BY_ACTION_TYPE = {
     "file_read": "file_read",
     "file_write": "file_write",
@@ -162,6 +166,10 @@ def project_action_explanation(
     action_type = _text(action_envelope.get("action_type")) or "unknown_action"
     kind = _KIND_BY_ACTION_TYPE.get(action_type, "unknown_action")
     target_kind, target_label = _safe_target(action_envelope, kind)
+    truncated_fields: list[str] = []
+    if len(target_label) > TARGET_LABEL_MAX_LENGTH:
+        target_label = _safe_text(target_label, TARGET_LABEL_MAX_LENGTH)
+        truncated_fields.append("everyday.targets.label")
     if kind == "unknown_action":
         headline = "Run an action Guard could not fully explain"
         summary = (
@@ -194,6 +202,10 @@ def project_action_explanation(
     else:
         unavailable_reason = "No exact command was retained for this action."
 
+    command_display_value = command_redaction.text if technical_available and command_redaction else None
+    if command_display_value is not None and len(command_display_value) > COMMAND_DISPLAY_MAX_LENGTH:
+        command_display_value = command_display_value[:COMMAND_DISPLAY_MAX_LENGTH]
+        truncated_fields.append("technical.command_display")
     omitted_fields = [] if technical_available else ["technical.command_display"]
     payload: dict[str, object] = {
         "schema_version": ACTION_EXPLANATION_SCHEMA_VERSION,
@@ -239,7 +251,7 @@ def project_action_explanation(
             "available": technical_available,
             "unavailable_reason": unavailable_reason,
             "action_type": action_type,
-            "command_display": command_redaction.text if technical_available and command_redaction else None,
+            "command_display": command_display_value,
             "normalized_command_display": None,
             "executable": None,
             "arguments_display": None,
@@ -263,7 +275,7 @@ def project_action_explanation(
             ),
             "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
             "omitted_fields": omitted_fields,
-            "truncated_fields": [],
+            "truncated_fields": truncated_fields,
             "secret_like_values_removed": bool(command_redaction and command_redaction.count),
         },
     }
