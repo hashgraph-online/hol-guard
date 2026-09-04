@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
+from .connect_flow import apply_guard_connect_sync_result
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
@@ -287,62 +288,40 @@ def _finalize_guard_connect_payload(
                 payload["supply_chain_error"] = str(error)
                 sync_bar.done("Guard Cloud sync complete (supply chain skipped)")
     except GuardSyncNotAvailableError as error:
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="sync_not_available",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="sync_not_available",
+            repair_message=str(error),
         )
-        payload.update(
-            {
-                "milestone": "sync_not_available",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": str(error),
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="retry_required",
+            recorded_milestone="first_sync_failed",
+            repair_message="Run hol-guard connect again to refresh Guard Cloud authorization.",
+            payload_status="retry_required",
         )
-        payload.update(
-            {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": "Run hol-guard connect again to refresh Guard Cloud authorization.",
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     except (RuntimeError, TimeoutError) as error:
-        repair_message = (
-            "Guard Cloud pairing finished, but the first proof sync is still pending. "
-            "Local Guard will retry automatically while the daemon is running, or run hol-guard sync now."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="first_sync_pending",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="first_sync_pending",
+            repair_message=(
+                "Guard Cloud pairing finished, but the first proof sync is still pending. "
+                "Local Guard will retry automatically while the daemon is running, or run hol-guard sync now."
+            ),
+            payload_status="connected",
         )
-        payload.update(
-            {
-                "status": "connected",
-                "milestone": "first_sync_pending",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),

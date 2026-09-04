@@ -76,6 +76,7 @@ from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
     _persist_oauth_local_credentials,
+    apply_guard_connect_sync_result,
     exchange_guard_authorization_code,
     resolve_connect_url,
     resolve_guard_oauth_client_config,
@@ -1188,6 +1189,31 @@ def _headless_action_state_payload(
     }
 
 
+def _headless_sync_retry_summary(
+    store: GuardStore,
+    *,
+    status: str,
+    error: BaseException,
+    repair: dict[str, object],
+    recorded_at: str,
+    record_retry: bool = False,
+) -> dict[str, object]:
+    if record_retry:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
+    summary = {
+        "status": status,
+        "message": str(error),
+        "authorization_repair": repair,
+    }
+    store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+    return summary
+
+
 def _run_headless_cloud_sync(
     *,
     store: GuardStore,
@@ -1252,35 +1278,30 @@ def _run_headless_cloud_sync(
             except GuardSyncAuthorizationExpiredError as retry_error:
                 auth_error = retry_error
             except GuardSyncNotConfiguredError as retry_error:
-                store.record_latest_guard_connect_sync_result(
-                    status="retry_required",
-                    milestone="first_sync_failed",
-                    now=recorded_at,
-                    reason=str(retry_error),
+                return _headless_sync_retry_summary(
+                    store,
+                    status="not_configured",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                    record_retry=True,
                 )
-                summary = {
-                    "status": "not_configured",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
             except GuardSyncNotAvailableError as retry_error:
-                summary = {
-                    "status": "not_available",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return _headless_sync_retry_summary(
+                    store,
+                    status="not_available",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             except Exception as retry_error:
-                summary = {
-                    "status": "pending",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return _headless_sync_retry_summary(
+                    store,
+                    status="pending",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             else:
                 store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
                 return summary
@@ -1302,37 +1323,32 @@ def _run_headless_cloud_sync(
             try:
                 summary = _perform_sync()
             except GuardSyncAuthorizationExpiredError as retry_error:
-                store.record_latest_guard_connect_sync_result(
-                    status="retry_required",
-                    milestone="first_sync_failed",
-                    now=recorded_at,
-                    reason=str(retry_error),
+                return _headless_sync_retry_summary(
+                    store,
+                    status="auth_expired",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                    record_retry=True,
                 )
-                summary = {
-                    "status": "auth_expired",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
             except GuardSyncNotConfiguredError as retry_error:
                 config_error = retry_error
             except GuardSyncNotAvailableError as retry_error:
-                summary = {
-                    "status": "not_available",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return _headless_sync_retry_summary(
+                    store,
+                    status="not_available",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             except Exception as retry_error:
-                summary = {
-                    "status": "pending",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return _headless_sync_retry_summary(
+                    store,
+                    status="pending",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             else:
                 store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
                 return summary
@@ -1914,20 +1930,14 @@ def _finalize_daemon_guard_connect_payload(
             managed_controls_publish,
         )
     except GuardSyncNotAvailableError as error:
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="sync_not_available",
+        apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
-        )
-        payload.update(
-            {
-                "milestone": "sync_not_available",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": str(error),
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="sync_not_available",
+            repair_message=str(error),
         )
         reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
         if reconciled_state is not None:
@@ -1935,45 +1945,30 @@ def _finalize_daemon_guard_connect_payload(
             payload["latest_connect_state"] = reconciled_state
         return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="retry_required",
+            recorded_milestone="first_sync_failed",
+            repair_message="Run Guard Cloud connect again to refresh local authorization.",
+            payload_status="retry_required",
         )
-        payload.update(
-            {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": "Run Guard Cloud connect again to refresh local authorization.",
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     except (RuntimeError, TimeoutError) as error:
-        repair_message = (
-            "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
-            "the daemon is running."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="first_sync_pending",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="first_sync_pending",
+            repair_message=(
+                "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
+                "the daemon is running."
+            ),
+            payload_status="connected",
         )
-        payload.update(
-            {
-                "status": "connected",
-                "milestone": "first_sync_pending",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),
@@ -1997,6 +1992,82 @@ def _finalize_daemon_guard_connect_payload(
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
     return payload
+
+
+def _failed_browser_connect_flow_state(running_state: dict[str, object], *, detail: str) -> dict[str, object]:
+    return {
+        **running_state,
+        "state": "failed",
+        "title": "Guard Cloud sign-in needs attention",
+        "detail": detail,
+        "poll_after_ms": None,
+    }
+
+
+def _complete_browser_oauth_connect(
+    *,
+    store: GuardStore,
+    session: Any,
+    connect_url: str,
+    browser_opened: bool,
+    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None),
+) -> dict[str, object]:
+    _, allowed_origin = resolve_connect_url(connect_url)
+    oauth_client = resolve_guard_oauth_client_config(allowed_origin)
+    callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
+    if callback is None or callback.code is None:
+        raise RuntimeError("Guard OAuth callback missing authorization code.")
+    token_result = exchange_guard_authorization_code(
+        token_endpoint=oauth_client.token_endpoint,
+        client_id=oauth_client.client_id,
+        code=callback.code,
+        redirect_uri=session.redirect_uri,
+        code_verifier=session.pkce_verifier,
+        dpop_key_material=session.dpop_key_material,
+    )
+    if token_result.refresh_token is None:
+        raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
+    timestamp = _now()
+    _persist_oauth_local_credentials(
+        store=store,
+        issuer=oauth_client.issuer,
+        client_id=oauth_client.client_id,
+        refresh_token=token_result.refresh_token,
+        dpop_key_material=session.dpop_key_material,
+        grant_id=token_result.grant_id,
+        **token_result.target_binding(),
+        supply_chain_entitlement=token_result.supply_chain_entitlement,
+        workspace_id=token_result.workspace_id,
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        access_token=token_result.access_token,
+        access_token_expires_at=token_result.access_token_expires_at,
+        now=timestamp,
+    )
+    sync_url = f"{allowed_origin}/api/guard/receipts/sync"
+    return _finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={
+            "status": "connected",
+            "connect_mode": "browser_oauth",
+            "browser_opened": browser_opened,
+            "authorize_url": session.authorize_url,
+            "redirect_uri": session.redirect_uri,
+            "grant_id": token_result.grant_id,
+            "machine_id": token_result.machine_id,
+            "workspace_id": token_result.workspace_id,
+            "connect_url": connect_url,
+            "sync_url": sync_url,
+            "_guard_sync_auth_context": _build_sync_auth_context(
+                access_token=token_result.access_token,
+                dpop_key_material=session.dpop_key_material,
+                sync_url=sync_url,
+            ),
+        },
+        now=timestamp,
+        managed_controls_publish=managed_controls_publish,
+    )
 
 
 _PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
@@ -2946,22 +3017,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         contract_digest=scope_contract_digest,
                     )
                 except StaleApprovalScopeContractError as error:
-                    self._write_json(
-                        {"resolved": False, "error": str(error), **error.contract.to_dict()},
-                        status=409,
-                    )
+                    self._write_stale_approval_scope_error(error)
                     return
                 except IneligibleApprovalScopeError as error:
-                    self._write_json(
-                        {
-                            "resolved": False,
-                            "error": str(error),
-                            "action": error.action,
-                            "requested_scope": error.requested_scope,
-                            **error.contract.to_dict(),
-                        },
-                        status=422,
-                    )
+                    self._write_ineligible_approval_scope_error(error)
                     return
                 except ValueError as error:
                     self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -3002,22 +3061,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error, resolved=False)
             return
         except StaleApprovalScopeContractError as error:
-            self._write_json(
-                {"resolved": False, "error": str(error), **error.contract.to_dict()},
-                status=409,
-            )
+            self._write_stale_approval_scope_error(error)
             return
         except IneligibleApprovalScopeError as error:
-            self._write_json(
-                {
-                    "resolved": False,
-                    "error": str(error),
-                    "action": error.action,
-                    "requested_scope": error.requested_scope,
-                    **error.contract.to_dict(),
-                },
-                status=422,
-            )
+            self._write_ineligible_approval_scope_error(error)
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -3958,59 +4005,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
         def _complete_connect() -> None:
             try:
-                _, allowed_origin = resolve_connect_url(connect_url)
-                oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-                callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback is None or callback.code is None:
-                    raise RuntimeError("Guard OAuth callback missing authorization code.")
-                token_result = exchange_guard_authorization_code(
-                    token_endpoint=oauth_client.token_endpoint,
-                    client_id=oauth_client.client_id,
-                    code=callback.code,
-                    redirect_uri=session.redirect_uri,
-                    code_verifier=session.pkce_verifier,
-                    dpop_key_material=session.dpop_key_material,
-                )
-                if token_result.refresh_token is None:
-                    raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
-                timestamp = _now()
-                _persist_oauth_local_credentials(
+                payload = _complete_browser_oauth_connect(
                     store=store,
-                    issuer=oauth_client.issuer,
-                    client_id=oauth_client.client_id,
-                    refresh_token=token_result.refresh_token,
-                    dpop_key_material=session.dpop_key_material,
-                    grant_id=token_result.grant_id,
-                    **token_result.target_binding(),
-                    supply_chain_entitlement=token_result.supply_chain_entitlement,
-                    workspace_id=token_result.workspace_id,
-                    runtime_id="hol-guard",
-                    runtime_label="HOL Guard CLI",
-                    access_token=token_result.access_token,
-                    access_token_expires_at=token_result.access_token_expires_at,
-                    now=timestamp,
-                )
-                payload = _finalize_daemon_guard_connect_payload(
-                    store=store,
+                    session=session,
                     connect_url=connect_url,
-                    payload={
-                        "status": "connected",
-                        "connect_mode": "browser_oauth",
-                        "browser_opened": browser_opened,
-                        "authorize_url": session.authorize_url,
-                        "redirect_uri": session.redirect_uri,
-                        "grant_id": token_result.grant_id,
-                        "machine_id": token_result.machine_id,
-                        "workspace_id": token_result.workspace_id,
-                        "connect_url": connect_url,
-                        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
-                        "_guard_sync_auth_context": _build_sync_auth_context(
-                            access_token=token_result.access_token,
-                            dpop_key_material=session.dpop_key_material,
-                            sync_url=f"{allowed_origin}/api/guard/receipts/sync",
-                        ),
-                    },
-                    now=timestamp,
+                    browser_opened=browser_opened,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 resolved_entitlement = resolve_package_firewall_entitlement(store)
@@ -4023,24 +4022,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": repair_message,
-                        "poll_after_ms": None,
-                    },
+                    _failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": str(error),
-                        "poll_after_ms": None,
-                    },
+                    _failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
@@ -4143,59 +4130,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
         def _complete_connect() -> None:
             try:
-                _, allowed_origin = resolve_connect_url(connect_url)
-                oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-                callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback is None or callback.code is None:
-                    raise RuntimeError("Guard OAuth callback missing authorization code.")
-                token_result = exchange_guard_authorization_code(
-                    token_endpoint=oauth_client.token_endpoint,
-                    client_id=oauth_client.client_id,
-                    code=callback.code,
-                    redirect_uri=session.redirect_uri,
-                    code_verifier=session.pkce_verifier,
-                    dpop_key_material=session.dpop_key_material,
-                )
-                if token_result.refresh_token is None:
-                    raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
-                timestamp = _now()
-                _persist_oauth_local_credentials(
+                payload = _complete_browser_oauth_connect(
                     store=store,
-                    issuer=oauth_client.issuer,
-                    client_id=oauth_client.client_id,
-                    refresh_token=token_result.refresh_token,
-                    dpop_key_material=session.dpop_key_material,
-                    grant_id=token_result.grant_id,
-                    **token_result.target_binding(),
-                    supply_chain_entitlement=token_result.supply_chain_entitlement,
-                    workspace_id=token_result.workspace_id,
-                    runtime_id="hol-guard",
-                    runtime_label="HOL Guard CLI",
-                    access_token=token_result.access_token,
-                    access_token_expires_at=token_result.access_token_expires_at,
-                    now=timestamp,
-                )
-                payload = _finalize_daemon_guard_connect_payload(
-                    store=store,
+                    session=session,
                     connect_url=connect_url,
-                    payload={
-                        "status": "connected",
-                        "connect_mode": "browser_oauth",
-                        "browser_opened": browser_opened,
-                        "authorize_url": session.authorize_url,
-                        "redirect_uri": session.redirect_uri,
-                        "grant_id": token_result.grant_id,
-                        "machine_id": token_result.machine_id,
-                        "workspace_id": token_result.workspace_id,
-                        "connect_url": connect_url,
-                        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
-                        "_guard_sync_auth_context": _build_sync_auth_context(
-                            access_token=token_result.access_token,
-                            dpop_key_material=session.dpop_key_material,
-                            sync_url=f"{allowed_origin}/api/guard/receipts/sync",
-                        ),
-                    },
-                    now=timestamp,
+                    browser_opened=browser_opened,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 if _guard_cloud_connect_succeeded(store):
@@ -4206,24 +4145,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": repair_message,
-                        "poll_after_ms": None,
-                    },
+                    _failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": str(error),
-                        "poll_after_ms": None,
-                    },
+                    _failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
@@ -4678,6 +4605,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if "remember" in payload:
             return True if self._optional_bool(payload.get("remember"), default=False) else None
         return None
+
+    def _write_stale_approval_scope_error(self, error: StaleApprovalScopeContractError) -> None:
+        self._write_json(
+            {"resolved": False, "error": str(error), **error.contract.to_dict()},
+            status=409,
+        )
+
+    def _write_ineligible_approval_scope_error(self, error: IneligibleApprovalScopeError) -> None:
+        self._write_json(
+            {
+                "resolved": False,
+                "error": str(error),
+                "action": error.action,
+                "requested_scope": error.requested_scope,
+                **error.contract.to_dict(),
+            },
+            status=422,
+        )
 
     def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
         payload = error.to_payload()
