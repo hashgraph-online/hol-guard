@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -97,6 +98,31 @@ def _key_path(guard_home: Path) -> Path:
 def _load_or_create_key(guard_home: Path) -> tuple[str, bytes]:
     path = _key_path(guard_home)
     _ensure_path_within_root(guard_home, path, label="adapter state key")
+    if os.name == "posix":
+        parent_descriptor = _private_key_directory_descriptor(path.parent)
+        try:
+            payload: dict[str, object] = {
+                "key": base64.urlsafe_b64encode(secrets.token_bytes(_KEY_BYTES)).decode("ascii"),
+                "key_id": secrets.token_hex(12),
+                "schema_version": _SCHEMA_VERSION,
+            }
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+            try:
+                descriptor = os.open(path.name, flags, 0o600, dir_fd=parent_descriptor)
+            except FileExistsError:
+                return _load_key_from_descriptor(parent_descriptor)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps(payload, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            except BaseException:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(path.name, dir_fd=parent_descriptor)
+                raise
+            return _parse_key(payload)
+        finally:
+            os.close(parent_descriptor)
     if path.exists() or path.is_symlink():
         return _load_key(guard_home)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,12 +155,53 @@ def _load_or_create_key(guard_home: Path) -> tuple[str, bytes]:
 def _load_key(guard_home: Path) -> tuple[str, bytes]:
     path = _key_path(guard_home)
     _ensure_path_within_root(guard_home, path, label="adapter state key")
+    if os.name == "posix":
+        parent_descriptor = _private_key_directory_descriptor(path.parent)
+        try:
+            return _load_key_from_descriptor(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode):
         raise ValueError("adapter state key is not a regular file")
     if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o077:
         raise ValueError("adapter state key permissions are not private")
     value = json.loads(read_text_file_within_root(path.parent, path, max_bytes=16_384))
+    if not isinstance(value, dict):
+        raise ValueError("adapter state key has an invalid format")
+    return _parse_key(value)
+
+
+def _private_key_directory_descriptor(path: Path) -> int:
+    path.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(path, flags)
+    try:
+        # Owner-only access is required because this directory contains HMAC key material.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        os.fchmod(descriptor, 0o700)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _load_key_from_descriptor(parent_descriptor: int) -> tuple[str, bytes]:
+    descriptor = os.open(
+        _KEY_FILENAME,
+        os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+        dir_fd=parent_descriptor,
+    )
+    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+        metadata = os.fstat(handle.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("adapter state key is not a regular file")
+        if stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise ValueError("adapter state key permissions are not private")
+        raw = handle.read(16_385)
+    if len(raw.encode("utf-8")) > 16_384:
+        raise ValueError("adapter state key has an invalid format")
+    value = json.loads(raw)
     if not isinstance(value, dict):
         raise ValueError("adapter state key has an invalid format")
     return _parse_key(value)

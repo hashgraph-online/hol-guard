@@ -19,7 +19,10 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .copilot_state_paths import commit_copilot_target_and_state, validated_copilot_state_entries
+from .copilot_state_paths import (
+    commit_copilot_target_and_state,
+    validated_copilot_state_entries,
+)
 from .hook_payloads import inline_hooks_payload
 from .mcp_servers import (
     ManagedMcpServer,
@@ -470,10 +473,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
             backup_path = self._backup_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, backup_path, label="Copilot backup")
             backup_paths.append(str(backup_path))
-            if not backup_path.exists():
-                backup_path.parent.mkdir(parents=True, exist_ok=True)
-                backup_payload = {"existed": original_text is not None, "content": original_text}
-                write_text_at_authorized_path(backup_path, json.dumps(backup_payload, indent=2) + "\n")
             state_path = self._state_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, state_path, label="Copilot state")
             state_paths.append(str(state_path))
@@ -838,14 +837,10 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 (state_path, managed_config_path, backup_path)
                 for state_path, managed_config_path, backup_path, _payload in state_entries
             ]
-        return [
-            (
-                cls._state_path(target_path, context),
-                target_path,
-                cls._backup_path(target_path, context),
-            )
-            for target_path in current_targets
-        ]
+        # Unsigned legacy backups are migrated by the next install, which
+        # replaces the orphaned backup and writes authenticated lifecycle
+        # state. They never authorize destructive cleanup on their own.
+        return []
 
     @staticmethod
     def _managed_servers_for_target(

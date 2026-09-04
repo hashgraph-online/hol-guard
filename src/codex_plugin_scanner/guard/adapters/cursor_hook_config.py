@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import stat
 import sys
@@ -377,4 +378,21 @@ def detect_managed_cursor_hook_artifact(hooks_path: Path, payload: object) -> Gu
 
 
 def _make_executable(path: Path) -> None:
-    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode):
+        raise OSError("refusing to change permissions on a non-regular Cursor hook")
+    if os.name == "nt":
+        return
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise OSError("Cursor hook changed before its permission update")
+        # Cursor must be able to execute this user-owned hook; the writer keeps its content owner-only.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        os.fchmod(descriptor, opened.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    finally:
+        os.close(descriptor)

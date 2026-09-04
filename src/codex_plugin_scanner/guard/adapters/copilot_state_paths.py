@@ -50,10 +50,24 @@ def commit_copilot_target_and_state(
     state_path: Path,
     scope: str,
 ) -> None:
-    """Write a target before its lifecycle state, restoring it if state persistence fails."""
+    """Commit backup, target, and state as one recoverable lifecycle transaction."""
 
-    write_text_at_authorized_path(target_path, target_payload)
+    preserve_existing_backup = backup_path.exists() and copilot_state_authorizes_backup_reuse(
+        context,
+        target_path=target_path,
+        backup_path=backup_path,
+        state_path=state_path,
+    )
+    backup_replaced = False
+    target_attempted = False
     try:
+        if not preserve_existing_backup:
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            backup_payload = {"existed": original_text is not None, "content": original_text}
+            write_text_at_authorized_path(backup_path, json.dumps(backup_payload, indent=2) + "\n")
+            backup_replaced = True
+        target_attempted = True
+        write_text_at_authorized_path(target_path, target_payload)
         write_copilot_state(
             context,
             target_path=target_path,
@@ -62,11 +76,45 @@ def commit_copilot_target_and_state(
             scope=scope,
         )
     except BaseException:
-        if original_text is None:
-            target_path.unlink(missing_ok=True)
-        else:
-            write_text_at_authorized_path(target_path, original_text)
+        try:
+            if target_attempted:
+                if original_text is None:
+                    target_path.unlink(missing_ok=True)
+                else:
+                    write_text_at_authorized_path(target_path, original_text)
+        finally:
+            if backup_replaced:
+                backup_path.unlink(missing_ok=True)
         raise
+
+
+def copilot_state_authorizes_backup_reuse(
+    context: HarnessContext,
+    *,
+    target_path: Path,
+    backup_path: Path,
+    state_path: Path,
+) -> bool:
+    """Return whether authenticated durable state binds this target to this backup."""
+
+    if backup_path.is_symlink() or not backup_path.is_file():
+        return False
+    payload = _json_payload(state_path)
+    if not adapter_state_is_authenticated(context.guard_home, harness="copilot", payload=payload):
+        return False
+    authenticated_target = authenticated_adapter_path(
+        context.guard_home,
+        harness="copilot",
+        payload=payload,
+        field="managed_config_path",
+    )
+    authenticated_backup = authenticated_adapter_path(
+        context.guard_home,
+        harness="copilot",
+        payload=payload,
+        field="backup_path",
+    )
+    return authenticated_target == target_path.resolve() and authenticated_backup == backup_path.resolve()
 
 
 def validated_copilot_state_entries(
@@ -104,7 +152,7 @@ def _validated_entry(
         harness="copilot",
         payload=payload,
     )
-    if "state_authentication" in payload and not authenticated:
+    if not authenticated:
         return None
     managed_value = payload.get("managed_config_path")
     backup_value = payload.get("backup_path")

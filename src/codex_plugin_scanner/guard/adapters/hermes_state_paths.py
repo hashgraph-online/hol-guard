@@ -83,10 +83,17 @@ def _safe_legacy_cleanup_values(
     if not isinstance(servers, dict):
         servers = {}
     managed: list[str] = []
-    marker = ["-m", "codex_plugin_scanner.cli", "hermes", "mcp-proxy", "--guard-home", str(context.guard_home)]
+    marker = ["-m", "codex_plugin_scanner.cli", "hermes", "mcp-proxy", "--guard-home"]
+    guard_home_values = {str(context.guard_home), str(context.guard_home.resolve())}
     for name, config in servers.items():
         args = config.get("args") if isinstance(config, dict) else None
-        if isinstance(name, str) and isinstance(args, list) and args[: len(marker)] == marker:
+        if (
+            isinstance(name, str)
+            and isinstance(args, list)
+            and args[: len(marker)] == marker
+            and len(args) > len(marker)
+            and args[len(marker)] in guard_home_values
+        ):
             managed.append(name)
     current_guard = inspection.payload.get("guard")
     return managed, current_guard if isinstance(current_guard, dict) else None
