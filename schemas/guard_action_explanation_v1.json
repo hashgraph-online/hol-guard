@@ -3,127 +3,41 @@
     "alternative": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "enum": [
-            "review",
-            "narrow",
-            "preview",
-            "backup",
-            "isolate",
-            "cancel",
-            "manual"
-          ]
-        },
-        "message": {
-          "maxLength": 500,
-          "type": "string"
-        },
-        "message_id": {
-          "pattern": "^[a-z][a-z0-9_.-]{0,127}$",
-          "type": "string"
-        }
+        "kind": {"enum": ["review", "narrow", "preview", "backup", "isolate", "cancel", "manual"]},
+        "message": {"maxLength": 500, "type": "string"},
+        "message_id": {"pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string"}
       },
-      "required": [
-        "message_id",
-        "message",
-        "kind"
-      ],
+      "required": ["message_id", "message", "kind"],
       "type": "object"
     },
     "consequence": {
       "additionalProperties": false,
       "properties": {
-        "confirmed": {
-          "type": "boolean"
-        },
-        "message": {
-          "maxLength": 500,
-          "type": "string"
-        },
-        "message_id": {
-          "pattern": "^[a-z][a-z0-9_.-]{0,127}$",
-          "type": "string"
-        },
-        "severity": {
-          "enum": [
-            "info",
-            "low",
-            "medium",
-            "high",
-            "critical"
-          ]
-        }
+        "confirmed": {"type": "boolean"},
+        "message": {"maxLength": 500, "type": "string"},
+        "message_id": {"pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string"},
+        "severity": {"enum": ["info", "low", "medium", "high", "critical"]}
       },
-      "required": [
-        "message_id",
-        "message",
-        "severity",
-        "confirmed"
-      ],
+      "required": ["message_id", "message", "severity", "confirmed"],
       "type": "object"
     },
     "everyday": {
       "additionalProperties": false,
       "properties": {
-        "actor_label": {
-          "maxLength": 120,
-          "type": "string"
-        },
-        "consequences": {
-          "items": {
-            "$ref": "#/$defs/consequence"
-          },
-          "maxItems": 16,
-          "type": "array"
-        },
-        "headline": {
-          "maxLength": 240,
-          "type": "string"
-        },
-        "headline_message_id": {
-          "pattern": "^[a-z][a-z0-9_.-]{0,127}$",
-          "type": "string"
-        },
-        "impact": {
-          "$ref": "#/$defs/message"
-        },
-        "impact_message_id": {
-          "$ref": "#/$defs/messageId"
-        },
-        "recommendation": {
-          "$ref": "#/$defs/message"
-        },
-        "recommendation_message_id": {
-          "$ref": "#/$defs/messageId"
-        },
-        "safer_alternatives": {
-          "items": {
-            "$ref": "#/$defs/alternative"
-          },
-          "maxItems": 12,
-          "type": "array"
-        },
-        "summary": {
-          "maxLength": 800,
-          "type": "string"
-        },
-        "summary_message_id": {
-          "pattern": "^[a-z][a-z0-9_.-]{0,127}$",
-          "type": "string"
-        },
-        "targets": {
-          "items": {
-            "$ref": "#/$defs/target"
-          },
-          "maxItems": 16,
-          "type": "array"
-        },
-        "why_guard_intervened": {
-          "$ref": "#/$defs/message"
-        },
-        "why_guard_intervened_message_id": {
-          "$ref": "#/$defs/messageId"
-        }
+        "actor_label": {"maxLength": 120, "type": "string"},
+        "consequences": {"items": {"$ref": "#/$defs/consequence"}, "maxItems": 16, "type": "array"},
+        "headline": {"maxLength": 240, "type": "string"},
+        "headline_message_id": {"pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string"},
+        "impact": {"$ref": "#/$defs/message"},
+        "impact_message_id": {"$ref": "#/$defs/messageId"},
+        "recommendation": {"$ref": "#/$defs/message"},
+        "recommendation_message_id": {"$ref": "#/$defs/messageId"},
+        "safer_alternatives": {"items": {"$ref": "#/$defs/alternative"}, "maxItems": 12, "type": "array"},
+        "summary": {"maxLength": 800, "type": "string"},
+        "summary_message_id": {"pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string"},
+        "targets": {"items": {"$ref": "#/$defs/target"}, "maxItems": 16, "type": "array"},
+        "why_guard_intervened": {"$ref": "#/$defs/message"},
+        "why_guard_intervened_message_id": {"$ref": "#/$defs/messageId"}
       },
       "required": [
         "headline_message_id",
@@ -143,242 +57,54 @@
       ],
       "type": "object"
     },
-    "message": {
-      "maxLength": 800,
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "messageId": {
-      "pattern": "^[a-z][a-z0-9_.-]{0,127}$",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
+    "message": {"maxLength": 800, "type": ["string", "null"]},
+    "messageId": {"pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": ["string", "null"]},
     "redaction": {
       "additionalProperties": false,
       "properties": {
-        "level": {
-          "enum": [
-            "none",
-            "summary",
-            "redacted"
-          ]
-        },
-        "omitted_fields": {
-          "items": {
-            "maxLength": 128,
-            "type": "string"
-          },
-          "maxItems": 64,
-          "type": "array"
-        },
-        "policy_version": {
-          "maxLength": 64,
-          "type": "string"
-        },
-        "secret_like_values_removed": {
-          "type": "boolean"
-        },
-        "truncated_fields": {
-          "items": {
-            "maxLength": 128,
-            "type": "string"
-          },
-          "maxItems": 64,
-          "type": "array"
-        }
+        "level": {"enum": ["none", "summary", "redacted"]},
+        "omitted_fields": {"items": {"maxLength": 128, "type": "string"}, "maxItems": 64, "type": "array"},
+        "policy_version": {"maxLength": 64, "type": "string"},
+        "secret_like_values_removed": {"type": "boolean"},
+        "truncated_fields": {"items": {"maxLength": 128, "type": "string"}, "maxItems": 64, "type": "array"}
       },
-      "required": [
-        "level",
-        "policy_version",
-        "omitted_fields",
-        "truncated_fields",
-        "secret_like_values_removed"
-      ],
+      "required": ["level", "policy_version", "omitted_fields", "truncated_fields", "secret_like_values_removed"],
       "type": "object"
     },
     "target": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "pattern": "^[a-z][a-z0-9_]{0,63}$",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 240,
-          "type": "string"
-        },
-        "scope": {
-          "maxLength": 120,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sensitivity": {
-          "enum": [
-            "normal",
-            "private",
-            "secret",
-            "unknown"
-          ]
-        }
+        "kind": {"pattern": "^[a-z][a-z0-9_]{0,63}$", "type": "string"},
+        "label": {"maxLength": 240, "type": "string"},
+        "scope": {"maxLength": 120, "type": ["string", "null"]},
+        "sensitivity": {"enum": ["normal", "private", "secret", "unknown"]}
       },
-      "required": [
-        "kind",
-        "label",
-        "scope",
-        "sensitivity"
-      ],
+      "required": ["kind", "label", "scope", "sensitivity"],
       "type": "object"
     },
     "technical": {
       "additionalProperties": false,
       "properties": {
-        "action_id": {
-          "maxLength": 512,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "action_type": {
-          "maxLength": 120,
-          "type": "string"
-        },
-        "arguments_display": {
-          "items": {
-            "maxLength": 240,
-            "type": "string"
-          },
-          "maxItems": 128,
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "available": {
-          "type": "boolean"
-        },
-        "command_display": {
-          "maxLength": 4096,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "dialect": {
-          "maxLength": 64,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "executable": {
-          "maxLength": 240,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "extension_ids": {
-          "items": {
-            "maxLength": 128,
-            "type": "string"
-          },
-          "maxItems": 64,
-          "type": "array"
-        },
-        "normalized_command_display": {
-          "maxLength": 4096,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "parse_confidence": {
-          "maxLength": 64,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "policy_source": {
-          "maxLength": 128,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "proof_level": {
-          "maxLength": 64,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reason_codes": {
-          "items": {
-            "maxLength": 128,
-            "type": "string"
-          },
-          "maxItems": 64,
-          "type": "array"
-        },
-        "receipt_id": {
-          "maxLength": 256,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "rule_ids": {
-          "items": {
-            "maxLength": 128,
-            "type": "string"
-          },
-          "maxItems": 64,
-          "type": "array"
-        },
-        "segments": {
-          "items": {
-            "$ref": "#/$defs/technicalSegment"
-          },
-          "maxItems": 128,
-          "type": "array"
-        },
-        "transport": {
-          "maxLength": 64,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "unavailable_reason": {
-          "maxLength": 240,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "working_scope_display": {
-          "maxLength": 240,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "wrappers": {
-          "items": {
-            "maxLength": 120,
-            "type": "string"
-          },
-          "maxItems": 32,
-          "type": "array"
-        }
+        "action_id": {"maxLength": 512, "type": ["string", "null"]},
+        "action_type": {"maxLength": 120, "type": "string"},
+        "arguments_display": {"items": {"maxLength": 240, "type": "string"}, "maxItems": 128, "type": ["array", "null"]},
+        "available": {"type": "boolean"},
+        "command_display": {"maxLength": 4096, "type": ["string", "null"]},
+        "dialect": {"maxLength": 64, "type": ["string", "null"]},
+        "executable": {"maxLength": 240, "type": ["string", "null"]},
+        "extension_ids": {"items": {"maxLength": 128, "type": "string"}, "maxItems": 64, "type": "array"},
+        "normalized_command_display": {"maxLength": 4096, "type": ["string", "null"]},
+        "parse_confidence": {"maxLength": 64, "type": ["string", "null"]},
+        "policy_source": {"maxLength": 128, "type": ["string", "null"]},
+        "proof_level": {"maxLength": 64, "type": ["string", "null"]},
+        "reason_codes": {"items": {"maxLength": 128, "type": "string"}, "maxItems": 64, "type": "array"},
+        "receipt_id": {"maxLength": 256, "type": ["string", "null"]},
+        "rule_ids": {"items": {"maxLength": 128, "type": "string"}, "maxItems": 64, "type": "array"},
+        "segments": {"items": {"$ref": "#/$defs/technicalSegment"}, "maxItems": 128, "type": "array"},
+        "transport": {"maxLength": 64, "type": ["string", "null"]},
+        "unavailable_reason": {"maxLength": 240, "type": ["string", "null"]},
+        "working_scope_display": {"maxLength": 240, "type": ["string", "null"]},
+        "wrappers": {"items": {"maxLength": 120, "type": "string"}, "maxItems": 32, "type": "array"}
       },
       "required": [
         "available",
@@ -407,37 +133,12 @@
     "technicalSegment": {
       "additionalProperties": false,
       "properties": {
-        "arguments_display": {
-          "items": {
-            "maxLength": 240,
-            "type": "string"
-          },
-          "maxItems": 128,
-          "type": "array"
-        },
-        "executable": {
-          "maxLength": 240,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "execution_context": {
-          "maxLength": 120,
-          "type": "string"
-        },
-        "pipeline_index": {
-          "maximum": 128,
-          "minimum": 0,
-          "type": "integer"
-        }
+        "arguments_display": {"items": {"maxLength": 240, "type": "string"}, "maxItems": 128, "type": "array"},
+        "executable": {"maxLength": 240, "type": ["string", "null"]},
+        "execution_context": {"maxLength": 120, "type": "string"},
+        "pipeline_index": {"maximum": 128, "minimum": 0, "type": "integer"}
       },
-      "required": [
-        "executable",
-        "arguments_display",
-        "execution_context",
-        "pipeline_index"
-      ],
+      "required": ["executable", "arguments_display", "execution_context", "pipeline_index"],
       "type": "object"
     }
   },
@@ -445,40 +146,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "action_identity": {
-      "maxLength": 512,
-      "minLength": 1,
-      "type": "string"
-    },
-    "canonical_identity": {
-      "maxLength": 256,
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "catalog_digest": {
-      "maxLength": 256,
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "confidence": {
-      "enum": [
-        "exact",
-        "derived",
-        "limited"
-      ]
-    },
-    "everyday": {
-      "$ref": "#/$defs/everyday"
-    },
-    "explanation_version": {
-      "maxLength": 64,
-      "minLength": 1,
-      "type": "string"
-    },
+    "action_identity": {"maxLength": 512, "minLength": 1, "type": "string"},
+    "canonical_identity": {"maxLength": 256, "type": ["string", "null"]},
+    "catalog_digest": {"maxLength": 256, "type": ["string", "null"]},
+    "confidence": {"enum": ["exact", "derived", "limited"]},
+    "everyday": {"$ref": "#/$defs/everyday"},
+    "explanation_version": {"maxLength": 64, "minLength": 1, "type": "string"},
     "kind": {
       "enum": [
         "file_read",
@@ -519,33 +192,12 @@
         "unknown_action"
       ]
     },
-    "locale": {
-      "maxLength": 35,
-      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
-      "type": "string"
-    },
-    "redaction": {
-      "$ref": "#/$defs/redaction"
-    },
-    "renderer_version": {
-      "maxLength": 64,
-      "minLength": 1,
-      "type": "string"
-    },
-    "schema_version": {
-      "const": "guard.action-explanation.v1"
-    },
-    "technical": {
-      "$ref": "#/$defs/technical"
-    },
-    "uncertainty_reasons": {
-      "items": {
-        "pattern": "^[a-z][a-z0-9_]{0,63}$",
-        "type": "string"
-      },
-      "maxItems": 16,
-      "type": "array"
-    }
+    "locale": {"maxLength": 35, "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$", "type": "string"},
+    "redaction": {"$ref": "#/$defs/redaction"},
+    "renderer_version": {"maxLength": 64, "minLength": 1, "type": "string"},
+    "schema_version": {"const": "guard.action-explanation.v1"},
+    "technical": {"$ref": "#/$defs/technical"},
+    "uncertainty_reasons": {"items": {"pattern": "^[a-z][a-z0-9_]{0,63}$", "type": "string"}, "maxItems": 16, "type": "array"}
   },
   "required": [
     "schema_version",
