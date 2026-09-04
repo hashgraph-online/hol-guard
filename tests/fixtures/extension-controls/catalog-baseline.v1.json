@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "4229f4f3f32bf48111ab7479f277997f361d665a7aa72018c5d0fac521fe075e",
+  "catalog_digest": "442c94c6b13c2be9ed34524aa954c119af948f9653a7091a61723cb915a885b5",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 64,
+  "extension_count": 65,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -55,6 +55,7 @@
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
     "command.kubernetes-secrets",
+    "command.laravel-artisan",
     "command.load-balancer",
     "command.messaging.kafka",
     "command.messaging.nats",
@@ -91,7 +92,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 173,
+  "permission_count": 175,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -193,6 +194,8 @@
     "command.kubernetes-operations.permission.drain-node": "kubectl drain",
     "command.kubernetes-operations.permission.helm-uninstall": "helm uninstall",
     "command.kubernetes-secrets.permission.secret-read": "kubectl get secret db-credentials -o yaml",
+    "command.laravel-artisan.permission.db-wipe": "php artisan db:wipe",
+    "command.laravel-artisan.permission.migrate-fresh": "php artisan migrate:fresh",
     "command.load-balancer.permission.delete": "aws elbv2 delete-load-balancer",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
@@ -440,6 +443,8 @@
     "command.kubernetes-operations.permission.drain-node",
     "command.kubernetes-operations.permission.helm-uninstall",
     "command.kubernetes-secrets.permission.secret-read",
+    "command.laravel-artisan.permission.db-wipe",
+    "command.laravel-artisan.permission.migrate-fresh",
     "command.load-balancer.permission.delete",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
@@ -524,7 +529,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 161,
+  "rule_count": 163,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -622,6 +627,8 @@
     "command.kubernetes-operations.drain-node",
     "command.kubernetes-operations.helm-uninstall",
     "command.kubernetes-secrets.secret-read",
+    "command.laravel-artisan.migrate-fresh",
+    "command.laravel-artisan.db-wipe",
     "command.load-balancer.delete",
     "command.messaging.kafka.delete",
     "command.messaging.nats.delete",
