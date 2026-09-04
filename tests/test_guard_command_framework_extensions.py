@@ -107,6 +107,16 @@ FRAMEWORK_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "Laravel queue purge command",
         "command.framework.laravel.queue-purge",
     ),
+    (
+        "php -c --help artisan db:wipe",
+        "Laravel database wipe command",
+        "command.framework.laravel.database-wipe",
+    ),
+    (
+        "php -d --help artisan migrate:fresh",
+        "Laravel destructive rebuild command",
+        "command.framework.laravel.migrate-fresh",
+    ),
 )
 
 

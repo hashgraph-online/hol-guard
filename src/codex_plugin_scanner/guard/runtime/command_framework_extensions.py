@@ -57,16 +57,17 @@ class PhpArtisanScriptMatcher:
             if executable.replace("\\", "/").rsplit("/", 1)[-1].lower() not in _PHP_LAUNCHER_BASENAMES:
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
-            if not self.required_flags <= frozenset(lowered_arguments):
-                continue
             _php_flags, operands = leading_flags_and_operands(
                 lowered_arguments,
                 options_with_values=_PHP_OPTIONS_WITH_VALUES,
             )
             if not operands or operands[0].replace("\\", "/").rsplit("/", 1)[-1] != "artisan":
                 continue
+            artisan_arguments = operands[1:]
+            if not self.required_flags <= frozenset(artisan_arguments):
+                continue
             _artisan_flags, subcommand_operands = leading_flags_and_operands(
-                operands[1:],
+                artisan_arguments,
                 options_with_values=_ARTISAN_GLOBAL_OPTIONS,
             )
             if subcommand_operands[: len(self.subcommands)] != self.subcommands:
