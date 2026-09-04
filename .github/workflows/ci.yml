@@ -239,6 +239,7 @@ jobs:
         with:
           name: pytest-coverage-${{ matrix.shard-index }}
           path: .coverage
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 1
       - name: Upload pytest duration artifact
