@@ -102,7 +102,7 @@ class ShimRefreshTest(unittest.TestCase):
             encoding="utf-8",
         )
         stable_cli.chmod(0o755)
-        desktop_owner = desktop_root / "bundled" / "3.0.0" / "lib" / "hol-guard-core" / "hol-guard"
+        desktop_owner = desktop_root / "bundled" / "3.0.63" / "bin" / "hol-guard"
         desktop_owner.parent.mkdir(parents=True)
         desktop_owner.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
         desktop_owner.chmod(0o755)

@@ -37,6 +37,24 @@ def test_resolve_frozen_cli_recognizes_bundled_desktop_layout(tmp_path: Path) ->
     assert desktop_core_shim_for_executable(bundled) == core_dir / "current-hol-guard"
 
 
+def test_resolve_frozen_cli_recognizes_bundled_desktop_wrapper(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.stable_guard_cli import desktop_core_shim_for_executable
+
+    core_dir = tmp_path / "core"
+    bundled = core_dir / "bundled" / "3.0.63" / "bin" / "hol-guard"
+
+    assert desktop_core_shim_for_executable(bundled) == core_dir / "current-hol-guard"
+
+
+def test_resolve_frozen_cli_normalizes_desktop_directory_case(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.stable_guard_cli import desktop_core_shim_for_executable
+
+    core_dir = tmp_path / "core"
+    bundled = core_dir / "Bundled" / "3.0.63" / "bin" / "HOL-Guard"
+
+    assert desktop_core_shim_for_executable(bundled) == core_dir / "current-hol-guard"
+
+
 def test_resolved_cursor_hook_guard_cli_rewrites_argv0_only(tmp_path: Path) -> None:
     core_dir = tmp_path / "core"
     versioned = core_dir / "versions" / "3.0.55" / "hol-guard"
@@ -71,7 +89,9 @@ def test_cursor_hook_script_template_includes_guard_cli_resolver() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import _HOOK_SCRIPT_TEMPLATE
 
     assert "_resolve_cursor_hook_guard_cli_argv0" in HOOK_SCRIPT_TEMPLATE_RESOLVER
-    assert 'executable.parents[3].name == "bundled"' in HOOK_SCRIPT_TEMPLATE_RESOLVER
+    assert "ancestor_name = ancestor.name.lower()" in HOOK_SCRIPT_TEMPLATE_RESOLVER
+    assert 'ancestor_name != "bundled"' in HOOK_SCRIPT_TEMPLATE_RESOLVER
+    assert 'relative_parts[1] == "bin"' in HOOK_SCRIPT_TEMPLATE_RESOLVER
     assert "_resolved_guard_cli()" in HOOK_SCRIPT_TEMPLATE_RESOLVER
     assert "_resolve_cursor_hook_guard_cli_argv0" in _HOOK_SCRIPT_TEMPLATE
     assert "_resolved_guard_cli()" in _HOOK_SCRIPT_TEMPLATE
