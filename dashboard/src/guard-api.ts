@@ -822,7 +822,8 @@ export function redirectToGuardDaemonOrigin(
   }
   fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(candidateOrigin)}`);
   url.hash = fragmentPairs.join("&");
-  window.location.replace(url.toString());
+  // The target is re-canonicalized to exact loopback here; the sole caller also authenticates it.
+  window.location.replace(url.toString()); // NOSONAR
 }
 
 export async function reconnectGuardDaemonAfterUpdate(

@@ -13,7 +13,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, TextIO
 
-from .hermes_file_inspection import inspect_hermes_config
+from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
+
+from .hermes_file_inspection import HERMES_CONFIG_MAX_BYTES, inspect_hermes_config, inspect_hermes_text_file
 
 _PRETOOL_EVENT = "pre_tool_call"
 _GUARD_HOOK_ID = "hol-guard-pretool"
@@ -25,6 +27,7 @@ _MALFORMED_ALLOWLIST = (
     "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can allowlist its pre_tool_call command."
 )
 _MISSING_HOOK_COMMAND = "Hermes Guard hook command is missing; runtime protection was not registered."
+_UNSAFE_ALLOWLIST = "Hermes shell-hooks-allowlist.json must be a regular file directly under the selected Hermes home."
 
 
 def hermes_hook_command_string(command: Sequence[str]) -> str:
@@ -152,13 +155,14 @@ def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
 
 
 def merge_guard_hook_allowlist(
-    allowlist_path: Path,
+    hermes_home: Path,
     *,
     command: Sequence[str],
     retire_commands: Sequence[str] = (),
 ) -> None:
     """Approve only Guard's (event, command) pair without auto-accepting other hooks."""
 
+    allowlist_path = _allowlist_destination(hermes_home)
     command_string = hermes_hook_command_string(command)
     payload = _read_allowlist(allowlist_path)
     if payload is None:
@@ -171,14 +175,14 @@ def merge_guard_hook_allowlist(
     ]
     if not any(item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string for item in approvals):
         approvals.append({"event": _PRETOOL_EVENT, "command": command_string})
-    allowlist_path.parent.mkdir(parents=True, exist_ok=True)
-    allowlist_path.write_text(
+    _atomic_write_allowlist(
+        allowlist_path,
         json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
-        encoding="utf-8",
     )
 
 
-def remove_guard_hook_allowlist(allowlist_path: Path, *, command_string: str) -> None:
+def remove_guard_hook_allowlist(hermes_home: Path, *, command_string: str) -> None:
+    allowlist_path = _allowlist_destination(hermes_home)
     if not allowlist_path.is_file():
         return
     payload = _read_allowlist(allowlist_path)
@@ -190,14 +194,21 @@ def remove_guard_hook_allowlist(allowlist_path: Path, *, command_string: str) ->
         if isinstance(item, dict)
         and not (item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string)
     ]
-    allowlist_path.write_text(
+    _atomic_write_allowlist(
+        allowlist_path,
         json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
-        encoding="utf-8",
     )
 
 
 def hermes_allowlist_path(hermes_home: Path) -> Path:
-    return hermes_home / _ALLOWLIST_NAME
+    """Return the fixed allowlist slot under the selected Hermes authority root.
+
+    Resolving the root itself deliberately preserves custom and symlinked
+    ``HERMES_HOME`` values while ensuring no caller-controlled suffix reaches a
+    filesystem write.
+    """
+
+    return hermes_home.expanduser().resolve(strict=False) / _ALLOWLIST_NAME
 
 
 def prepare_hermes_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
@@ -301,7 +312,7 @@ def sync_guard_runtime_hooks(
     if not merged:
         raise ValueError("Hermes hooks config is not a mapping; runtime protection was not registered.")
     merge_guard_hook_allowlist(
-        hermes_allowlist_path(hermes_home),
+        hermes_home,
         command=hook_command,
         retire_commands=removed,
     )
@@ -309,7 +320,7 @@ def sync_guard_runtime_hooks(
 
 def unsync_guard_runtime_hooks(config: dict[str, Any], *, hermes_home: Path) -> None:
     for command_string in remove_guard_pretool_hooks(config):
-        remove_guard_hook_allowlist(hermes_allowlist_path(hermes_home), command_string=command_string)
+        remove_guard_hook_allowlist(hermes_home, command_string=command_string)
 
 
 def _policy_from_response(response: Mapping[str, object]) -> tuple[str, str]:
@@ -348,11 +359,20 @@ def _reason_from_response(response: Mapping[str, object]) -> str:
 
 
 def _read_allowlist(path: Path) -> dict[str, Any] | None:
+    if path.is_symlink():
+        return None
     if not path.exists():
         return {"approvals": []}
+    inspection = inspect_hermes_text_file(
+        path,
+        scope_root=path.parent,
+        content_limit_bytes=HERMES_CONFIG_MAX_BYTES,
+    )
+    if not inspection.complete or inspection.content is None:
+        return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeError):
+        raw = json.loads(inspection.content)
+    except (json.JSONDecodeError, UnicodeError):
         return None
     if not isinstance(raw, dict):
         return None
@@ -373,3 +393,20 @@ def _allowlist_has_command(path: Path, command: str) -> bool:
         isinstance(item, dict) and item.get("event") == _PRETOOL_EVENT and item.get("command") == command
         for item in payload.get("approvals", [])
     )
+
+
+def _allowlist_destination(hermes_home: Path) -> Path:
+    path = hermes_allowlist_path(hermes_home)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    return path
+
+
+def _atomic_write_allowlist(path: Path, content: str) -> None:
+    """Atomically replace the allowlist through the shared no-follow writer."""
+
+    if path.name != _ALLOWLIST_NAME or path.parent != path.parent.resolve(strict=False):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    write_text_atomic_no_follow(path, content)  # NOSONAR - fixed name under the selected Hermes authority root

@@ -1,5 +1,6 @@
 """Containment contracts for optional third-party scanner processes."""
 
+import json
 import os
 import sys
 import time
@@ -22,6 +23,77 @@ def test_scanner_environment_keeps_runtime_context_but_drops_ambient_secrets(mon
 
     assert env["PATH"] == "/trusted/bin"
     assert "AWS_SECRET_ACCESS_KEY" not in env
+
+
+def test_scanner_process_rejects_relative_executable_before_spawn(monkeypatch) -> None:
+    def fail_spawn(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("an untrusted executable must not reach process creation")
+
+    monkeypatch.setattr(scanner_subprocess_module, "_spawn_scanner_process", fail_spawn)
+
+    with pytest.raises(ValueError, match="absolute path"):
+        run_bounded_scanner_process(
+            ["python", "-c", "print('unsafe path lookup')"],
+            env={"PATH": "/attacker-controlled"},
+            timeout_seconds=1,
+        )
+
+
+def test_scanner_process_rejects_nul_in_data_argument() -> None:
+    with pytest.raises(ValueError, match="NUL"):
+        run_bounded_scanner_process(
+            [sys.executable, "safe\x00unsafe"],
+            env=scrubbed_scanner_env(),
+            timeout_seconds=1,
+        )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink launchers are a POSIX virtualenv contract")
+def test_scanner_validation_preserves_absolute_virtualenv_style_launcher(tmp_path) -> None:
+    launcher = tmp_path / "venv with spaces" / "python"
+    launcher.parent.mkdir()
+    launcher.symlink_to(sys.executable)
+
+    command = scanner_subprocess_module._validated_scanner_argv([str(launcher), "data"])
+
+    assert command == [str(launcher), "data"]
+
+
+def test_scanner_process_preserves_shell_metacharacters_as_one_data_argument() -> None:
+    data = "$(not-a-command); 'quoted value' && still-data"
+    result = run_bounded_scanner_process(
+        [sys.executable, "-c", "import sys; print(sys.argv[1])", data],
+        env=scrubbed_scanner_env(),
+        timeout_seconds=5,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == data
+
+
+def test_posix_lockdown_executes_only_the_validated_absolute_executable(monkeypatch) -> None:
+    executable = sys.executable
+    data = "; still one argument"
+    monkeypatch.setattr(scanner_subprocess_module.sys, "argv", ["bootstrap", json.dumps([executable, data])])
+    monkeypatch.setattr(scanner_subprocess_module.sys, "platform", "linux")
+    monkeypatch.setattr(scanner_subprocess_module, "_install_linux_process_group_lockdown", lambda: None)
+    observed: dict[str, object] = {}
+
+    class ExecveCalledError(Exception):
+        pass
+
+    def fake_execve(path: str, argv: list[str], env: object) -> None:
+        observed.update(path=path, argv=argv, env=env)
+        raise ExecveCalledError
+
+    monkeypatch.setattr(scanner_subprocess_module.os, "execve", fake_execve)
+
+    with pytest.raises(ExecveCalledError):
+        scanner_subprocess_module._exec_posix_scanner_with_lockdown()
+
+    assert observed["path"] == executable
+    assert observed["argv"] == [executable, data]
+    assert observed["env"] is os.environ
 
 
 def test_scanner_process_timeout_terminates_and_bounds_output() -> None:

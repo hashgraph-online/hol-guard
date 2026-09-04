@@ -333,6 +333,50 @@ def test_malformed_allowlist_refuses_install(tmp_path: Path) -> None:
         HermesHarnessAdapter().install(_ctx(tmp_path))
 
 
+def test_install_accepts_symlinked_custom_hermes_home_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_home = tmp_path / "real" / "hermes"
+    _write(real_home / "config.yaml", "mcp_servers: {}\n")
+    linked_parent = tmp_path / "linked-parent"
+    try:
+        linked_parent.symlink_to(real_home.parent, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable")
+    selected_home = linked_parent / real_home.name
+    monkeypatch.setenv("HERMES_HOME", str(selected_home))
+    (tmp_path / "workspace").mkdir()
+
+    adapter = HermesHarnessAdapter()
+    adapter.install(_ctx(tmp_path))
+
+    allowlist_path = real_home / "shell-hooks-allowlist.json"
+    assert allowlist_path.is_file()
+    assert json.loads(allowlist_path.read_text(encoding="utf-8"))["approvals"]
+    probe = adapter.runtime_probe(_ctx(tmp_path))
+    assert probe is not None
+    assert probe["runtime_hook_registered"] is True
+
+
+def test_install_rejects_symlinked_allowlist_without_touching_target(tmp_path: Path) -> None:
+    _config(tmp_path)
+    outside = tmp_path / "outside-allowlist.json"
+    original = '{"approvals": [{"event": "pre_tool_call", "command": "keep"}]}\n'
+    outside.write_text(original, encoding="utf-8")
+    allowlist_path = tmp_path / ".hermes" / "shell-hooks-allowlist.json"
+    try:
+        allowlist_path.symlink_to(outside)
+    except OSError:
+        pytest.skip("file symlinks are unavailable")
+
+    with pytest.raises(ValueError, match="regular file directly under"):
+        HermesHarnessAdapter().install(_ctx(tmp_path))
+
+    assert allowlist_path.is_symlink()
+    assert outside.read_text(encoding="utf-8") == original
+
+
 def test_user_hook_with_marker_substring_is_preserved(tmp_path: Path) -> None:
     _write(
         tmp_path / ".hermes" / "config.yaml",
@@ -384,7 +428,10 @@ def test_registered_requires_allowlist_and_matcher(tmp_path: Path) -> None:
 def test_protection_display_name_skips_blank_runtime_label() -> None:
     from codex_plugin_scanner.guard.cli.render import _protection_display_name
 
-    assert _protection_display_name(
-        {"runtime_protection_label": "   ", "protection_label": "Protected"},
-        "watch",
-    ) == "Protected"
+    assert (
+        _protection_display_name(
+            {"runtime_protection_label": "   ", "protection_label": "Protected"},
+            "watch",
+        )
+        == "Protected"
+    )

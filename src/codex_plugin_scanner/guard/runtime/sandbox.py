@@ -118,7 +118,7 @@ def _detect_network_attempts(text: str) -> list[str]:
     return found
 
 
-def _build_env(policy: EnvPolicy) -> dict[str, str]:
+def _build_env(policy: EnvPolicy, *, private_root: Path) -> dict[str, str]:
     if policy == "passthrough":
         return dict(os.environ)
     if policy == "minimal":
@@ -128,10 +128,13 @@ def _build_env(policy: EnvPolicy) -> dict[str, str]:
             if val:
                 minimal[key] = val
         return minimal
+    private_root_text = os.fspath(private_root)
     return {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-        "HOME": "/tmp",
-        "TMPDIR": "/tmp",
+        "HOME": private_root_text,
+        "TMPDIR": private_root_text,
+        "TEMP": private_root_text,
+        "TMP": private_root_text,
     }
 
 
@@ -251,7 +254,7 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
                 before_files.add(rel)
                 before_mtimes[rel] = p.stat().st_mtime
 
-        env = _build_env(request.env_policy)
+        env = _build_env(request.env_policy, private_root=workspace)
         argv = _language_argv(request.language, request.command, workspace)
 
         cpu_s = request.cpu_seconds

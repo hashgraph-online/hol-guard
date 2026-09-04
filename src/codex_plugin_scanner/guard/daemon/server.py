@@ -451,6 +451,19 @@ def _codex_live_replay_authority(
 
 
 _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+_JSON_RESPONSE_TRANSLATION = str.maketrans(
+    {
+        "&": "\\u0026",
+        "<": "\\u003c",
+        ">": "\\u003e",
+    }
+)
+
+
+def _json_response_bytes(payload: dict[str, Any]) -> bytes:
+    """Serialize JSON without leaving HTML-significant characters on the wire."""
+
+    return json.dumps(payload).translate(_JSON_RESPONSE_TRANSLATION).encode("utf-8")
 
 
 class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
@@ -7661,14 +7674,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        body = _json_response_bytes(payload)
         headers = dict(extra_headers or {})
         cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
         if cors_headers is not None:
             headers = {**cors_headers, **headers}
         try:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
             for key, value in self._validated_headers(headers).items():
                 self.send_header(key, value)
