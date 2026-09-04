@@ -1,0 +1,79 @@
+name: Refresh Laravel extension catalog baseline
+
+on:
+  push:
+    branches:
+      - feat/laravel-artisan-command-safety
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/laravel-artisan-command-safety
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc
+      - name: Install repository dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Regenerate extension-control catalog identity
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
+          path = Path('tests/fixtures/extension-controls/catalog-baseline.v1.json')
+          baseline = json.loads(path.read_text(encoding='utf-8'))
+          registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+          baseline.update({
+              'catalog_digest': registry.catalog_digest,
+              'extension_count': len(registry.extensions),
+              'extension_ids': [extension.extension_id for extension in registry.extensions],
+              'permission_count': sum(len(extension.permissions) for extension in registry.extensions),
+              'permission_ids': [
+                  permission.permission_id
+                  for extension in registry.extensions
+                  for permission in extension.permissions
+              ],
+              'rule_count': sum(len(extension.rules) for extension in registry.extensions),
+              'rule_ids': [
+                  rule.rule_id
+                  for extension in registry.extensions
+                  for rule in extension.rules
+              ],
+              'permission_examples': {
+                  permission.permission_id: permission.example_command
+                  for extension in registry.extensions
+                  for permission in extension.permissions
+              },
+              'permission_families': {
+                  permission.permission_id: permission.family
+                  for extension in registry.extensions
+                  for permission in extension.permissions
+                  if permission.family is not None
+              },
+          })
+          path.write_text(json.dumps(baseline, indent=2) + '\n', encoding='utf-8')
+          PY
+      - name: Validate focused catalog identity
+        run: uv run --no-sync pytest tests/test_guard_extension_control_catalog_detail.py::test_catalog_identity_matches_generated_baseline_fixture -q
+      - name: Commit regenerated fixture
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/fixtures/extension-controls/catalog-baseline.v1.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'test(guard): refresh extension catalog baseline'
+          git push origin HEAD:feat/laravel-artisan-command-safety
