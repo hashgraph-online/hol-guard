@@ -62,12 +62,16 @@ def _php_artisan_arguments(arguments: tuple[str, ...]) -> tuple[str, ...] | None
         if any(token.startswith(option) and len(token) > len(option) for option in _PHP_VALUE_OPTIONS):
             index += 1
             continue
-        if token == "-f":
+        if token in {"-f", "--file"}:
             if index + 1 >= len(arguments) or _basename(arguments[index + 1]) != "artisan":
                 return None
             return arguments[index + 2 :]
         if token.startswith("-f") and len(token) > 2:
             if _basename(token[2:]) != "artisan":
+                return None
+            return arguments[index + 1 :]
+        if token.startswith("--file="):
+            if _basename(token.partition("=")[2]) != "artisan":
                 return None
             return arguments[index + 1 :]
         if token.startswith("-"):
@@ -166,6 +170,7 @@ LARAVEL_ARTISAN_COMMAND_RULES = (
         matcher=_LARAVEL_MIGRATE_FRESH,
         default_mode="review",
         safe_variants=_help_variant("migrate:fresh", "migrate-fresh"),
+        example_command="php artisan migrate:fresh",
     ),
     CommandSafetyRule(
         rule_id="command.laravel-artisan.db-wipe",
@@ -183,6 +188,7 @@ LARAVEL_ARTISAN_COMMAND_RULES = (
         matcher=_LARAVEL_DB_WIPE,
         default_mode="review",
         safe_variants=_help_variant("db:wipe", "db-wipe"),
+        example_command="php artisan db:wipe",
     ),
 )
 
