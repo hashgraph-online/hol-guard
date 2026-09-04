@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..action_lattice import is_guard_action
+from ..daemon.hook_availability_policy import hook_reason_continues_session
 
 
 def _infer_cursor_hook_event_name(payload: Mapping[str, object]) -> dict[str, object]:
@@ -90,6 +91,17 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
             tool_input.setdefault("file_path", file_path.strip())
             tool_input.setdefault("path", file_path.strip())
         normalized["tool_input"] = tool_input
+        return normalized
+    if raw_event == "beforewritefile":
+        normalized["hook_event_name"] = "PreToolUse"
+        normalized.setdefault("tool_name", "Write")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        file_path = normalized.get("file_path")
+        if isinstance(file_path, str) and file_path.strip():
+            tool_input.setdefault("file_path", file_path.strip())
+            tool_input.setdefault("path", file_path.strip())
+        normalized["tool_input"] = tool_input
+        normalized["cursor_source_hook_event"] = "beforeWriteFile"
         return normalized
     if raw_event == "pretooluse":
         normalized["hook_event_name"] = "PreToolUse"
@@ -197,7 +209,15 @@ def _cursor_permission_for_policy(
     policy_action: str,
     guard_payload: Mapping[str, object] | None = None,
 ) -> str:
-    del guard_payload
+    payload = {} if guard_payload is None else guard_payload
+    reason_code = str(payload.get("reason_code") or "")
+    if hook_reason_continues_session(reason_code):
+        return "allow"
+    hook_output = payload.get("hookSpecificOutput")
+    if isinstance(hook_output, Mapping) and hook_output.get("permissionDecision") == "allow":
+        return "allow"
+    if payload.get("decision") in {"allow", "warn"}:
+        return "allow"
     if not is_guard_action(policy_action):
         return "deny"
     if policy_action in {"block", "sandbox-required"}:
@@ -218,6 +238,11 @@ def _cursor_block_reason(guard_payload: Mapping[str, object]) -> str:
         value = guard_payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    hook_output = guard_payload.get("hookSpecificOutput")
+    if isinstance(hook_output, Mapping):
+        nested_reason = hook_output.get("permissionDecisionReason")
+        if isinstance(nested_reason, str) and nested_reason.strip():
+            return nested_reason.strip()
     decision = guard_payload.get("decision_v2_json")
     if isinstance(decision, Mapping):
         for key in ("harness_message", "retry_instruction", "user_body", "user_title"):

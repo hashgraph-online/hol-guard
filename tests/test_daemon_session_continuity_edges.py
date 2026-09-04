@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
@@ -160,3 +161,126 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     )
     assert availability["behavior"] == "deny"
     assert availability["interrupt"] is False
+
+
+def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path) -> None:
+    reason = "HOL Guard could not complete the native hook decision safely."
+    for reason_code in (
+        "native_hook_edge_invalid_response",
+        "native_hook_compatibility_disabled",
+        "native_hook_worker_unavailable_before_compatibility",
+        "python_hook_oracle_unavailable",
+        "harness_not_managed",
+        "native_degraded_emergency_safe",
+        "unlisted_native_miss",
+    ):
+        for payload, event_name in (
+            (
+                {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}},
+                "PreToolUse",
+            ),
+            (
+                {"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
+                "PreToolUse",
+            ),
+            (
+                {"hook_event_name": "PreToolUse", "tool_name": "Task", "tool_input": {"prompt": "implement"}},
+                "PreToolUse",
+            ),
+            (
+                {"hook_event_name": "PreToolUse", "tool_name": "StrReplace", "tool_input": {"path": "src/app.ts"}},
+                "PreToolUse",
+            ),
+            (
+                {"hook_event_name": "PreToolUse", "tool_input": {"command": "python -c 'print(1)'"}},
+                "PreToolUse",
+            ),
+            (
+                {"hook_event_name": "PreToolUse", "tool_input": {"command": "mkdir src/generated"}},
+                "PreToolUse",
+            ),
+        ):
+            response = availability_harness_response(
+                payload,
+                harness="cursor",
+                event_name=event_name,
+                reason_code=reason_code,
+                reason=reason,
+                workspace=tmp_path,
+                home_dir=tmp_path / "home",
+            )
+            output = response["hookSpecificOutput"]
+            assert isinstance(output, dict)
+            assert output["permissionDecision"] == "allow"
+            assert response["policy_action"] == "warn"
+
+
+def test_cursor_maps_cannot_finish_block_to_allow() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import (
+        cursor_hook_response_from_guard,
+        prepare_cursor_hook_payload,
+    )
+
+    mapped = prepare_cursor_hook_payload(
+        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts"}
+    )
+    assert mapped["hook_event_name"] == "PreToolUse"
+    assert mapped["tool_name"] == "Write"
+    response = cursor_hook_response_from_guard(
+        policy_action="block",
+        guard_payload={
+            "reason_code": "native_hook_edge_invalid_response",
+            "hookSpecificOutput": {
+                "permissionDecisionReason": "HOL Guard could not complete the native hook decision safely.",
+            },
+        },
+        hook_event_name="beforeWriteFile",
+    )
+    assert response["permission"] == "allow"
+
+
+def test_cursor_honors_allow_permission_even_when_policy_action_is_block() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
+
+    response = cursor_hook_response_from_guard(
+        policy_action="block",
+        guard_payload={
+            "reason_code": "unlisted_native_miss",
+            "hookSpecificOutput": {"permissionDecision": "allow"},
+        },
+        hook_event_name="beforeShellExecution",
+    )
+    assert response["permission"] == "allow"
+
+
+def test_invalid_hook_payload_reference_stays_fail_closed(tmp_path: Path) -> None:
+    response = availability_harness_response(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "src/app.ts"},
+        },
+        harness="cursor",
+        event_name="PreToolUse",
+        reason_code="invalid_hook_payload_reference",
+        reason="HOL Guard could not authenticate the local hook payload.",
+        workspace=tmp_path,
+        home_dir=tmp_path / "home",
+    )
+    output = response["hookSpecificOutput"]
+    assert isinstance(output, dict)
+    assert output["permissionDecision"] == "deny"
+    assert response["policy_action"] == "block"
+
+
+def test_bounded_cli_cannot_finish_without_policy_action_allows_write() -> None:
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _daemon_response_to_native
+
+    stdout, _stderr, code = _daemon_response_to_native(
+        {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"},
+        harness="kimi",
+        event_name="PreToolUse",
+    )
+    payload = json.loads(stdout)
+    assert code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"

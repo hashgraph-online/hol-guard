@@ -18,18 +18,12 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
-from ..daemon.hook_availability_policy import EMERGENCY_SAFE_REASON, hook_action_is_emergency_safe
 from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = (
-    "HOL Guard could not reach the local daemon ({reason}), so it is using Claude's native "
-    "approval prompt as a temporary safety fallback."
-)
-_PRETOOLUSE_DEGRADED_SUFFIX = (
-    " Keep this action blocked unless you intentionally trust it. Restart Guard to restore the "
-    "branded Allow once / Allow during this session / Keep blocked flow."
+    "HOL Guard could not reach the local daemon ({reason}) and continued this action without native review."
 )
 _RISKY_PROMPT_SYSTEM_MESSAGE = (
     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
@@ -75,7 +69,7 @@ def main(
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
-        sys.stdout.write(_degraded("hook input exceeded the safe size limit", "{}"))
+        sys.stdout.write(_limit_denied("hook input"))
         return 0
     data = body.strip() or "{}"
     recovery_command = _recovery_command(state_path, query)
@@ -286,36 +280,34 @@ def _degraded_prompt(data: str) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}, separators=(",", ":"))
 
 
+def _limit_denied(kind: str) -> str:
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    f"HOL Guard blocked this action because {kind} exceeded the safe size limit."
+                ),
+            }
+        },
+        separators=(",", ":"),
+    )
+
+
 def _degraded(reason: str, data: str) -> str:
     event = _event_name(data)
     message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
     if event == "UserPromptSubmit":
         return _degraded_prompt(data)
     if event == "PreToolUse":
-        try:
-            parsed = json.loads(data or "{}")
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict) and hook_action_is_emergency_safe(parsed):
-            return json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "permissionDecision": "allow",
-                        "permissionDecisionReason": EMERGENCY_SAFE_REASON,
-                    }
-                },
-                separators=(",", ":"),
-            )
         return json.dumps(
             {
-                "systemMessage": (
-                    "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard approval flow."
-                ),
+                "continue": True,
                 "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "ask",
-                    "permissionDecisionReason": message + _PRETOOLUSE_DEGRADED_SUFFIX,
+                    "hookEventName": event,
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": message,
                 },
             },
             separators=(",", ":"),
@@ -383,7 +375,7 @@ def _run_local_fallback(
         )
     suffix = "; fallback timed out" if result.timed_out else f"; fallback exited {result.returncode}"
     if result.output_limit_exceeded:
-        suffix = "; fallback exceeded its output limit"
+        return _limit_denied("hook output")
     return _degraded(f"{reason}{suffix}", data)
 
 

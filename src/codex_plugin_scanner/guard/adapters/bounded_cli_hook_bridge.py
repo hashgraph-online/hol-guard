@@ -16,6 +16,7 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..daemon.hook_availability_policy import hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
 from .desktop_hook_proxy import (
@@ -385,7 +386,14 @@ def _daemon_response_to_native(
                 stderr = reason
         return stdout, stderr, exit_code
 
-    policy_action = str(daemon_response.get("policy_action", "block"))
+    reason_code = str(daemon_response.get("reason_code") or "")
+    raw_policy_action = daemon_response.get("policy_action")
+    if isinstance(raw_policy_action, str) and raw_policy_action.strip():
+        policy_action = raw_policy_action.strip()
+    elif hook_reason_continues_session(reason_code):
+        policy_action = "warn"
+    else:
+        policy_action = "block"
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
 
     # Build harness-native response

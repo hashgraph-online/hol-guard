@@ -13,7 +13,7 @@ if __package__:
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    from ..daemon.hook_availability_policy import EMERGENCY_SAFE_REASON, hook_action_is_emergency_safe
+    from ..daemon.hook_availability_policy import hook_event_is_permission_request
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -42,8 +42,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     )
     from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
-        EMERGENCY_SAFE_REASON,
-        hook_action_is_emergency_safe,
+        hook_event_is_permission_request,
     )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
@@ -131,22 +130,29 @@ def _unavailable_response(
     reason: str,
     data: str | None = None,
 ) -> dict[str, object]:
-    if event_name == "UserPromptSubmit":
+    del data
+    if hook_event_is_permission_request(event_name):
         return {
             "continue": True,
             "systemMessage": reason,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "decision": {"behavior": "allow", "message": reason},
+            },
         }
-    if event_name == "PreToolUse" and data:
-        payload = _json_object(data)
-        if payload is not None and hook_action_is_emergency_safe(payload):
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": event_name,
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": EMERGENCY_SAFE_REASON,
-                }
-            }
-    return _fail_closed(event_name, reason)
+    if event_name == "PreToolUse":
+        return {
+            "continue": True,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "permissionDecision": "allow",
+                "permissionDecisionReason": reason,
+            },
+        }
+    return {
+        "continue": True,
+        "systemMessage": reason,
+    }
 
 
 def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> dict[str, object]:
@@ -211,14 +217,11 @@ def main(
         config_json=config_json,
     )
     if response is None:
-        failure_reason = (
-            _OVERLOAD_REASON
-            if daemon_overloaded
-            else _LAUNCH_INTEGRITY_REASON
-            if launch_integrity_failed
-            else _FAIL_CLOSED_REASON
-        )
-        response = _unavailable_response(event_name, failure_reason, data)
+        if launch_integrity_failed:
+            response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+        else:
+            failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
+            response = _unavailable_response(event_name, failure_reason, data)
     sys.stdout.write(
         _bridge_output(
             response,

@@ -448,6 +448,17 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
             tool_input.setdefault("path", file_path.strip())
         normalized["tool_input"] = tool_input
         return normalized
+    if raw_event == "beforewritefile":
+        normalized["hook_event_name"] = "PreToolUse"
+        normalized.setdefault("tool_name", "Write")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        file_path = normalized.get("file_path")
+        if isinstance(file_path, str) and file_path.strip():
+            tool_input.setdefault("file_path", file_path.strip())
+            tool_input.setdefault("path", file_path.strip())
+        normalized["tool_input"] = tool_input
+        normalized["cursor_source_hook_event"] = "beforeWriteFile"
+        return normalized
     if raw_event == "pretooluse":
         normalized["hook_event_name"] = "PreToolUse"
     return normalized
@@ -478,6 +489,12 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
         if isinstance(value, str) and value.strip():
             reason = value.strip()
             break
+    if reason is None:
+        hook_output = guard_payload.get("hookSpecificOutput")
+        if isinstance(hook_output, Mapping):
+            nested_reason = hook_output.get("permissionDecisionReason")
+            if isinstance(nested_reason, str) and nested_reason.strip():
+                reason = nested_reason.strip()
     if reason is None:
         decision = guard_payload.get("decision_v2_json")
         if isinstance(decision, Mapping):
