@@ -234,6 +234,40 @@ assert.equal(extensionEffectiveState(effective, extension), "enabled");
 assert.equal(permissionEffectiveState(effective, extension, extension.permissions[0]!), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, global_lockdown: true }, { ...extension, required: true }), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, health: "tampered" }, extension), "disabled");
+const noodle = {
+  ...extension,
+  extension_id: "command.noodle",
+  name: "Noodle",
+  enabled: false,
+  trust_class: "external" as const,
+  activation: "opt-in" as const,
+};
+assert.equal(extensionEffectiveState(effective, noodle), "disabled");
+assert.equal(extensionEffectiveState({
+  ...effective,
+  layers: [{
+    schema_version: "1.0.0",
+    kind: "local-admin",
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: false,
+    controls: [{ target_kind: "extension", target_id: "command.noodle", state: "enabled" }],
+  }],
+  projection: {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: 7,
+    catalog_digest: effective.catalog_digest,
+    health: "protected",
+    extensions: [{
+      extension_id: "command.noodle",
+      effective_state: "allowed",
+      local_state: "enabled",
+      managed_state: "inherited",
+      required: false,
+      reason_codes: [],
+    }],
+    permissions: [],
+  },
+}, noodle), "enabled");
 
 assert.equal(extensionPolicyRadioTabStop([
   { value: "inherit" },

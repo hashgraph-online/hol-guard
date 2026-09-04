@@ -4,11 +4,13 @@ import { performance } from "node:perf_hooks";
 import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission, ExtensionRule } from "./extension-controls-api";
 import {
   canonicalExtensionId,
+  catalogRowSecondLine,
   groupPermissionsByFamily,
   DEFAULT_EXTENSION_DETAIL_URL_STATE,
   extensionDetailHref,
   extensionDetailSearch,
   extensionDisplayName,
+  extensionEffectiveState,
   extensionStateLabel,
   filterDetailPermissions,
   filterDetailRules,
@@ -115,6 +117,11 @@ assert.equal(readExtensionDetailUrlState("?tab=evil&risk=maximum&sort=random&rul
 assert.equal(readExtensionDetailUrlState(`?q=${"x".repeat(300)}`).query.length, 160);
 
 assert.equal(extensionStateLabel(effective, extension), "Allowed");
+const noodle = { ...extension, extension_id: "command.noodle", enabled: false, trust_class: "external" as const, activation: "opt-in" as const, executables: ["noodle"] };
+assert.equal(extensionEffectiveState(effective, noodle), "disabled");
+assert.equal(extensionStateLabel(effective, noodle), "Blocked");
+assert.equal(catalogRowSecondLine(noodle, "Blocked"), "Off until you turn it on");
+assert.equal(catalogRowSecondLine(noodle, "Allowed"), "noodle");
 assert.equal(permissionStateLabel(effective, extension, permissions[1]!), "Inherited");
 assert.equal(extensionStateLabel({ ...effective, global_lockdown: true }, extension), "Lockdown");
 assert.equal(extensionStateLabel({ ...effective, health: "tampered" }, extension), "Unavailable");

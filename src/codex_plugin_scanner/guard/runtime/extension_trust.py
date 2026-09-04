@@ -9,8 +9,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeVar, cast
 
+from .extension_contribution import contribution_catalog_overlay
 from .extension_control_contract import (
-    ComposedExtensionControls,
+    ControlLayerKind,
     ControlState,
     ControlTargetKind,
     ExtensionControlLayer,
@@ -18,12 +19,16 @@ from .extension_control_contract import (
 
 
 class _ExtensionLike(Protocol):
-    extension_id: str
-    required: bool
+    @property
+    def extension_id(self) -> str: ...
+
+    @property
+    def required(self) -> bool: ...
 
 
 class _ObservationLike(Protocol):
-    extension: _ExtensionLike
+    @property
+    def extension(self) -> _ExtensionLike: ...
 
 
 _ObservationT = TypeVar("_ObservationT", bound=_ObservationLike)
@@ -33,6 +38,7 @@ Activation = Literal["default-on", "opt-in"]
 
 _MAP_SCHEMA: Final = "guard.extension-trust-class-map.v1"
 _VALID_CLASSES: Final = frozenset({"first-party", "trusted-library", "external"})
+_TEST_ID: Final = "command.test"
 _HOL_PUBLISHER: Final = {"id": "hol", "displayName": "Hashgraph Online"}
 _CURATED_PUBLISHER: Final = {"id": "hol-curated", "displayName": "HOL curated library"}
 
@@ -80,9 +86,14 @@ def _repo_map_path() -> Path:
 
 
 def trust_class_for(extension_id: str) -> TrustClass:
-    """Return the curated class, or first-party for unmapped test/local ids."""
+    """Return the curated class, or external for unmapped production ids."""
 
-    return _trust_map().get(extension_id, "first-party")
+    mapped = _trust_map().get(extension_id)
+    if mapped is not None:
+        return mapped
+    if extension_id == _TEST_ID or extension_id.startswith(f"{_TEST_ID}."):
+        return "first-party"
+    return "external"
 
 
 def activation_for(extension_id: str) -> Activation:
@@ -106,13 +117,17 @@ def publisher_for(extension_id: str) -> dict[str, str]:
 
 def catalog_trust_fields(extension_id: str, *, required: bool) -> dict[str, object]:
     trust = trust_class_for(extension_id)
-    return {
+    fields: dict[str, object] = {
         "enabled": catalog_enabled(extension_id, required=required),
         "trust_class": trust,
         "activation": activation_for(extension_id),
         "publisher": publisher_for(extension_id),
         "icon": {"kind": "none"},
     }
+    overlay = contribution_catalog_overlay(extension_id)
+    if overlay is not None:
+        fields.update(overlay)
+    return fields
 
 
 def mapped_ids() -> frozenset[str]:
@@ -125,21 +140,27 @@ def ids_for_class(trust_class: TrustClass) -> frozenset[str]:
 
 def extension_is_active(
     extension_id: str,
-    composed: ComposedExtensionControls,
+    layers: Iterable[ExtensionControlLayer] | None,
     *,
     required: bool = False,
 ) -> bool:
     if required or trust_class_for(extension_id) != "external":
         return True
-    return _explicitly_enabled(composed, extension_id)
+    layer_values = tuple(layers or ())
+    from .extension_control_resolver import compose_control_layers
 
-
-def _explicitly_enabled(composed: ComposedExtensionControls, extension_id: str) -> bool:
+    composed = compose_control_layers(layer_values)
+    if composed.state_for(ControlTargetKind.EXTENSION, extension_id) is ControlState.DISABLED:
+        return False
     return any(
-        control.target.kind is ControlTargetKind.EXTENSION
-        and control.target.target_id == extension_id
-        and control.state is ControlState.ENABLED
-        for control in composed.controls
+        layer.kind is ControlLayerKind.LOCAL_ADMIN
+        and any(
+            control.target.kind is ControlTargetKind.EXTENSION
+            and control.target.target_id == extension_id
+            and control.state is ControlState.ENABLED
+            for control in layer.controls
+        )
+        for layer in layer_values
     )
 
 
@@ -147,17 +168,18 @@ def filter_inert_external_observations(
     observations: Sequence[_ObservationT],
     layers: Iterable[ExtensionControlLayer] | None,
 ) -> tuple[_ObservationT, ...]:
-    """Drop external observations unless the user explicitly enabled them."""
+    """Drop external observations unless a local-admin enable is present."""
 
-    from .extension_control_resolver import compose_control_layers
-
-    composed = compose_control_layers(tuple(layers or ()))
+    layer_values = tuple(layers or ())
     return tuple(
         item
         for item in observations
-        if extension_is_active(item.extension.extension_id, composed, required=item.extension.required)
+        if extension_is_active(item.extension.extension_id, layer_values, required=item.extension.required)
     )
 
 
 def reset_trust_map_cache() -> None:
+    from .extension_contribution import reset_contribution_cache
+
     _trust_map.cache_clear()
+    reset_contribution_cache()

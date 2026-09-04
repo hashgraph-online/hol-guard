@@ -43,7 +43,7 @@ from .extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     current_extension_control_snapshot,
 )
-from .extension_trust import filter_inert_external_observations
+from .extension_trust import extension_is_active, filter_inert_external_observations
 from .github_capability_contract import github_capability_contract
 from .github_command_capabilities import classify_github_cli
 from .github_workflow_authorization import (
@@ -148,17 +148,28 @@ def evaluate_command(
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
     compatibility_rule: tuple[CommandSafetyExtension, CommandSafetyRule] | None = None
+    effective_compatibility_class = compatibility_action_class
     if compatibility_action_class is not None:
         extension = registry.for_action_class(compatibility_action_class)
         rule = registry.rule_for_action_class(compatibility_action_class)
-        if extension is not None and rule is not None:
+        if (
+            extension is not None
+            and rule is not None
+            and extension_is_active(
+                extension.extension_id,
+                control_layers,
+                required=extension.required,
+            )
+        ):
             compatibility_rule = (extension, rule)
             if rule.rule_id not in selected_rule_ids:
                 selected.append((extension, rule, ()))
+        else:
+            effective_compatibility_class = None
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
-        action_class = rule.action_classes[0] if rule.action_classes else compatibility_action_class
+        action_class = rule.action_classes[0] if rule.action_classes else effective_compatibility_class
         reason = rule.description
         if rule.compatibility_fallback and compatibility_reason is not None:
             reason = compatibility_reason
@@ -215,8 +226,8 @@ def evaluate_command(
         for rule_id in permission.rule_ids
     )
     controlling_match = max(owned_matches, key=_match_precedence_key, default=None)
-    controlling_action_class = compatibility_action_class
-    controlling_reason = compatibility_reason
+    controlling_action_class = effective_compatibility_class
+    controlling_reason = compatibility_reason if effective_compatibility_class is not None else None
     if controlling_action_class is None and controlling_match is not None:
         controlling_action_class = controlling_match.match.action_class
         controlling_reason = controlling_match.match.reason
@@ -226,14 +237,14 @@ def evaluate_command(
             continue
         minimum_action = _stronger_floor(minimum_action, _rule_floor(owned))
     compatibility_owned_rule_ids = frozenset(
-        owned.match.rule.rule_id for owned in owned_matches if owned.match.action_class == compatibility_action_class
+        owned.match.rule.rule_id for owned in owned_matches if owned.match.action_class == effective_compatibility_class
     )
     compatibility_explicitly_enabled = (
         bool(compatibility_owned_rule_ids) and compatibility_owned_rule_ids.issubset(explicitly_enabled_rule_ids)
     ) or (compatibility_rule is not None and compatibility_rule[1].rule_id in explicitly_enabled_rule_ids)
-    if compatibility_action_class is not None and not compatibility_explicitly_enabled:
+    if effective_compatibility_class is not None and not compatibility_explicitly_enabled:
         minimum_action = _stronger_floor(minimum_action, "review")
-    if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
+    if command.confidence != "exact" and (effective_compatibility_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
     observation_uncertainties = extension_uncertainties(observations)
     if observation_uncertainties:
@@ -289,9 +300,10 @@ def evaluate_command(
     )
     decision_compatibility_action_class = (
         None
-        if compatibility_explicitly_enabled
-        or (authorized_action_class is not None and compatibility_action_class == authorized_action_class)
-        else compatibility_action_class
+        if effective_compatibility_class is None
+        or compatibility_explicitly_enabled
+        or (authorized_action_class is not None and effective_compatibility_class == authorized_action_class)
+        else effective_compatibility_class
     )
     current_decision_factors = (
         decision_factors(effective_evidence_batch, compatibility_action_class=None)
@@ -318,7 +330,7 @@ def evaluate_command(
     )
     decision_uncertainties = (
         baseline_uncertainties
-        if compatibility_action_class is None
+        if effective_compatibility_class is None
         else tuple(
             sorted(
                 {

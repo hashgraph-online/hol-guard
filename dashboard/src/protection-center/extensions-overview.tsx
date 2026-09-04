@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import {
+  catalogRowSecondLine,
   extensionDisplayName,
   extensionStateLabel,
 } from "../extension-control-center-model";
@@ -27,19 +28,6 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
     && layer.controls.some((control) =>
       control.target_kind === "extension" && control.target_id === extensionId
     ));
-}
-
-/**
- * The row's second line carries the state only when it deviates from the
- * default. A healthy, enabled tool has nothing to decide, so the line shows
- * the tool's executables (or its description) instead — information that
- * helps recognition rather than repeating "Allowed" fifty-nine times.
- */
-function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
-  if (state === "Blocked" || state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
-  if (extension.trust_class === "external" && !extension.enabled) return "Off until you turn it on";
-  const executables = extension.executables.join(" · ").trim();
-  return executables || extension.description;
 }
 
 function CatalogExtensionRow(props: {

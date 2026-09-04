@@ -223,9 +223,15 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     description: string(item.description, `${label}.description`),
     enabled: bool(item.enabled, `${label}.enabled`),
     required: bool(item.required, `${label}.required`),
-    trust_class: enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"] as const),
-    activation: enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"] as const),
-    publisher: publisher(item.publisher, `${label}.publisher`),
+    trust_class: item.trust_class === undefined
+      ? "first-party"
+      : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"] as const),
+    activation: item.activation === undefined
+      ? "default-on"
+      : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"] as const),
+    publisher: item.publisher === undefined
+      ? { id: "hol", displayName: "Hashgraph Online" }
+      : publisher(item.publisher, `${label}.publisher`),
     icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"] as const),
     version: version(item.version, `${label}.version`),

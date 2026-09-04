@@ -135,6 +135,11 @@ packages = ["src/codex_plugin_scanner"]
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
+"contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
+"contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
+"contributions/extensions/command.probe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.probe.json"
+"contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
+"contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
 
 [tool.hatch.build]
 artifacts = [
