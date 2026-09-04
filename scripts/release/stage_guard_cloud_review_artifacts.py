@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 import shutil
-import tomllib
 from pathlib import Path
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 uses the declared tomli dependency.
+    import tomli as tomllib
 
 _FORCE_INCLUDE_KEYS = ("tool", "hatch", "build", "targets", "wheel", "force-include")
 
