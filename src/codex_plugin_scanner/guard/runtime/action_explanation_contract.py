@@ -13,6 +13,8 @@ from typing import Literal, cast
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from .action_explanation_cloud import build_cloud_safe_projection
+
 ACTION_EXPLANATION_SCHEMA_VERSION = "guard.action-explanation.v1"
 ACTION_EXPLANATION_VERSION = "1.0.0"
 ACTION_EXPLANATION_RENDERER_VERSION = "1.0.0"
@@ -233,37 +235,17 @@ class GuardActionExplanationV1:
         return payload
 
     def cloud_safe_projection(self) -> dict[str, object]:
-        payload = self.list_projection()
-        payload["technical"] = {
-            "available": False,
-            "unavailable_reason": "Technical content stays on the protected device.",
-            "action_type": self.technical.action_type,
-            "command_display": None,
-            "normalized_command_display": None,
-            "executable": None,
-            "arguments_display": None,
-            "dialect": None,
-            "transport": None,
-            "working_scope_display": None,
-            "wrappers": [],
-            "segments": [],
-            "extension_ids": [],
-            "rule_ids": [],
-            "reason_codes": list(self.technical.reason_codes),
-            "policy_source": None,
-            "parse_confidence": self.technical.parse_confidence,
-            "proof_level": self.technical.proof_level,
-            "receipt_id": None,
-            "action_id": self.technical.action_id,
-        }
-        payload["redaction"] = {
-            "level": "redacted",
-            "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
-            "omitted_fields": ["technical.command", "technical.paths", "technical.arguments", "technical.rule_ids"],
-            "truncated_fields": [],
-            "secret_like_values_removed": self.redaction.secret_like_values_removed,
-        }
-        return payload
+        return build_cloud_safe_projection(
+            schema_version=self.schema_version,
+            explanation_version=self.explanation_version,
+            renderer_version=self.renderer_version,
+            action_identity=self.action_identity,
+            locale=self.locale,
+            kind=self.kind,
+            confidence=self.confidence,
+            technical_action_type=self.technical.action_type,
+            redaction_policy_version=ACTION_EXPLANATION_REDACTION_VERSION,
+        )
 
 
 @lru_cache(maxsize=1)

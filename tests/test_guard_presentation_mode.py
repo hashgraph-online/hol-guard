@@ -31,17 +31,16 @@ def test_new_install_defaults_to_everyday(tmp_path: Path) -> None:
     assert _presentation_settings(config)["source"] == "default"
 
 
-@pytest.mark.parametrize(
-    ("legacy", "expected"), [("simple", "everyday"), ("advanced", "technical"), ("developer", "technical")]
-)
-def test_legacy_density_migration(tmp_path: Path, legacy: str, expected: str) -> None:
+@pytest.mark.parametrize("legacy_key", ["presentation_density", "display_density", "density"])
+def test_obsolete_presentation_keys_are_ignored(tmp_path: Path, legacy_key: str) -> None:
     guard_home = tmp_path / "guard"
     guard_home.mkdir()
-    (guard_home / "config.toml").write_text(f'density = "{legacy}"\n', encoding="utf-8")
+    (guard_home / "config.toml").write_text(f'{legacy_key} = "advanced"\n', encoding="utf-8")
     config = load_guard_config(guard_home)
-    assert config.presentation_mode == expected
-    assert config.presentation_mode_explicit is True
-    assert config.presentation_source == "migrated"
+    assert config.presentation_mode == "everyday"
+    assert config.presentation_mode_explicit is False
+    assert config.presentation_source == "default"
+    assert config.presentation_diagnostic is None
 
 
 def test_workspace_cannot_override_local_presentation_preference(tmp_path: Path) -> None:
@@ -62,12 +61,15 @@ def test_workspace_cannot_override_local_presentation_preference(tmp_path: Path)
     assert _presentation_settings(config)["source"] == "local-explicit"
 
 
-def test_editable_settings_preserve_migration_source(tmp_path: Path) -> None:
+def test_obsolete_presentation_value_falls_back_without_migration(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard"
     guard_home.mkdir()
-    (guard_home / "config.toml").write_text('density = "advanced"\n', encoding="utf-8")
+    (guard_home / "config.toml").write_text('presentation_mode = "advanced"\n', encoding="utf-8")
     config = load_guard_config(guard_home)
-    assert _presentation_settings(config)["source"] == "migrated"
+    assert config.presentation_mode == "everyday"
+    assert config.presentation_mode_explicit is False
+    assert config.presentation_source == "default"
+    assert config.presentation_diagnostic == "unknown_presentation_mode_fell_back_to_everyday"
 
 
 def test_unknown_mode_falls_back_with_safe_diagnostic() -> None:
@@ -108,6 +110,70 @@ def test_stale_presentation_revision_rejected(tmp_path: Path) -> None:
             {"presentation_mode": "everyday", "presentation_revision": 0},
             skip_approval_gate=True,
         )
+
+
+def test_stale_revision_is_rejected_for_no_op_presentation_write(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    current = update_guard_settings(guard_home, {"presentation_mode": "technical"}, skip_approval_gate=True)
+    with pytest.raises(ValueError, match="another surface"):
+        update_guard_settings(
+            guard_home,
+            {"presentation_mode": "technical", "presentation_revision": current.presentation_revision - 1},
+            skip_approval_gate=True,
+        )
+
+
+def test_no_op_write_preserves_unsupported_future_schema(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    config_path = guard_home / "config.toml"
+    config_path.write_text(
+        'presentation_mode = "future"\n'
+        "presentation_mode_explicit = false\n"
+        "presentation_schema_version = 99\n"
+        "presentation_revision = 7\n",
+        encoding="utf-8",
+    )
+    current = load_guard_config(guard_home)
+    assert _presentation_settings(current)["writable"] is False
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "presentation_mode_explicit": False,
+            "presentation_revision": current.presentation_revision,
+        },
+        skip_approval_gate=True,
+    )
+    assert updated.presentation_revision == 7
+    persisted = config_path.read_text(encoding="utf-8")
+    assert 'presentation_mode = "future"' in persisted
+    assert "presentation_schema_version = 99" in persisted
+
+    updated_with_mode = update_guard_settings(
+        guard_home,
+        {
+            "presentation_mode": "everyday",
+            "presentation_mode_explicit": False,
+            "presentation_revision": current.presentation_revision,
+        },
+        skip_approval_gate=True,
+    )
+    assert updated_with_mode.presentation_revision == 7
+    persisted = config_path.read_text(encoding="utf-8")
+    assert 'presentation_mode = "future"' in persisted
+    assert "presentation_schema_version = 99" in persisted
+
+    before = config_path.read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="newer schema"):
+        update_guard_settings(
+            guard_home,
+            {
+                "presentation_mode": "technical",
+                "presentation_revision": current.presentation_revision,
+            },
+            skip_approval_gate=True,
+        )
+    assert config_path.read_text(encoding="utf-8") == before
 
 
 def test_revision_only_write_is_rejected(tmp_path: Path) -> None:

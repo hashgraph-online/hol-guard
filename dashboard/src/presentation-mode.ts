@@ -3,7 +3,6 @@ export type GuardPresentationMode = "everyday" | "technical";
 export type GuardPresentationSource =
   | "default"
   | "local-explicit"
-  | "migrated"
   | "session-preview"
   | "cloud-profile"
   | "read-error";
@@ -18,11 +17,6 @@ export type ResolvedGuardPresentationMode = {
   diagnostic: string | null;
 };
 
-const LEGACY: Record<string, GuardPresentationMode> = {
-  simple: "everyday",
-  advanced: "technical",
-  developer: "technical",
-};
 
 export function resolvePresentationMode(input: {
   value?: unknown;
@@ -59,19 +53,18 @@ export function resolvePresentationMode(input: {
   if (persistedMode !== null && input.explicit === true) {
     return resolved(persistedMode, "local-explicit", true);
   }
-  if (typeof input.value === "string" && LEGACY[input.value]) {
-    return resolved(LEGACY[input.value], "migrated", true, `migrated_legacy_${input.value}_presentation_mode`);
-  }
-  if (
+  const invalidDiagnostic =
     input.value !== undefined &&
     input.value !== null &&
     input.value !== "" &&
     persistedMode === null
-  ) {
-    return resolved("everyday", "default", false, "unknown_presentation_mode_fell_back_to_everyday");
-  }
+      ? "unknown_presentation_mode_fell_back_to_everyday"
+      : null;
   if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
-    return resolved(input.cloudProfile, "cloud-profile", false);
+    return resolved(input.cloudProfile, "cloud-profile", false, invalidDiagnostic);
+  }
+  if (invalidDiagnostic !== null) {
+    return resolved("everyday", "default", false, invalidDiagnostic);
   }
   if (persistedMode !== null) {
     return resolved(persistedMode, "default", false);

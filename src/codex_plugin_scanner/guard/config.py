@@ -30,8 +30,14 @@ from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_m
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
 from .presentation_mode import (
     PRESENTATION_SCHEMA_VERSION,
+    UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
     coerce_persisted_presentation_mode,
     coerce_presentation_mode_write,
+)
+from .presentation_settings import (
+    PRESENTATION_SETTING_INPUT_KEYS,
+    apply_presentation_settings_update,
+    resolve_presentation_settings_update,
 )
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
@@ -535,17 +541,10 @@ def load_guard_config(
     else:
         loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
         posture_explicit = False
-    legacy_presentation_value = next(
-        (
-            merged.get(key)
-            for key in ("presentation_mode", "presentation_density", "display_density", "density")
-            if merged.get(key) is not None
-        ),
-        None,
-    )
+    persisted_presentation_value = merged.get("presentation_mode")
     persisted_presentation = coerce_persisted_presentation_mode(
-        legacy_presentation_value,
-        explicit=merged.get("presentation_mode_explicit", legacy_presentation_value is not None),
+        persisted_presentation_value,
+        explicit=merged.get("presentation_mode_explicit", persisted_presentation_value is not None),
         schema_version=merged.get("presentation_schema_version", PRESENTATION_SCHEMA_VERSION),
     )
     presentation_revision = _coerce_loaded_non_negative_int(merged.get("presentation_revision"), 0)
@@ -635,6 +634,7 @@ def load_guard_config(
 def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
     """Return Guard config values that are safe to edit from the local dashboard."""
 
+    presentation_writable = config.presentation_diagnostic != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC
     return {
         "mode": config.mode,
         "presentation_mode": config.presentation_mode,
@@ -645,7 +645,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
             "value": config.presentation_mode,
             "source": config.presentation_source,
             "explicit": config.presentation_mode_explicit,
-            "writable": True,
+            "writable": presentation_writable,
             "schema_version": config.presentation_schema_version,
             "revision": config.presentation_revision,
             "diagnostic": config.presentation_diagnostic,
@@ -691,19 +691,18 @@ def update_guard_settings(
     skip_approval_gate: bool = False,
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
-
     if not skip_approval_gate:
         require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
-    presentation_change = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
-    if "presentation_revision" in payload and not presentation_change:
-        raise ValueError("presentation_revision requires a presentation preference change.")
-    if presentation_change:
-        expected_revision = payload.get("presentation_revision")
-        if expected_revision is not None and expected_revision != current_config.presentation_revision:
-            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
+    presentation_update = resolve_presentation_settings_update(
+        payload,
+        current_mode=coerce_presentation_mode_write(current_config.presentation_mode),
+        current_explicit=current_config.presentation_mode_explicit,
+        current_revision=current_config.presentation_revision,
+        current_writable=current_config.presentation_diagnostic != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
+    )
     switching_to_custom_without_overrides = (
         payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()
     )
@@ -715,11 +714,12 @@ def update_guard_settings(
     for key, value in payload.items():
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
+        if key in PRESENTATION_SETTING_INPUT_KEYS:
+            continue
         next_payload[key] = _coerce_editable_setting(key, value)
-    if presentation_change:
-        next_payload["presentation_mode_explicit"] = True
-        next_payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
-        next_payload["presentation_revision"] = current_config.presentation_revision + 1
+    apply_presentation_settings_update(
+        next_payload, presentation_update, current_revision=current_config.presentation_revision
+    )
     incoming_selected_posture = _incoming_selects_protection_posture(
         payload,
         current_config,

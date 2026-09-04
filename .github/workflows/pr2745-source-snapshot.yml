@@ -1,0 +1,72 @@
+name: PR 2745 source snapshot
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-r32-final
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr2745-source-snapshot
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact PR branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/everyday-mode-r32-final
+          path: current
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out EVM-101-200 source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/everyday-mode-101-200
+          path: evm-101-200
+          persist-credentials: false
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Check out EVM-201-300 source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/everyday-mode-201-300
+          path: evm-201-300
+          persist-credentials: false
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Create verified source archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in current evm-101-200 evm-201-300; do
+            if [ ! -d "$source" ]; then
+              echo "::warning::skipping missing source checkout: $source"
+              continue
+            fi
+            tar --exclude=.git --exclude=.venv --exclude=node_modules -czf "/tmp/${source}.tar.gz" "$source"
+            sha256sum "/tmp/${source}.tar.gz" > "/tmp/${source}.tar.gz.sha256"
+          done
+
+      - name: Upload source archives
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: pr2745-sources-${{ github.sha }}
+          path: |
+            /tmp/current.tar.gz
+            /tmp/current.tar.gz.sha256
+            /tmp/evm-101-200.tar.gz
+            /tmp/evm-101-200.tar.gz.sha256
+            /tmp/evm-201-300.tar.gz
+            /tmp/evm-201-300.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
