@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from dataclasses import dataclass
+from typing import final
+
+from .command_extension_matchers import executable_matcher, with_required_flag
 from .command_extension_specs import CommandExtensionSpec
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_model import CanonicalCommand
 from .command_rules import (
     AnyMatcher,
     CommandRuleSeverity,
@@ -11,6 +16,7 @@ from .command_rules import (
     CommandSafeVariant,
     ExecutableMatcher,
 )
+from .command_structured_matchers import leading_flags_and_operands
 
 _ARTISAN_GLOBAL_OPTIONS = frozenset({"--env"})
 _ARTISAN_GLOBAL_FLAGS = frozenset(
@@ -30,6 +36,57 @@ _ARTISAN_GLOBAL_FLAGS = frozenset(
         "--verbose",
     }
 )
+_PHP_OPTIONS_WITH_VALUES = frozenset({"-c", "-d", "-z", "--define", "--php-ini"})
+_PHP_LAUNCHER_BASENAMES = frozenset({"php", "php.cmd", "php.exe"})
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class PhpArtisanScriptMatcher:
+    """Match php-launched artisan scripts across interpreter options and script paths."""
+
+    subcommands: tuple[str, ...]
+    required_flags: frozenset[str] = frozenset()
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            executable = segment.executable
+            if executable is None:
+                continue
+            if executable.replace("\\", "/").rsplit("/", 1)[-1].lower() not in _PHP_LAUNCHER_BASENAMES:
+                continue
+            lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            if not self.required_flags <= frozenset(lowered_arguments):
+                continue
+            _php_flags, operands = leading_flags_and_operands(
+                lowered_arguments,
+                options_with_values=_PHP_OPTIONS_WITH_VALUES,
+            )
+            if not operands or operands[0].replace("\\", "/").rsplit("/", 1)[-1] != "artisan":
+                continue
+            _artisan_flags, subcommand_operands = leading_flags_and_operands(
+                operands[1:],
+                options_with_values=_ARTISAN_GLOBAL_OPTIONS,
+            )
+            if subcommand_operands[: len(self.subcommands)] != self.subcommands:
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=executable,
+                    detail="Matched php-launched artisan script and structured subcommand constraints.",
+                )
+            )
+        return tuple(evidence)
+
+
+def framework_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
+    """Return conservative registry hints for the php-launched artisan matcher."""
+
+    if not isinstance(matcher, PhpArtisanScriptMatcher):
+        return None
+    return _PHP_LAUNCHER_BASENAMES, frozenset(matcher.subcommands)
 
 
 def _artisan_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
@@ -39,6 +96,7 @@ def _artisan_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
             *subcommands,
             global_options_with_values=_ARTISAN_GLOBAL_OPTIONS,
             global_flags=_ARTISAN_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "php",
@@ -46,23 +104,90 @@ def _artisan_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
             *subcommands,
             global_options_with_values=_ARTISAN_GLOBAL_OPTIONS,
             global_flags=_ARTISAN_GLOBAL_FLAGS,
+            allow_leading_options=True,
+            leading_options_with_values=_PHP_OPTIONS_WITH_VALUES,
+            fail_secure_unknown_options=True,
+        ),
+        executable_matcher(
+            "php",
+            "./artisan",
+            *subcommands,
+            global_options_with_values=_ARTISAN_GLOBAL_OPTIONS,
+            global_flags=_ARTISAN_GLOBAL_FLAGS,
+            allow_leading_options=True,
+            leading_options_with_values=_PHP_OPTIONS_WITH_VALUES,
+            fail_secure_unknown_options=True,
         ),
     )
 
 
-_LARAVEL_DB_WIPE = AnyMatcher(matchers=_artisan_matchers("db:wipe"))
-_LARAVEL_MIGRATE_FRESH = AnyMatcher(matchers=_artisan_matchers("migrate:fresh"))
-_LARAVEL_MIGRATE_RESET = AnyMatcher(
+def _artisan_safe_variant(
+    executable_matcher_bundle: AnyMatcher,
+    *subcommands: str,
+    variant_id: str,
+    title: str,
+    flag: str,
+) -> CommandSafeVariant:
+    return CommandSafeVariant(
+        variant_id=variant_id,
+        title=title,
+        matcher=AnyMatcher(
+            matchers=(
+                *with_required_flag(executable_matcher_bundle, flag).matchers,
+                *(
+                    PhpArtisanScriptMatcher(subcommands=(subcommand,), required_flags=frozenset({flag}))
+                    for subcommand in subcommands
+                ),
+            )
+        ),
+    )
+
+
+_LARAVEL_DB_WIPE_EXEC = AnyMatcher(matchers=_artisan_matchers("db:wipe"))
+_LARAVEL_DB_WIPE = AnyMatcher(
+    matchers=(
+        *_LARAVEL_DB_WIPE_EXEC.matchers,
+        PhpArtisanScriptMatcher(subcommands=("db:wipe",)),
+    )
+)
+_LARAVEL_MIGRATE_FRESH_EXEC = AnyMatcher(matchers=_artisan_matchers("migrate:fresh"))
+_LARAVEL_MIGRATE_FRESH = AnyMatcher(
+    matchers=(
+        *_LARAVEL_MIGRATE_FRESH_EXEC.matchers,
+        PhpArtisanScriptMatcher(subcommands=("migrate:fresh",)),
+    )
+)
+_LARAVEL_MIGRATE_RESET_EXEC = AnyMatcher(
     matchers=(
         *_artisan_matchers("migrate:reset"),
         *_artisan_matchers("migrate:refresh"),
     )
 )
-_LARAVEL_MIGRATE_ROLLBACK = AnyMatcher(matchers=_artisan_matchers("migrate:rollback"))
-_LARAVEL_QUEUE_PURGE = AnyMatcher(
+_LARAVEL_MIGRATE_RESET = AnyMatcher(
+    matchers=(
+        *_LARAVEL_MIGRATE_RESET_EXEC.matchers,
+        PhpArtisanScriptMatcher(subcommands=("migrate:reset",)),
+        PhpArtisanScriptMatcher(subcommands=("migrate:refresh",)),
+    )
+)
+_LARAVEL_MIGRATE_ROLLBACK_EXEC = AnyMatcher(matchers=_artisan_matchers("migrate:rollback"))
+_LARAVEL_MIGRATE_ROLLBACK = AnyMatcher(
+    matchers=(
+        *_LARAVEL_MIGRATE_ROLLBACK_EXEC.matchers,
+        PhpArtisanScriptMatcher(subcommands=("migrate:rollback",)),
+    )
+)
+_LARAVEL_QUEUE_PURGE_EXEC = AnyMatcher(
     matchers=(
         *_artisan_matchers("queue:clear"),
         *_artisan_matchers("queue:flush"),
+    )
+)
+_LARAVEL_QUEUE_PURGE = AnyMatcher(
+    matchers=(
+        *_LARAVEL_QUEUE_PURGE_EXEC.matchers,
+        PhpArtisanScriptMatcher(subcommands=("queue:clear",)),
+        PhpArtisanScriptMatcher(subcommands=("queue:flush",)),
     )
 )
 
@@ -106,8 +231,20 @@ FRAMEWORK_COMMAND_RULES = (
             "Inspect migrations with migrate:status and confirm a current backup before wiping the database."
         ),
         safe_variants=(
-            safe_flag_variant(_LARAVEL_DB_WIPE, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_LARAVEL_DB_WIPE, variant_id="short-help", title="Command help", flag="-h"),
+            _artisan_safe_variant(
+                _LARAVEL_DB_WIPE_EXEC,
+                "db:wipe",
+                variant_id="help",
+                title="Command help",
+                flag="--help",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_DB_WIPE_EXEC,
+                "db:wipe",
+                variant_id="short-help",
+                title="Command help",
+                flag="-h",
+            ),
         ),
     ),
     _framework_rule(
@@ -122,8 +259,20 @@ FRAMEWORK_COMMAND_RULES = (
             "Run migrate:status and review pending migrations before rebuilding the database from scratch."
         ),
         safe_variants=(
-            safe_flag_variant(_LARAVEL_MIGRATE_FRESH, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_LARAVEL_MIGRATE_FRESH, variant_id="short-help", title="Command help", flag="-h"),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_FRESH_EXEC,
+                "migrate:fresh",
+                variant_id="help",
+                title="Command help",
+                flag="--help",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_FRESH_EXEC,
+                "migrate:fresh",
+                variant_id="short-help",
+                title="Command help",
+                flag="-h",
+            ),
         ),
     ),
     _framework_rule(
@@ -136,10 +285,26 @@ FRAMEWORK_COMMAND_RULES = (
         example_command="php artisan migrate:reset",
         safer_alternative="Review the rollback SQL with migrate:reset --pretend before resetting every migration.",
         safe_variants=(
-            safe_flag_variant(_LARAVEL_MIGRATE_RESET, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_LARAVEL_MIGRATE_RESET, variant_id="short-help", title="Command help", flag="-h"),
-            safe_flag_variant(
-                _LARAVEL_MIGRATE_RESET,
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_RESET_EXEC,
+                "migrate:reset",
+                "migrate:refresh",
+                variant_id="help",
+                title="Command help",
+                flag="--help",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_RESET_EXEC,
+                "migrate:reset",
+                "migrate:refresh",
+                variant_id="short-help",
+                title="Command help",
+                flag="-h",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_RESET_EXEC,
+                "migrate:reset",
+                "migrate:refresh",
                 variant_id="dry-run",
                 title="Migration dry run",
                 flag="--pretend",
@@ -156,10 +321,23 @@ FRAMEWORK_COMMAND_RULES = (
         example_command="php artisan migrate:rollback",
         safer_alternative="Inspect pending batches with migrate:status and dump the rollback SQL with --pretend first.",
         safe_variants=(
-            safe_flag_variant(_LARAVEL_MIGRATE_ROLLBACK, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_LARAVEL_MIGRATE_ROLLBACK, variant_id="short-help", title="Command help", flag="-h"),
-            safe_flag_variant(
-                _LARAVEL_MIGRATE_ROLLBACK,
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_ROLLBACK_EXEC,
+                "migrate:rollback",
+                variant_id="help",
+                title="Command help",
+                flag="--help",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_ROLLBACK_EXEC,
+                "migrate:rollback",
+                variant_id="short-help",
+                title="Command help",
+                flag="-h",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_MIGRATE_ROLLBACK_EXEC,
+                "migrate:rollback",
                 variant_id="dry-run",
                 title="Migration dry run",
                 flag="--pretend",
@@ -176,8 +354,22 @@ FRAMEWORK_COMMAND_RULES = (
         example_command="php artisan queue:clear redis --queue=emails",
         safer_alternative="Inspect queued and failed jobs before clearing or flushing queue state.",
         safe_variants=(
-            safe_flag_variant(_LARAVEL_QUEUE_PURGE, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_LARAVEL_QUEUE_PURGE, variant_id="short-help", title="Command help", flag="-h"),
+            _artisan_safe_variant(
+                _LARAVEL_QUEUE_PURGE_EXEC,
+                "queue:clear",
+                "queue:flush",
+                variant_id="help",
+                title="Command help",
+                flag="--help",
+            ),
+            _artisan_safe_variant(
+                _LARAVEL_QUEUE_PURGE_EXEC,
+                "queue:clear",
+                "queue:flush",
+                variant_id="short-help",
+                title="Command help",
+                flag="-h",
+            ),
         ),
     ),
 )

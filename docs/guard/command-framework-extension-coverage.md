@@ -9,7 +9,7 @@ Guard's built-in framework extensions match parsed executables, exact Artisan su
 - `migrate:reset` and `migrate:refresh` rolling back every migration
 - `migrate:rollback` reverting the last migration batch (including `--batch=`/`--step=` selection)
 - `queue:clear` and `queue:flush` deleting queued or failed jobs
-- Direct `artisan` and interpreter-wrapped `php artisan` launch forms plus portable `.cmd`/`.exe` launcher names
+- Direct `artisan` and interpreter-wrapped `php artisan` launch forms — including PHP interpreter options such as `-d`/`-c` and relative or absolute `artisan` script paths — plus portable `.cmd`/`.exe` launcher names
 - Documented `--help`/`-h` and migration `--pretend` dry-run variants
 
 Framework dev-server and code-generation commands are intentionally deferred until Guard has a bounded matcher for interactive Artisan workflows.

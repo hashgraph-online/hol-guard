@@ -81,6 +81,32 @@ FRAMEWORK_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     ("artisan.exe db:wipe", "Laravel database wipe command", "command.framework.laravel.database-wipe"),
     ("php.cmd artisan migrate:fresh", "Laravel destructive rebuild command", "command.framework.laravel.migrate-fresh"),
+    (
+        "php -d memory_limit=-1 artisan db:wipe",
+        "Laravel database wipe command",
+        "command.framework.laravel.database-wipe",
+    ),
+    (
+        "php -c php.ini artisan migrate:fresh",
+        "Laravel destructive rebuild command",
+        "command.framework.laravel.migrate-fresh",
+    ),
+    ("php ./artisan db:wipe", "Laravel database wipe command", "command.framework.laravel.database-wipe"),
+    (
+        "php /app/artisan migrate:fresh",
+        "Laravel destructive rebuild command",
+        "command.framework.laravel.migrate-fresh",
+    ),
+    (
+        "php /var/www/app/artisan migrate:reset",
+        "Laravel migration reset command",
+        "command.framework.laravel.migrate-reset",
+    ),
+    (
+        "php -d memory_limit=1G artisan queue:flush",
+        "Laravel queue purge command",
+        "command.framework.laravel.queue-purge",
+    ),
 )
 
 
@@ -94,6 +120,9 @@ FRAMEWORK_SAFE_COMMANDS: tuple[str, ...] = (
     "php artisan db:wipe -h",
     "php artisan migrate:reset --pretend",
     "php artisan migrate:rollback --pretend --batch=3",
+    "php -d memory_limit=-1 artisan db:wipe --help",
+    "php /app/artisan db:wipe --help",
+    "php ./artisan migrate:reset --pretend",
     "php artisan migrate:status",
     "php artisan migrate",
     "php artisan db:seed",
@@ -127,6 +156,14 @@ def test_framework_safe_variant_does_not_hide_destructive_segment(tmp_path: Path
     )
 
     assert [rule["rule_id"] for rule in payload["rules"]] == ["command.framework.laravel.migrate-fresh"]
+
+    script_path_payload = inspect_command(
+        "php ./artisan db:wipe --help && php artisan migrate:fresh",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert [rule["rule_id"] for rule in script_path_payload["rules"]] == ["command.framework.laravel.migrate-fresh"]
 
 
 def test_framework_pipelines_and_wrappers_preserve_review(tmp_path: Path) -> None:
