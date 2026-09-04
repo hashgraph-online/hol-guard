@@ -21,6 +21,8 @@ from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _jso
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .copilot_state_paths import (
     commit_copilot_target_and_state,
+    copilot_lifecycle_install,
+    copilot_lifecycle_uninstall,
     validated_copilot_state_entries,
 )
 from .hook_payloads import inline_hooks_payload
@@ -459,6 +461,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
             warnings=(),
         )
 
+    @copilot_lifecycle_install
     def install(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
         managed_servers = managed_stdio_servers(detection)
@@ -568,6 +571,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
             ],
         }
 
+    @copilot_lifecycle_uninstall
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:

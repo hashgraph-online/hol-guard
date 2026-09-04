@@ -391,8 +391,8 @@ def _make_executable(path: Path) -> None:
         opened = os.fstat(descriptor)
         if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
             raise OSError("Cursor hook changed before its permission update")
-        # Cursor must be able to execute this user-owned hook; the writer keeps its content owner-only.
-        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
-        os.fchmod(descriptor, opened.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        # Cursor launches this user-owned hook through its configured interpreter;
+        # only the owner execute bit is needed, and the writer keeps its content owner-only.
+        os.fchmod(descriptor, opened.st_mode | stat.S_IXUSR)
     finally:
         os.close(descriptor)
