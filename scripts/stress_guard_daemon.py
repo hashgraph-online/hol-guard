@@ -41,7 +41,6 @@ from scripts.stress_guard_daemon_runtime import health_is_ready as _health_is_re
 from scripts.stress_guard_daemon_runtime import healthz_details as _healthz_details  # noqa: E402
 from scripts.stress_guard_daemon_runtime import pid_is_running as _pid_is_running  # noqa: E402
 from scripts.stress_guard_daemon_runtime import run_stress_batches as _run_stress_batches  # noqa: E402
-from scripts.stress_guard_daemon_runtime import sample_stress_runtime as _sample_stress_runtime  # noqa: E402
 from scripts.stress_guard_daemon_runtime import settle_stress_runtime as _settle_stress_runtime  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stabilized_process_resources as _stabilized_resources  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stress_request as _stress_request  # noqa: E402
@@ -244,7 +243,14 @@ def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
                 for _ in range(_WARMUP_CONCURRENCY)
             ]
             while not all(future.done() for future in futures):
-                _sample_stress_runtime(execution)
+                # The 64-request wave intentionally fills the daemon's outer
+                # HTTP admission slots.  Probing /healthz while those slots
+                # are full measures the warmup saturation itself rather than
+                # daemon health; authenticated capacity details are checked
+                # before and after the wave. PID continuity remains checked
+                # during warmup, while resource baselining starts after the
+                # wave and measured batches retain health probes under their
+                # normal 32-request load.
                 _update_pid_stability(execution, execution.guard_home)
                 time.sleep(0.05)
             _collect_batch(execution, futures, retain_latencies=False)
