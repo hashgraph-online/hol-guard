@@ -38,8 +38,10 @@ def test_run_shim_keeps_windows_forwarded_arguments_verbatim() -> None:
 def test_frozen_windows_launcher_invokes_guard_directly(tmp_path: Path) -> None:
     posix_path = tmp_path / "guard-omp"
     guard_cli = r"C:\Program Files\HOL Guard\current-hol-guard.exe"
+    workspace = r"C:\work\100%\a&b"
+    base_command = [guard_cli, "run", "omp", "--guard-home", "guard home", "--workspace", workspace]
     posix_path.write_text(
-        f"#!/bin/sh\n# base_command = {[guard_cli, 'run', 'omp', '--guard-home', 'guard home']!r}\n",
+        f"#!/bin/sh\n# base_command = {base_command!r}\n",
         encoding="utf-8",
     )
 
@@ -49,7 +51,9 @@ def test_frozen_windows_launcher_invokes_guard_directly(tmp_path: Path) -> None:
     assert "run-shim" in source
     assert "--guard-home" in source
     assert "guard home" in source
-    assert "omp -- %*" in source
+    assert '"C:\\work\\100%%\\a&b"' in source
+    assert "setlocal DisableDelayedExpansion" in source
+    assert '"omp" "--" %*' in source
     assert str(posix_path) not in source
 
 
@@ -59,8 +63,10 @@ def test_frozen_windows_launcher_preserves_multiple_arguments(tmp_path: Path) ->
     guard_cli = tmp_path / "fake guard.cmd"
     guard_cli.write_text(f'@echo off\r\necho %* > "{capture_path}"\r\n', encoding="utf-8")
     posix_path = tmp_path / "guard-omp"
+    workspace = tmp_path / "a&b"
+    base_command = [str(guard_cli), "run", "omp", "--guard-home", "guard home", "--workspace", str(workspace)]
     posix_path.write_text(
-        f"#!/bin/sh\n# base_command = {[str(guard_cli), 'run', 'omp', '--guard-home', 'guard home']!r}\n",
+        f"#!/bin/sh\n# base_command = {base_command!r}\n",
         encoding="utf-8",
     )
     launcher = tmp_path / "guard-omp.cmd"
@@ -71,4 +77,5 @@ def test_frozen_windows_launcher_preserves_multiple_arguments(tmp_path: Path) ->
     assert completed.returncode == 0
     captured = capture_path.read_text(encoding="utf-8").strip()
     assert "run-shim" in captured
+    assert str(workspace) in captured
     assert '-- --help "prompt with spaces"' in captured

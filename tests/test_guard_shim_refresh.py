@@ -141,7 +141,7 @@ class ShimRefreshTest(unittest.TestCase):
         self.assertIn("run-shim", windows_source)
         self.assertIn(str(stable_cli), windows_source)
         self.assertNotIn(str(path), windows_source)
-        self.assertIn(" -- %*", windows_source)
+        self.assertIn('"--" %*', windows_source)
         self.assertEqual(
             capture_path.read_text(encoding="utf-8").splitlines(),
             [

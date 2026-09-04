@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import os
 import shlex
-import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -103,8 +102,31 @@ def build_windows_script(executable: str, posix_path: Path) -> str:
     if harness_command is not None:
         guard_cli, _, harness, *context_args = harness_command
         command = [guard_cli, "run-shim", *context_args, harness, "--"]
-        return "\r\n".join(("@echo off", f"{subprocess.list2cmdline(command)} %*", ""))
+        command_line = " ".join(_cmd_quote_fixed_argument(value) for value in command)
+        return "\r\n".join(("@echo off", "setlocal DisableDelayedExpansion", f"{command_line} %*", ""))
     return "\r\n".join(("@echo off", f'"{executable}" "{posix_path}" %*', ""))
+
+
+def _cmd_quote_fixed_argument(value: str) -> str:
+    """Quote a generated argv value for both CMD and Windows argv parsing."""
+
+    value = value.replace("%", "%%")
+    result = ['"']
+    backslashes = 0
+    for character in value:
+        if character == "\\":
+            backslashes += 1
+            continue
+        if character == '"':
+            result.append("\\" * (backslashes * 2 + 1))
+            result.append('"')
+        else:
+            result.append("\\" * backslashes)
+            result.append(character)
+        backslashes = 0
+    result.append("\\" * (backslashes * 2))
+    result.append('"')
+    return "".join(result)
 
 
 def _generated_harness_command(posix_path: Path) -> list[str] | None:
