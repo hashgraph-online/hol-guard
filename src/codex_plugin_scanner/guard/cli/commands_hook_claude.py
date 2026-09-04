@@ -136,6 +136,10 @@ def _run_hook_claude_permission_prompt_notification(
     if not _is_claude_permission_prompt_notification(args, payload_map):
         return None
     notice = _load_claude_permission_notice(store, payload_map)
+    if notice is None:
+        tool_name = payload_map.get("tool_name")
+        if isinstance(tool_name, str) and tool_name.strip():
+            notice = {"tool_name": tool_name.strip()}
     _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
     store.add_event(
         "claude/permission_prompt",

@@ -357,3 +357,30 @@ def test_claude_oversized_forged_notification_still_denies(
     assert prompt_result == 0
     assert prompt["decision"] == "block"
 
+
+def test_claude_permission_notification_asks_without_pending_notice(tmp_path: Path) -> None:
+    import argparse
+    from io import StringIO
+
+    from codex_plugin_scanner.guard.cli.commands_hook_claude import (
+        _run_hook_claude_permission_prompt_notification,
+    )
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    stream = StringIO()
+    code = _run_hook_claude_permission_prompt_notification(
+        argparse.Namespace(harness="claude-code", json=True),
+        output_stream=stream,
+        payload={
+            "session_id": "session-1",
+            "hook_event_name": "Notification",
+            "notification_type": "permission_prompt",
+            "tool_name": "Read",
+        },
+        store=GuardStore(tmp_path, prime_policy_integrity=False),
+    )
+    payload = json.loads(stream.getvalue())
+    assert code == 0
+    context = payload["hookSpecificOutput"]["additionalContext"]
+    assert "HOL Guard needs the user's explicit decision before Read can run" in context
+
