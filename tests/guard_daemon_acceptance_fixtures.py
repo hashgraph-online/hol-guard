@@ -151,7 +151,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             "tool_response": [{"type": "text", "text": output}],
             "stdout": output,
             "session_id": client,
-            "guard_remaining_ms": 10_000,
+            "guard_remaining_ms": int(remaining_ms),
         }
         query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
