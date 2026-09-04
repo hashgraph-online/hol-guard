@@ -76,6 +76,23 @@ import type {
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
+import {
+  applyPresentationMode,
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  normalizePresentationSettings,
+  parsePresentationMode,
+  presentationModeOptions,
+  presentationModeStatus,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
+export {
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
@@ -309,7 +326,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     ? settings.protection_posture
     : deriveProtectionPosture(settings.mode, securityLevel);
   return {
-    ...settings,
+    ...normalizePresentationSettings(settings),
     protection_posture: posture,
     watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
@@ -554,6 +571,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     },
     []
   );
+
+  const handlePresentationModeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextMode = parsePresentationMode(event.target.value);
+    if (nextMode === null) return;
+    setDraft((value) => value === null ? value : applyPresentationMode(value, nextMode));
+    setSaveError(null);
+  }, []);
 
   const handleSecurityLevelChange = useCallback((securityLevel: GuardSettings["security_level"]) => {
     setDraft((value) => {
@@ -815,11 +839,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      const settingsToSave: Partial<GuardSettings> = {
-        ...draft,
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate,
-      };
+      // A presentation-only save is a free preference change: the daemon
+      // accepts it without the high-risk gate, so it must carry only the
+      // presentation keys (no approval_gate, no risk_actions).
+      const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+      const settingsToSave: Partial<GuardSettings> = presentationOnlyPayload !== null
+        ? presentationOnlyPayload
+        : {
+          ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+          risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+          approval_gate: approvalGateUpdate,
+        };
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -1026,7 +1056,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       draftGateEnabled: approvalGateEnabled,
       changingPassword: false,
     });
-    if (requiresSettingsSaveProof(proofKind)) {
+    // A presentation-only change bypasses the settings gate on the daemon, so
+    // it never needs the save-proof modal.
+    if (requiresSettingsSaveProof(proofKind) && !isPresentationOnlyChange(draft, savedSettingsRef.current)) {
       openProofModal(proofKind!, { kind: "save" });
       return;
     }
@@ -1333,6 +1365,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   const consequenceSummary = buildConsequenceSummary(draft);
   const selectedPosture = currentProtectionPosture(draft);
+  const resolvedPresentation = resolveSettingsPresentation(draft);
   const protectionCapabilities: GuardProtectionCapability[] = state.kind === "ready"
     ? (state.payload.protection_capabilities ?? [])
     : [];
@@ -1434,6 +1467,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
+                <SettingsSelectRow
+                  label="Presentation mode"
+                  description="Choose whether Guard leads with clear everyday explanations or opens with technical detail. This never changes protection or enforcement."
+                  value={resolvedPresentation.value}
+                  onChange={handlePresentationModeChange}
+                  options={presentationModeOptions}
+                  disabled={!resolvedPresentation.writable}
+                />
+                <p className="guard-settings-caption -mt-2 text-slate-500">
+                  {presentationModeStatus(resolvedPresentation)}
+                </p>
                 <div>
                   <label htmlFor="approval-wait" className="guard-settings-body font-medium text-brand-dark">
                     How long to wait for your answer

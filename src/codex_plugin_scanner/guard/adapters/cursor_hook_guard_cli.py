@@ -23,9 +23,12 @@ _CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
 
 def _desktop_core_shim_for_executable(executable: Path) -> Path | None:
     versions_dir = executable.parent.parent
-    if versions_dir.name != "versions":
+    if versions_dir.name == "versions":
+        parent = versions_dir.parent
+    elif len(executable.parents) > 4 and executable.parents[3].name == "bundled":
+        parent = executable.parents[4]
+    else:
         return None
-    parent = versions_dir.parent
     unix = parent / _CURRENT_HOL_GUARD_SHIM
     windows = parent / f"{_CURRENT_HOL_GUARD_SHIM}.cmd"
     if os.name == "nt":

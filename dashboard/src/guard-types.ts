@@ -126,6 +126,66 @@ export type GuardDecisionV2 = {
   confidence: GuardDecisionV2Confidence;
 };
 
+export type GuardPresentationMode = "everyday" | "technical";
+export type GuardPresentationSource = "default" | "local-explicit" | "migrated" | "session-preview" | "cloud-profile" | "read-error";
+export type GuardResolvedPresentation = {
+  value: GuardPresentationMode;
+  source: GuardPresentationSource;
+  explicit: boolean;
+  writable: boolean;
+  schema_version: number;
+  revision: number;
+  diagnostic: string | null;
+};
+
+export type GuardEverydayActionKind =
+  | "file_read" | "file_write" | "file_delete" | "file_move" | "permission_change"
+  | "process_start" | "process_stop" | "system_change" | "disk_change" | "network_read"
+  | "network_send" | "download" | "download_and_execute" | "package_install" | "package_remove"
+  | "package_update" | "package_script" | "git_read" | "git_local_change" | "git_history_rewrite"
+  | "git_remote_change" | "secret_read" | "secret_send" | "container_change" | "cluster_change"
+  | "cloud_change" | "database_read" | "database_change" | "mcp_tool" | "browser_action"
+  | "prompt_submission" | "skill_install" | "extension_change" | "guard_control_change"
+  | "compound_action" | "unknown_action";
+
+export type GuardActionExplanationV1 = {
+  schema_version: "guard.action-explanation.v1";
+  explanation_version: string;
+  renderer_version: string;
+  action_identity: string;
+  canonical_identity: string | null;
+  catalog_digest: string | null;
+  locale: string;
+  kind: GuardEverydayActionKind;
+  confidence: "exact" | "derived" | "limited";
+  uncertainty_reasons: string[];
+  everyday: {
+    headline_message_id: string; headline: string;
+    summary_message_id: string; summary: string;
+    impact_message_id: string | null; impact: string | null;
+    why_guard_intervened_message_id: string | null; why_guard_intervened: string | null;
+    recommendation_message_id: string | null; recommendation: string | null;
+    actor_label: string;
+    targets: Array<{ kind: string; label: string; scope: string | null; sensitivity: "normal" | "private" | "secret" | "unknown" }>;
+    consequences: Array<{ message_id: string; message: string; severity: "info" | "low" | "medium" | "high" | "critical"; confirmed: boolean }>;
+    safer_alternatives: Array<{ message_id: string; message: string; kind: "review" | "narrow" | "preview" | "backup" | "isolate" | "cancel" | "manual" }>;
+  };
+  technical: {
+    available: boolean; unavailable_reason: string | null; action_type: string;
+    command_display: string | null; normalized_command_display: string | null;
+    executable: string | null; arguments_display: string[] | null; dialect: string | null;
+    transport: string | null; working_scope_display: string | null; wrappers: string[];
+    segments: Array<{ executable: string | null; arguments_display: string[]; execution_context: string; pipeline_index: number }>;
+    extension_ids: string[]; rule_ids: string[]; reason_codes: string[];
+    policy_source: string | null; parse_confidence: string | null; proof_level: string | null;
+    receipt_id: string | null; action_id: string | null;
+  };
+  redaction: {
+    level: "none" | "summary" | "redacted"; policy_version: string;
+    omitted_fields: string[]; truncated_fields: string[]; secret_like_values_removed: boolean;
+  };
+};
+
 export type GuardActionEnvelope = {
   schema_version: number;
   action_id: string;
@@ -206,6 +266,7 @@ export type GuardApprovalRequest = {
   action_envelope_json?: GuardActionEnvelope | null;
   decision_v2_json?: GuardDecisionV2 | null;
   decision_contract_error?: string;
+  action_explanation?: GuardActionExplanationV1 | null;
   fallback_cli_command?: string | null;
   raw_command_text?: string | null;
   queue_preview?: string | null;
@@ -615,6 +676,7 @@ export type GuardReceipt = {
   diff_summary?: string | null;
   scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
+  action_explanation?: GuardActionExplanationV1 | null;
   decision_contract_error?: string;
 };
 
@@ -891,6 +953,12 @@ export type GuardApprovalGatePublicConfig = {
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
+  presentation_mode: GuardPresentationMode;
+  presentation_mode_explicit: boolean;
+  presentation_schema_version: number;
+  presentation_revision: number;
+  presentation?: GuardResolvedPresentation;
+  presentation_diagnostic?: string | null;
   protection_posture?: "protected" | "extra_careful" | "watch";
   protection_posture_explicit?: boolean;
   watch_auto_revert_hours?: number;
