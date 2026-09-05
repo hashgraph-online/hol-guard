@@ -164,7 +164,7 @@ def test_desktop_bootstrap_treats_paired_active_cloud_as_connected() -> None:
 
 def test_desktop_bootstrap_repairs_managed_app_when_warnings_remain() -> None:
     payload = build_desktop_bootstrap_payload(
-        status_payload=_status_payload(managed=1, review_count=53, warning_count=1),
+        status_payload=_status_payload(managed=1, review_count=0, warning_count=1),
         pending_requests=[],
         approval_history=[],
         receipts=[],
