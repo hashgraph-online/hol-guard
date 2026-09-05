@@ -21,12 +21,13 @@ budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
 
-RSS evidence fills the bounded sixteen-stream resident pool first, then issues
-bounded capacity waves while sampling process-tree RSS and worker counts. It
-takes the baseline only after three consecutive samples within a 2 percent
-RSS plateau and a 30-second deadline, and compares the post-c16/c64 peak
-against that steady-state baseline. The growth gate remains at most 10
-percent, so one-time pool startup is not misreported as stress growth.
+RSS evidence fills the bounded resident worker pool first and fully starts the
+benchmark's bounded 64-thread load executor before sampling. The same load
+executor remains alive through the c16/c64 waves, so client thread allocation
+cannot be misreported as daemon/runtime growth. The proof takes its baseline
+only after three consecutive samples within a 2 percent RSS plateau and a
+30-second deadline, then compares the post-c16/c64 peak against that
+steady-state baseline. The resident growth gate remains at most 12 percent.
 
 Native wheel CI runs the no-environment installed-wheel probe and enforces the
 adapter SLO. Windows remains outside this wave. The stress script exposes
