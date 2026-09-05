@@ -78,15 +78,17 @@ def test_windows_private_state_binding_closes_refreshed_barrier_handle(
 def test_windows_private_state_binding_does_not_reclose_released_barrier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Avoid a second close when a released state barrier has no replacement."""
+    """Preserve an operation error after releasing a state barrier without replacement."""
 
     closed: list[tuple[object, object]] = []
     api, guard_handle, original_state_handle, _live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
 
-    with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
-        released = binding.handles.pop()
-        assert released == original_state_handle
-        api._windows_close_handle(*released)
+    with pytest.raises(NativePolicySnapshotError, match="rename_failed"):
+        with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
+            released = binding.handles.pop()
+            assert released == original_state_handle
+            api._windows_close_handle(*released)
+            raise NativePolicySnapshotError("native_policy_windows_rename_failed")
 
     assert closed == [original_state_handle, guard_handle]
 
