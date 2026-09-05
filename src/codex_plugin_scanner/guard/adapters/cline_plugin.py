@@ -482,11 +482,17 @@ def cline_plugin_syntax_probe(context: HarnessContext) -> dict[str, object]:
     node = shutil.which("node")
     if not isinstance(path_value, str):
         return {"ok": False, "reason": "plugin_state_missing"}
+    try:
+        index_path = cline_plugin_root(context) / "index.js"
+    except (OSError, RuntimeError, ValueError):
+        return {"ok": False, "reason": "plugin_path_unsafe"}
+    if path_value != str(index_path):
+        return {"ok": False, "reason": "plugin_state_path_mismatch"}
     if node is None:
         return {"ok": True, "skipped": True, "reason": "node_not_available"}
     try:
         result = subprocess.run(
-            [node, "--check", path_value],
+            [node, "--check", "--", str(index_path)],
             capture_output=True,
             text=True,
             timeout=5,
