@@ -103,7 +103,16 @@ def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, s
     stamp = ""
     if name.startswith("guard.db.corrupt-"):
         stamp = name[len("guard.db.corrupt-") :]
-    if stamp and stamp[:1].isdigit():
+    # Only the exact `%Y%m%dT%H%M%S%fZ` quarantine shape ranks as stamped;
+    # a digit-led but malformed name must not outrank real event ids.
+    if (
+        len(stamp) >= 21
+        and stamp[:8].isdigit()
+        and stamp[8] == "T"
+        and stamp[9:15].isdigit()
+        and stamp[15:21].isdigit()
+        and stamp[21] == "Z"
+    ):
         return ("1", stamp, fallback_mtime)
     return ("0", "", fallback_mtime)
 

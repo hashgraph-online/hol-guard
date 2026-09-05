@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 _STAGING_PRUNE_AGE_SECONDS = 7 * 24 * 60 * 60
-_ACTIVITY_FRESH_SECONDS = 24 * 60 * 60
 _UPDATE_RUNTIME_DIR_NAME = "update-runtime"
 _ACTIVITY_MARKER_NAME = "active.json"
 
@@ -19,13 +18,14 @@ def note_update_activity(guard_home: Path) -> None:
 
     The marker's mtime is the signal: the staging sweep refuses to delete
     anything while it is fresh, because the reused staging roots keep their
-    old directory mtimes even while an update writes deep inside them.
+    old directory mtimes even while an update writes deep inside them. A
+    write failure raises so the updater treats an unmarkable tree as
+    unavailable instead of running unprotected.
     """
 
     marker = guard_home / _UPDATE_RUNTIME_DIR_NAME / _ACTIVITY_MARKER_NAME
-    with contextlib.suppress(OSError):
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text('{"staging": "active"}\n', encoding="utf-8")
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text('{"staging": "active"}\n', encoding="utf-8")
 
 
 def prune_stale_update_staging(
@@ -45,9 +45,15 @@ def prune_stale_update_staging(
     """
 
     runtime = guard_home / _UPDATE_RUNTIME_DIR_NAME
+    # Never traverse through a linked component: rmtree below a symlinked
+    # runtime tree would delete whatever the link points at.
+    try:
+        reject_linked_path_components(runtime)
+    except OSError:
+        return
     marker = runtime / _ACTIVITY_MARKER_NAME
     try:
-        if time.time() - marker.stat().st_mtime < _ACTIVITY_FRESH_SECONDS:
+        if time.time() - marker.stat().st_mtime < _STAGING_PRUNE_AGE_SECONDS:
             return
     except OSError:
         pass

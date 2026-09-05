@@ -124,7 +124,7 @@ def test_fresh_update_activity_marker_blocks_the_staging_sweep(tmp_path: Path) -
     # them; the fresh marker is what protects the tree.
     assert stale_home.exists()
 
-    _age(marker, age_seconds=2 * 24 * 60 * 60)
+    _age(marker, age_seconds=8 * 24 * 60 * 60)
     prune_stale_update_staging(guard_home)
 
     assert not stale_home.exists()
@@ -134,3 +134,37 @@ def test_fresh_update_activity_marker_blocks_the_staging_sweep(tmp_path: Path) -
 def test_stale_update_staging_prune_tolerates_missing_directories(tmp_path: Path) -> None:
     prune_stale_update_staging(tmp_path / "guard-home")
     assert not (tmp_path / "guard-home").exists()
+
+
+def test_malformed_digit_led_quarantine_name_does_not_outrank_real_stamps(tmp_path: Path) -> None:
+    _write_snapshot(tmp_path, "guard.db.corrupt-9-legacy", age_seconds=0)
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260905T132908303335Z-real", age_seconds=30 * 24 * 60 * 60)
+
+    prune_quarantined_store_snapshots(tmp_path, keep=1)
+
+    # The real quarantine event survives even with an older file mtime.
+    assert (tmp_path / "guard.db.corrupt-20260905T132908303335Z-real").exists()
+    assert not (tmp_path / "guard.db.corrupt-9-legacy").exists()
+
+
+def test_staging_sweep_refuses_a_linked_runtime_tree(tmp_path: Path) -> None:
+    import os
+
+    if os.name == "nt":
+        import pytest
+
+        pytest.skip("symlink creation may require elevated privileges on Windows")
+    guard_home = tmp_path / "guard-home"
+    target = tmp_path / "target-tree"
+    stale = target / "home"
+    stale.mkdir(parents=True)
+    _age(stale, age_seconds=30 * 24 * 60 * 60)
+    guard_home.mkdir()
+    (guard_home / "update-runtime").symlink_to(target, target_is_directory=True)
+
+    from codex_plugin_scanner.guard.update_staging import prune_stale_update_staging
+
+    prune_stale_update_staging(guard_home)
+
+    # The sweep must not follow the link: the target tree stays untouched.
+    assert stale.exists()
