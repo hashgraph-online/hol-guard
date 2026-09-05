@@ -213,7 +213,10 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
 
 
 def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
-    from codex_plugin_scanner.guard.codex_hook_registration import finalize_codex_doctor_warnings
+    from codex_plugin_scanner.guard.codex_hook_registration import (
+        finalize_codex_doctor_setup_status,
+        finalize_codex_doctor_warnings,
+    )
 
     warnings = finalize_codex_doctor_warnings(
         [
@@ -230,3 +233,27 @@ def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
 
     assert not any("Guard is not installed" in warning for warning in warnings)
     assert any("do not match this Guard CLI" in warning for warning in warnings)
+    assert (
+        finalize_codex_doctor_setup_status(
+            "partial",
+            {"managed_hook_installed": True, "protection_active": False},
+            warnings,
+        )
+        == "broken"
+    )
+    assert (
+        finalize_codex_doctor_setup_status(
+            "partial",
+            {"managed_hook_installed": True, "protection_active": True},
+            warnings,
+        )
+        == "active"
+    )
+    assert (
+        finalize_codex_doctor_setup_status(
+            "partial",
+            {"managed_hook_installed": True, "protection_active": True},
+            ["codex command is not available"],
+        )
+        == "broken"
+    )

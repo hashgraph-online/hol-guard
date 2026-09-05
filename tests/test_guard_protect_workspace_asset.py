@@ -54,8 +54,8 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Repair failed checks" not in source
     assert "Open diagnostics" not in source
     assert "Guard could not confirm integrity protection yet." not in source
-    assert 'hookCheck?.status === "fail"' in source
-    assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
+    assert 'hookCheck?.status !== "pass"' in source
+    assert 'check.check_id === "harness_hooks")?.status !== "pass"' in source
     assert "Restore local protection" in authoritative_source
 
 

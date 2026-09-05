@@ -52,8 +52,9 @@ from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from ..codex_hook_registration import (
-    finalize_codex_doctor_warnings,
     exact_legacy_hook_bindings,
+    finalize_codex_doctor_setup_status,
+    finalize_codex_doctor_warnings,
     install_managed_codex_hook_groups,
     overlay_live_owned_event_matches,
 )
@@ -1363,13 +1364,12 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload = super().diagnostics(context)
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
-        warnings = (
-            [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
+        items = warning_items if isinstance(warning_items, list) else []
+        warnings = finalize_codex_doctor_warnings(
+            [str(item) for item in items if isinstance(item, str)], hook_state
         )
-        warnings = finalize_codex_doctor_warnings(warnings, hook_state)
         payload["warnings"] = warnings
-        if payload.get("setup_status") == "active":
-            payload["setup_status"] = "active" if bool(hook_state.get("protection_active")) else "broken"
+        payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
         payload["native_hook_state"] = hook_state
         return payload
 
