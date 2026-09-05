@@ -123,7 +123,15 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         review_with_resident_receipt,
     )
     reset_native_hook_route()
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    store = GuardStore(tmp_path / "guard-home")
+    store.upsert_runtime_state(
+        session_id="native-review",
+        daemon_host="127.0.0.1",
+        daemon_port=4781,
+        started_at="2026-09-05T00:00:00+00:00",
+        last_heartbeat_at="2026-09-05T00:00:00+00:00",
+    )
+    worker = HookWorker(store=store)
 
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
@@ -137,7 +145,10 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     hook_output = result["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "deny"
+    assert result["policy_action"] == "review"
+    assert isinstance(result.get("approval_request_id"), str)
     assert native_hook_route() == "native_resident"
+    assert store.list_approval_requests(status="pending")
 
 
 def test_full_cli_review_keeps_native_terminal_provenance(

@@ -16,9 +16,9 @@ Security:
 - Supported generic PreToolUse is decided by Rust. Native failure uses the
   mechanical emergency-safe action-class floor: local inspection may continue,
   while mutating, network, secret, destructive, and uncertain actions pause.
-  Explicit off/shadow have no production semantic fallback. Native review and
-  block results are rendered mechanically and never escape to the Python
-  semantic CLI path.
+  Explicit off/shadow have no production semantic fallback. Native block
+  results stay mechanical. Native review pauses the tool and queues an
+  approval-center request; it never escapes to the Python semantic CLI path.
 """
 
 from __future__ import annotations
