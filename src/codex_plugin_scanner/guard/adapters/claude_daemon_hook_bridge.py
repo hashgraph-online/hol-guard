@@ -75,46 +75,46 @@ def main(
         if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
-        return 0
-    data = body.strip() or "{}"
-    try:
-        state_path = state_path_for_query(state_path, query)
-    except ValueError as error:
-        sys.stdout.write(_run_local_fallback(_daemon_failure_reason(error), data, fallback_command, deadline=deadline))
-        return 0
-    recovery_command = _recovery_command(state_path, query)
-    try:
-        endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-        _assert_loopback_http_url(endpoint)
-        response_body = _valid_hook_json_or_degraded(
-            _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
-            reason="daemon returned malformed hook JSON",
-            data=data,
-        )
-    except Exception as error:
-        reason = _daemon_failure_reason(error)
-        failure_kind = _daemon_failure_kind(error)
-        if failure_kind == "authenticated-control-plane-failure":
-            response_body = _authenticated_control_plane_failure(reason, data)
-        elif _daemon_failure_is_recoverable(error):
-            response_body = _recover_retry_or_fallback(
-                reason,
-                data,
-                state_path=state_path,
-                fallback_daemon_url=fallback_daemon_url,
-                fallback_command=fallback_command,
-                recovery_command=recovery_command,
-                query=query,
-                deadline=deadline,
-                failure_kind=failure_kind,
+    else:
+        data = body.strip() or "{}"
+        try:
+            state_path = state_path_for_query(state_path, query)
+        except ValueError as error:
+            sys.stdout.write(
+                _run_local_fallback(_daemon_failure_reason(error), data, fallback_command, deadline=deadline)
             )
         else:
-            response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
-        sys.stdout.write(response_body)
-        return 0
-    if _should_suppress_output(data, response_body):
-        return 0
-    sys.stdout.write(response_body if response_body.strip() else "{}")
+            recovery_command = _recovery_command(state_path, query)
+            try:
+                endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
+                _assert_loopback_http_url(endpoint)
+                response_body = _valid_hook_json_or_degraded(
+                    _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
+                    reason="daemon returned malformed hook JSON",
+                    data=data,
+                )
+            except Exception as error:
+                reason, failure_kind = _daemon_failure_reason(error), _daemon_failure_kind(error)
+                if failure_kind == "authenticated-control-plane-failure":
+                    response_body = _authenticated_control_plane_failure(reason, data)
+                elif _daemon_failure_is_recoverable(error):
+                    response_body = _recover_retry_or_fallback(
+                        reason,
+                        data,
+                        state_path=state_path,
+                        fallback_daemon_url=fallback_daemon_url,
+                        fallback_command=fallback_command,
+                        recovery_command=recovery_command,
+                        query=query,
+                        deadline=deadline,
+                        failure_kind=failure_kind,
+                    )
+                else:
+                    response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+                sys.stdout.write(response_body)
+            else:
+                if not _should_suppress_output(data, response_body):
+                    sys.stdout.write(response_body if response_body.strip() else "{}")
     return 0
 
 
