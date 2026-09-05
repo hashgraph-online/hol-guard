@@ -11,7 +11,7 @@ from .errors import BuilderError
 from .io import list_value, object_value
 from .models import Operation, make_operation
 from .source_cli import name_hints
-from .validation import TOOL_PATTERN, text, token
+from .validation import TOOL_PATTERN, token
 
 _DIALECTS = frozenset({"https://json-schema.org/draft/2020-12/schema", "http://json-schema.org/draft/2020-12/schema"})
 _HINT_FIELDS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
@@ -57,6 +57,14 @@ def _result(value: object) -> dict[str, object]:
     return row
 
 
+def _cursor(value: object) -> str:
+    # Cursors are protocol data: even an empty or whitespace-bearing value is
+    # a continuation token. Never apply display-text normalization to them.
+    if not isinstance(value, str) or len(value) > 1024:
+        raise BuilderError("mcp_pagination", "Pagination cursors must be strings within the supported length limit.")
+    return value
+
+
 def _pages(value: object) -> tuple[dict[str, object], ...]:
     document = object_value(value)
     if "pages" not in document:
@@ -83,7 +91,7 @@ def _pages(value: object) -> tuple[dict[str, object], ...]:
                 raise BuilderError("mcp_pagination", "Inventory contains pages after a terminal response.")
             expected = None
             continue
-        next_cursor = text(row["nextCursor"], maximum=1024)
+        next_cursor = _cursor(row["nextCursor"])
         if next_cursor in seen:
             raise BuilderError("mcp_pagination", "Inventory repeats a pagination cursor.")
         seen.add(next_cursor)
