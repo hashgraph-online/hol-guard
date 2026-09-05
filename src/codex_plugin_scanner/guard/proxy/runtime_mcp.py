@@ -1123,6 +1123,29 @@ class RuntimeMcpGuardProxy:
             "approval_requests": [],
         }
 
+    def _inline_approval_deny_result(
+        self,
+        approval_result: object,
+        deny_tool_call: Callable[..., tuple[dict[str, Any], dict[str, Any]]],
+        tool_name: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        if _approval_denies(approval_result):
+            return deny_tool_call(
+                decision_source="inline-denied",
+                event_decision="deny-inline",
+                reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+            )
+        if _approval_invalid(approval_result):
+            return deny_tool_call(
+                decision_source="inline-invalid",
+                event_decision="deny-inline-invalid",
+                reason=(
+                    f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                    "approval returned an invalid response."
+                ),
+            )
+        return None
+
     def _handle_message_serialized(
         self,
         *,
@@ -1224,6 +1247,17 @@ class RuntimeMcpGuardProxy:
                 approval_reuse_claim_disposition=None,
             )
         decision_scanner_evidence = _tool_decision_scanner_evidence(decision)
+        deny_inline_call = partial(
+            self._deny_inline_tool_call,
+            message=message,
+            tool_name=tool_name,
+            event=event,
+            artifact=artifact,
+            artifact_hash=tool_artifact_hash,
+            decision=decision,
+            scanner_evidence=decision_scanner_evidence,
+            arguments=arguments,
+        )
         if decision.saved_action == "block":
             return self._stored_tool_block_response(
                 message_id=message.get("id"),
@@ -1364,32 +1398,13 @@ class RuntimeMcpGuardProxy:
                         remember_risk_categories=decision.risk_categories,
                     )
                     return response, package_event
-                deny_tool_call = partial(
-                    self._deny_inline_tool_call,
-                    message=message,
+                denied = self._inline_approval_deny_result(
+                    approval_result,
+                    deny_tool_call=deny_inline_call,
                     tool_name=tool_name,
-                    event=event,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    decision=decision,
-                    scanner_evidence=decision_scanner_evidence,
-                    arguments=arguments,
                 )
-                if _approval_denies(approval_result):
-                    return deny_tool_call(
-                        decision_source="inline-denied",
-                        event_decision="deny-inline",
-                        reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                    )
-                if _approval_invalid(approval_result):
-                    return deny_tool_call(
-                        decision_source="inline-invalid",
-                        event_decision="deny-inline-invalid",
-                        reason=(
-                            f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                            "approval returned an invalid response."
-                        ),
-                    )
+                if denied is not None:
+                    return denied
             if self.config.mode == "observe":
                 response, package_event = self._handle_package_request(
                     message=message,
@@ -1485,32 +1500,13 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
-            deny_tool_call = partial(
-                self._deny_inline_tool_call,
-                message=message,
+            denied = self._inline_approval_deny_result(
+                approval_result,
+                deny_tool_call=deny_inline_call,
                 tool_name=tool_name,
-                event=event,
-                artifact=artifact,
-                artifact_hash=tool_artifact_hash,
-                decision=decision,
-                scanner_evidence=decision_scanner_evidence,
-                arguments=arguments,
             )
-            if _approval_denies(approval_result):
-                return deny_tool_call(
-                    decision_source="inline-denied",
-                    event_decision="deny-inline",
-                    reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                )
-            if _approval_invalid(approval_result):
-                return deny_tool_call(
-                    decision_source="inline-invalid",
-                    event_decision="deny-inline-invalid",
-                    reason=(
-                        f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                        "approval returned an invalid response."
-                    ),
-                )
+            if denied is not None:
+                return denied
         if self.config.mode == "observe":
             try:
                 catalog_current = self._drain_and_validate_catalog_authority(
