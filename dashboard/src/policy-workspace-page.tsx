@@ -68,7 +68,6 @@ export function PolicyWorkspacePage(props: {
             <PolicyExceptionsToolbar
               cloudConnected={cloudConnected}
               cloudControlsUrl={cloudControlsUrl}
-              connectUrl={props.snapshot.connect_url?.trim() || null}
               onRequestException={() => setExceptionRequestOpen(true)}
             />
           ) : (

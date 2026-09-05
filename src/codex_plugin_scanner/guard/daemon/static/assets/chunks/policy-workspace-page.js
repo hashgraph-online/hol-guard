@@ -1,4 +1,5 @@
 import { j as jsxRuntimeExports, S as SectionLabel, z as HiMiniXMark, P as Badge, aA as Tag, b as HiMiniCommandLine, M as HiMiniExclamationTriangle, bL as scopeLabel, i as harnessDisplayName, A as ActionButton, aX as guardAwareHref, w as formatRelativeTime$1, bM as HiMiniDocumentText, o as HiMiniCheckCircle, bN as HiMiniCloudArrowUp, bO as HiMiniCheck, bP as HiMiniCodeBracket, bQ as HiMiniClipboardDocument, bR as HiMiniUsers, bp as HiMiniBeaker, aO as HiMiniFolder, ab as HiMiniLockClosed, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, bw as HiMiniCloudArrowDown, aW as HiMiniArrowTopRightOnSquare, bS as HiMiniIdentification, bT as policyActionLabel, r as reactExports, bU as createCloudExceptionRequest, bV as HiMiniArrowRight, m as EmptyState, ax as HiMiniMagnifyingGlass, B as HiMiniChevronUp, C as HiMiniChevronDown, c as HiMiniChevronRight, bW as HiMiniPuzzlePiece, aL as HiMiniGlobeAlt, bn as HiMiniClock, bX as fetchCloudExceptions, bY as fetchCloudExceptionRequests, bZ as downloadBlob, b_ as PolicyStatField, b$ as PaginationControls, aU as HiMiniNoSymbol, aM as HiMiniCube, aF as HiMiniArrowPath, I as HiMiniCloud, ad as HiMiniAdjustmentsHorizontal, c0 as HiMiniArrowDownTray, c1 as HiMiniQueueList, aw as WorkspacePageHeader, bJ as lazyWorkspace, bK as __vitePreload } from "../guard-dashboard.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -2886,7 +2887,6 @@ function PolicyCloudExceptionsTab({
   const [actionFilter, setActionFilter] = reactExports.useState("all");
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
-  snapshot.connect_url?.trim() || null;
   const reloadData = reactExports.useCallback(async () => {
     if (!cloudConnected) {
       setExceptions([]);
@@ -4224,16 +4224,15 @@ function PolicyPageToolbar({ snapshot, onReloadPolicy, reloading = false }) {
 function PolicyExceptionsToolbar({
   cloudConnected,
   cloudControlsUrl,
-  connectUrl,
   onRequestException
 }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onRequestException, disabled: !cloudConnected, children: "+ Request cloud exception" }),
-    cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
+    cloudConnected && cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
       "Open Guard Cloud"
     ] }) : null,
-    !cloudConnected && connectUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: connectUrl, variant: "secondary", children: "Connect Guard Cloud" }) : null
+    !cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { variant: "secondary" }) : null
   ] });
 }
 const PolicyWorkspace = lazyWorkspace(
@@ -4286,7 +4285,6 @@ function PolicyWorkspacePage(props) {
           {
             cloudConnected,
             cloudControlsUrl,
-            connectUrl: props.snapshot.connect_url?.trim() || null,
             onRequestException: () => setExceptionRequestOpen(true)
           }
         ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
