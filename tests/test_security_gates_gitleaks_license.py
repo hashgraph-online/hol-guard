@@ -41,4 +41,5 @@ def test_gitleaks_license_is_limited_to_scan_steps() -> None:
         if isinstance(env, dict):
             assert "GITLEAKS_LICENSE" not in env
 
+    assert len(licensed_steps) == len(SCAN_STEP_NAMES)
     assert set(licensed_steps) == SCAN_STEP_NAMES
