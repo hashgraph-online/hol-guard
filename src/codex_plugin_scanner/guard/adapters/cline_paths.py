@@ -83,7 +83,12 @@ def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> None:
     guard_home = context.guard_home.resolve(strict=False)
     lexical_parent = Path(os.path.abspath(path.parent))
     lexical_path = Path(os.path.abspath(path))
-    lexical_roots = {home, guard_home, Path(os.path.abspath(context.home_dir)), Path(os.path.abspath(context.guard_home))}
+    lexical_roots = {
+        home,
+        guard_home,
+        Path(os.path.abspath(context.home_dir)),
+        Path(os.path.abspath(context.guard_home)),
+    }
     if not any(lexical_parent.is_relative_to(root) and lexical_path.is_relative_to(root) for root in lexical_roots):
         raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
     data_root = cline_data_dir(context).resolve(strict=False)

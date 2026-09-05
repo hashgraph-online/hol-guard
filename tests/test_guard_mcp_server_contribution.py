@@ -96,6 +96,7 @@ def test_filesystem_catalog_item_is_external_opt_in() -> None:
     assert payload["mcp_launch"]["package"] == "@modelcontextprotocol/server-filesystem"
     assert payload["publisher"]["id"] == "community.modelcontextprotocol"
     assert payload["icon"]["name"] == "HiMiniFolder"
+    assert payload["permissions"][0]["configurable"] is False
     assert trust_class_for("command.mcp-filesystem") == "external"
     overlay = catalog_mcp_fields("command.mcp-filesystem")
     assert overlay is not None

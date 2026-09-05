@@ -62,7 +62,7 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             version,
             action_classes,
             safer,
-            configurable=True,
+            configurable=False,
             example_command=example,
         ),
         "reference_urls": _string_tuple(payload.get("referenceUrls")),
