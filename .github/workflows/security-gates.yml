@@ -69,8 +69,6 @@ jobs:
     name: Gitleaks
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -143,6 +141,8 @@ jobs:
           echo "log_opts=${BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
       - name: Run Gitleaks on isolated commit range
         if: steps.gitleaks-scope.outputs.mode == 'git'
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: >-
           gitleaks git
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
@@ -152,4 +152,6 @@ jobs:
           "${{ steps.gitleaks-range.outputs.repository }}"
       - name: Run Gitleaks on working tree
         if: steps.gitleaks-scope.outputs.mode == 'dir'
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: gitleaks dir --no-banner --redact --exit-code 1 .
