@@ -39,7 +39,11 @@ from codex_plugin_scanner.guard.native_runtime import (
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus
+from scripts.native_probe_receipts import (
+    receipt_corpus_is_complete,
+    wait_for_receipt_corpus,
+    wait_for_route_corpus,
+)
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import proof_environment_violations
 
@@ -274,7 +278,10 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
             },
         )
         _exercise_installed_routes(daemon, guard_home, workspace, routes, route_receipts, reason_codes)
-        worker_stats = daemon._server.hook_worker.metrics.snapshot()
+        worker_stats = wait_for_route_corpus(
+            daemon._server.hook_worker.metrics,
+            expected=len(route_receipts),
+        )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
         evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
