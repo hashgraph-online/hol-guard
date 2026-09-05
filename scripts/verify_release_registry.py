@@ -366,6 +366,12 @@ def _retry_delay(attempt: int, *, initial: float, maximum: float) -> float:
     return min(maximum, initial * (2**capped_attempt))
 
 
+def _is_valid_retry_delay_value(delay: object) -> bool:
+    if isinstance(delay, bool) or not isinstance(delay, (int, float)):
+        return False
+    return isinstance(delay, int) or math.isfinite(delay)
+
+
 def _validate_retry_settings(
     attempts: int,
     initial_delay: float,
@@ -375,10 +381,7 @@ def _validate_retry_settings(
         raise RegistryVerificationError(
             f"Registry retry attempts must be between one and {REGISTRY_RETRY_MAX_ATTEMPTS}"
         )
-    if any(
-        isinstance(delay, bool) or not isinstance(delay, (int, float)) or not math.isfinite(delay)
-        for delay in (initial_delay, maximum_delay)
-    ):
+    if not all(_is_valid_retry_delay_value(delay) for delay in (initial_delay, maximum_delay)):
         raise RegistryVerificationError("Registry retry delays must be finite numbers")
     if initial_delay < 0 or maximum_delay < initial_delay:
         raise RegistryVerificationError("Registry retry delays must be non-negative and ordered")

@@ -666,6 +666,7 @@ def test_verify_registry_release_fails_after_persistent_download_404(tmp_path: P
     "retry_settings",
     [
         {"retry_attempts": 10**100},
+        {"retry_max_delay_seconds": 10**1000},
         {"retry_initial_delay_seconds": 61, "retry_max_delay_seconds": 61},
         {"retry_attempts": 6, "retry_initial_delay_seconds": 3, "retry_max_delay_seconds": 30},
         {"retry_initial_delay_seconds": float("nan"), "retry_max_delay_seconds": 1},
