@@ -15,6 +15,7 @@ from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.manager import _guard_daemon_url_port, _load_state, load_guard_daemon_url, read_approval_center_locator
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..policy_integrity import is_remote_policy_source
@@ -115,10 +116,8 @@ def _trust_status_payload(
         raise ValueError("guard_home is required")
     resolved = resolve_passive_trust_state(store, guard_home=resolved_guard_home, backend_requested=backend)
     trust_status = resolved.trust_status.to_dict()
-    degraded_reasons = trust_status.get("degraded_reasons")
-    reasons = (
-        [reason for reason in degraded_reasons if isinstance(reason, str)] if isinstance(degraded_reasons, list) else []
-    )
+    raw_reasons = trust_status.get("degraded_reasons")
+    reasons = [reason for reason in raw_reasons if isinstance(reason, str)] if isinstance(raw_reasons, list) else []
     runtime_protection = str(trust_status.get("runtime_protection") or "unknown")
     remembered_rules = str(trust_status.get("remembered_rules") or "unknown")
     cloud_policies = str(trust_status.get("cloud_policies") or "unknown")
@@ -255,7 +254,7 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             "daemon_package_version": daemon_package_version,
             "detail": detail,
         }
-    daemon_url = load_guard_daemon_url(guard_home)
+    daemon_url = load_guard_daemon_url(guard_home) or load_guard_daemon_endpoint_url(guard_home)
     if isinstance(daemon_url, str) and daemon_url.strip():
         detail = "Guard daemon is healthy, but the browser approval locator has not been refreshed yet."
         if restart_required:
