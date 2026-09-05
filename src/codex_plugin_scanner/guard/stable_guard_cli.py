@@ -138,6 +138,17 @@ def argv0_is_ephemeral_desktop_cli(argv0: str) -> bool:
     return desktop_core_shim_for_executable(Path(argv0)) is not None
 
 
+def prune_safe_cli_executable(executable: str) -> str:
+    """Prefer the Desktop current-hol-guard shim over a pruneable versions path."""
+
+    shim = desktop_core_shim_for_executable(Path(executable))
+    if shim is None or not frozen_cli_path_is_runnable(shim):
+        return executable
+    if sys.platform == "win32" and shim.suffix.lower() not in {".cmd", ".bat", ".exe"}:
+        return executable
+    return str(shim)
+
+
 def frozen_launcher_is_prune_safe(launcher: str) -> bool:
     """Return whether a frozen launcher survives Desktop Core prune."""
 
@@ -151,6 +162,7 @@ __all__ = [
     "desktop_core_shim_for_executable",
     "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
+    "prune_safe_cli_executable",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
     "resolved_guard_cli",
