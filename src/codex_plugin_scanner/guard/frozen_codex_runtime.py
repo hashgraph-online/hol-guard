@@ -252,18 +252,7 @@ def _validate_frozen_codex_hook_launch(
     from .codex_hook_integrity import load_authenticated_hook_manifest_path
     from .codex_hook_launch_runtime import isolated_hook_environment, private_hook_runtime_cwd
 
-    state = Path(state_path)
-    configured_manifest = Path(manifest_path)
-    if not state.is_absolute() or not configured_manifest.is_absolute():
-        raise ValueError("managed Codex hook paths must be absolute")
-    guard_home = state.parent.resolve(strict=False)
-    expected_managed_directory = (guard_home / "managed" / "codex").resolve(strict=False)
-    manifest_directory = configured_manifest.parent.resolve(strict=False)
-    if state.name != "daemon-state.json" or manifest_directory != expected_managed_directory:
-        raise ValueError("managed Codex hook paths do not belong to this Guard home")
-    if not configured_manifest.name.startswith("hooks-") or not configured_manifest.name.endswith(".manifest.json"):
-        raise ValueError("managed Codex hook manifest path is invalid")
-
+    state, configured_manifest, guard_home = trust._resolve_managed_hook_paths(state_path, manifest_path)
     manifest = load_authenticated_hook_manifest_path(guard_home, configured_manifest)
     trust._verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
     interpreter = trust._mapping(manifest.get("interpreter"), label="interpreter")
