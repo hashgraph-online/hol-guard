@@ -1083,19 +1083,18 @@ def _compose_runtime_policy_decision(
         ),
         *_runtime_detector_scanner_evidence(runtime_detector_block_reason),
     )
-    decision_reason = (
-        _RUNTIME_DETECTOR_BLOCK_REASON
-        if runtime_detector_block_reason
-        else _RUNTIME_DETECTOR_WARN_REASON
-        if runtime_context_action == "warn" and policy_action == "warn"
-        else _RUNTIME_DETECTOR_REVIEW_REASON
-        if runtime_context_action == "review" and policy_action == "review"
-        else _TRUSTED_REQUEST_OVERRIDE_REASON
-        if trusted_request_override
-        else approval_reuse.reason_code
-        if has_saved_state
-        else policy_action
-    )
+    if runtime_detector_block_reason:
+        decision_reason = _RUNTIME_DETECTOR_BLOCK_REASON
+    elif runtime_context_action == "warn" and policy_action == "warn":
+        decision_reason = _RUNTIME_DETECTOR_WARN_REASON
+    elif runtime_context_action == "review" and policy_action == "review":
+        decision_reason = _RUNTIME_DETECTOR_REVIEW_REASON
+    elif trusted_request_override:
+        decision_reason = _TRUSTED_REQUEST_OVERRIDE_REASON
+    elif has_saved_state:
+        decision_reason = approval_reuse.reason_code
+    else:
+        decision_reason = policy_action
     return policy_action, approval_authority_finalized, scanner_evidence, decision_reason
 
 
