@@ -16,6 +16,7 @@ from ..adapters.grok_config import (
     GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
     GUARD_HOOK_PRETOOL_FILE,
 )
+from ..stable_guard_cli import prune_safe_cli_executable
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as repair_context_from_managed_install
@@ -81,7 +82,8 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
     if not executable_path.exists():
         return False
     try:
-        if executable_path.resolve() != Path(sys.executable).resolve():
+        expected = Path(prune_safe_cli_executable(sys.executable)).resolve()
+        if executable_path.resolve() != expected:
             return False
     except OSError:
         return False
