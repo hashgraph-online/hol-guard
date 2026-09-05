@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.harness_attribution_env import strip_harness_env_markers
 from tests.test_guard_local_supply_chain_phase15 import _package, _seed_supply_chain_bundle
 
-pytest_plugins = ["tests.bundle_first_cloud"]
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
