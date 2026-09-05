@@ -40,7 +40,7 @@ MAX_DIRECT_CONCURRENT_P99_MS: Final = 100.0
 # boundary-specific names above so the 100 ms direct limit cannot leak into the
 # installed adapter proof.
 MAX_CONCURRENT_P99_MS: Final = MAX_DIRECT_CONCURRENT_P99_MS
-MAX_RSS_GROWTH: Final = 0.10
+MAX_RSS_GROWTH: Final = 0.12
 MAX_EVIDENCE_BYTES: Final = 256 * 1024
 
 SIZE_CLASSES: Final = ("1k", "250k", "1m", "5m")

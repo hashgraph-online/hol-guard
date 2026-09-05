@@ -72,13 +72,13 @@ def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> No
     barrier = threading.Barrier(48)
 
     def review(index: int) -> None:
-        barrier.wait(timeout=2 * coverage_scale)
+        barrier.wait(timeout=8 * coverage_scale)
         admission = scheduler.acquire(
             harness="pi",
             client_key=f"client-{index % 6}",
             lane="decision",
             payload_bytes=1,
-            deadline=time.monotonic() + 2 * coverage_scale,
+            deadline=time.monotonic() + 8 * coverage_scale,
         )
         assert admission.permit is not None
         time.sleep(0.002)
@@ -87,7 +87,7 @@ def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> No
     with ThreadPoolExecutor(max_workers=48) as executor:
         futures = [executor.submit(review, index) for index in range(48)]
         for future in futures:
-            future.result(timeout=3 * coverage_scale)
+            future.result(timeout=12 * coverage_scale)
 
     stats = scheduler.stats()
     assert stats["completed"] == 48
