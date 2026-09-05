@@ -372,4 +372,92 @@ assert(
   "failed desktop updates should say the current install remains",
 );
 
+// Embedded in the HOL Guard Desktop window, the panel must defer updates to
+// the app's own updater instead of offering a second, competing action.
+const priorWindow = (globalThis as { window?: unknown }).window;
+Object.assign(globalThis, {
+  window: {
+    location: { search: "?desktop_embed=1", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const embeddedMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a241",
+      installer: "desktop",
+      version_check: { source: "desktop_core", status: "stale", current_version: "3.0.0a239", latest_version: "3.0.0a241", update_available: true },
+      auto_updatable: true,
+      update_available: true,
+      blocked_reason: null,
+    }),
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(!embeddedMarkup.includes("Update Guard"), "embedded dashboard must not offer its own Update Guard button");
+assert(
+  embeddedMarkup.includes("Check for Updates in the HOL Guard menu-bar"),
+  "embedded dashboard should point at the app's updater",
+);
+assert(embeddedMarkup.includes("v3.0.0a239"), "embedded dashboard should still show the running version");
+
+// Internal navigation replaces the URL with routes that drop desktop_embed;
+// once the handoff was seen, the dashboard stays embedded for the session.
+const embeddedNavigationStatus = normalizeGuardUpdateStatus({
+  current_version: "3.0.0a239",
+  latest_version: "3.0.0a241",
+  installer: "desktop",
+  version_check: { source: "desktop_core", status: "stale", current_version: "3.0.0a239", latest_version: "3.0.0a241", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+});
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/about", search: "", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const navigatedMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: embeddedNavigationStatus,
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(!navigatedMarkup.includes("Update Guard"), "navigation inside the embedded dashboard must not restore the Update Guard button");
+
+// A recovery-reinstall prompt inside the Desktop window must not point at the
+// hidden PyPI reinstall action.
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/", search: "?desktop_embed=1", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const reinstallMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a241",
+      installer: "desktop",
+      auto_updatable: false,
+      update_available: false,
+      recovery_reinstall_available: true,
+      blocked_reason: "This install came from a local wheel whose source file is no longer available, so automatic updates are off.",
+    }),
+    onReinstallGuard: () => undefined,
+  }),
+);
+assert(!reinstallMarkup.includes("Reinstall from PyPI"), "embedded dashboard must not offer its own reinstall button");
+assert(
+  reinstallMarkup.includes("Check for Updates in the HOL Guard menu bar"),
+  "embedded reinstall prompt should point at the app first",
+);
+
+(globalThis as { window?: unknown }).window = priorWindow;
+
 console.log("guard-update.test.ts: all tests passed");

@@ -40,7 +40,7 @@ _ENV_DUMP_PATTERNS = (
     re.compile(r"\bprocess\.env\b(?!\s*[.\[])"),
     re.compile(r"\bprocess\.env\s*\[\s*(?!['\"])"),
 )
-_OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
+OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
 _SERVICE_ACCOUNT_PATH_MARKERS = (
     "/var/run/secrets/kubernetes.io/serviceaccount",
     "/run/secrets/kubernetes.io/serviceaccount",
@@ -118,6 +118,131 @@ def kubernetes_option_tokens_consumed(
     return None
 
 
+ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+
+WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+
+WRAPPER_OPTIONS_WITH_VALUES = {
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "sudo": frozenset(
+        {
+            "-C",
+            "-D",
+            "-R",
+            "-T",
+            "-g",
+            "-h",
+            "-p",
+            "-r",
+            "-t",
+            "-u",
+            "--chdir",
+            "--chroot",
+            "--close-from",
+            "--command-timeout",
+            "--group",
+            "--host",
+            "--prompt",
+            "--role",
+            "--type",
+            "--user",
+        }
+    ),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
+
+KUBECTL_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--as",
+        "--as-group",
+        "--as-uid",
+        "--cache-dir",
+        "--certificate-authority",
+        "--chunk-size",
+        "--client-certificate",
+        "--client-key",
+        "--cluster",
+        "--context",
+        "--field-manager",
+        "--field-selector",
+        "--filename",
+        "--kubeconfig",
+        "--label-selector",
+        "--namespace",
+        "--output",
+        "--password",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--selector",
+        "--server",
+        "--sort-by",
+        "--subresource",
+        "--template",
+        "--token",
+        "--user",
+        "--username",
+        "-c",
+        "-f",
+        "-l",
+        "-n",
+        "-o",
+    }
+)
+
+KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
+
+EXEC_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--container",
+        "--namespace",
+        "--pod-running-timeout",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--shell",
+        "-c",
+        "-n",
+    }
+)
+
+EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-q", "-t"})
+
+EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
+
+SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
+
+
+def exec_remote_tokens_after_resource(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Return the remote command tokens after the pod argument of an exec invocation."""
+    resource_seen = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return tokens[index + 1 :]
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=EXEC_OPTIONS_WITH_VALUES,
+            boolean_flags=EXEC_BOOLEAN_OPTIONS,
+            boolean_short_cluster=EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if not resource_seen:
+            resource_seen = True
+            index += 1
+            continue
+        return tokens[index:]
+    return ()
+
+
 def shell_command_script(tokens: tuple[str, ...]) -> str | None:
     """Return the script passed to a shell's ``-c`` option, if present."""
 
@@ -166,7 +291,7 @@ def is_output_redirect_target(
     *,
     previous_token: str | None,
 ) -> bool:
-    return token.startswith((">", "1>", "2>", ">>", "1>>", "2>>")) or (previous_token in _OUTPUT_REDIRECT_TOKENS)
+    return token.startswith((">", "1>", "2>", ">>", "1>>", "2>>")) or (previous_token in OUTPUT_REDIRECT_TOKENS)
 
 
 def is_proc_environ_path(path: str) -> bool:
@@ -235,7 +360,7 @@ def matching_source_arguments(
     sources: list[str] = []
     previous_token: str | None = None
     for token in tokens[1:]:
-        if token in _OUTPUT_REDIRECT_TOKENS:
+        if token in OUTPUT_REDIRECT_TOKENS:
             previous_token = token
             continue
         normalized_token = secret_volume_argument_value(token)

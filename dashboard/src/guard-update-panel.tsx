@@ -13,6 +13,8 @@ import {
   type GuardUpdateChannelProof,
 } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { dashboardEmbedsInDesktop } from "./desktop-embed";
+import { shouldPromptRecoveryReinstall, updateHelpCopy, updateStatusLabel } from "./guard-update-copy";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
 import type {
   GuardApprovalGatePublicConfig,
@@ -39,84 +41,25 @@ export type GuardUpdatePanelProps = {
   compact?: boolean;
 };
 
-function updateStatusLabel(status: GuardUpdateStatus | null | undefined): string {
-  if (!status) {
-    return "Checking version…";
-  }
-  if (status.update_available && status.latest_version) {
-    return `Version ${status.latest_version} is ready`;
-  }
-  return `Version ${status.current_version}`;
-}
-
-function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
-  return (
-    status?.recovery_reinstall_available === true &&
-    status?.auto_updatable !== true &&
-    status?.version_check?.update_available === true
-  );
-}
-
-function recoveryReinstallHelpCopy(status: GuardUpdateStatus | null | undefined): string | null {
-  if (!shouldPromptRecoveryReinstall(status)) {
-    return null;
-  }
-  const blockedReason = status?.blocked_reason ?? "";
-  if (blockedReason.includes("local wheel whose source file is no longer available")) {
-    return "This install came from a local wheel whose source file is no longer available, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-  }
-  if (blockedReason.includes("local wheel")) {
-    return "This install came from a local wheel, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-  }
-  return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-}
-
-function updateHelpCopy(
-  status: GuardUpdateStatus | null | undefined,
-  phase: GuardUpdatePhase,
-  errorMessage?: string | null,
-): string | null {
-  if (phase === "updating") {
-    return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
-  }
-  if (phase === "reconnecting") {
-    return "Reconnecting to Guard after the update…";
-  }
-  if (phase === "error") {
-    return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
-  }
-  if (status?.update_suppressed) {
-    if (status.retry_command) {
-      return `Automatic update already ran but this install is still behind. Run ${status.retry_command} in your terminal.`;
-    }
-    if (status.update_attempt_message) {
-      return status.update_attempt_message;
-    }
-    return "Automatic update already ran but this install is still behind the latest release.";
-  }
-  if (status?.update_available) {
-    return "This restarts Guard for a moment. Open approvals will stay saved.";
-  }
-  if (status && !status.auto_updatable && status.recovery_reinstall_available) {
-    return recoveryReinstallHelpCopy(status);
-  }
-  if (status && !status.auto_updatable && status.blocked_reason) {
-    return status.blocked_reason;
-  }
-  return null;
-}
-
 export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  // Inside the Desktop window, updates belong to the app's own updater;
+  // a second button here would race it against the same runtime.
   const showUpdateButton =
+    !embeddedInDesktop &&
     props.updateStatus?.update_available === true &&
     props.updateStatus.auto_updatable &&
     props.updateStatus.update_suppressed !== true &&
     phase !== "updating" &&
     phase !== "reconnecting";
-  const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton =
+    !embeddedInDesktop &&
+    shouldPromptRecoveryReinstall(props.updateStatus) &&
+    phase !== "updating" &&
+    phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha" || (
     props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha"
