@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -15,6 +16,17 @@ def startup_generation_is_current(server: GuardDaemonServer, generation: int | N
 
     with server._lifecycle_lock:
         return generation == server._lifecycle_generation and not server._shutdown_started.is_set()
+
+
+def _begin_owned_service_with_store_recovery(server: GuardDaemonServer, generation: int) -> None:
+    """Retry owned startup once after a fatal SQLite store is quarantined."""
+
+    try:
+        server._begin_owned_service(generation)
+    except sqlite3.DatabaseError as error:
+        if not server._server.store._recover_fatal_sqlite_store(error):
+            raise
+        server._begin_owned_service(generation)
 
 
 def _preflight_existing_service_workers(server: GuardDaemonServer) -> None:
@@ -52,7 +64,7 @@ def begin_service(server: GuardDaemonServer) -> None:
             if not startup_generation_is_current(server, generation):
                 raise RuntimeError("Guard daemon stopped during startup")
             server._owner_lock = acquire_guard_daemon_owner_lock(server._server.store.guard_home)
-            server._begin_owned_service(generation)
+            _begin_owned_service_with_store_recovery(server, generation)
     except BaseException as error:
         server._diagnostics.record_exception("daemon_start_failed")
         server._record_lifecycle("start_failed", reason="initialization_failed")
