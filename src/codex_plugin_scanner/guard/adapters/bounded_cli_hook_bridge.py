@@ -340,7 +340,7 @@ def _should_exit_block(harness: str, event_name: str, policy_action: str) -> boo
     """Mirror _should_emit_native_hook_exit_block."""
     canonical = harness.strip().lower().replace("_", "-")
     compact = event_name.replace("_", "").replace("-", "").lower()
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and compact in {
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "termcoder"} and compact in {
         "pretooluse",
         "userpromptsubmit",
         "pretoolcall",
