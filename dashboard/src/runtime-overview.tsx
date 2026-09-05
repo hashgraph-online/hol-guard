@@ -1,5 +1,6 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardOperatorHealth, GuardOperatorHealthState, GuardProofStatus, GuardProtectionState, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 import { protectionHealthFor } from "./protection-health";
 import { guardActionPresentation } from "./guard-action";
@@ -613,9 +614,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
               Apps
             </ActionButton>
             {snapshot.cloud_state === "local_only" ? (
-              <ActionButton href={snapshot.connect_url} variant="secondary">
-                Connect this machine
-              </ActionButton>
+              <ConnectGuardCloudButton label="Connect this machine" variant="outline" />
             ) : null}
           </div>
         </div>

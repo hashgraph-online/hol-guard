@@ -2,6 +2,7 @@ import { r as reactExports, R as remainingProtectionRepairParts, T as Protection
 import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 function recoverySummary(failCount, unknownCount, needsConnectedApp, failedLabels = []) {
   if (needsConnectedApp) {
     return "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected.";
@@ -376,8 +377,10 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
       subheadline: "Guard is confirming local protection. This takes a moment.",
       primaryCtaLabel: "Open Protect",
       primaryCtaHref: urls.fleet_url,
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: "Open Home",
-      secondaryCtaHref: urls.dashboard_url
+      secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false
     };
   }
   if (hasApps && protectionState !== "protected") {
@@ -387,8 +390,10 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
       subheadline: protectionState === "partial" ? "Core protection passes. Finish the remaining proofs below to reach full protection." : "Some protection checks failed or remain unproven. Use the steps below to restore full protection.",
       primaryCtaLabel: "Restore full protection",
       primaryCtaHref: "#protection-recovery",
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
-      secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url
+      secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url,
+      secondaryCtaStartsCloudConnect: cloudState === "local_only"
     };
   }
   if (cloudState === "local_only") {
@@ -398,8 +403,10 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
       subheadline: hasApps ? "Guard is protecting your local AI apps." : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Connect this machine",
       primaryCtaHref: urls.connect_url,
+      primaryCtaStartsCloudConnect: true,
       secondaryCtaLabel: "Open Home",
-      secondaryCtaHref: urls.dashboard_url
+      secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false
     };
   }
   if (cloudState === "paired_waiting") {
@@ -409,8 +416,10 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
       subheadline: hasApps ? "Guard is running. First cloud proof is on its way." : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Open Cloud Devices",
       primaryCtaHref: urls.fleet_url,
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: "Open Home",
-      secondaryCtaHref: urls.dashboard_url
+      secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false
     };
   }
   return {
@@ -419,8 +428,10 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
     subheadline: hasApps ? "Confirm that Guard is running and protecting your local AI apps." : SUPPORTED_APPS_COPY,
     primaryCtaLabel: "Open Cloud Devices",
     primaryCtaHref: urls.fleet_url,
+    primaryCtaStartsCloudConnect: false,
     secondaryCtaLabel: "Open Home",
-    secondaryCtaHref: urls.dashboard_url
+    secondaryCtaHref: urls.dashboard_url,
+    secondaryCtaStartsCloudConnect: false
   };
 }
 function collectHarnesses(snapshot) {
@@ -561,8 +572,8 @@ function FleetWorkspace(props) {
         status: heroCopy.status,
         headline: heroCopy.headline,
         subheadline: heroCopy.subheadline,
-        cta: protectionHealth.state !== "protected" ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
-        secondaryCta: protectionHealth.state !== "protected" ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
+        cta: protectionHealth.state !== "protected" ? null : heroCopy.primaryCtaStartsCloudConnect ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { label: heroCopy.primaryCtaLabel, variant: "primary" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        secondaryCta: protectionHealth.state !== "protected" ? null : heroCopy.secondaryCtaStartsCloudConnect ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { label: heroCopy.secondaryCtaLabel, variant: "outline" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(

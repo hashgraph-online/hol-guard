@@ -32,6 +32,7 @@ import {
   type DetectedAppStatus,
 } from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
+import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import { FleetProtectionRecovery } from "./fleet-protection-recovery";
 import type {
   GuardInventoryItem,
@@ -69,8 +70,10 @@ export type FleetHeroCopy = {
   subheadline: string;
   primaryCtaLabel: string;
   primaryCtaHref: string;
+  primaryCtaStartsCloudConnect: boolean;
   secondaryCtaLabel: string;
   secondaryCtaHref: string;
+  secondaryCtaStartsCloudConnect: boolean;
 };
 
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
@@ -89,8 +92,10 @@ export function resolveFleetHeroCopy(
       subheadline: "Guard is confirming local protection. This takes a moment.",
       primaryCtaLabel: "Open Protect",
       primaryCtaHref: urls.fleet_url,
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: "Open Home",
       secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false,
     };
   }
   if (hasApps && protectionState !== "protected") {
@@ -103,8 +108,10 @@ export function resolveFleetHeroCopy(
           : "Some protection checks failed or remain unproven. Use the steps below to restore full protection.",
       primaryCtaLabel: "Restore full protection",
       primaryCtaHref: "#protection-recovery",
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
       secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url,
+      secondaryCtaStartsCloudConnect: cloudState === "local_only",
     };
   }
   if (cloudState === "local_only") {
@@ -116,8 +123,10 @@ export function resolveFleetHeroCopy(
         : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Connect this machine",
       primaryCtaHref: urls.connect_url,
+      primaryCtaStartsCloudConnect: true,
       secondaryCtaLabel: "Open Home",
       secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false,
     };
   }
   if (cloudState === "paired_waiting") {
@@ -129,8 +138,10 @@ export function resolveFleetHeroCopy(
         : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Open Cloud Devices",
       primaryCtaHref: urls.fleet_url,
+      primaryCtaStartsCloudConnect: false,
       secondaryCtaLabel: "Open Home",
       secondaryCtaHref: urls.dashboard_url,
+      secondaryCtaStartsCloudConnect: false,
     };
   }
   return {
@@ -141,8 +152,10 @@ export function resolveFleetHeroCopy(
       : SUPPORTED_APPS_COPY,
     primaryCtaLabel: "Open Cloud Devices",
     primaryCtaHref: urls.fleet_url,
+    primaryCtaStartsCloudConnect: false,
     secondaryCtaLabel: "Open Home",
     secondaryCtaHref: urls.dashboard_url,
+    secondaryCtaStartsCloudConnect: false,
   };
 }
 
@@ -307,12 +320,16 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         headline={heroCopy.headline}
         subheadline={heroCopy.subheadline}
         cta={
-          protectionHealth.state !== "protected" ? null : (
+          protectionHealth.state !== "protected" ? null : heroCopy.primaryCtaStartsCloudConnect ? (
+            <ConnectGuardCloudButton label={heroCopy.primaryCtaLabel} variant="primary" />
+          ) : (
             <ActionButton href={heroCopy.primaryCtaHref}>{heroCopy.primaryCtaLabel}</ActionButton>
           )
         }
         secondaryCta={
-          protectionHealth.state !== "protected" ? null : (
+          protectionHealth.state !== "protected" ? null : heroCopy.secondaryCtaStartsCloudConnect ? (
+            <ConnectGuardCloudButton label={heroCopy.secondaryCtaLabel} variant="outline" />
+          ) : (
             <ActionButton href={heroCopy.secondaryCtaHref} variant="outline">
               {heroCopy.secondaryCtaLabel}
             </ActionButton>

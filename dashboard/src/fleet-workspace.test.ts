@@ -83,6 +83,10 @@ assert(
   `F1: local_only primary CTA href should be connect_url — got "${localOnlyWithApps.primaryCtaHref}"`
 );
 assert(
+  localOnlyWithApps.primaryCtaStartsCloudConnect === true,
+  "F1: local_only primary CTA must start the OAuth connect flow instead of a static link"
+);
+assert(
   localOnlyWithApps.primaryCtaLabel.toLowerCase().includes("connect"),
   `F1: local_only primary CTA label should mention connect — got "${localOnlyWithApps.primaryCtaLabel}"`
 );
@@ -93,7 +97,22 @@ assert(
   localOnlyNoApps.primaryCtaHref === urls.connect_url,
   `F2: local_only no-apps primary CTA href should be connect_url — got "${localOnlyNoApps.primaryCtaHref}"`
 );
+assert(
+  localOnlyNoApps.primaryCtaStartsCloudConnect === true,
+  "F2: local_only no-apps primary CTA must start the OAuth connect flow"
+);
 assert(localOnlyNoApps.status === "setup_gap", "F2: local_only no apps status should be setup_gap");
+
+const localOnlyDegraded = resolveFleetHeroCopy("local_only", 2, "degraded", urls);
+assert(
+  localOnlyDegraded.secondaryCtaStartsCloudConnect === true &&
+    localOnlyDegraded.secondaryCtaHref === urls.connect_url,
+  "degraded local_only secondary CTA must start the OAuth connect flow"
+);
+assert(
+  localOnlyDegraded.primaryCtaStartsCloudConnect === false,
+  "degraded local_only primary CTA stays on local protection repair"
+);
 
 const pairedWaitingWithApps = resolveFleetHeroCopy("paired_waiting", 3, "protected", urls);
 assert(
@@ -282,7 +301,7 @@ function containsJargon(text: string): boolean {
 }
 
 const allCopies = [
-  localOnlyWithApps, localOnlyNoApps, pairedWaitingWithApps, pairedWaitingNoApps, pairedActiveWithApps, pairedActiveNoApps,
+  localOnlyWithApps, localOnlyNoApps, localOnlyDegraded, pairedWaitingWithApps, pairedWaitingNoApps, pairedActiveWithApps, pairedActiveNoApps,
 ];
 for (const copy of allCopies) {
   assert(
@@ -297,6 +316,23 @@ for (const copy of allCopies) {
     !containsJargon(copy.primaryCtaLabel),
     `F7: primaryCtaLabel must not contain jargon — got: "${copy.primaryCtaLabel}"`
   );
+  if (copy.primaryCtaStartsCloudConnect) {
+    assert(
+      copy.primaryCtaHref === urls.connect_url,
+      `F7: OAuth-flagged primary CTA must keep href connect_url — got "${copy.primaryCtaHref}"`
+    );
+  }
+  if (copy.secondaryCtaStartsCloudConnect) {
+    assert(
+      copy.secondaryCtaHref === urls.connect_url,
+      `F7: OAuth-flagged secondary CTA must keep href connect_url — got "${copy.secondaryCtaHref}"`
+    );
+  }
 }
+assert(
+  pairedActiveWithApps.primaryCtaStartsCloudConnect === false &&
+    pairedActiveWithApps.secondaryCtaStartsCloudConnect === false,
+  "connected fleet CTAs stay plain cloud links without an OAuth flow"
+);
 
 console.log("fleet-workspace.test.ts: all tests passed");
