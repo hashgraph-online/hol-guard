@@ -144,8 +144,14 @@ def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int
     removed = 0
     for base in stale_prefixes:
         for ending in ("", "-wal", "-shm"):
+            candidate = guard_home / f"{base}{ending}"
             with suppress(OSError):
-                (guard_home / f"{base}{ending}").unlink()
+                # Recheck before unlinking: a sidecar may have been swapped
+                # for a symlink since the grouping pass, and a dangling link
+                # must never be followed or counted as a removed snapshot.
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                candidate.unlink()
                 removed += 1
     return removed
 
