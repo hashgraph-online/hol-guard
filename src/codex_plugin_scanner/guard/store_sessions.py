@@ -39,9 +39,6 @@ def _guard_operation_row(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
-
-
-
 class StoreSessionsMixin:
     def upsert_guard_session(
         self,

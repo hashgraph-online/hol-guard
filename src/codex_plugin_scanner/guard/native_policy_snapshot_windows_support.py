@@ -56,6 +56,7 @@ def _windows_write_chunks_and_flush(kernel32: Any, handle: Any, payload: bytes) 
     if not flush(handle):
         raise NativePolicySnapshotError("native_policy_windows_sync_failed")
 
+
 def _snapshot_api() -> Any:
     """Resolve the compatibility façade only after package initialization."""
 

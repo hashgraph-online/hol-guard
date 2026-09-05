@@ -277,7 +277,6 @@ def _windows_write_private_file_atomic(
 ) -> None:
     """Create, write, and commit a private file while parent handles remain held."""
 
-
     if not payload or len(payload) > maximum_bytes:
         raise NativePolicySnapshotError("native_policy_windows_write_too_large")
     temporary_name = _windows_child_name(temporary_name)

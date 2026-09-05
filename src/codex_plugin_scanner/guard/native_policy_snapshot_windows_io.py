@@ -312,7 +312,6 @@ def _windows_apply_private_dacl(kernel32: Any, handle: Any, descriptor: Any, dac
 def _windows_write_private_bytes(path: Path, payload: bytes, *, maximum_bytes: int) -> None:
     """Create, verify, and durably write bytes through one private handle."""
 
-
     if not payload or len(payload) > maximum_bytes:
         raise NativePolicySnapshotError("native_policy_windows_write_too_large")
     api = _snapshot_api()
