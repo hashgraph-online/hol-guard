@@ -363,6 +363,7 @@ class StoreConnectionSchemaMixin:
                 except OSError:
                     failed_identity = None
                 if yielded:
+                    error.guard_failed_sqlite_identity = failed_identity
                     raise
         if fatal_error is None:
             return
@@ -391,9 +392,7 @@ class StoreConnectionSchemaMixin:
         database_failed = False
         try:
             connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-            # Hot-path tuning: synchronous=NORMAL is only safe once the database
-            # is in WAL mode (durability comes from checkpointing, not per-commit
-            # fsync). Leave FULL for rollback-journal DBs and schema-init paths.
+            # WAL can use synchronous=NORMAL; rollback-journal and schema-init stay FULL.
             journal_mode_row = connection.execute("pragma journal_mode").fetchone()
             if journal_mode_row is not None and str(journal_mode_row[0]).lower() == "wal":
                 connection.execute("pragma synchronous=NORMAL")
