@@ -52,8 +52,9 @@ from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from ..codex_hook_registration import (
-    codex_hook_doctor_warnings,
     exact_legacy_hook_bindings,
+    finalize_codex_doctor_setup_status,
+    finalize_codex_doctor_warnings,
     install_managed_codex_hook_groups,
     overlay_live_owned_event_matches,
 )
@@ -70,7 +71,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
-from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
+from .base import HarnessAdapter, HarnessContext, _command_available
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -1363,13 +1364,10 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload = super().diagnostics(context)
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
-        warnings = (
-            [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
-        )
-        warnings.extend(codex_hook_doctor_warnings(hook_state))
+        items = warning_items if isinstance(warning_items, list) else []
+        warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
-        if payload.get("setup_status") == "active" and _warnings_include_setup_failure(warnings):
-            payload["setup_status"] = "broken"
+        payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
         payload["native_hook_state"] = hook_state
         return payload
 
