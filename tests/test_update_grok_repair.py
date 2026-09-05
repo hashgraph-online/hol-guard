@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.grok_config import (
@@ -226,3 +228,53 @@ def test_hook_config_from_windows_shell_escaped_json(tmp_path: Path) -> None:
     assert parsed is not None
     assert parsed["python_executable"] == config["python_executable"]
     assert "--json" in parsed["cli_args"]
+
+
+def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = core_dir / "versions" / "3.0.86" / "hol-guard"
+    versioned.parent.mkdir(parents=True)
+    versioned.write_text("binary", encoding="utf-8")
+    versioned.chmod(0o755)
+    shim = core_dir / "current-hol-guard"
+    shim.write_text("#!/bin/sh\n", encoding="utf-8")
+    shim.chmod(0o755)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.grok.sys.executable",
+        str(versioned),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_grok_repair.sys.executable",
+        str(versioned),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen",
+        True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
+        lambda executable, config: None,
+    )
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-08-17T00:00:00+00:00"
+    hook_path = _seed_grok_install(context, store, now)
+    _replace_hook_config(hook_path, python_executable=str(versioned))
+
+    repaired, warning = repair_grok_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now=now,
+    )
+
+    assert warning is None
+    assert isinstance(repaired, dict)
+    payload = json.loads(hook_path.read_text(encoding="utf-8"))
+    command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert str(shim) in command
+    assert "/versions/3.0.86/hol-guard" not in command
