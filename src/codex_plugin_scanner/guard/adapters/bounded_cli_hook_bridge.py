@@ -74,8 +74,9 @@ def bounded_cli_hook_command(
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
-    python_executable = prune_safe_cli_executable(python_executable)
     frozen_launcher = bool(getattr(sys, "frozen", False))
+    if frozen_launcher:
+        python_executable = prune_safe_cli_executable(python_executable)
     config = {
         "python_executable": python_executable,
         "package_root": str(package_root.resolve()),
