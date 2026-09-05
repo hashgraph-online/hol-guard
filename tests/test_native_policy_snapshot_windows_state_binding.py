@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import codex_plugin_scanner.guard.native_policy_snapshot_windows_atomic as windows_atomic
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_state as windows_state
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 
@@ -77,4 +78,43 @@ def test_windows_private_state_binding_does_not_reclose_released_barrier(
         assert released == original_state_handle
         api._windows_close_handle(*released)
 
+    assert closed == [original_state_handle, guard_handle]
+
+
+def test_windows_rename_barrier_retains_handle_when_release_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    closed: list[tuple[object, object]] = []
+    api, guard_handle, original_state_handle, _live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
+    original_close = api._windows_close_handle
+    failed_release = False
+
+    def fail_first_state_close(kernel32: object, handle: object) -> None:
+        nonlocal failed_release
+        if handle == original_state_handle[1] and not failed_release:
+            failed_release = True
+            raise NativePolicySnapshotError("native_policy_windows_handle_close_failed")
+        original_close(kernel32, handle)
+
+    api._windows_close_handle = fail_first_state_close
+    monkeypatch.setattr(
+        windows_atomic,
+        "_windows_rename_file_handle",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("rename must not run after failed release")),
+    )
+
+    with pytest.raises(NativePolicySnapshotError, match="handle_close_failed"):
+        with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
+            windows_atomic._windows_rename_releasing_barrier(
+                api=api,
+                kernel32=object(),
+                source_handle=object(),
+                parent_path=binding.path,
+                parent_handle=binding.handle,
+                destination_name="snapshot.json",
+                replace_existing=True,
+                directory_handles=binding.handles,
+            )
+
+    assert failed_release
     assert closed == [original_state_handle, guard_handle]
