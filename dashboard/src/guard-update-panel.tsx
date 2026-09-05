@@ -14,7 +14,7 @@ import {
 } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
 import { dashboardEmbedsInDesktop } from "./desktop-embed";
-import { updateStatusLabel, updateHelpCopy } from "./guard-update-copy";
+import { shouldPromptRecoveryReinstall, updateHelpCopy, updateStatusLabel } from "./guard-update-copy";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
 import type {
   GuardApprovalGatePublicConfig,

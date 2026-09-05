@@ -10,7 +10,7 @@ export function updateStatusLabel(status: GuardUpdateStatus | null | undefined):
   return `Version ${status.current_version}`;
 }
 
-function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
+export function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
   return (
     status?.recovery_reinstall_available === true &&
     status?.auto_updatable !== true &&
