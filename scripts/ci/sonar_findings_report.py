@@ -125,7 +125,8 @@ def _collect_report(output: Path, report: dict) -> None:
         try:
             if not current.isascii() or not current.isdecimal() or int(current) <= 0:
                 raise ValueError("invalid triggering pull request number")
-            trigger = read_json("github", f"/repos/{REPOSITORY}/pulls/{int(current)}")
+            current = str(int(current))
+            trigger = read_json("github", f"/repos/{REPOSITORY}/pulls/{current}")
             pulls = [pull for pull in pulls if pull["number"] != trigger["number"]]
             pulls.append(trigger)
         except errors as error:

@@ -40,10 +40,11 @@ def test_discovery_failure_still_writes_metadata_and_main_snapshot(
     assert (report_directory / "main.json").is_file()
 
 
+@pytest.mark.parametrize("current", ["2778", "002778"])
 def test_triggering_pr_is_fetched_even_when_open_pr_discovery_fails(
-    report_directory: Path, monkeypatch: pytest.MonkeyPatch
+    report_directory: Path, monkeypatch: pytest.MonkeyPatch, current: str
 ) -> None:
-    monkeypatch.setenv("PULL_REQUEST_NUMBER", "2778")
+    monkeypatch.setenv("PULL_REQUEST_NUMBER", current)
     trigger = {"number": 2778, "head": {"sha": "a" * 40, "ref": "fix/ordinary"}}
 
     def read(_service: str, path: str, **_parameters: object):
@@ -65,10 +66,11 @@ def test_triggering_pr_is_fetched_even_when_open_pr_discovery_fails(
     assert (report_directory / "pr-2778.json").is_file()
 
 
+@pytest.mark.parametrize("current", ["2778", "002778"])
 def test_triggering_pr_is_included_when_it_is_not_in_the_open_list(
-    report_directory: Path, monkeypatch: pytest.MonkeyPatch
+    report_directory: Path, monkeypatch: pytest.MonkeyPatch, current: str
 ) -> None:
-    monkeypatch.setenv("PULL_REQUEST_NUMBER", "2778")
+    monkeypatch.setenv("PULL_REQUEST_NUMBER", current)
     trigger = {"number": 2778, "head": {"sha": "a" * 40, "ref": "fix/ordinary"}}
     calls = []
 
