@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -62,10 +63,10 @@ _DEFAULT_COLD_ITERATIONS = 3
 _DEFAULT_RECOVERY_ITERATIONS = 3
 _MAX_READINESS_SAMPLES = 8
 _MAX_CONCURRENCY = 64
-# The resident client pool is bounded at sixteen streams. Fill that pool before
-# taking the RSS baseline so its one-time process/thread allocation is steady
-# state rather than stress growth.
-_POOL_WARMUP_CONCURRENCY = 16
+# RSS includes this benchmark process as well as the daemon's descendants. Keep
+# the bounded c64 load-generator workers alive across baseline and stress so
+# their thread allocation cannot be misclassified as resident runtime growth.
+_LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 _HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
 
@@ -210,23 +211,46 @@ def _run_recovery(session: AdapterSession, iterations: int) -> list[float]:
     return values
 
 
+def _load_executor_worker(barrier: threading.Barrier) -> int:
+    barrier.wait()
+    return threading.get_ident()
+
+
+def _prime_load_executor(executor: ThreadPoolExecutor, concurrency: int) -> int:
+    """Start every bounded load-generator thread before the RSS baseline."""
+
+    _require(0 < concurrency <= _MAX_CONCURRENCY, "load executor concurrency exceeds benchmark limit")
+    barrier = threading.Barrier(
+        concurrency + 1,
+        timeout=_LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS,
+    )
+    futures = [executor.submit(_load_executor_worker, barrier) for _ in range(concurrency)]
+    try:
+        barrier.wait()
+        worker_ids = {future.result(timeout=_LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS) for future in futures}
+    except (threading.BrokenBarrierError, TimeoutError) as error:
+        raise RuntimeError("native_installed_slo_failed: load executor prewarm timed out") from error
+    _require(len(worker_ids) == concurrency, "load executor did not reach configured concurrency")
+    return len(worker_ids)
+
+
 def _run_concurrent(
     session: AdapterSession,
     routes: tuple[tuple[str, str], ...],
     concurrency: int,
+    executor: ThreadPoolExecutor,
 ) -> tuple[list[Observation], int]:
     selected = tuple(routes[index % len(routes)] for index in range(concurrency))
 
     observations: list[Observation] = []
     errors = 0
     _require(0 < concurrency <= _MAX_CONCURRENCY, "concurrency exceeds bounded benchmark limit")
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(session.observe, harness, event, "1k") for harness, event in selected]
-        for future in futures:
-            try:
-                observations.append(future.result(timeout=5))
-            except Exception:
-                errors += 1
+    futures = [executor.submit(session.observe, harness, event, "1k") for harness, event in selected]
+    for future in futures:
+        try:
+            observations.append(future.result(timeout=5))
+        except Exception:
+            errors += 1
     return observations, errors
 
 
@@ -267,10 +291,11 @@ def _prewarm_ready_hook_workers(
     session: AdapterSession,
     routes: tuple[tuple[str, str], ...],
     concurrency: int,
+    executor: ThreadPoolExecutor,
 ) -> tuple[list[Observation], int]:
     """Exercise one request on each ready worker and prove the pool stayed steady."""
 
-    observations, errors = _run_concurrent(session, routes, concurrency)
+    observations, errors = _run_concurrent(session, routes, concurrency, executor)
     stats = session.daemon._server.hook_process_runner.stats()
     _require(
         stats["target"] == concurrency
@@ -336,30 +361,42 @@ def _measure_slo(
             "serialized resident pool warmup did not stay on the allowed native route",
         )
         ready_workers = _stabilize_ready_hook_workers(session)
-        rss_baseline = _steady_state_rss_baseline(
-            lambda: _prewarm_ready_hook_workers(session, routes, ready_workers),
-            sample_capacity=session.daemon._server.hook_process_runner.stats,
-            expected_warmup_count=ready_workers,
-        )
-        rss_peak = rss_baseline
-        native_overloads_before_16 = session.native_overload_count()
-        concurrent_16, errors_16 = _run_concurrent(session, routes, 16) if include_capacity else ([], 0)
-        native_overloads_after_16 = session.native_overload_count()
-        native_overloads_before_64 = native_overloads_after_16
-        concurrent_64, errors_64 = _run_concurrent(session, routes, 64) if include_capacity else ([], 0)
-        native_overloads_after_64 = session.native_overload_count()
-        if include_capacity:
-            concurrent_16 = _classify_native_overloads(
-                concurrent_16,
-                overload_delta=native_overloads_after_16 - native_overloads_before_16,
+        load_concurrency = _MAX_CONCURRENCY if include_capacity else ready_workers
+        with ThreadPoolExecutor(max_workers=load_concurrency) as load_executor:
+            _prime_load_executor(load_executor, load_concurrency)
+            rss_baseline = _steady_state_rss_baseline(
+                lambda: _prewarm_ready_hook_workers(
+                    session,
+                    routes,
+                    ready_workers,
+                    load_executor,
+                ),
+                sample_capacity=session.daemon._server.hook_process_runner.stats,
+                expected_warmup_count=ready_workers,
             )
-            concurrent_64 = _classify_native_overloads(
-                concurrent_64,
-                overload_delta=native_overloads_after_64 - native_overloads_before_64,
+            rss_peak = rss_baseline
+            native_overloads_before_16 = session.native_overload_count()
+            concurrent_16, errors_16 = (
+                _run_concurrent(session, routes, 16, load_executor) if include_capacity else ([], 0)
             )
-        # The post-stress sample keeps growth caused by the c16/c64 workload in
-        # the comparison while the baseline already includes bounded pool setup.
-        rss_peak = max(rss_peak, process_rss_bytes())
+            native_overloads_after_16 = session.native_overload_count()
+            native_overloads_before_64 = native_overloads_after_16
+            concurrent_64, errors_64 = (
+                _run_concurrent(session, routes, 64, load_executor) if include_capacity else ([], 0)
+            )
+            native_overloads_after_64 = session.native_overload_count()
+            if include_capacity:
+                concurrent_16 = _classify_native_overloads(
+                    concurrent_16,
+                    overload_delta=native_overloads_after_16 - native_overloads_before_16,
+                )
+                concurrent_64 = _classify_native_overloads(
+                    concurrent_64,
+                    overload_delta=native_overloads_after_64 - native_overloads_before_64,
+                )
+            # The post-stress sample keeps daemon/runtime growth in the comparison
+            # while the same bounded load-generator allocation stays in baseline.
+            rss_peak = max(rss_peak, process_rss_bytes())
         readiness = [session.readiness_ms]
     if readiness_samples > 1:
         readiness.extend(_readiness_samples(runtime, readiness_samples - 1))
