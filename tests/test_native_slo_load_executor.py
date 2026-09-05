@@ -18,20 +18,27 @@ def test_load_executor_is_fully_started_before_rss_baseline() -> None:
         assert benchmark._prime_load_executor(executor, 4) == 4
 
 
-def test_timed_out_capacity_wave_aborts_before_next_wave(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_timed_out_capacity_wave_returns_without_waiting_for_running_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def slow_observe(*_args: object) -> object:
-        time.sleep(0.02)
+        time.sleep(0.2)
         return object()
 
     session = cast(AdapterSession, SimpleNamespace(observe=slow_observe))
-    monkeypatch.setattr(benchmark, "_CONCURRENT_WAVE_TIMEOUT_SECONDS", 0.001)
-
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    monkeypatch.setattr(benchmark, "_CONCURRENT_WAVE_TIMEOUT_SECONDS", 0.01)
+    executor = ThreadPoolExecutor(max_workers=1)
+    started = time.perf_counter()
+    try:
         with pytest.raises(RuntimeError, match="concurrent capacity wave timed out"):
             benchmark._run_concurrent(session, (("codex", "PreToolUse"),), 1, executor)
+        elapsed = time.perf_counter() - started
+        assert elapsed < 0.1
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
-def test_measure_slo_isolates_c16_then_primes_c64_before_rss_baseline(
+def test_measure_slo_prestarts_isolated_c16_then_primes_c64_before_rss_baseline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, int | None]] = []
@@ -55,7 +62,7 @@ def test_measure_slo_isolates_c16_then_primes_c64_before_rss_baseline(
             return 0
 
     def fake_prime(executor: ThreadPoolExecutor, concurrency: int) -> int:
-        calls.append(("prime", id(executor)))
+        calls.append((f"prime-{concurrency}", id(executor)))
         return concurrency
 
     def fake_prewarm(
@@ -105,13 +112,15 @@ def test_measure_slo_isolates_c16_then_primes_c64_before_rss_baseline(
     )
 
     assert [name for name, _ in calls] == [
+        "prime-16",
         "c16",
-        "prime",
+        "prime-64",
         "baseline-start",
         "baseline-warmup",
         "baseline-end",
         "c64",
     ]
     executor_by_call = {name: executor_id for name, executor_id in calls if executor_id is not None}
+    assert executor_by_call["prime-16"] == executor_by_call["c16"]
     assert executor_by_call["c16"] != executor_by_call["c64"]
-    assert executor_by_call["prime"] == executor_by_call["baseline-warmup"] == executor_by_call["c64"]
+    assert executor_by_call["prime-64"] == executor_by_call["baseline-warmup"] == executor_by_call["c64"]
