@@ -23,9 +23,7 @@ def _invoke(tmp_path):
 
 @pytest.mark.parametrize("decision", ["allow", "deny"])
 @pytest.mark.parametrize("suppressed", [False, True])
-def test_daemon_output_keeps_decision_and_completion_separate(
-    tmp_path, monkeypatch, capsys, decision, suppressed
-) -> None:
+def test_daemon_output_keeps_decision_and_completion_separate(tmp_path, monkeypatch, capsys, decision, suppressed) -> None:
     response = json.dumps({"hookSpecificOutput": {"permissionDecision": decision}})
     monkeypatch.setattr(bridge.sys, "stdin", io.StringIO("{}"))
     monkeypatch.setattr(bridge, "_recovery_command", Mock(return_value=()))
