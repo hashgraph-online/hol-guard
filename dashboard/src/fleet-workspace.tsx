@@ -32,9 +32,7 @@ import {
   type DetectedAppStatus,
 } from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
-import {
-  FleetProtectionRecovery,
-} from "./fleet-protection-recovery";
+import { FleetProtectionRecovery } from "./fleet-protection-recovery";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
