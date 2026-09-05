@@ -251,6 +251,11 @@ assert(
   resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true) === "partial",
   "active Codex with passing hooks is not a repair loop when global protection is Watch",
 );
+const missingHookProofHealth = { ...watchModeCodexHealth, checks: [] };
+assert(
+  resolveDetectedAppStatus({ active: true }, missingHookProofHealth, true, true, true) === "needs_repair",
+  "active installs without an app-specific hook proof still need repair",
+);
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];
 for (const state of allStates) {
