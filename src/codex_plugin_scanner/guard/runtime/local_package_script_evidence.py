@@ -7,6 +7,7 @@ import json
 import re
 import shlex
 from dataclasses import asdict, dataclass
+from functools import partial
 from pathlib import Path
 from typing import Final, Literal, cast
 from urllib.parse import urlsplit
@@ -27,6 +28,7 @@ EvidenceStatus = Literal["complete", "incomplete"]
 _OPERATIONS: Final = frozenset({"test", "lint", "build", "typecheck"})
 _RUNNER_PACKAGE: Final = {"vitest": "vitest", "eslint": "eslint", "vite": "vite", "tsc": "typescript"}
 _VERSION = re.compile(r"^(?:[~^])?(\d+)\.(\d+)\.(\d+)$")
+_declared_version_matches = partial(version_spec_matches, version_re=_VERSION, caret_pins_zero_major=True)
 _ALTERNATE_LOCKS: Final = ("bun.lock", "bun.lockb", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock")
 _TEST_SUFFIXES: Final = (
     ".test.js",
@@ -107,11 +109,7 @@ def build_local_package_script_evidence(
     require(source_ok, "lock_source_drift", reasons)
     require(installed_name == package, "installed_package_name_mismatch", reasons)
     require(installed_version is not None, "installed_package_missing", reasons)
-    require(
-        version_spec_matches(declared, locked, version_re=_VERSION, caret_pins_zero_major=True),
-        "manifest_lock_version_drift",
-        reasons,
-    )
+    require(_declared_version_matches(declared, locked), "manifest_lock_version_drift", reasons)
     require(locked == installed_version, "lock_install_version_drift", reasons)
 
     bin_target = _package_bin_target(package_payload, runner)

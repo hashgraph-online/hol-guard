@@ -14,10 +14,10 @@ from .command_option_parsing import (
 )
 from .command_rules import (
     _after_leading_options,
-    _ExecutableContractBase,
     _segment_matches_executable,
     _without_options,
 )
+from .executable_flag_contract import _ExecutableContractBase
 
 
 def _normalized_string_set(values: frozenset[str], *, field_name: str) -> frozenset[str]:

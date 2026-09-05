@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from functools import partial
 from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import urlsplit
@@ -26,6 +27,7 @@ RunnerKind = Literal["vitest", "eslint", "tsx"]
 EvidenceStatus = Literal["complete", "incomplete"]
 
 _VERSION_RE = re.compile(r"^(?:[~^])?(\d+)\.(\d+)\.(\d+)$")
+_declared_version_matches = partial(version_spec_matches, version_re=_VERSION_RE, caret_pins_zero_major=True)
 _RUNNER_OPERATION = {"vitest": "test", "eslint": "lint", "tsx": "diagnostic"}
 _SOURCE_PREFIXES = ("file:", "git+", "git://", "github:", "http://", "https://", "npm:", "workspace:")
 _TEST_SUFFIXES = (".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts", ".spec.tsx")
@@ -118,11 +120,7 @@ def build_local_node_runner_evidence(
     require(lock_source_ok, "lock_source_drift", reasons)
     require(installed_name == runner, "installed_package_name_mismatch", reasons)
     require(installed_version is not None, "installed_package_missing", reasons)
-    require(
-        version_spec_matches(declared_version, locked_version, version_re=_VERSION_RE, caret_pins_zero_major=True),
-        "manifest_lock_version_drift",
-        reasons,
-    )
+    require(_declared_version_matches(declared_version, locked_version), "manifest_lock_version_drift", reasons)
     require(locked_version == installed_version, "lock_install_version_drift", reasons)
     require(execution.declared_version == declared_version, "declared_dependency_mismatch", reasons)
 

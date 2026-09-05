@@ -14,30 +14,13 @@ from .command_option_parsing import (
     known_option_advance,
     matches_subcommands_conservatively,
 )
+from .executable_flag_contract import _ExecutableContractBase
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
 
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
-
-
-@dataclass(frozen=True, slots=True)
-class _ExecutableContractBase:
-    """Shared executable-matcher contract fields."""
-
-    executables: frozenset[str]
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    allow_leading_options: bool = False
-    leading_options_with_values: frozenset[str] = frozenset()
-    interspersed_options_with_values: frozenset[str] = frozenset()
-    interspersed_flags: frozenset[str] = frozenset()
-    options_with_values: frozenset[str] = frozenset()
-    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
-    required_flags_in_all_arguments: bool = False
-    fail_secure_unknown_options: bool = False
 
 
 @final
