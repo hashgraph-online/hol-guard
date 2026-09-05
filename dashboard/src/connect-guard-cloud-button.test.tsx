@@ -155,6 +155,32 @@ assert(
 );
 
 states = await runFlow(
+  connectStatus({ connectUrl: CONNECT_URL }),
+  {
+    connect_required: true,
+    connect_flow: {
+      state: "failed",
+      title: "Guard Cloud sign-in failed",
+      detail: "The connect window was closed before sign-in finished.",
+      action_label: "Connect Guard Cloud",
+      connect_url: CONNECT_URL,
+      authorize_url: null,
+      browser_opened: null,
+      request_id: "guard-connect-test",
+      poll_after_ms: 100,
+    },
+    dashboard_url: null,
+  },
+);
+const connectOnlyFailed = states[states.length - 1];
+assert(
+  connectOnlyFailed?.status === "error" &&
+    connectOnlyFailed.message === "The connect window was closed before sign-in finished." &&
+    connectOnlyFailed.manualUrl === CONNECT_URL,
+  "a failed connect_url-only flow must surface the daemon failure instead of staying pending",
+);
+
+states = await runFlow(
   connectStatus({ connectUrl: null }),
   connectStatus({ connectUrl: null }),
 );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { HiMiniCloudArrowUp } from "react-icons/hi2";
 
 import { ActionButton } from "./approval-center-primitives";
+import type { GuardCloudConnectStatusResponse } from "./guard-types";
 import {
   safeCloudConnectUrl,
   startOrRecoverCloudConnect,
@@ -32,6 +33,28 @@ function cloudConnectPendingMessage(opened: boolean): string {
 
 function connectOnlyPendingMessage(): string {
   return "Open sign-in to continue. This page will update automatically.";
+}
+
+function postWaitState(
+  connectedStatus: GuardCloudConnectStatusResponse,
+  fallbackUrl: string,
+): GuardCloudConnectUiState {
+  const flow = connectedStatus.connect_flow;
+  if (connectedStatus.connect_required && flow?.state === "failed") {
+    return {
+      status: "error",
+      message: flow.detail || "Guard Cloud sign-in could not finish. Try again.",
+      manualUrl: safeCloudConnectUrl(flow.authorize_url) ?? safeCloudConnectUrl(flow.connect_url) ?? fallbackUrl,
+    };
+  }
+  if (!connectedStatus.connect_required) {
+    return { status: "connected" };
+  }
+  return {
+    status: "pending",
+    message: SIGN_IN_PENDING_MESSAGE,
+    manualUrl: safeCloudConnectUrl(flow?.authorize_url) ?? fallbackUrl,
+  };
 }
 
 export type GuardCloudConnectFlowDeps = {
@@ -85,18 +108,7 @@ export async function runGuardCloudConnectFlow(
       });
       const connectedStatus = await deps.waitConnection(status, { signal });
       if (signal.aborted) return;
-      if (!connectedStatus.connect_required) {
-        emitIfLive({ status: "connected" });
-        return;
-      }
-      const failed = connectedStatus.connect_flow?.state === "failed";
-      emitIfLive({
-        status: failed ? "error" : "pending",
-        message: failed
-          ? connectedStatus.connect_flow?.detail || "Guard Cloud sign-in could not finish. Try again."
-          : SIGN_IN_PENDING_MESSAGE,
-        manualUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? authorizeUrl,
-      });
+      emitIfLive(postWaitState(connectedStatus, authorizeUrl));
       return;
     }
     const connectUrl = safeCloudConnectUrl(flow?.connect_url);
@@ -108,15 +120,7 @@ export async function runGuardCloudConnectFlow(
       });
       const connectedStatus = await deps.waitConnection(status, { signal });
       if (signal.aborted) return;
-      if (!connectedStatus.connect_required) {
-        emitIfLive({ status: "connected" });
-        return;
-      }
-      emitIfLive({
-        status: "pending",
-        message: SIGN_IN_PENDING_MESSAGE,
-        manualUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? connectUrl,
-      });
+      emitIfLive(postWaitState(connectedStatus, connectUrl));
       return;
     }
     emitIfLive({

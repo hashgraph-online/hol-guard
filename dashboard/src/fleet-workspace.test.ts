@@ -106,9 +106,8 @@ assert(localOnlyNoApps.status === "setup_gap", "F2: local_only no apps status sh
 
 const localOnlyDegraded = resolveFleetHeroCopy("local_only", 2, "degraded", urls);
 assert(
-  localOnlyDegraded.secondaryCtaStartsCloudConnect === true &&
-    localOnlyDegraded.secondaryCtaHref === urls.connect_url,
-  "degraded local_only secondary CTA must start the OAuth connect flow"
+  localOnlyDegraded.secondaryCtaStartsCloudConnect === false,
+  "degraded hero CTAs stay hidden; the protection recovery panel owns the connect action"
 );
 assert(
   localOnlyDegraded.primaryCtaStartsCloudConnect === false,

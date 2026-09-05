@@ -6,6 +6,24 @@ function cloudConnectPendingMessage(opened) {
 function connectOnlyPendingMessage() {
   return "Open sign-in to continue. This page will update automatically.";
 }
+function postWaitState(connectedStatus, fallbackUrl) {
+  const flow = connectedStatus.connect_flow;
+  if (connectedStatus.connect_required && flow?.state === "failed") {
+    return {
+      status: "error",
+      message: flow.detail || "Guard Cloud sign-in could not finish. Try again.",
+      manualUrl: safeCloudConnectUrl(flow.authorize_url) ?? safeCloudConnectUrl(flow.connect_url) ?? fallbackUrl
+    };
+  }
+  if (!connectedStatus.connect_required) {
+    return { status: "connected" };
+  }
+  return {
+    status: "pending",
+    message: SIGN_IN_PENDING_MESSAGE,
+    manualUrl: safeCloudConnectUrl(flow?.authorize_url) ?? fallbackUrl
+  };
+}
 const defaultGuardCloudConnectFlowDeps = {
   start: startOrRecoverCloudConnect,
   waitAuthorize: waitForAuthorizeUrl,
@@ -35,16 +53,7 @@ async function runGuardCloudConnectFlow(signal, emit, deps = defaultGuardCloudCo
       });
       const connectedStatus = await deps.waitConnection(status, { signal });
       if (signal.aborted) return;
-      if (!connectedStatus.connect_required) {
-        emitIfLive({ status: "connected" });
-        return;
-      }
-      const failed = connectedStatus.connect_flow?.state === "failed";
-      emitIfLive({
-        status: failed ? "error" : "pending",
-        message: failed ? connectedStatus.connect_flow?.detail || "Guard Cloud sign-in could not finish. Try again." : SIGN_IN_PENDING_MESSAGE,
-        manualUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? authorizeUrl
-      });
+      emitIfLive(postWaitState(connectedStatus, authorizeUrl));
       return;
     }
     const connectUrl = safeCloudConnectUrl(flow?.connect_url);
@@ -56,15 +65,7 @@ async function runGuardCloudConnectFlow(signal, emit, deps = defaultGuardCloudCo
       });
       const connectedStatus = await deps.waitConnection(status, { signal });
       if (signal.aborted) return;
-      if (!connectedStatus.connect_required) {
-        emitIfLive({ status: "connected" });
-        return;
-      }
-      emitIfLive({
-        status: "pending",
-        message: SIGN_IN_PENDING_MESSAGE,
-        manualUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? connectUrl
-      });
+      emitIfLive(postWaitState(connectedStatus, connectUrl));
       return;
     }
     emitIfLive({

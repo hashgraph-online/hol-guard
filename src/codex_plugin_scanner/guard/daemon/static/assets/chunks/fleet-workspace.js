@@ -27,9 +27,11 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, u
       primaryCtaLabel: "Restore full protection",
       primaryCtaHref: "#protection-recovery",
       primaryCtaStartsCloudConnect: false,
+      // The hero CTAs are hidden while protection is degraded; the recovery
+      // panel below owns the connect action for that state.
       secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
       secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url,
-      secondaryCtaStartsCloudConnect: cloudState === "local_only"
+      secondaryCtaStartsCloudConnect: false
     };
   }
   if (cloudState === "local_only") {
