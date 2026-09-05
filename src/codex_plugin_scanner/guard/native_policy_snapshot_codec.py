@@ -9,6 +9,7 @@ import math
 from collections.abc import Mapping
 
 from .native_policy_snapshot_constants import (
+    _MAX_GENERATION,
     _VERIFIER_KEY_BYTES,
     POLICY_SNAPSHOT_FLOOR_DOMAIN,
     POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS,
@@ -152,7 +153,12 @@ def derive_native_policy_verifier_key(policy_integrity_key: bytes) -> bytes:
 def _generation_floor_mac_v3(generation: int, policy_digest: str, verifier_key: bytes) -> str:
     """Authenticate the resident generation floor the same way Rust does."""
 
-    message = generation.to_bytes(8, "big") + b"\0" + policy_digest.encode("utf-8")
+    if isinstance(generation, bool) or not isinstance(generation, int) or not 1 <= generation <= _MAX_GENERATION:
+        raise NativePolicySnapshotError("native_policy_snapshot_generation_invalid")
+    try:
+        message = generation.to_bytes(8, "big") + b"\0" + policy_digest.encode("utf-8")
+    except (OverflowError, UnicodeEncodeError) as error:
+        raise NativePolicySnapshotError("native_policy_snapshot_generation_invalid") from error
     return hmac.new(
         verifier_key,
         POLICY_SNAPSHOT_FLOOR_DOMAIN + message,

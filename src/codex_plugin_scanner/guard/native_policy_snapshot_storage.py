@@ -80,7 +80,7 @@ def _authority_snapshot_v3(
         or _canonical_json_bytes_v3(value) != payload
         or isinstance(generation_floor, bool)
         or not isinstance(generation_floor, int)
-        or generation_floor <= 0
+        or not 1 <= generation_floor <= _MAX_GENERATION
         or not _valid_digest_v3(policy_digest)
         or not _valid_digest_v3(floor_mac)
         or not isinstance(snapshot, dict)

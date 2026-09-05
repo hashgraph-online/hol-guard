@@ -33,7 +33,7 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
             Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY / _RUST_SNAPSHOT_STATE_NAME,
             verifier_key=derive_native_policy_verifier_key(material[0]),
         )
-    except NativePolicySnapshotError:
+    except (NativePolicySnapshotError, OverflowError):
         return None
     if cached is None:
         return None

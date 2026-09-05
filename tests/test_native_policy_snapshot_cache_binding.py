@@ -232,3 +232,24 @@ def test_prepare_workspace_policy_binds_resident_authority_without_publishing(
     binding = worker.prepare_workspace_policy(tmp_path / "workspace")
     assert binding is not None
     assert binding["generation"] == snapshot["generation"]
+
+
+def test_prepare_workspace_policy_rejects_out_of_range_generation_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    master = b"g" * 32
+    path = guard_home / "native-runtime" / "policy-snapshot-v3.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "floor_mac": "0" * 64,
+        "generation_floor": 2**64,
+        "policy_digest": "a" * 64,
+        "schema": POLICY_SNAPSHOT_AUTHORITY_SCHEMA,
+        "snapshot": {"generation": 2**64, "policy_digest": "a" * 64},
+    }
+    path.write_bytes(_canonical_json_bytes_v3(record))
+    path.chmod(0o600)
+    worker = _ready_worker(guard_home, master, monkeypatch)
+    assert worker.prepare_workspace_policy(tmp_path / "workspace") is None
