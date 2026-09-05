@@ -200,34 +200,34 @@ def main(
     hook_input = _bound_hook_input(hook_timeouts)
     if hook_input is None:
         sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
-        return 0
-    event_name, data, timeout_seconds = hook_input
-    deadline = time.monotonic() + timeout_seconds
-    response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
-        state_path=state_path,
-        fallback_command=fallback_command,
-        start_command=start_command,
-        query=query,
-        data=data,
-        deadline=deadline,
-        manifest_path=manifest_path,
-        config_json=config_json,
-    )
-    if response is None:
-        if launch_integrity_failed:
-            response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
-        else:
-            failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
-            response = _unavailable_response(event_name, failure_reason, data)
-    sys.stdout.write(
-        _bridge_output(
-            response,
-            event_name=event_name,
-            hook_input=data,
+    else:
+        event_name, data, timeout_seconds = hook_input
+        deadline = time.monotonic() + timeout_seconds
+        response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,
+            fallback_command=fallback_command,
+            start_command=start_command,
+            query=query,
+            data=data,
             deadline=deadline,
+            manifest_path=manifest_path,
+            config_json=config_json,
         )
-    )
+        if response is None:
+            if launch_integrity_failed:
+                response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+            else:
+                failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
+                response = _unavailable_response(event_name, failure_reason, data)
+        sys.stdout.write(
+            _bridge_output(
+                response,
+                event_name=event_name,
+                hook_input=data,
+                state_path=state_path,
+                deadline=deadline,
+            )
+        )
     return 0
 
 

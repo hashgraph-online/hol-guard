@@ -15,6 +15,7 @@ from ..integrations.cisco_skill_scanner import (
 from ..models import SEVERITY_ORDER, CheckResult, Finding, ScanOptions, Severity, max_severity
 from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .manifest import load_manifest
+from .skill_command_urls import CommandUrlPattern
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,21 +25,10 @@ class SkillSecurityContext:
     skip_message: str | None = None
 
 
-_RISKY_SKILL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+_RISKY_SKILL_PATTERNS: tuple[tuple[re.Pattern[str] | CommandUrlPattern, str], ...] = (
     (re.compile(r"cat\s+\.env", re.IGNORECASE), "reads the local .env file"),
-    # Unrolled skip loops keep these linear on adversarial skill content while
-    # matching the same leftmost spans the lazy .*? forms matched. The skip
-    # lookahead mirrors the full scheme+value match so a failed early candidate
-    # (for example "https://" followed by a backtick) is skipped like the lazy
-    # form skipped it, instead of stalling the loop.
-    (
-        re.compile(r"curl\s+(?:[^h\n]|h(?!ttps?:\/\/[^\s`\"']))*https?://[^\s`\"']+", re.IGNORECASE),
-        "sends workspace data to a remote endpoint",
-    ),
-    (
-        re.compile(r"wget\s+(?:[^h\n]|h(?!ttps?:\/\/[^\s`\"']))*https?://[^\s`\"']+", re.IGNORECASE),
-        "downloads or sends data over the network",
-    ),
+    (CommandUrlPattern(re.compile(r"curl\s+", re.IGNORECASE)), "sends workspace data to a remote endpoint"),
+    (CommandUrlPattern(re.compile(r"wget\s+", re.IGNORECASE)), "downloads or sends data over the network"),
     (re.compile(r"\b(?:bash|sh)\s+-lc\b", re.IGNORECASE), "runs through a shell wrapper"),
     (re.compile(r"(?:~\/\.ssh|id_rsa|authorized_keys)", re.IGNORECASE), "references sensitive SSH material"),
 )

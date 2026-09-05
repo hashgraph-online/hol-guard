@@ -50,6 +50,21 @@ def test_package_shim_status_exposes_phase11_alias_fields(tmp_path: Path) -> Non
     assert status["lastInterceptProofAt"] == status["last_intercept_proof_at"] == status["last_test_at"]
 
 
+def test_package_shim_audit_refuses_manifest_outside_guard_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _harness_context(tmp_path)
+    outside_manifest = tmp_path / "outside" / "manifest.json"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.package_shim_status._package_shim_manifest_path",
+        lambda _context: outside_manifest,
+    )
+
+    with pytest.raises(ValueError, match="escapes the Guard home"):
+        record_package_shim_audit_result(context, audited_at="2026-06-10T01:00:00+00:00")
+
+
 def test_package_shim_status_lists_tested_managers_after_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

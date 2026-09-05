@@ -30,6 +30,7 @@ from .action_lattice import most_restrictive_guard_action, normalize_guard_actio
 from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .approval_scope_support import package_request_runtime_workspace_scope
+from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig, resolve_risk_action
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
@@ -3866,14 +3867,12 @@ def _execute_cloud_workspace_audit_request(
     payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     runner = _runtime_runner_module()
-    request_headers = runner._guard_sync_headers(auth_context, request_url=request_url, method=method)
-    if payload is not None:
-        request_headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        request_url,
-        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
-        headers=request_headers,
+    request = build_cloud_workspace_audit_request(
+        auth_context=auth_context,
+        request_url=request_url,
         method=method,
+        payload=payload,
+        build_headers=runner._guard_sync_headers,
     )
     try:
         with managed_urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
