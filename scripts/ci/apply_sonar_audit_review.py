@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -32,9 +33,9 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def sonar(path: str, *, post: bool = False, raw: bool = False, **parameters: object):
+def sonar(path: str, *, post: bool = False, **parameters: object):
     if path not in {
-        "/api/issues/search", "/api/sources/raw", "/api/issues/add_comment", "/api/issues/do_transition",
+        "/api/issues/search", "/api/project_pull_requests/list", "/api/issues/add_comment", "/api/issues/do_transition",
     }:
         raise ValueError("unapproved Sonar endpoint")
     encoded = urlencode(parameters).encode()
@@ -49,7 +50,7 @@ def sonar(path: str, *, post: bool = False, raw: bool = False, **parameters: obj
         body = response.read(MAX_BYTES + 1)
     if len(body) > MAX_BYTES:
         raise ValueError("Sonar response exceeded limit")
-    return body.decode("utf-8") if raw else json.loads(body)
+    return json.loads(body)
 
 
 def fingerprint(source: str) -> str:
@@ -73,14 +74,42 @@ def read_issue() -> dict:
     return issue
 
 
-def verify_sources(manifest: dict) -> None:
+def read_analysis() -> dict:
+    payload = sonar("/api/project_pull_requests/list", project=PROJECT)
+    matches = [item for item in payload["pullRequests"] if str(item.get("key")) == str(PULL_REQUEST)]
+    if len(matches) != 1:
+        raise ValueError("reviewed analysis is missing or ambiguous")
+    analysis = matches[0]
+    sha = analysis.get("commit", {}).get("sha")
+    if (
+        analysis.get("branch") != "fix/sonar-blocker-control-flow"
+        or not isinstance(sha, str) or re.fullmatch(r"[0-9a-f]{40}", sha) is None
+        or not analysis.get("analysisDate")
+    ):
+        raise ValueError("reviewed analysis identity is invalid")
+    return {"sha": sha, "date": analysis["analysisDate"]}
+
+
+def analyzed_source(sha: str, path: str) -> str:
+    """Read the immutable SCM revision reported by Sonar, without sending its token."""
+    if re.fullmatch(r"[0-9a-f]{40}", sha) is None or path not in REVIEWED_SOURCES:
+        raise ValueError("unapproved analyzed source")
+    request = Request("https://raw.githubusercontent.com/hashgraph-online/hol-guard/" + sha + "/" + path)
+    with build_opener(NoRedirect()).open(request, timeout=30) as response:
+        body = response.read(MAX_BYTES + 1)
+    if len(body) > MAX_BYTES:
+        raise ValueError("analyzed source exceeded limit")
+    return body.decode("utf-8")
+
+
+def verify_sources(manifest: dict, analysis: dict) -> None:
     if set(manifest["source_sha256"]) != REVIEWED_SOURCES:
         raise ValueError("reviewed source set changed")
     for path, expected in manifest["source_sha256"].items():
         if not path.startswith("src/codex_plugin_scanner/") or ".." in Path(path).parts:
             raise ValueError("invalid reviewed source path")
         local = Path(path).read_text(encoding="utf-8")
-        analyzed = sonar("/api/sources/raw", raw=True, key=PROJECT + ":" + path, pullRequest=PULL_REQUEST)
+        analyzed = analyzed_source(analysis["sha"], path)
         if fingerprint(local) != expected or fingerprint(analyzed) != expected:
             raise ValueError("reviewed or analyzed source changed: " + path)
 
@@ -90,9 +119,12 @@ def main(*, apply: bool = False) -> None:
     if (manifest["project"], manifest["issue"], manifest["pull_request"]) != (PROJECT, ISSUE, PULL_REQUEST):
         raise ValueError("review manifest identity changed")
     OUTPUT.mkdir(exist_ok=True)
+    analysis = read_analysis()
     issue = read_issue()
     (OUTPUT / "before.json").write_text(json.dumps(issue, indent=2), encoding="utf-8")
-    verify_sources(manifest)
+    verify_sources(manifest, analysis)
+    if read_analysis() != analysis:
+        raise ValueError("Sonar analyzed revision changed during verification")
     # Re-read after all source checks so a concurrent analysis cannot silently change the finding.
     current = read_issue()
     if (current.get("hash"), current.get("lastChangeAnalysisUuid")) != (
@@ -108,6 +140,7 @@ def main(*, apply: bool = False) -> None:
         current = read_issue()
         if current.get("resolution") != "FALSE-POSITIVE" and current.get("issueStatus") != "FALSE_POSITIVE":
             raise ValueError("Sonar did not confirm the requested disposition")
+    (OUTPUT / "analysis.json").write_text(json.dumps(analysis, indent=2), encoding="utf-8")
     (OUTPUT / "after.json").write_text(json.dumps(current, indent=2), encoding="utf-8")
     (OUTPUT / "review.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print("Verified one reviewed audit-origin finding; apply=" + str(apply))

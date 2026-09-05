@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -43,8 +43,17 @@ def review_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict, 
     def sonar(path: str, **parameters: object):
         if path == "/api/issues/search":
             return {"total": 1, "issues": [dict(issue)]}
-        if path == "/api/sources/raw":
-            return source
+        if path == "/api/project_pull_requests/list":
+            return {
+                "pullRequests": [
+                    {
+                        "key": str(review.PULL_REQUEST),
+                        "branch": "fix/sonar-blocker-control-flow",
+                        "analysisDate": "2026-09-05T00:00:00Z",
+                        "commit": {"sha": "b" * 40},
+                    }
+                ]
+            }
         if path == "/api/issues/do_transition":
             assert parameters == {"post": True, "issue": review.ISSUE, "transition": "falsepositive"}
             issue["issueStatus"] = "FALSE_POSITIVE"
@@ -52,14 +61,17 @@ def review_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict, 
 
     api = Mock(side_effect=sonar)
     monkeypatch.setattr(review, "sonar", api)
+    monkeypatch.setattr(review, "analyzed_source", Mock(return_value=source))
     return manifest, issue, api
 
 
 def test_dry_run_verifies_all_sources_without_mutation(review_case) -> None:
     _manifest, _issue, api = review_case
-    review.main()
+    with patch.object(review, "analyzed_source", return_value="value = 1\n") as sources:
+        review.main()
     assert not any(call.kwargs.get("post") for call in api.call_args_list)
-    assert sum(call.args[0] == "/api/sources/raw" for call in api.call_args_list) == 5
+    assert sources.call_count == 5
+    assert {call.args for call in sources.call_args_list} == {("b" * 40, name) for name in review.REVIEWED_SOURCES}
     assert (review.OUTPUT / "review.json").is_file()
 
 
@@ -120,3 +132,57 @@ def test_concurrent_analysis_change_prevents_every_write(review_case, monkeypatc
     with pytest.raises(ValueError, match="finding changed"):
         review.main(apply=True)
     assert not any(call.kwargs.get("post") for call in api.call_args_list)
+
+
+@pytest.mark.parametrize("sha", ["", "main", "a" * 39, "a" * 41, "g" * 40, "../untrusted"])
+def test_invalid_analyzed_revision_prevents_writes(review_case, monkeypatch: pytest.MonkeyPatch, sha: str) -> None:
+    _manifest, _issue, api = review_case
+    original = api.side_effect
+
+    def sonar(path: str, **parameters):
+        payload = original(path, **parameters)
+        if path == "/api/project_pull_requests/list":
+            payload["pullRequests"][0]["commit"]["sha"] = sha
+        return payload
+
+    api.side_effect = sonar
+    with pytest.raises(ValueError, match="analysis identity"):
+        review.main(apply=True)
+    assert not any(call.kwargs.get("post") for call in api.call_args_list)
+
+
+def test_analyzed_commit_change_prevents_writes(review_case, monkeypatch: pytest.MonkeyPatch) -> None:
+    _manifest, _issue, api = review_case
+    reader = Mock(side_effect=[{"sha": "b" * 40, "date": "first"}, {"sha": "c" * 40, "date": "second"}])
+    monkeypatch.setattr(review, "read_analysis", reader)
+    with pytest.raises(ValueError, match="analyzed revision changed"):
+        review.main(apply=True)
+    assert not any(call.kwargs.get("post") for call in api.call_args_list)
+
+
+def test_source_fetch_never_sends_sonar_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SONAR_TOKEN", "fixture-sonar-token")
+    response = Mock()
+    response.read.return_value = b"value = 1\n"
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=None)
+    opener = Mock()
+    opener.open.return_value = response
+    factory = Mock(return_value=opener)
+    monkeypatch.setattr(review, "build_opener", factory)
+    path = "src/codex_plugin_scanner/no_redirect.py"
+    assert review.analyzed_source("b" * 40, path) == "value = 1\n"
+    request = opener.open.call_args.args[0]
+    assert request.full_url == "https://raw.githubusercontent.com/hashgraph-online/hol-guard/" + "b" * 40 + "/" + path
+    assert request.header_items() == []
+    handler = factory.call_args.args[0]
+    assert handler.redirect_request(request, None, 302, "Found", {}, "https://attacker.invalid") is None
+
+
+@pytest.mark.parametrize("sha,path", [("main", "src/codex_plugin_scanner/no_redirect.py"), ("a" * 40, "../x")])
+def test_source_fetch_rejects_unapproved_inputs(monkeypatch: pytest.MonkeyPatch, sha: str, path: str) -> None:
+    opener = Mock()
+    monkeypatch.setattr(review, "build_opener", opener)
+    with pytest.raises(ValueError, match="unapproved analyzed source"):
+        review.analyzed_source(sha, path)
+    opener.assert_not_called()
