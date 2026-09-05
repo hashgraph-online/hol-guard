@@ -8,20 +8,21 @@ and sync behavior used by existing command protection.
 
 | Extension | Reviewed operations | Safe forms |
 | --- | --- | --- |
-| `command.container-runtime` | System/container/image/volume/network/build-cache prune, container/image/volume/network/Buildx/Swarm removal, container stop/kill, privileged run, container exec, privileged exec, Compose volume/image cleanup | Command help where argument boundaries are unambiguous; ordinary local Compose teardown without explicit volume/image deletion remains unchanged |
+| `command.container-runtime` | System/container/image/volume/network/build-cache prune, container/image/volume/network/Buildx/Swarm removal, container stop/kill, privileged run, container exec, privileged exec, native `docker compose` volume/image cleanup | Command help where argument boundaries are unambiguous; ordinary local `docker compose` teardown without explicit volume/image deletion remains unchanged |
 | `command.kubernetes-secrets` | Secret reads through supported cluster clients | Existing metadata-only and non-secret reads |
 | `command.kubernetes-operations` | Delete, drain, apply, create, replace/force-replace, patch, edit, scale/autoscale, expose, run, annotate, label, taint, cordon/uncordon, set, rollout restart/undo, exec, debug, port-forward, file copy, certificate approve/deny, Helm install/upgrade/rollback/uninstall aliases | Help, documented client/server dry-run forms, local-only rendering where supported, and Helm dry-run forms |
 | `command.infrastructure-as-code` | Terraform/OpenTofu destroy and destroy-mode apply, Pulumi destroy | Plan and preview commands |
 
-Global command options such as Docker contexts, Compose project/file selectors, cluster contexts and namespaces,
-Terraform/OpenTofu working directories, and Pulumi stacks are normalized before matching. Docker, kubectl, and Helm
-Windows executable forms are covered alongside Unix launchers. A safe variant suppresses only its owning rule and
-cannot hide an unrelated match in another command segment.
+Global command options such as Docker contexts, hosts, TLS certificate paths, Compose project/file selectors, cluster
+contexts, impersonation identities, namespaces, Terraform/OpenTofu working directories, and Pulumi stacks are
+normalized before matching. Docker, kubectl, and Helm Windows executable forms are covered alongside Unix launchers.
+A safe variant suppresses only its owning rule and cannot hide an unrelated match in another command segment.
 
 The Docker extension preserves Guard's established low-friction boundary for routine local Compose workflows. Plain
 `docker compose down` and `docker compose rm -f` remain unreviewed; explicit volume or image deletion is reviewed.
-Free-form remote execution and copy commands do not use a generic `--help` escape, so a payload token named
-`--help` cannot suppress the owning rule.
+The supported Compose surface is the Docker CLI plugin form (`docker compose`), not a separate compatibility
+executable. Free-form remote execution and copy commands do not use a generic `--help` escape, so a payload token
+named `--help` cannot suppress the owning rule.
 
 ## Primary command references
 
@@ -48,7 +49,7 @@ Free-form remote execution and copy commands do not use a generic `--help` escap
 
 - Rules match canonical executable and argument structures, not raw command substrings.
 - Quoted examples and source-search commands remain data and do not trigger execution rules.
-- Destructive operations produce one composite decision even when compatibility and structured rules both match.
+- Destructive operations produce one composite decision even when multiple structured rules overlap.
 - Help, preview, local-only, and supported dry-run forms remain side-effect-free inspection paths.
 - False or overridden safe flags such as `--dry-run=none`, `--dry-run=false`, and `--local=false` remain live execution.
 - Safe variants are rule-local, so a preview in one shell segment cannot hide a destructive command in another.
