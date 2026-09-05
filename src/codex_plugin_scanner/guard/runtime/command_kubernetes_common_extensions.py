@@ -11,21 +11,74 @@ from .command_common_extension_helpers import (
 )
 from .command_rules import AnyMatcher, CommandSafeVariant, ExecutableMatcher
 
-_KUBECTL = frozenset({"kubectl"})
-_HELM = frozenset({"helm"})
+_KUBECTL = frozenset({"kubectl", "kubectl.exe"})
+_HELM = frozenset({"helm", "helm.exe"})
 _KUBECTL_GLOBAL_OPTIONS = frozenset(
-    {"--as", "--as-group", "--cluster", "--context", "--kubeconfig", "--namespace", "-n", "--server", "--user"}
+    {
+        "--as",
+        "--as-group",
+        "--cache-dir",
+        "--certificate-authority",
+        "--client-certificate",
+        "--client-key",
+        "--cluster",
+        "--context",
+        "--kubeconfig",
+        "--namespace",
+        "-n",
+        "--password",
+        "--profile-output",
+        "--request-timeout",
+        "--server",
+        "-s",
+        "--tls-server-name",
+        "--token",
+        "--user",
+        "--username",
+    }
 )
-_HELM_GLOBAL_OPTIONS = frozenset({"--kube-context", "--kubeconfig", "--namespace", "-n", "--registry-config"})
+_KUBECTL_GLOBAL_FLAGS = frozenset(
+    {
+        "--disable-compression",
+        "--insecure-skip-tls-verify",
+        "--match-server-version",
+        "--warnings-as-errors",
+    }
+)
+_HELM_GLOBAL_OPTIONS = frozenset(
+    {
+        "--burst-limit",
+        "--kube-apiserver",
+        "--kube-as-group",
+        "--kube-as-user",
+        "--kube-ca-file",
+        "--kube-context",
+        "--kube-token",
+        "--kubeconfig",
+        "--namespace",
+        "-n",
+        "--qps",
+        "--registry-config",
+        "--repository-cache",
+        "--repository-config",
+    }
+)
+_HELM_GLOBAL_FLAGS = frozenset({"--debug", "--kube-insecure-skip-tls-verify"})
+_EMPTY: frozenset[str] = frozenset()
 
 
-def _kubectl(*subcommands: str, required_flags: frozenset[str] = frozenset(), forbidden_flags: frozenset[str] = frozenset()) -> ExecutableMatcher:
+def _kubectl(
+    *subcommands: str,
+    required_flags: frozenset[str] = _EMPTY,
+    forbidden_flags: frozenset[str] = _EMPTY,
+) -> ExecutableMatcher:
     return executable_matcher(
         _KUBECTL,
         *subcommands,
         required_flags=required_flags,
         forbidden_flags=forbidden_flags,
         leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
+        interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
     )
 
 
@@ -34,6 +87,7 @@ def _helm(*subcommands: str) -> ExecutableMatcher:
         _HELM,
         *subcommands,
         leading_options_with_values=_HELM_GLOBAL_OPTIONS,
+        interspersed_flags=_HELM_GLOBAL_FLAGS,
     )
 
 
@@ -54,6 +108,15 @@ def _kube_mutation_variants(
             )
         )
     return tuple(variants)
+
+
+def _helm_dry_run_variant(matcher: ExecutableMatcher | AnyMatcher, title: str) -> CommandSafeVariant:
+    return flag_variant(
+        matcher,
+        variant_id="dry-run",
+        title=title,
+        required_flags=frozenset({"--dry-run"}),
+    )
 
 
 _APPLY = _kubectl("apply")
@@ -245,7 +308,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
     rule(
         rule_id="command.kubernetes-operations.set-resources",
         title="Kubernetes set",
-        description="Identifies declarative set operations that mutate image, environment, resources, selectors, or identity.",
+        description=(
+            "Identifies declarative set operations that mutate image, environment, resources, selectors, or identity."
+        ),
         matcher=_SET,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
@@ -338,7 +403,10 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         risk_classes=("execution", "network_egress", "destructive_shell"),
         safer_alternative="Render or dry-run the chart and review values, hooks, images, and namespace before install.",
         example_command="helm install api ./chart --namespace prod",
-        safe_variants=(help_variant(_HELM_INSTALL), flag_variant(_HELM_INSTALL, variant_id="dry-run", title="Helm install preview", required_flags=frozenset({"--dry-run"}))),
+        safe_variants=(
+            help_variant(_HELM_INSTALL),
+            _helm_dry_run_variant(_HELM_INSTALL, "Helm install preview"),
+        ),
     ),
     rule(
         rule_id="command.kubernetes-operations.helm-upgrade",
@@ -349,7 +417,10 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         risk_classes=("execution", "network_egress", "destructive_shell"),
         safer_alternative="Dry-run the upgrade and review rendered manifests, hooks, values, and rollback readiness first.",
         example_command="helm upgrade api ./chart --namespace prod",
-        safe_variants=(help_variant(_HELM_UPGRADE), flag_variant(_HELM_UPGRADE, variant_id="dry-run", title="Helm upgrade preview", required_flags=frozenset({"--dry-run"}))),
+        safe_variants=(
+            help_variant(_HELM_UPGRADE),
+            _helm_dry_run_variant(_HELM_UPGRADE, "Helm upgrade preview"),
+        ),
     ),
     rule(
         rule_id="command.kubernetes-operations.helm-rollback",
@@ -360,7 +431,10 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         risk_classes=("network_egress", "destructive_shell"),
         safer_alternative="Inspect release history and dry-run the rollback before changing live resources.",
         example_command="helm rollback api 2 --namespace prod",
-        safe_variants=(help_variant(_HELM_ROLLBACK), flag_variant(_HELM_ROLLBACK, variant_id="dry-run", title="Helm rollback preview", required_flags=frozenset({"--dry-run"}))),
+        safe_variants=(
+            help_variant(_HELM_ROLLBACK),
+            _helm_dry_run_variant(_HELM_ROLLBACK, "Helm rollback preview"),
+        ),
     ),
     rule(
         rule_id="command.kubernetes-operations.helm-uninstall-alias",
@@ -371,6 +445,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         risk_classes=("network_egress", "destructive_shell"),
         safer_alternative="Dry-run the uninstall where supported and confirm the exact release and namespace first.",
         example_command="helm delete api --namespace prod",
-        safe_variants=(help_variant(_HELM_REMOVE_ALIASES), flag_variant(_HELM_REMOVE_ALIASES, variant_id="dry-run", title="Helm uninstall preview", required_flags=frozenset({"--dry-run"}))),
+        safe_variants=(
+            help_variant(_HELM_REMOVE_ALIASES),
+            _helm_dry_run_variant(_HELM_REMOVE_ALIASES, "Helm uninstall preview"),
+        ),
     ),
 )
