@@ -1,0 +1,103 @@
+name: Extension final check verification
+
+on:
+  push:
+    branches: [maintenance/extension-final-checks-2794]
+    paths: [.github/workflows/extension-final-checks.yml]
+
+permissions:
+  contents: write
+  actions: read
+  checks: read
+  statuses: read
+  pull-requests: read
+
+jobs:
+  verify:
+    if: github.repository == 'hashgraph-online/hol-guard'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Verify all check runs and statuses without altering their results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import collections
+          import json
+          import os
+          import time
+          import urllib.request
+
+          root = "https://api.github.com/repos/hashgraph-online/hol-guard"
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                     "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+          def get(path):
+              assert path.startswith(("/pulls/2794", "/commits/"))
+              with urllib.request.urlopen(urllib.request.Request(root + path, headers=headers), timeout=30) as response:
+                  return json.load(response)
+          def check_runs(sha):
+              result = []
+              for page in range(1, 6):
+                  rows = get("/commits/" + sha + "/check-runs?filter=latest&per_page=100&page=" + str(page))["check_runs"]
+                  result.extend(rows)
+                  if len(rows) < 100:
+                      return result
+              raise RuntimeError("Check inventory exceeds the verification bound")
+
+          pull = get("/pulls/2794")
+          assert pull["head"]["ref"] == "fix/deterministic-extension-builder"
+          assert pull["head"]["repo"]["full_name"] == "hashgraph-online/hol-guard"
+          expected = pull["head"]["sha"]
+          assert expected == "25587496b37d30806d22ebff259a5f9e7b7320f5"
+          report = {}
+          for attempt in range(28):
+              current = get("/pulls/2794")
+              if current["head"]["sha"] != expected:
+                  report = {"headChanged": True, "expected": expected, "current": current["head"]["sha"]}
+                  break
+              runs = check_runs(expected)
+              status = get("/commits/" + expected + "/status")
+              latest_statuses = status["statuses"]
+              bad = [row for row in runs if row["status"] == "completed" and row["conclusion"] not in ("success", "skipped", "neutral")]
+              pending = [row for row in runs if row["status"] != "completed"]
+              bad_statuses = [row for row in latest_statuses if row["state"] in ("error", "failure")]
+              pending_statuses = [row for row in latest_statuses if row["state"] == "pending"]
+              def describe(row):
+                  return {key: row.get(key) for key in ("id", "name", "status", "conclusion", "details_url")}
+              report = {
+                  "head": expected, "base": current["base"]["sha"],
+                  "mergeable": current["mergeable"], "merged": current["merged"],
+                  "checkCount": len(runs),
+                  "conclusionCounts": dict(collections.Counter(row["conclusion"] or row["status"] for row in runs)),
+                  "failedChecks": [describe(row) for row in bad],
+                  "pendingChecks": [describe(row) for row in pending],
+                  "statuses": [{"context": row["context"], "state": row["state"], "target_url": row["target_url"]} for row in latest_statuses],
+                  "allChecksPassed": bool(runs) and not (bad or pending or bad_statuses or pending_statuses),
+              }
+              print(json.dumps(report, sort_keys=True), flush=True)
+              if bad or bad_statuses or report["allChecksPassed"]:
+                  break
+              time.sleep(60)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("## Exact-head check verification\n\n```json\n" + json.dumps(report, indent=2) + "\n```\n")
+          print("FINAL_REPORT", json.dumps(report, sort_keys=True), flush=True)
+
+      - name: Remove the temporary verification reference
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        shell: python
+        run: |
+          import json
+          import os
+          import urllib.request
+          url = "https://api.github.com/repos/hashgraph-online/hol-guard/git/refs/heads/maintenance/extension-final-checks-2794"
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+          with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
+              reference = json.load(response)
+          assert reference["object"]["sha"] == os.environ["EXPECTED_SHA"], "Temporary reference moved"
+          with urllib.request.urlopen(urllib.request.Request(url, headers=headers, method="DELETE"), timeout=30) as response:
+              assert response.status == 204
+          print("Temporary verification reference removed.")
