@@ -47,6 +47,7 @@ function CatalogExtensionRow(props: {
       description={props.extension.description}
       behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
       required={props.extension.required}
+      mcp={props.extension.surface === "mcp"}
       external={props.extension.trust_class === "external"}
       managed={cloudSource || sourceIsManaged(props.effective, props.extension.extension_id)}
       managedLabel={cloudSource ? source : undefined}

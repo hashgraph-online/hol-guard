@@ -8,6 +8,7 @@ from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import rules_for_extension
 from .command_extension_specs import CommandExtensionSpec, CommandExtensionValues, command_extension_values
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
+from .mcp_server_catalog import MCP_COMMAND_EXTENSION_VALUES
 
 
 def _core_values(spec: CommandExtensionSpec) -> CommandExtensionValues:
@@ -178,4 +179,5 @@ BUILT_IN_COMMAND_EXTENSION_VALUES: Final[tuple[CommandExtensionValues, ...]] = (
     *(_core_values(spec) for spec in _CORE_COMMAND_EXTENSION_SPECS),
     *DIRECT_COMMAND_EXTENSION_VALUES,
     *(_package_values(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
+    *MCP_COMMAND_EXTENSION_VALUES,
 )

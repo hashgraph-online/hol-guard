@@ -9,6 +9,7 @@ latency. This guide makes those requirements reviewable and gives contributors o
 | Contribution | Use it for | Expected scope |
 | :--- | :--- | :--- |
 | New Extension | A distinct command capability with its own stable identity | Metadata, rules, fixtures, docs, and registry coverage |
+| MCP server | A well-known stdio MCP package with default tool policy; see the [MCP server contribution guide](../mcp-server-contributions.md) | `contributions/mcp-servers/mcp.<name>.json`, trust-class map, catalog tests |
 | Coverage expansion | A dangerous operation owned by an existing Extension | Matcher/rule updates plus destructive and safe-counterpart cases |
 | False-positive fix | Preview, read-only, help, or bounded behavior incorrectly reaches review | A positive safe predicate and regression cases; never a global suppression |
 | Documentation | Better examples, references, or operator guidance | Documentation plus directory validation when catalog metadata changes |

@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
 )
+from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY_PATH = REPO_ROOT / "docs" / "guard" / "extensions" / "README.md"
@@ -70,7 +71,7 @@ def _category(extension_id: str) -> str:
         return "Managed services"
     if extension_id.startswith("command.package."):
         return "Package supply chain"
-    if extension_id == "command.skill-sunset":
+    if extension_id == "command.skill-sunset" or extension_id.startswith("command.mcp-"):
         return "Specialized tools"
     return "Other extensions"
 
@@ -84,6 +85,8 @@ def _protection_model(extension: CommandSafetyExtension) -> str:
         return "Required core"
     if extension.delegated_protection == "package-firewall":
         return "Package Firewall"
+    if trust_class_for(extension.extension_id) == "external":
+        return "External opt-in"
     return "Built in"
 
 

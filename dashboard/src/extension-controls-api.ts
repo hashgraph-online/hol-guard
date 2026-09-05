@@ -77,6 +77,19 @@ export type ExtensionIcon = {
   background?: string;
 };
 
+export type McpToolDefaultState = "inherit" | "allow" | "block";
+
+export type McpLaunch = {
+  kind: "package-launcher";
+  command: string;
+  package: string;
+};
+
+export type McpToolDefault = {
+  name: string;
+  state: McpToolDefaultState;
+};
+
 export type ExtensionCatalogItem = {
   schema_version: number;
   extension_id: string;
@@ -105,6 +118,9 @@ export type ExtensionCatalogItem = {
   rules: ExtensionRule[];
   permission_count: number;
   permissions: ExtensionPermission[];
+  surface?: "mcp";
+  mcp_launch?: McpLaunch;
+  mcp_tools?: McpToolDefault[];
 };
 
 export type ExtensionControlLayer = {

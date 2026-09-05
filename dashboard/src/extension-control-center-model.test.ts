@@ -122,6 +122,8 @@ assert.equal(extensionEffectiveState(effective, noodle), "disabled");
 assert.equal(extensionStateLabel(effective, noodle), "Blocked");
 assert.equal(catalogRowSecondLine(noodle, "Blocked"), "Off until you turn it on");
 assert.equal(catalogRowSecondLine(noodle, "Allowed"), "noodle");
+const filesystem = { ...extension, extension_id: "command.mcp-filesystem", enabled: false, trust_class: "external" as const, activation: "opt-in" as const, executables: ["npx"], surface: "mcp" as const };
+assert.equal(catalogRowSecondLine(filesystem, "Blocked"), "Off until you turn it on");
 assert.equal(permissionStateLabel(effective, extension, permissions[1]!), "Inherited");
 assert.equal(extensionStateLabel({ ...effective, global_lockdown: true }, extension), "Lockdown");
 assert.equal(extensionStateLabel({ ...effective, health: "tampered" }, extension), "Unavailable");

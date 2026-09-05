@@ -127,6 +127,11 @@ class CommandSafetyExtension:
             "permissions": [permission.to_dict() for permission in self.permissions],
         }
         payload.update(catalog_trust_fields(self.extension_id, required=self.required))
+        from .mcp_server_contribution import catalog_mcp_fields
+
+        mcp_fields = catalog_mcp_fields(self.extension_id)
+        if mcp_fields is not None:
+            payload.update(mcp_fields)
         return payload
 
 

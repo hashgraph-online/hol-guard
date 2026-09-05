@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.extension_contribution import (
     validate_contribution,
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_catalog_ids
 
 _NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
@@ -29,8 +30,8 @@ def _noodle_payload() -> dict[str, object]:
 def test_in_tree_contributions_match_external_trust_class() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
-    assert ids == ids_for_class("external")
-    assert contribution_ids() == ids_for_class("external")
+    assert ids == contribution_ids()
+    assert contribution_ids() | mcp_catalog_ids() == ids_for_class("external")
     for payload in payloads:
         validate_contribution(payload, filename=str(payload["id"]))
 
