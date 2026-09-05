@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.remote.essh",
+  "version": "1.0.0",
+  "name": "essh",
+  "description": "Reviews essh host group execution and removal of cached hosts, keys, and workspaces.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.matthart1983",
+    "displayName": "Community",
+    "url": "https://github.com/matthart1983/essh"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F766E" },
+  "homepage": "https://github.com/matthart1983/essh",
+  "executables": ["essh"],
+  "ecosystemIds": ["essh"],
+  "riskClasses": ["destructive_shell", "execution", "network_egress"],
+  "actionClasses": ["essh group execution command", "essh cache removal command"],
+  "referenceUrls": ["https://github.com/matthart1983/essh"],
+  "saferAlternatives": ["Inspect group membership and cached entries before running or removing anything."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_remote_essh_extensions"
+  }
+}
