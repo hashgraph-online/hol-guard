@@ -76,41 +76,43 @@ def is_cline_owned_path(context: HarnessContext, path: Path) -> bool:
     return any(candidate == root or candidate.is_relative_to(root) for root in roots)
 
 
-def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> None:
-    """Reject writes outside known roots or through an existing symlink ancestor."""
+def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> Path:
+    """Validate nodes from the trusted root down and return the rebuilt destination."""
 
+    if ".." in path.parts or "\x00" in os.fspath(path):
+        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
     home = context.home_dir.resolve(strict=False)
     guard_home = context.guard_home.resolve(strict=False)
-    lexical_parent = Path(os.path.abspath(path.parent))
-    lexical_path = Path(os.path.abspath(path))
-    lexical_roots = {
-        home,
-        guard_home,
-        Path(os.path.abspath(context.home_dir)),
-        Path(os.path.abspath(context.guard_home)),
-    }
-    if not any(lexical_parent.is_relative_to(root) and lexical_path.is_relative_to(root) for root in lexical_roots):
-        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
-    data_root = cline_data_dir(context).resolve(strict=False)
-    parent = path.parent.resolve(strict=False)
-    permitted_roots = (home, guard_home, data_root)
-    if not any(parent == root or parent.is_relative_to(root) for root in permitted_roots):
-        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
+    roots = (home, guard_home, context.home_dir.absolute(), context.guard_home.absolute())
+    destination = Path(os.path.abspath(path))
+    for root in roots:
+        try:
+            relative = destination.relative_to(root)
+        except ValueError:
+            continue
+        if not relative.parts:
+            continue
+        return _checked_cline_destination(root, relative, home, guard_home)
+    raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
 
-    # Canonical paths from persisted state can use the physical trusted root.
-    lexical_roots = {home, guard_home, context.home_dir.absolute(), context.guard_home.absolute()}
-    lexical_roots.add(cline_data_dir(context).absolute())
-    current = path.parent.absolute()
-    while True:
+
+def _checked_cline_destination(root: Path, relative: Path, home: Path, guard_home: Path) -> Path:
+    """Build each filesystem operand from its trusted parent and a single basename."""
+
+    current = root
+    if current.is_symlink():
+        raise RuntimeError(f"Cline destination parent is a symlink: {current}")
+    for part in relative.parts:
+        name = os.path.basename(part)
+        if name != part or name in {"", ".", ".."}:
+            raise RuntimeError("Cline destination contains an unsafe path component")
+        current = current / name
         if current.is_symlink():
-            raise RuntimeError(f"Cline destination parent is a symlink: {current}")
-        if current in lexical_roots:
-            break
-        if current == current.parent:
-            raise RuntimeError("Cline destination could not be anchored to a trusted root")
-        current = current.parent
-    if path.is_symlink():
-        raise RuntimeError(f"Cline destination is a symlink: {path}")
+            raise RuntimeError(f"Cline destination is a symlink: {current}")
+    resolved_parent = current.parent.resolve(strict=False)
+    if not (resolved_parent.is_relative_to(home) or resolved_parent.is_relative_to(guard_home)):
+        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
+    return current
 
 
 __all__ = [

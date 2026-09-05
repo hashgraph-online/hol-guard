@@ -63,9 +63,8 @@ def _canonical_saved_hook_root(context: HarnessContext, value: object) -> Path |
         return None
     probe = recorded / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
     try:
-        ensure_safe_cline_destination(context, probe)
-        # The preceding guard rejects escapes and symlink ancestors before resolving persisted state.
-        resolved = recorded.resolve(strict=True)  # NOSONAR
+        checked = ensure_safe_cline_destination(context, probe)
+        resolved = checked.parent.resolve(strict=True)
     except (OSError, RuntimeError):
         return None
     home = context.home_dir.resolve(strict=False)
