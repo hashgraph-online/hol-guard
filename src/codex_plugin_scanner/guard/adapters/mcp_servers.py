@@ -321,6 +321,7 @@ __all__ = [
     "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
     "proxy_cli_args",
+    "proxy_launcher_entry",
     "proxy_process_env",
     "skipped_stdio_server_names",
     "stable_mcp_server_identifier",
