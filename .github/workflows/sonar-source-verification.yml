@@ -1,0 +1,31 @@
+name: Sonar source verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  source-snapshot:
+    if: github.head_ref == 'fix/sonar-main-completion' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Export tracked source and revision
+        run: |
+          mkdir source-verification
+          git rev-parse HEAD > source-verification/revision.txt
+          git ls-tree -r HEAD > source-verification/tree.txt
+          git archive --format=tar.gz --output=source-verification/source.tar.gz HEAD
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sonar-source-verification
+          path: source-verification/
+          retention-days: 3
+          if-no-files-found: error
