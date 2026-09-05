@@ -57,6 +57,38 @@ def _variant_leaf(matcher: ExecutableMatcher, required_flags: frozenset[str]) ->
     )
 
 
+def _option_value_variant_leaf(
+    matcher: ExecutableMatcher,
+    *,
+    option: str,
+    allowed_values: frozenset[str],
+) -> ExecutableMatcher:
+    normalized_option = option.strip().lower()
+    normalized_values = frozenset(value.strip().lower() for value in allowed_values if value.strip())
+    existing_requirements = dict(matcher.required_option_values)
+    existing = existing_requirements.get(normalized_option)
+    if existing is not None and existing != normalized_values:
+        raise ValueError("option-value variants cannot override an existing option-value requirement")
+    required_option_values = matcher.required_option_values
+    if existing is None:
+        required_option_values = (*required_option_values, (normalized_option, normalized_values))
+    return ExecutableMatcher(
+        executables=matcher.executables,
+        subcommands=matcher.subcommands,
+        required_flags=matcher.required_flags,
+        forbidden_flags=matcher.forbidden_flags,
+        allow_leading_options=matcher.allow_leading_options,
+        leading_options_with_values=matcher.leading_options_with_values,
+        interspersed_options_with_values=matcher.interspersed_options_with_values,
+        interspersed_flags=matcher.interspersed_flags,
+        options_with_values=matcher.options_with_values | {normalized_option},
+        inverse_flag_pairs=matcher.inverse_flag_pairs,
+        required_option_values=required_option_values,
+        required_flags_in_all_arguments=matcher.required_flags_in_all_arguments,
+        fail_secure_unknown_options=matcher.fail_secure_unknown_options,
+    )
+
+
 def flag_variant(
     matcher: ExecutableMatcher | AnyMatcher,
     *,
@@ -80,6 +112,40 @@ def flag_variant(
     return CommandSafeVariant(variant_id=variant_id, title=title, matcher=variant_matcher)
 
 
+def option_value_variant(
+    matcher: ExecutableMatcher | AnyMatcher,
+    *,
+    variant_id: str,
+    title: str,
+    option: str,
+    allowed_values: frozenset[str],
+) -> CommandSafeVariant:
+    """Create a safe variant that requires the effective value of one option."""
+
+    if not allowed_values:
+        raise ValueError("option-value variants require at least one allowed value")
+    if isinstance(matcher, ExecutableMatcher):
+        variant_matcher: CommandMatcher = _option_value_variant_leaf(
+            matcher,
+            option=option,
+            allowed_values=allowed_values,
+        )
+    else:
+        leaves = tuple(
+            _option_value_variant_leaf(
+                child,
+                option=option,
+                allowed_values=allowed_values,
+            )
+            for child in matcher.matchers
+            if isinstance(child, ExecutableMatcher)
+        )
+        if len(leaves) != len(matcher.matchers):
+            raise ValueError("option-value variants require executable matcher leaves")
+        variant_matcher = AnyMatcher(matchers=leaves)
+    return CommandSafeVariant(variant_id=variant_id, title=title, matcher=variant_matcher)
+
+
 def help_variant(matcher: ExecutableMatcher | AnyMatcher) -> CommandSafeVariant:
     return flag_variant(
         matcher,
@@ -90,19 +156,12 @@ def help_variant(matcher: ExecutableMatcher | AnyMatcher) -> CommandSafeVariant:
 
 
 def kubernetes_dry_run_variant(matcher: ExecutableMatcher | AnyMatcher, title: str) -> CommandSafeVariant:
-    variants = tuple(
-        flag_variant(
-            matcher,
-            variant_id=f"dry-run-{mode}",
-            title=title,
-            required_flags=frozenset({f"--dry-run={mode}"}),
-        ).matcher
-        for mode in ("client", "server")
-    )
-    return CommandSafeVariant(
+    return option_value_variant(
+        matcher,
         variant_id="dry-run",
         title=title,
-        matcher=AnyMatcher(matchers=variants),
+        option="--dry-run",
+        allowed_values=frozenset({"client", "server"}),
     )
 
 
