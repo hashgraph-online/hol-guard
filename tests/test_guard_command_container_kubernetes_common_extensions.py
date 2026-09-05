@@ -32,7 +32,8 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "docker compose -f compose.yml down --volumes",
             "command.container-runtime.compose-destructive-cleanup",
         ),
-        ("docker-compose -f compose.yml rm -v api", "command.container-runtime.compose-destructive-cleanup"),
+        ("docker compose down --rmi=all", "command.container-runtime.compose-destructive-cleanup"),
+        ("docker compose down --rmi local", "command.container-runtime.compose-destructive-cleanup"),
         ("docker exec api sh -lc 'id'", "command.container-runtime.container-exec"),
         ("docker container exec api id", "command.container-runtime.container-exec"),
         ("docker exec --privileged api sh", "command.container-runtime.privileged-exec"),
@@ -40,6 +41,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("docker service rm api", "command.container-runtime.swarm-resource-removal"),
         ("docker stack rm prod", "command.container-runtime.swarm-resource-removal"),
         ("docker.exe volume rm app-data", "command.container-runtime.volume-removal"),
+        ("docker.exe system prune", "command.container-runtime.system-prune"),
+        ("docker.exe rm -f api", "command.container-runtime.forced-container-removal"),
+        ("docker.exe run --privileged alpine", "command.container-runtime.privileged-run"),
+        ("docker -c prod volume rm app-data", "command.container-runtime.volume-removal"),
+        ("docker -H tcp://daemon volume rm app-data", "command.container-runtime.volume-removal"),
+        ("docker --tlscacert ca.pem volume rm app-data", "command.container-runtime.volume-removal"),
+        ("docker -D --context prod image rm app:old", "command.container-runtime.image-removal"),
         ("kubectl apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),
         ("kubectl create -f service.yaml", "command.kubernetes-operations.create-resources"),
         ("kubectl replace -f deployment.yaml", "command.kubernetes-operations.replace-resources"),
@@ -106,7 +114,15 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("helm rollback api 2 --namespace prod", "command.kubernetes-operations.helm-rollback"),
         ("helm delete api --namespace prod", "command.kubernetes-operations.helm-uninstall-alias"),
         ("kubectl.exe --context prod apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),
+        ("kubectl.exe delete pod api", "command.kubernetes-operations.delete-resources"),
+        ("kubectl.exe drain node-a", "command.kubernetes-operations.drain-node"),
+        ("helm.exe uninstall api", "command.kubernetes-operations.helm-uninstall"),
         ("helm.exe --namespace prod upgrade api ./chart", "command.kubernetes-operations.helm-upgrade"),
+        ("kubectl --as-uid 1000 apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),
+        (
+            "kubectl --insecure-skip-tls-verify --context prod scale deployment api --replicas=2",
+            "command.kubernetes-operations.scale-resources",
+        ),
     ],
 )
 def test_common_container_and_kubernetes_operations_emit_structured_rules(
@@ -144,8 +160,8 @@ def test_common_container_and_kubernetes_operations_emit_structured_rules(
         "docker buildx rm --help",
         "docker compose down",
         "docker compose rm -f api",
-        "docker-compose down",
         "kubectl apply -f deployment.yaml --dry-run=client",
+        "kubectl apply -f deployment.yaml --dry-run client",
         "kubectl create -f service.yaml --dry-run=server",
         "kubectl replace -f deployment.yaml --dry-run=client",
         "kubectl replace --force -f deployment.yaml --dry-run=server",
@@ -161,10 +177,15 @@ def test_common_container_and_kubernetes_operations_emit_structured_rules(
         "kubectl cordon node-a --dry-run=client",
         "kubectl set image deployment/api api=example/api:v2 --local",
         "kubectl rollout undo deployment/api --dry-run=client",
+        "kubectl.exe delete pod api --dry-run client",
+        "kubectl.exe drain node-a --dry-run=server",
         "helm install api ./chart --dry-run",
+        "helm install api ./chart --dry-run=client",
         "helm upgrade api ./chart --dry-run",
+        "helm upgrade api ./chart --dry-run server",
         "helm rollback api 2 --dry-run",
         "helm delete api --dry-run",
+        "helm.exe uninstall api --dry-run=client",
         "kubectl get pods -A",
         "kubectl describe deployment api",
         "kubectl logs deployment/api",
@@ -198,6 +219,8 @@ def test_safe_and_read_only_forms_remain_unreviewed(command: str, tmp_path: Path
         "kubectl patch deployment api -p '{}' --local=false",
         "kubectl patch deployment api -p '{}' --local --local=false",
         "helm upgrade api ./chart --dry-run=false",
+        "helm upgrade api ./chart --dry-run=client --dry-run=false",
+        "helm install api ./chart --dry-run=none",
         "docker compose down --volumes --help=false",
         "docker exec api sh -- --help",
         "kubectl exec deployment/api -- sh -lc 'echo --dry-run=client'",
@@ -224,10 +247,17 @@ def test_false_preview_flags_and_payload_tokens_cannot_bypass_review(command: st
         "kubectl apply -f deployment.yaml --dry-run=none --dry-run=client",
         "kubectl patch deployment api -p '{}' --local=false --local",
         "helm upgrade api ./chart --dry-run=false --dry-run",
+        "helm upgrade api ./chart --dry-run=false --dry-run=server",
     ],
 )
 def test_effective_final_safe_flag_remains_unreviewed(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "no_match"
+
+
+def test_legacy_compose_compatibility_is_not_registered(tmp_path: Path) -> None:
+    payload = inspect_command("docker-compose down --volumes", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "no_match"
 
