@@ -19,6 +19,7 @@ from ..codex_hook_launch_runtime import (
 )
 from ..daemon.hook_availability_policy import hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
+from ..stable_guard_cli import prune_safe_cli_executable
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
 from .desktop_hook_proxy import (
     _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
@@ -37,10 +38,7 @@ _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
 
 
 def _assert_loopback_http_url(url: str) -> None:
-    """Assert the URL is HTTP on a loopback host.
-
-    Mirrors _assert_loopback_http_url from claude_daemon_hook_bridge.
-    """
+    """Reject non-loopback daemon URLs."""
     parsed = urlparse(url)
     if parsed.scheme != "http":
         raise ValueError(f"daemon URL must use http, not {parsed.scheme!r}")
@@ -76,6 +74,7 @@ def bounded_cli_hook_command(
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
+    python_executable = prune_safe_cli_executable(python_executable)
     frozen_launcher = bool(getattr(sys, "frozen", False))
     config = {
         "python_executable": python_executable,
