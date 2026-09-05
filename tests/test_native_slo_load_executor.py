@@ -3,19 +3,18 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
-from scripts import bench_guard_native_installed_slo as benchmark
+from scripts import native_slo_capacity as capacity
 from scripts.native_slo_session import AdapterSession
 
 
 def test_load_executor_is_fully_started_before_rss_baseline() -> None:
     with ThreadPoolExecutor(max_workers=4) as executor:
-        assert benchmark._prime_load_executor(executor, 4) == 4
+        assert capacity._prime_load_executor(executor, 4) == 4
 
 
 def test_timed_out_capacity_wave_returns_without_waiting_for_running_worker(
@@ -26,37 +25,27 @@ def test_timed_out_capacity_wave_returns_without_waiting_for_running_worker(
         return object()
 
     session = cast(AdapterSession, SimpleNamespace(observe=slow_observe))
-    monkeypatch.setattr(benchmark, "_CONCURRENT_WAVE_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(capacity, "_CONCURRENT_WAVE_TIMEOUT_SECONDS", 0.01)
     executor = ThreadPoolExecutor(max_workers=1)
     started = time.perf_counter()
     try:
         with pytest.raises(RuntimeError, match="concurrent capacity wave timed out"):
-            benchmark._run_concurrent(session, (("codex", "PreToolUse"),), 1, executor)
+            capacity._run_concurrent(session, (("codex", "PreToolUse"),), 1, executor)
         elapsed = time.perf_counter() - started
         assert elapsed < 0.1
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
 
 
-def test_measure_slo_prestarts_isolated_c16_then_primes_c64_before_rss_baseline(
+def test_capacity_proof_prestarts_isolated_c16_then_primes_c64_before_rss_baseline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, int | None]] = []
 
     class FakeSession:
-        def __init__(self, _runtime: Path) -> None:
+        def __init__(self) -> None:
             runner = SimpleNamespace(stats=lambda: {})
             self.daemon = SimpleNamespace(_server=SimpleNamespace(hook_process_runner=runner))
-            self.readiness_ms = 1.0
-
-        def __enter__(self) -> FakeSession:
-            return self
-
-        def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
-            return None
-
-        def observe(self, *_args: object) -> SimpleNamespace:
-            return SimpleNamespace(allowed=True, route="native_resident")
 
         def native_overload_count(self) -> int:
             return 0
@@ -89,27 +78,15 @@ def test_measure_slo_prestarts_isolated_c16_then_primes_c64_before_rss_baseline(
         calls.append((f"c{concurrency}", id(executor)))
         return [], 0
 
-    monkeypatch.setattr(benchmark, "AdapterSession", FakeSession)
-    monkeypatch.setattr(benchmark, "_run_cold", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(benchmark, "_run_warm", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(benchmark, "_run_sizes", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(benchmark, "_run_recovery", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(benchmark, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
-    monkeypatch.setattr(benchmark, "_prime_load_executor", fake_prime)
-    monkeypatch.setattr(benchmark, "_prewarm_ready_hook_workers", fake_prewarm)
-    monkeypatch.setattr(benchmark, "_steady_state_rss_baseline", fake_baseline)
-    monkeypatch.setattr(benchmark, "_run_concurrent", fake_concurrent)
-    monkeypatch.setattr(benchmark, "process_rss_bytes", lambda: 100)
+    monkeypatch.setattr(capacity, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(capacity, "_prime_load_executor", fake_prime)
+    monkeypatch.setattr(capacity, "_prewarm_ready_hook_workers", fake_prewarm)
+    monkeypatch.setattr(capacity, "_steady_state_rss_baseline", fake_baseline)
+    monkeypatch.setattr(capacity, "_run_concurrent", fake_concurrent)
+    monkeypatch.setattr(capacity, "process_rss_bytes", lambda: 100)
 
-    benchmark._measure_slo(
-        Path("/tmp/unused-runtime"),
-        (("codex", "PreToolUse"),),
-        warm_iterations=1,
-        cold_iterations=1,
-        recovery_iterations=1,
-        readiness_samples=1,
-        include_capacity=True,
-    )
+    session = cast(AdapterSession, FakeSession())
+    capacity.measure_capacity(session, (("codex", "PreToolUse"),), include_capacity=True)
 
     assert [name for name, _ in calls] == [
         "prime-16",
