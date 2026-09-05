@@ -21,13 +21,16 @@ budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
 
-The c16 latency proof uses a dedicated 16-thread client executor so a larger
-benchmark-only client pool cannot distort the production contention being
-measured. RSS is evaluated separately after c16. The proof fills the resident
-worker pool, fully starts the bounded 64-thread c64 load executor, and only then
-samples the RSS baseline. That same c64 executor remains alive through the RSS
-baseline and c64 wave, so client thread allocation cannot be misreported as
-daemon/runtime growth. The baseline requires three consecutive samples within
+The c16 latency proof uses a dedicated, fully started 16-thread client executor
+so thread creation and a larger benchmark-only client pool cannot distort the
+production contention being measured. RSS is evaluated separately after c16.
+The proof fills the resident worker pool, fully starts the bounded 64-thread c64
+load executor, and only then samples the RSS baseline. That same c64 executor
+remains alive through the RSS baseline and c64 wave, so client thread allocation
+cannot be misreported as daemon/runtime growth. Adapter transport requests are
+individually bounded at five seconds and concurrent waves have a six-second
+executor envelope; a wave that escapes that bound fails closed without waiting
+for executor teardown. The baseline requires three consecutive samples within
 a 2 percent RSS plateau and a 30-second deadline; the post-c64 peak is compared
 against that steady-state baseline. The resident growth gate remains at most
 12 percent.
