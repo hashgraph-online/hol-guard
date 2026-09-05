@@ -337,10 +337,14 @@ def codex_scan_targets_secret_like_source_name(
         )
         if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
             continue
-        if compound_secret_like and cwd is not None and _codex_search_target_is_source_like(
-            stripped,
-            cwd=cwd,
-            home_dir=home_dir,
+        if (
+            compound_secret_like
+            and cwd is not None
+            and _codex_search_target_is_source_like(
+                stripped,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
         ):
             continue
         return True
