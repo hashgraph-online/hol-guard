@@ -67,6 +67,9 @@ _MAX_CONCURRENCY = 64
 # the bounded c64 load-generator workers alive across baseline and c64 stress so
 # their thread allocation cannot be misclassified as resident runtime growth.
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
+# This is intentionally one hard wall-clock limit for the complete parallel
+# wave, not 5 seconds per future. The c64 contract requires a bounded no-hang
+# result, so allowing sequential per-future timeout slack would weaken it.
 _CONCURRENT_WAVE_TIMEOUT_SECONDS = 5.0
 _HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
@@ -249,6 +252,9 @@ def _run_concurrent(
     futures = [executor.submit(session.observe, harness, event, "1k") for harness, event in selected]
     _, unfinished = wait(futures, timeout=_CONCURRENT_WAVE_TIMEOUT_SECONDS)
     if unfinished:
+        # Cancellation only stops requests that are still queued. Any request
+        # already executing is drained by executor shutdown when this fatal
+        # benchmark error unwinds the enclosing executor context.
         for future in unfinished:
             future.cancel()
         raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
@@ -299,7 +305,7 @@ def _prewarm_ready_hook_workers(
     concurrency: int,
     executor: ThreadPoolExecutor,
 ) -> tuple[list[Observation], int]:
-    """Exercise one request on each ready worker and prove the pool stayed steady."""
+    """Exercise ready workers; a wave timeout aborts the benchmark."""
 
     observations, errors = _run_concurrent(session, routes, concurrency, executor)
     stats = session.daemon._server.hook_process_runner.stats()
