@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import BUILDER_VERSION
 from .errors import BuilderError
-from .io import canonical_json, checked_path, read_bytes, read_json, sha256
+from .io import canonical_json, checked_path, parse_json, read_bytes, read_json, sha256
 from .models import Discovery, load_discovery
 from .render_native import (
     contribution_path,
@@ -148,8 +148,10 @@ crash-atomic filesystem transaction. After a crash, inspect Git status and the
 
 
 def build_kit(discovery: Discovery, review: Review) -> Kit:
-    discovery = load_discovery(discovery.to_dict())
-    review = load_review(review.to_dict(), discovery)
+    # Normalization can expand a small source into a large document. Enforce the
+    # same byte and structure budgets that subsequent on-disk replay will use.
+    discovery = load_discovery(parse_json(canonical_json(discovery.to_dict()).encode("utf-8")))
+    review = load_review(parse_json(canonical_json(review.to_dict()).encode("utf-8")), discovery)
     metadata = discovery.metadata
     files: dict[str, str] = {
         "discovery.json": canonical_json(discovery.to_dict()),
@@ -178,7 +180,10 @@ def build_kit(discovery: Discovery, review: Review) -> Kit:
     return Kit(discovery, review, tuple(sorted(files.items())))
 
 
-def _listed_files(root: Path) -> set[str]:
+def _listed_files(root: Path, expected: set[str]) -> set[str]:
+    allowed_directories = {
+        parent.as_posix() for name in expected for parent in Path(name).parents if parent != Path(".")
+    }
     pending = [root]
     files: set[str] = set()
     visited = 0
@@ -190,10 +195,13 @@ def _listed_files(root: Path) -> set[str]:
                 if visited > 64:
                     raise BuilderError("kit_files", "Kit contains unexpected or excessive filesystem entries.")
                 checked_path(entry)
+                relative = entry.relative_to(root).as_posix()
                 if entry.is_dir():
+                    if relative not in allowed_directories:
+                        raise BuilderError("kit_files", "Kit contains a directory not owned by the compiler.")
                     pending.append(entry)
                 else:
-                    files.add(entry.relative_to(root).as_posix())
+                    files.add(relative)
     except OSError as exc:
         raise BuilderError("kit_files", "Cannot inspect the contribution kit directory.") from exc
     return files
@@ -206,7 +214,8 @@ def load_kit(path: Path) -> Kit:
     discovery = load_discovery(read_json(root / "discovery.json"))
     review = load_review(read_json(root / "review.json"), discovery)
     expected = build_kit(discovery, review)
-    if _listed_files(root) != {name for name, _ in expected.files}:
+    expected_names = {name for name, _ in expected.files}
+    if _listed_files(root, expected_names) != expected_names:
         raise BuilderError(
             "kit_files", "Kit file set differs from the compiler output; regenerate into a new directory."
         )
