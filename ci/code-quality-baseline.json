@@ -431,7 +431,7 @@
     "src/codex_plugin_scanner/verification.py::_check_marketplace": 115
   },
   "oversized_files": {
-    ".github/workflows/ci.yml": 671,
+    ".github/workflows/ci.yml": 672,
     ".github/workflows/desktop-core-alpha-feed.yml": 539,
     ".github/workflows/publish.yml": 1718,
     "dashboard/src/app.tsx": 1052,
@@ -720,7 +720,7 @@
     "tests/test_guard_supply_chain_daemon.py": 613,
     "tests/test_guard_supply_chain_evaluator.py": 3384,
     "tests/test_guard_supply_chain_sync.py": 886,
-    "tests/test_guard_surface_server.py": 4656,
+    "tests/test_guard_surface_server.py": 4685,
     "tests/test_guard_temporary_mcp_approvals.py": 620,
     "tests/test_guard_threat_intel.py": 577,
     "tests/test_guard_update_artifact.py": 1088,
@@ -731,7 +731,7 @@
     "tests/test_opencode_adapter.py": 1042,
     "tests/test_opencode_pretool.py": 788,
     "tests/test_pi_adapter.py": 997,
-    "tests/test_pi_hook_latency.py": 534,
+    "tests/test_pi_hook_latency.py": 547,
     "tests/test_policy_bundle_parser.py": 1216,
     "tests/test_policy_bundle_trust_regressions.py": 686,
     "tests/test_policy_bundle_v2.py": 537,

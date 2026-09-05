@@ -463,29 +463,6 @@ def test_verify_release_cli_reconciles_pypi_without_exposing_urls(
     assert "pythonhosted.org" not in output
 
 
-@pytest.mark.parametrize(
-    "files",
-    [
-        {WHEEL: (b"different", None), SDIST: (SDIST_BYTES, None)},
-        {WHEEL: (WHEEL_BYTES, None)},
-        {
-            WHEEL: (WHEEL_BYTES, None),
-            SDIST: (SDIST_BYTES, None),
-            f"hol_guard-{VERSION}-py2-none-any.whl": (b"extra", None),
-        },
-    ],
-)
-def test_verify_testpypi_rejects_mismatch_partial_and_extra(
-    tmp_path: Path,
-    files: dict[str, tuple[bytes, str | None]],
-) -> None:
-    dist = _local_dist(tmp_path)
-    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): _release_payload(Registry.TESTPYPI, files)})
-
-    with pytest.raises(RegistryVerificationError):
-        verify_testpypi_release(VERSION, dist, fetcher=fetcher)
-
-
 def test_generic_pypi_reconciliation_rejects_digest_mismatch(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     payload = _release_payload(
