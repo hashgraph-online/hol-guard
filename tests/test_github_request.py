@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.error import URLError
@@ -47,7 +48,7 @@ class _LocalGitHubApiHandler(BaseHTTPRequestHandler):
 
 
 @pytest.fixture()
-def local_api_server() -> _RecordingApiServer:
+def local_api_server() -> Iterator[_RecordingApiServer]:
     server = _RecordingApiServer()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
