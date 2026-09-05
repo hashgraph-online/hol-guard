@@ -72,12 +72,12 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     payload = get_adapter("codex").diagnostics(context)
 
     assert payload["native_hook_state"]["managed_hook_installed"] is True
+    assert payload["native_hook_state"]["protection_active"] is False
     assert payload["native_hook_state"]["integrity_status"] != "valid"
-    assert payload["setup_status"] != "broken"
+    assert payload["setup_status"] == "broken"
     assert not any("managed Codex hooks are missing" in warning for warning in payload["warnings"])
     assert not any("Guard is not installed" in warning for warning in payload["warnings"])
     assert any("do not match this Guard CLI" in warning for warning in payload["warnings"])
-    assert payload["setup_status"] == "active"
 
 
 def _write_cursor_hook_script(context: HarnessContext) -> Path:
