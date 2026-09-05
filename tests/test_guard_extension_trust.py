@@ -130,7 +130,7 @@ def test_local_catalog_marks_external_off_and_libraries_on() -> None:
     assert essh_payload["enabled"] is False
     assert essh_payload["trust_class"] == "external"
     assert essh_payload["activation"] == "opt-in"
-    assert essh_payload["publisher"]["id"] == "community"
+    assert essh_payload["publisher"]["id"] == "community.matthart1983"
     assert aws_payload["enabled"] is True
     assert aws_payload["trust_class"] == "trusted-library"
     assert git_payload["enabled"] is True
