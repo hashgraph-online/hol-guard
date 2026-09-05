@@ -1344,7 +1344,7 @@ def _write_guard_to_hermes_config_yaml(
 
     hermes_runtime_hooks.sync_guard_runtime_hooks(
         existing,
-        command=_json_payload(_managed_root(context) / "pretool-hook.json").get("command"),
+        command=_pretool_payload(context=context)["command"],
         timeout_seconds=_GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
         hermes_home=config_yaml_path.parent,
     )
