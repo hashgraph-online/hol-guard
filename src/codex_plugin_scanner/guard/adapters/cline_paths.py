@@ -90,14 +90,14 @@ def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> None:
     lexical_roots = {context.home_dir.absolute(), context.guard_home.absolute(), cline_data_dir(context).absolute()}
     current = path.parent.absolute()
     while True:
-        if current.exists() and current.is_symlink():
+        if current.is_symlink():
             raise RuntimeError(f"Cline destination parent is a symlink: {current}")
         if current in lexical_roots:
             break
         if current == current.parent:
             raise RuntimeError("Cline destination could not be anchored to a trusted root")
         current = current.parent
-    if path.exists() and path.is_symlink():
+    if path.is_symlink():
         raise RuntimeError(f"Cline destination is a symlink: {path}")
 
 

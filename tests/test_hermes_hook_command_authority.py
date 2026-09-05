@@ -14,7 +14,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
 
 @pytest.mark.parametrize("cached_command", [["sh", "-c", "echo untrusted"], ["--eval=untrusted"], [], None])
-def test_registration_regenerates_command_instead_of_trusting_cache(tmp_path: Path, monkeypatch, cached_command) -> None:
+def test_registration_regenerates_command_instead_of_trusting_cache(
+    tmp_path: Path, monkeypatch, cached_command
+) -> None:
     monkeypatch.delenv("HERMES_HOME", raising=False)
     home = tmp_path / "home with spaces"
     home.mkdir()
