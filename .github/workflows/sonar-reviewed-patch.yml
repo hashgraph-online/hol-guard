@@ -1,0 +1,46 @@
+name: Validate reviewed Sonar patch
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ci/sonar-reviewed-patch.b64
+      - scripts/ci/sonar_reviewed_patch.py
+      - .github/workflows/sonar-reviewed-patch.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    if: github.event.pull_request.number == 2778 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/sonar-blocker-control-flow' && github.actor == 'kantorcodes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Read rule definitions
+        run: python3 scripts/ci/sonar_reviewed_patch.py rules
+      - name: Apply checked patch
+        run: python3 scripts/ci/sonar_reviewed_patch.py prepare
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - name: Install locked test dependencies
+        run: uv sync --frozen --extra dev
+      - name: Validate behavior and refresh source-bound report
+        run: python3 scripts/ci/sonar_reviewed_patch.py validate
+      - name: Export verified blobs without updating refs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/sonar_reviewed_patch.py export
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: sonar-reviewed-patch
+          path: sonar-reviewed-output/
+          if-no-files-found: error
