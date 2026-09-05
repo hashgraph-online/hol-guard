@@ -79,7 +79,7 @@ for (const configured of [false, true]) {
     page.on("pageerror", (error) => runtimeErrors.push(error.message));
     await mountRecoveryFixture(page, { configured, enabled: false, failSettings: false });
     await page.goto(`/extensions?${DAEMON}`);
-    await expect(page.getByRole("heading", { name: "Set up approval before enrollment" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Set up local approval before enrollment" })).toBeVisible();
     await expect(page.getByText("hol-guard command controls enroll", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Set up approval", exact: true }).click();
     await expect(page).toHaveURL(/\/settings\?.*section=approval/);
