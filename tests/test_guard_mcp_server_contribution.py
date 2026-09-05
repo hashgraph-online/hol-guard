@@ -73,9 +73,37 @@ def test_mcp_contribution_rejects_whitespace_aliased_tool_names() -> None:
 
 
 def test_action_classes_preserve_id_separators() -> None:
+    from codex_plugin_scanner.guard.runtime.command_permission_catalog import permissions_for_action_classes
     from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _action_class_for
 
-    assert _action_class_for("mcp.foo.bar") != _action_class_for("mcp.foo-bar")
+    dotted = _action_class_for("mcp.foo.bar")
+    hyphen = _action_class_for("mcp.foo-bar")
+    assert dotted != hyphen
+    dotted_permission = permissions_for_action_classes(
+        "command.mcp-foo.bar",
+        "1.0.0",
+        (dotted,),
+        ("Inspect first.",),
+        configurable=False,
+    )[0].permission_id
+    hyphen_permission = permissions_for_action_classes(
+        "command.mcp-foo-bar",
+        "1.0.0",
+        (hyphen,),
+        ("Inspect first.",),
+        configurable=False,
+    )[0].permission_id
+    assert dotted_permission != hyphen_permission
+
+
+def test_declared_display_name_matches_live_tool_name() -> None:
+    payload = _filesystem_payload()
+    payload["tools"] = [
+        {"name": "Read File", "state": "block"},
+        {"name": "other", "state": "inherit"},
+    ]
+    validate_mcp_contribution(payload, filename="alias.json")
+    assert mcp_tool_state(payload, "read_file") == "block"
 
 
 def test_mcp_contribution_rejects_unknown_icon() -> None:

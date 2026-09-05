@@ -94,22 +94,20 @@ def mcp_catalog_ids(root: Path | None = None) -> frozenset[str]:
 
 
 def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
-    from .local_cli_commands import OTHER_COMMAND_ID, slug_local_cli_command_id
-
     tools = payload.get("tools")
     if not isinstance(tools, list):
         return "inherit"
-    wanted = slug_local_cli_command_id(tool_name)
+    wanted = _normalized_tool_name(tool_name)
     fallback = "inherit"
     for item in tools:
         if not isinstance(item, dict):
             continue
         name = item.get("name")
         state = item.get("state")
-        if name == OTHER_COMMAND_ID and state in {"inherit", "allow", "block"}:
+        normalized = _normalized_tool_name(name) if isinstance(name, str) else ""
+        if normalized == "other" and state in {"inherit", "allow", "block"}:
             fallback = state
-        named = isinstance(name, str) and slug_local_cli_command_id(name) == wanted
-        if named and state in {"inherit", "allow", "block"}:
+        if normalized == wanted and state in {"inherit", "allow", "block"}:
             return state
     return fallback
 
