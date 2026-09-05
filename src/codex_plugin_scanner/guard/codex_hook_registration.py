@@ -442,9 +442,44 @@ def codex_hook_doctor_warnings(hook_state: Mapping[str, object]) -> list[str]:
     return warnings
 
 
+_FALSE_UNINSTALLED_MARKER = "guard is not installed for this harness"
+
+
+def finalize_codex_doctor_warnings(
+    warnings: Sequence[str],
+    hook_state: Mapping[str, object],
+) -> list[str]:
+    """Keep Codex hook warnings and drop the false uninstalled copy when hooks exist."""
+
+    merged = [str(item) for item in warnings]
+    merged.extend(codex_hook_doctor_warnings(hook_state))
+    if not bool(hook_state.get("managed_hook_installed")):
+        return merged
+    return [warning for warning in merged if _FALSE_UNINSTALLED_MARKER not in warning.lower()]
+
+
+def finalize_codex_doctor_setup_status(
+    current_status: object,
+    hook_state: Mapping[str, object],
+    warnings: Sequence[str],
+) -> str:
+    """Project Codex setup from live hook proof, including partial base status."""
+
+    text = " ".join(warnings).lower()
+    setup_failure = "command is not available" in text or "native hooks are disabled" in text
+    if bool(hook_state.get("managed_hook_installed")):
+        if bool(hook_state.get("protection_active")) and not setup_failure:
+            return "active"
+        return "broken"
+    status = current_status if isinstance(current_status, str) and current_status else "partial"
+    return "broken" if status == "active" else status
+
+
 __all__ = [
     "codex_hook_doctor_warnings",
     "exact_legacy_hook_bindings",
+    "finalize_codex_doctor_setup_status",
+    "finalize_codex_doctor_warnings",
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",

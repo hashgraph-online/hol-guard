@@ -279,7 +279,7 @@ assert.match(fleetSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(fleetSource, /resolveDetectedAppStatus\(install, appProtection,/);
 assert.match(fleetSource, /onRepairHarness=\{props\.onRepairHarness \?\? props\.onConnectHarness\}/);
 assert.match(readFileSync(new URL("./fleet-protection-recovery.tsx", import.meta.url), "utf8"), /defaultConnectHarness\(props\.repairHarness, props\.repairHarnesses\)/);
-assert.match(harnessDetectionSource, /hookCheck\?\.status === "fail"/);
+assert.match(harnessDetectionSource, /hookCheck\?\.status !== "pass"/);
 assert.match(reviewStatesSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);
 assert.match(reviewStatesSource, /if \(runtime === null\)/);

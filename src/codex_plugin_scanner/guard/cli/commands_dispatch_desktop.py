@@ -80,7 +80,6 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     installed = _bool(item.get("installed"))
     command_available = _bool(item.get("command_available"))
     artifact_count = _int(item.get("artifact_count"))
-    review_count = _int(item.get("review_count"))
     warning_count = _int(item.get("warning_count"))
     managed = _bool(item.get("managed"))
     detected = installed or command_available or artifact_count > 0
@@ -88,7 +87,7 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     if managed and not runtime_active:
         protection = "needs_repair"
         detail = "Guard management is installed, but local enforcement is unavailable until the runtime is active."
-    elif managed and review_count == 0 and warning_count == 0:
+    elif managed and warning_count == 0:
         protection = "protected"
         detail = "Guard management is installed and the latest local check is clean."
     elif managed:
@@ -193,7 +192,7 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     elif state == "paired_waiting":
         status = "syncing"
         detail = "Guard Cloud pairing is complete and the first sync is pending."
-    elif state in {"connected", "active", "synced"}:
+    elif state in {"connected", "active", "synced", "paired_active"}:
         status = "connected"
         detail = "Guard Cloud is connected."
     else:

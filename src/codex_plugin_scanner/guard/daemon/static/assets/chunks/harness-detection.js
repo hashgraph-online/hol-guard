@@ -46,10 +46,9 @@ function isHarnessDetectedItems(items, harness) {
 function resolveDetectedAppStatus(install, protectionHealth, hasInventory, hasReceipts, detected) {
   if (install !== void 0) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
-    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
+    if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
-    if (protectionHealth.state === "partial") return "partial";
-    return "needs_repair";
+    return "partial";
   }
   return hasInventory || hasReceipts || detected ? "found_unprotected" : "not_found";
 }

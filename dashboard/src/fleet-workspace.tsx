@@ -32,9 +32,7 @@ import {
   type DetectedAppStatus,
 } from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
-import {
-  FleetProtectionRecovery,
-} from "./fleet-protection-recovery";
+import { FleetProtectionRecovery } from "./fleet-protection-recovery";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -175,7 +173,7 @@ export function repairHarnessesFor(
     installs
       .filter((install) => install.active !== true || health.apps.find(
         (app) => app.harness === install.harness
-      )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true)
+      )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass")
       .map((install) => install.harness)
   ));
 }
@@ -338,6 +336,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
             cloudSyncState: props.runtime.cloud_sync_health.state,
             cloudPolicySyncError: props.runtime.cloud_policy_sync_error,
             connectUrl: props.runtime.connect_url,
+            dashboardUrl: props.runtime.dashboard_url,
           }}
           health={protectionHealth}
           repairHarness={repairHarness}
