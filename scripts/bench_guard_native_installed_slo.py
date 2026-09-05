@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -67,6 +67,7 @@ _MAX_CONCURRENCY = 64
 # the bounded c64 load-generator workers alive across baseline and stress so
 # their thread allocation cannot be misclassified as resident runtime growth.
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
+_CONCURRENT_WAVE_TIMEOUT_SECONDS = 5.0
 _HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
 
@@ -246,9 +247,14 @@ def _run_concurrent(
     errors = 0
     _require(0 < concurrency <= _MAX_CONCURRENCY, "concurrency exceeds bounded benchmark limit")
     futures = [executor.submit(session.observe, harness, event, "1k") for harness, event in selected]
+    _, unfinished = wait(futures, timeout=_CONCURRENT_WAVE_TIMEOUT_SECONDS)
+    if unfinished:
+        for future in unfinished:
+            future.cancel()
+        raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
     for future in futures:
         try:
-            observations.append(future.result(timeout=5))
+            observations.append(future.result())
         except Exception:
             errors += 1
     return observations, errors
