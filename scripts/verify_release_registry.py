@@ -466,20 +466,12 @@ def verify_registry_release(
         try:
             inspection = inspect_release(registry, version_text, project_name=project_name, fetcher=fetcher)
             if not inspection.exists:
-                if not _wait_for_retry(
-                    attempt,
-                    attempts=retry_attempts,
-                    initial_delay=retry_initial_delay_seconds,
-                    maximum_delay=retry_max_delay_seconds,
-                    sleep=sleep_fn,
-                ):
-                    return RegistryResult(
-                        registry=registry,
-                        status="absent",
-                        version=inspection.version,
-                        files=tuple(sorted(local_hashes)),
-                    )
-                continue
+                return RegistryResult(
+                    registry=registry,
+                    status="absent",
+                    version=inspection.version,
+                    files=tuple(sorted(local_hashes)),
+                )
 
             _compare_digest_sets(local_hashes, inspection.digests, registry=registry)
             downloaded = (

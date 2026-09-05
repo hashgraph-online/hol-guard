@@ -509,14 +509,34 @@ def test_verify_release_cli_reconciles_pypi_without_exposing_urls(
     assert "pythonhosted.org" not in output
 
 
-def test_verify_registry_release_retries_until_pypi_release_appears(tmp_path: Path) -> None:
+def test_verify_registry_release_reports_absent_without_internal_retry(tmp_path: Path) -> None:
+    dist = _local_dist(tmp_path)
+    url = _release_url(Registry.PYPI)
+    fetcher = SequencedFetcher(url, [_http_error(url, 404)])
+    delays: list[float] = []
+
+    result = verify_registry_release(
+        Registry.PYPI,
+        VERSION,
+        dist,
+        fetcher=fetcher,
+        retry_attempts=2,
+        sleep=delays.append,
+    )
+
+    assert result.status == "absent"
+    assert fetcher.calls == [url]
+    assert delays == []
+
+
+def test_verify_registry_release_retries_transient_metadata_error(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     url = _release_url(Registry.PYPI)
     payload = _release_payload(
         Registry.PYPI,
         {WHEEL: (WHEEL_BYTES, None), SDIST: (SDIST_BYTES, None)},
     )
-    fetcher = SequencedFetcher(url, [_http_error(url, 404), payload])
+    fetcher = SequencedFetcher(url, [_http_error(url, 503), payload])
     delays: list[float] = []
 
     result = verify_registry_release(
