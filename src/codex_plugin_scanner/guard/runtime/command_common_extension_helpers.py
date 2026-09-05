@@ -69,7 +69,11 @@ def flag_variant(
     if isinstance(matcher, ExecutableMatcher):
         variant_matcher: CommandMatcher = _variant_leaf(matcher, required_flags)
     else:
-        leaves = tuple(_variant_leaf(child, required_flags) for child in matcher.matchers if isinstance(child, ExecutableMatcher))
+        leaves = tuple(
+            _variant_leaf(child, required_flags)
+            for child in matcher.matchers
+            if isinstance(child, ExecutableMatcher)
+        )
         if len(leaves) != len(matcher.matchers):
             raise ValueError("flag variants require executable matcher leaves")
         variant_matcher = AnyMatcher(matchers=leaves)
@@ -95,7 +99,11 @@ def kubernetes_dry_run_variant(matcher: ExecutableMatcher | AnyMatcher, title: s
         ).matcher
         for mode in ("client", "server")
     )
-    return CommandSafeVariant(variant_id="dry-run", title=title, matcher=AnyMatcher(matchers=variants))
+    return CommandSafeVariant(
+        variant_id="dry-run",
+        title=title,
+        matcher=AnyMatcher(matchers=variants),
+    )
 
 
 def rule(
