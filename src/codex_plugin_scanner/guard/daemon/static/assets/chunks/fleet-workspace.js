@@ -70,7 +70,7 @@ function cloudPolicyRecoveryHint(input) {
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl,
+    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl || input.connectUrl,
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof"
   };
