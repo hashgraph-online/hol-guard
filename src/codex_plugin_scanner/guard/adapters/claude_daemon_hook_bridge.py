@@ -63,24 +63,6 @@ def main(
     fallback_command: tuple[str, ...],
     query: str,
 ) -> int:
-    """Emit the hook decision as JSON while preserving the harness exit contract."""
-
-    _run_hook(
-        state_path=state_path,
-        fallback_daemon_url=fallback_daemon_url,
-        fallback_command=fallback_command,
-        query=query,
-    )
-    return 0
-
-
-def _run_hook(
-    *,
-    state_path: str | Path,
-    fallback_daemon_url: str,
-    fallback_command: tuple[str, ...],
-    query: str,
-) -> None:
     """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
 
     _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
@@ -91,7 +73,7 @@ def _run_hook(
         if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
-        return
+        return 0
     data = body.strip() or "{}"
     recovery_command = _recovery_command(state_path, query)
     try:
@@ -122,10 +104,11 @@ def _run_hook(
         else:
             response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
         sys.stdout.write(response_body)
-        return
+        return 0
     if _should_suppress_output(data, response_body):
-        return
+        return 0
     sys.stdout.write(response_body if response_body.strip() else "{}")
+    return 0
 
 
 def _build_loopback_opener() -> urllib.request.OpenerDirector:
