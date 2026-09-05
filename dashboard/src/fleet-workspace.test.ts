@@ -2,9 +2,10 @@ import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
 import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
-import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
+import { repairHarnessesFor } from "./fleet-workspace";
+import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
-import type { FleetHeroCopy } from "./fleet-workspace";
+import type { FleetHeroCopy } from "./fleet-hero-copy";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
