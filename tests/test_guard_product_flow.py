@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import product as product_module
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import detect_all
@@ -166,6 +167,34 @@ args = ["workspace-skill.js", "--changed"]
         codex_summary = next(item for item in payload["harnesses"] if item["harness"] == "codex")
 
         assert codex_summary["review_count"] >= 1
+
+    def test_guard_status_uses_verified_desktop_endpoint_for_mismatched_cli_runtime(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        home_dir.mkdir()
+        workspace_dir.mkdir()
+        context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        store = GuardStore(guard_home)
+        config = GuardConfig(guard_home=guard_home, workspace=workspace_dir)
+        observed_homes = []
+
+        def verified_desktop_endpoint(home):
+            observed_homes.append(home)
+            return "http://127.0.0.1:8234", "desktop-token"
+
+        monkeypatch.setattr(product_module, "detect_all", lambda _context: ())
+        monkeypatch.setattr(product_module, "load_guard_daemon_endpoint", verified_desktop_endpoint)
+
+        payload = build_guard_status_payload(context, store, config)
+
+        assert observed_homes == [guard_home]
+        assert payload["approval_center_url"] == "http://127.0.0.1:8234"
+        assert payload["runtime_status"] == "active"
 
     def test_guard_bootstrap_stays_local_when_cloud_is_unreachable(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

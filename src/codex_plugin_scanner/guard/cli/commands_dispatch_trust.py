@@ -15,6 +15,7 @@ from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.manager import _guard_daemon_url_port, _load_state, load_guard_daemon_url, read_approval_center_locator
+from ..daemon.runtime_peer import load_guard_daemon_endpoint
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..policy_integrity import is_remote_policy_source
@@ -256,6 +257,9 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             "detail": detail,
         }
     daemon_url = load_guard_daemon_url(guard_home)
+    if daemon_url is None:
+        daemon_endpoint = load_guard_daemon_endpoint(guard_home)
+        daemon_url = daemon_endpoint[0] if daemon_endpoint is not None else None
     if isinstance(daemon_url, str) and daemon_url.strip():
         detail = "Guard daemon is healthy, but the browser approval locator has not been refreshed yet."
         if restart_required:
