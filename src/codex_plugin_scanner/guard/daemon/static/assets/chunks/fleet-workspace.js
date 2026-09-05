@@ -121,9 +121,6 @@ function TargetedRepairButton({
   ] });
 }
 function cloudConnectPendingMessage(hasAuthorizeUrl, opened) {
-  if (!hasAuthorizeUrl) {
-    return "Open the secure sign-in link below. This page will update automatically.";
-  }
   if (opened) {
     return "Complete sign-in in the opened window. This page will update automatically.";
   }
