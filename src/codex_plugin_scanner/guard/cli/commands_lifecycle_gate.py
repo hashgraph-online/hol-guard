@@ -16,8 +16,10 @@ from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
 _ENROLLMENT_NOTICE = (
-    "Security recommendation: protect Guard administration with an approval password or Authenticator. "
-    "Run `hol-guard dashboard`, then enable these controls in Settings."
+    "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
+    "local gate. Run `hol-guard dashboard`, then open Settings > Approval gate, enable `Ask for proof on allow "
+    "decisions`, and set an `Approval password`. Optionally connect an `Authenticator app` for high-risk "
+    "approvals. This notice is advisory and does not block the current command."
 )
 _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "apps.",
