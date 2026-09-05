@@ -132,3 +132,49 @@ def test_windows_rename_barrier_retains_handle_when_release_close_fails(
 
     assert failed_release
     assert closed == [original_state_handle, guard_handle]
+
+
+def test_windows_rename_barrier_preserves_rename_failure_after_restoring_barrier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Propagate rename failure while restoring and later closing a new barrier handle."""
+
+    closed: list[tuple[object, object]] = []
+    api, guard_handle, original_state_handle, live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
+    rename_handle = (object(), object())
+    restored_state_handle = (object(), object())
+    opened = 0
+
+    def open_handle(*_args: object, **kwargs: object) -> tuple[object, object, object]:
+        """Open the temporary rename parent first and restored exclusive barrier second."""
+
+        nonlocal opened
+        opened += 1
+        selected = rename_handle if kwargs.get("rename_parent") else restored_state_handle
+        live_handles.add(selected[1])
+        return selected[0], selected[1], object()
+
+    api._windows_open_handle = open_handle
+    monkeypatch.setattr(
+        windows_atomic,
+        "_windows_rename_file_handle",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            NativePolicySnapshotError("native_policy_windows_replace_failed")
+        ),
+    )
+
+    with pytest.raises(NativePolicySnapshotError, match="replace_failed"):
+        with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
+            windows_atomic._windows_rename_releasing_barrier(
+                api=api,
+                kernel32=object(),
+                source_handle=object(),
+                parent_path=binding.path,
+                parent_handle=binding.handle,
+                destination_name="snapshot.json",
+                replace_existing=True,
+                directory_handles=binding.handles,
+            )
+
+    assert opened == 2
+    assert closed == [original_state_handle, rename_handle, restored_state_handle, guard_handle]
