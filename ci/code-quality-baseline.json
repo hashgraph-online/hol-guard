@@ -166,10 +166,6 @@
       "scripts/ci/rust_posttool_failclosed_integration_v2.py::_decode",
       "scripts/ci/rust_pretool_authority_integration.py::_json_output"
     ],
-    "6bb41d10fded6414307345ceb966fe16624a1412f89c3d587ed69bd3a78da8dd": [
-      "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/agent_guidance_reads.py::_bounded_sed_read_target",
-      "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py::_bounded_sed_read_target"
-    ],
     "8a068a1061fd1f1ad28323e4a8557f983a207b1389a892cacb504bca6044085a": [
       "scripts/mdm/generate-release-manifest.py::_open_readonly_no_follow",
       "src/codex_plugin_scanner/guard/mdm/manifest.py::_open_readonly_no_follow"

@@ -2,11 +2,12 @@
 
 import hashlib
 import json
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from .home_path_text import expand_home, normalize_path
 
 SecretSensitivity = Literal["high", "critical"]
 SecretContentSensitivity = Literal["medium", "high", "critical"]
@@ -228,8 +229,8 @@ def classify_secret_path(
     requested_path = path.strip().strip("'").strip('"')
     if not requested_path:
         return None
-    expanded_home = _expand_home(requested_path, home_dir)
-    normalized_path = _normalize_path(expanded_home, cwd)
+    expanded_home = expand_home(requested_path, home_dir)
+    normalized_path = normalize_path(expanded_home, cwd)
     lowered_segments = tuple(segment for segment in normalized_path.replace("\\", "/").lower().split("/") if segment)
     if not lowered_segments:
         return None
@@ -436,20 +437,3 @@ def _match(
         reason=_SENSITIVE_PATH_REASONS[family],
         requested_path=requested_path,
     )
-
-
-def _expand_home(value: str, home_dir: Path | None) -> str:
-    if value == "~":
-        return str(home_dir or Path.home())
-    if value.startswith("~/") or value.startswith("~\\"):
-        base = home_dir or Path.home()
-        return str(base / value[2:])
-    return value
-
-
-def _normalize_path(value: str, cwd: Path | None) -> str:
-    if os.path.isabs(value):
-        return os.path.normpath(value)
-    if cwd is not None:
-        return os.path.normpath(os.path.join(str(cwd), value))
-    return os.path.normpath(value)
