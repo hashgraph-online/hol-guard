@@ -309,7 +309,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "--pending-dir dist-hol-guard" in main_quota["run"]
     main_verify = next(step for step in main_steps if step.get("name") == "Download and verify exact PyPI artifacts")
     assert "--artifact-set full" in main_verify["run"]
-    assert "verify-published" in main_verify["run"]
+    assert main_verify["run"].find("for attempt in {1..60}") < main_verify["run"].find("retry_verify_published.py") < main_verify["run"].find("\ndone\n")
 
     stable_native = jobs["build-native-guard-wheels"]["if"]
     assert "needs.build.outputs.channel == 'stable'" in stable_native
@@ -388,7 +388,7 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         < alpha_test_steps.index(alpha_test_verify)
     )
     assert "--download-dir verified-testpypi" in alpha_test_verify["run"]
-    assert "verify-published --registry testpypi" in alpha_test_verify["run"]
+    assert alpha_test_verify["run"].find("for attempt in {1..60}") < alpha_test_verify["run"].find("retry_verify_published.py") < alpha_test_verify["run"].find("\ndone\n")
     assert 'uv tool run --from "$wheel"' in alpha_test_verify["run"]
     assert 'status" == "exact"' in alpha_test_verify["run"]
     assert 'status" != "absent"' in alpha_test_verify["run"]
@@ -517,7 +517,7 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     )
     assert "inspect-release --registry pypi --project hol-guard" in alpha_verify["run"]
     assert "verify-release --registry pypi --project plugin-scanner" in alpha_verify["run"]
-    assert "verify-published --registry pypi" in alpha_verify["run"]
+    assert alpha_verify["run"].find("for attempt in {1..60}") < alpha_verify["run"].find("retry_verify_published.py") < alpha_verify["run"].find("\ndone\n")
     assert "--artifact-set pure" in alpha_verify["run"]
     assert '--source-sha "$SOURCE_SHA"' in alpha_verify["run"]
     assert "dist-hol-guard/*-py3-none-any.whl" in alpha_verify["run"]

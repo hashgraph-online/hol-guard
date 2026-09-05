@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
@@ -17,6 +17,7 @@ from .hook_availability_policy import (
     hook_review_is_recording_only,
     recording_only_pre_tool_response,
 )
+from .hook_native_review_approval import pause_native_pre_tool_for_approval
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -58,7 +59,13 @@ class _HookWorkerMetrics(Protocol):
     def record_route(self, route: str) -> None: ...
 
 
+if TYPE_CHECKING:
+    from ..store import GuardStore
+
+
 class _HookWorkerNativeHost(Protocol):
+    store: GuardStore
+
     @property
     def metrics(self) -> _HookWorkerMetrics: ...
 
@@ -296,6 +303,16 @@ class HookWorkerNativeMixin:
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
+            action = str(native_result.get("minimum_action") or "")
+            if action == "review":
+                return pause_native_pre_tool_for_approval(
+                    self.store,
+                    harness=native_harness,
+                    payload=payload,
+                    native_result=native_result,
+                    workspace=workspace,
+                    guard_home=guard_home,
+                )
             return harness_json_from_native_pre_tool(native_harness, native_result)
         if recording_only:
             native_result = _watch_native_post_tool_result(native_result)
