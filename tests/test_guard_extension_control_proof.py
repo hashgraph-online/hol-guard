@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import stat
 import subprocess
 from pathlib import Path
@@ -22,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     ExtensionControlMutation,
     ExtensionControlProofError,
     _require_local_terminal_confirmation,
+    _terminal_descriptors_share_session,
     _terminal_session_is_local,
     consume_extension_control_enrollment_proof,
     consume_extension_control_proof,
@@ -164,6 +166,103 @@ def test_enrollment_proof_rejects_remote_terminal(tmp_path: Path, monkeypatch: p
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
         _require_local_terminal_confirmation(_enrollment())
+
+
+def test_terminal_descriptors_accept_linux_tty_alias_and_stdin_pty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process_groups = {10: 4200, 11: 4200}
+
+    def process_group(descriptor: int) -> int:
+        try:
+            return process_groups[descriptor]
+        except KeyError as error:
+            raise OSError("unknown terminal descriptor") from error
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        process_group,
+    )
+
+    assert _terminal_descriptors_share_session(10, 11) is True
+
+
+def test_terminal_descriptors_reject_different_terminal_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process_groups = {10: 4200, 11: 4300}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        process_groups.__getitem__,
+    )
+
+    assert _terminal_descriptors_share_session(10, 11) is False
+
+
+def test_terminal_descriptors_fail_closed_when_session_cannot_be_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unreadable_process_group(_descriptor: int) -> int:
+        raise OSError("not a terminal")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        unreadable_process_group,
+    )
+
+    assert _terminal_descriptors_share_session(10, 11) is False
+
+
+def test_enrollment_accepts_linux_tty_alias_for_same_controlling_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = "ENROLL EXTENSION CONTROL local-admin\n"
+    process_groups = {10: 4200, 11: 4200}
+
+    def process_group(descriptor: int) -> int:
+        try:
+            return process_groups[descriptor]
+        except KeyError as error:
+            raise OSError("unknown terminal descriptor") from error
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.open",
+        lambda *_args, **_kwargs: 10,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.close",
+        lambda _descriptor: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.dup",
+        lambda descriptor: descriptor,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.tcgetpgrp",
+        process_group,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.ttyname",
+        lambda descriptor: "/dev/tty" if descriptor == 10 else "/dev/pts/0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.isatty",
+        lambda _descriptor: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._terminal_session_is_local",
+        lambda terminal_name: terminal_name == "/dev/pts/0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.os.fdopen",
+        lambda _descriptor, mode, **_kwargs: io.StringIO(expected if mode == "r" else ""),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof.sys.stdin",
+        type("InteractiveInput", (), {"isatty": lambda self: True, "fileno": lambda self: 11})(),
+    )
+
+    _require_local_terminal_confirmation(_enrollment())
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,162 @@
+{
+  "schema": "hol-guard.python-capability-ownership.v1",
+  "slice": "NHD-091-NHD-095",
+  "decision_authority": "rust_native_runtime",
+  "dynamic_import_policy": {
+    "mode": "literal_or_bounded",
+    "max_destination_length": 256,
+    "provenance": "module constants, static expressions, bounded literal loops, or same-module literal callsites"
+  },
+  "classes": [
+    "required_control_plane",
+    "named_reference_oracle",
+    "dead_duplicate"
+  ],
+  "scope_globs": [
+    "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
+    "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+    "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
+    "src/codex_plugin_scanner/guard/native_hook_edge.py",
+    "src/codex_plugin_scanner/guard/native_response_decoder.py",
+    "src/codex_plugin_scanner/guard/native_route_receipt.py",
+    "src/codex_plugin_scanner/guard/native_resident_client.py",
+    "src/codex_plugin_scanner/guard/native_runtime*.py",
+    "src/codex_plugin_scanner/guard/native_mode.py",
+    "src/codex_plugin_scanner/guard/runtime/hook_*.py"
+  ],
+  "capabilities": [
+    {
+      "id": "hook_control_and_transport",
+      "class": "required_control_plane",
+      "patterns": [
+        "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_payload_preparation.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_local_cli.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
+        "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+        "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
+        "src/codex_plugin_scanner/guard/native_hook_edge.py",
+        "src/codex_plugin_scanner/guard/native_response_decoder.py",
+        "src/codex_plugin_scanner/guard/native_route_receipt.py",
+        "src/codex_plugin_scanner/guard/native_resident_client.py",
+        "src/codex_plugin_scanner/guard/native_runtime.py",
+        "src/codex_plugin_scanner/guard/native_runtime_admission.py",
+        "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+        "src/codex_plugin_scanner/guard/native_mode.py",
+        "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
+      ],
+      "exclude_patterns": [
+        "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_process_metrics.py",
+        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+        "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
+      ],
+      "production_role": "authentication, transport, adapter projection, supervision, and non-authoritative evidence plumbing",
+      "owner": "python-control-and-transport"
+    },
+    {
+      "id": "python_reference_oracle",
+      "class": "named_reference_oracle",
+      "patterns": [
+        "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_compat_bootstrap.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_compat_loader.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_compatibility.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_finish.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_state.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_source_ref.py",
+        "src/codex_plugin_scanner/guard/runtime/hook_*.py"
+      ],
+      "exclude_patterns": [
+        "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
+        "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
+      ],
+      "production_role": "explicit differential-test and rollback oracle; never an ordinary production decision path",
+      "owner": "python-reference-tests"
+    },
+    {
+      "id": "hook_evidence_persistence",
+      "class": "required_control_plane",
+      "patterns": [
+        "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_process_metrics.py",
+        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+        "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
+      ],
+      "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
+      "owner": "evidence-persistence"
+    },
+    {
+      "id": "legacy_python_resident_transport",
+      "class": "dead_duplicate",
+      "patterns": [
+        "src/codex_plugin_scanner/guard/native_runtime_resident*.py"
+      ],
+      "exclude_patterns": [],
+      "production_role": "superseded Python resident transport; source retained pending separate deletion authorization",
+      "owner": "rust-resident-runtime",
+      "package_status": "wheel-and-sdist-excluded",
+      "rollback_boundary": "restore the retained source and remove the single build exclusion in a separately reviewed rollback change"
+    }
+  ],
+  "oracle_tests": [
+    "tests/test_python_hook_semantic_callgraph_gate.py",
+    "tests/test_guard_hook_payload_reference.py",
+    "ci/native_runtime/test_guard_native_runtime_differential.py",
+    "ci/native_runtime/test_guard_native_runtime_mutation_differential.py"
+  ],
+  "lazy_oracle_modules": [
+    "codex_plugin_scanner.guard.cli.commands_hook_claude",
+    "codex_plugin_scanner.guard.cli.commands_hook_compatibility",
+    "codex_plugin_scanner.guard.cli.commands_hook_copilot",
+    "codex_plugin_scanner.guard.cli.commands_hook_generic",
+    "codex_plugin_scanner.guard.cli.commands_hook_runtime_eval",
+    "codex_plugin_scanner.guard.cli.commands_hook_runtime_finish",
+    "codex_plugin_scanner.guard.cli.commands_hook_runtime_review",
+    "codex_plugin_scanner.guard.cli.commands_hook_runtime_state",
+    "codex_plugin_scanner.guard.runtime.hook_content_scanner",
+    "codex_plugin_scanner.guard.runtime.hook_decision_cache",
+    "codex_plugin_scanner.guard.runtime.hook_payload_reference",
+    "codex_plugin_scanner.guard.runtime.hook_review_engine",
+    "codex_plugin_scanner.guard.runtime.hook_source_read"
+  ],
+  "parity_fixture": "tests/fixtures/native-hook-parity/cases.v1.json",
+  "package_excluded_candidates": [
+    "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+  ],
+  "deletion_candidates": [
+    {
+      "path": "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+      "reason": "No production src import or entrypoint reaches the Python resident transport; Rust resident runtime owns the route.",
+      "authorization": "separate deletion review required",
+      "source_retained": true
+    }
+  ],
+  "dependency_delta": {
+    "removed_project_dependencies": [],
+    "removed_entrypoints": [],
+    "removed_runtime_flags": [],
+    "review": "No dependency or public entrypoint was proven dead without widening the rollback boundary; the cleanup removes only the dead resident package surface."
+  },
+  "rollback_boundary": {
+    "retained_source": true,
+    "reversible_changes": [
+      "commands_hook_compat_loader.py lazy oracle import",
+      "commands_support.py lazy facade lookup",
+      "hatch build exclusion for native_runtime_resident.py"
+    ],
+    "non_reversible_without_review": [
+      "deletion of native_runtime_resident.py",
+      "removal of legacy oracle modules"
+    ]
+  }
+}

@@ -19,16 +19,23 @@ import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .daemon.manager import GuardDaemonHookFailureKind
 
 from .frozen_runtime_commands import (
     FROZEN_DAEMON_RECOVER_ARG,
+    FROZEN_DAEMON_RECOVERY_WORKER_ARG,
     frozen_daemon_recovery_command,
     is_frozen_guard_runtime,
 )
 
 _FROZEN_BRIDGE_ARG = "--_hol-guard-codex-bridge"
 _FROZEN_DAEMON_RECOVER_ARG = FROZEN_DAEMON_RECOVER_ARG
+_FROZEN_DAEMON_RECOVERY_WORKER_ARG = FROZEN_DAEMON_RECOVERY_WORKER_ARG
 
 
 def _decode_private_payload(raw: str, *, label: str) -> dict[str, object]:
@@ -145,12 +152,69 @@ def run_frozen_internal_command(argv: Sequence[str] | None = None) -> int | None
             config_json=config["config_json"],
         )
 
-    if operation != _FROZEN_DAEMON_RECOVER_ARG:
-        return None
+    if operation == _FROZEN_DAEMON_RECOVER_ARG:
+        return _schedule_frozen_daemon_recovery(raw_payload)
+    if operation == _FROZEN_DAEMON_RECOVERY_WORKER_ARG:
+        return _run_frozen_daemon_recovery_worker(raw_payload)
+    return None
 
+
+def _schedule_frozen_daemon_recovery(raw_payload: str) -> int:
     payload = _decode_private_payload(raw_payload, label="Codex daemon recovery")
     if set(payload) != {"guard_home", "home_dir"}:
         raise ValueError("Codex daemon recovery payload has unexpected fields")
+    guard_home, home_dir = _frozen_recovery_paths(payload)
+
+    from .daemon import schedule_guard_daemon_recovery
+
+    schedule_guard_daemon_recovery(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind=_hook_failure_kind(),
+        executable=Path(sys.executable).expanduser().resolve(strict=True),
+    )
+    return 0
+
+
+def _run_frozen_daemon_recovery_worker(raw_payload: str) -> int:
+    payload = _decode_private_payload(raw_payload, label="Codex daemon recovery worker")
+    if set(payload) != {"failure_kind", "guard_home", "home_dir", "recovery_token"}:
+        raise ValueError("Codex daemon recovery worker payload has unexpected fields")
+    guard_home, home_dir = _frozen_recovery_paths(payload)
+    failure_kind = payload.get("failure_kind")
+    recovery_token = payload.get("recovery_token")
+    typed_failure_kind: GuardDaemonHookFailureKind
+    if failure_kind == "authenticated-control-plane-failure":
+        typed_failure_kind = "authenticated-control-plane-failure"
+    elif failure_kind == "overload":
+        typed_failure_kind = "overload"
+    elif failure_kind == "transport-failure":
+        typed_failure_kind = "transport-failure"
+    else:
+        raise ValueError("Codex daemon recovery worker failure kind is invalid")
+    if not isinstance(recovery_token, str) or not recovery_token:
+        raise ValueError("Codex daemon recovery worker token is invalid")
+
+    from .daemon.manager import (
+        _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
+        clear_guard_daemon_recovery_reservation,
+        recover_guard_daemon_after_hook_failure,
+    )
+
+    try:
+        recover_guard_daemon_after_hook_failure(
+            guard_home,
+            home_dir=home_dir,
+            failure_kind=typed_failure_kind,
+            recovery_lock_timeout_seconds=_GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
+        )
+    finally:
+        with suppress(OSError, RuntimeError, ValueError):
+            clear_guard_daemon_recovery_reservation(guard_home, token=recovery_token)
+    return 0
+
+
+def _frozen_recovery_paths(payload: Mapping[str, object]) -> tuple[Path, Path]:
     guard_home_value = payload.get("guard_home")
     home_dir_value = payload.get("home_dir")
     if not isinstance(guard_home_value, str) or not isinstance(home_dir_value, str):
@@ -159,22 +223,18 @@ def run_frozen_internal_command(argv: Sequence[str] | None = None) -> int | None
     home_dir = Path(home_dir_value)
     if not guard_home.is_absolute() or not home_dir.is_absolute():
         raise ValueError("Codex daemon recovery paths must be absolute")
+    return guard_home, home_dir
 
-    from .daemon import recover_guard_daemon_after_hook_failure
 
-    failure_kind_raw = os.environ.get("HOL_GUARD_HOOK_FAILURE_KIND", "transport-failure")
-    if failure_kind_raw == "authenticated-control-plane-failure":
-        failure_kind = "authenticated-control-plane-failure"
-    elif failure_kind_raw == "overload":
-        failure_kind = "overload"
-    else:
-        failure_kind = "transport-failure"
-    recover_guard_daemon_after_hook_failure(
-        guard_home,
-        home_dir=home_dir,
-        failure_kind=failure_kind,
-    )
-    return 0
+def _hook_failure_kind() -> GuardDaemonHookFailureKind:
+    failure_kind = os.environ.get("HOL_GUARD_HOOK_FAILURE_KIND", "transport-failure")
+    if failure_kind == "authenticated-control-plane-failure":
+        return "authenticated-control-plane-failure"
+    if failure_kind == "overload":
+        return "overload"
+    if failure_kind == "transport-failure":
+        return "transport-failure"
+    return "transport-failure"
 
 
 def _validate_frozen_codex_hook_launch(
@@ -192,18 +252,7 @@ def _validate_frozen_codex_hook_launch(
     from .codex_hook_integrity import load_authenticated_hook_manifest_path
     from .codex_hook_launch_runtime import isolated_hook_environment, private_hook_runtime_cwd
 
-    state = Path(state_path)
-    configured_manifest = Path(manifest_path)
-    if not state.is_absolute() or not configured_manifest.is_absolute():
-        raise ValueError("managed Codex hook paths must be absolute")
-    guard_home = state.parent.resolve(strict=False)
-    expected_managed_directory = (guard_home / "managed" / "codex").resolve(strict=False)
-    manifest_directory = configured_manifest.parent.resolve(strict=False)
-    if state.name != "daemon-state.json" or manifest_directory != expected_managed_directory:
-        raise ValueError("managed Codex hook paths do not belong to this Guard home")
-    if not configured_manifest.name.startswith("hooks-") or not configured_manifest.name.endswith(".manifest.json"):
-        raise ValueError("managed Codex hook manifest path is invalid")
-
+    state, configured_manifest, guard_home = trust._resolve_managed_hook_paths(state_path, manifest_path)
     manifest = load_authenticated_hook_manifest_path(guard_home, configured_manifest)
     trust._verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
     interpreter = trust._mapping(manifest.get("interpreter"), label="interpreter")

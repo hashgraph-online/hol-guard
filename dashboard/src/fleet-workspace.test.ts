@@ -1,4 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
@@ -151,11 +152,43 @@ const pendingCloudProof = cloudPolicyRecoveryHint({
   cloudPolicySyncError: null,
   connectUrl: urls.fleet_url,
 });
+assert(pendingCloudProof === null, "queued Cloud sync must not appear on local protection repair");
+const staleCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "stale",
+  cloudPolicySyncError: null,
+  connectUrl: urls.fleet_url,
+});
+assert(staleCloudProof === null, "stale Cloud sync must not appear on local protection repair");
+const failedCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+  dashboardUrl: urls.dashboard_url,
+});
 assert(
-  pendingCloudProof?.actionLabel === "Open Guard Cloud" &&
-    pendingCloudProof.detail.includes("separate from local repair") &&
-    pendingCloudProof.startsOAuth === false,
-  "incomplete Cloud proof remains an independent Cloud action",
+  failedCloudProof?.actionLabel === "Open Guard Cloud" &&
+    failedCloudProof.detail.includes("separate from local repair") &&
+    failedCloudProof.startsOAuth === false &&
+    failedCloudProof.href === urls.dashboard_url,
+  "failed Cloud proof remains an independent Cloud action",
+);
+assert(
+  failedCloudProof.href !== urls.connect_url,
+  "already-connected Cloud recovery must not open the connect page",
+);
+const missingDashboardCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+});
+assert(missingDashboardCloudProof === null, "connected Cloud recovery requires a dashboard URL");
+assert(
+  recoverySummary(1, 0, false, ["App hooks"]) ===
+    "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",
+  "a single failed local check is named instead of a generic count",
 );
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
@@ -210,6 +243,25 @@ const targetedRepairs = repairHarnessesFor(
 assert(
   targetedRepairs.length === 2 && targetedRepairs[0] === "grok" && targetedRepairs[1] === "cursor",
   "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
+);
+
+const watchModeCodexHealth = {
+  harness: "codex",
+  state: "degraded" as const,
+  label: "Degraded",
+  detail: "Watch posture is observe-only.",
+  evidence_gap: false,
+  checks: [{ check_id: "harness_hooks", status: "pass" as const, reason_code: "hooks_verified" }],
+  reason_codes: ["hooks_verified"],
+};
+assert(
+  resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true) === "partial",
+  "active Codex with passing hooks is not a repair loop when global protection is Watch",
+);
+const missingHookProofHealth = { ...watchModeCodexHealth, checks: [] };
+assert(
+  resolveDetectedAppStatus({ active: true }, missingHookProofHealth, true, true, true) === "needs_repair",
+  "active installs without an app-specific hook proof still need repair",
 );
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];

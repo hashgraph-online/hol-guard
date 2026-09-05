@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "guard.extension-trust-class-map.v1",
+  "publishers": {
+    "hol": {
+      "id": "hol",
+      "displayName": "Hashgraph Online"
+    },
+    "hol-curated": {
+      "id": "hol-curated",
+      "displayName": "HOL curated library"
+    }
+  },
+  "classes": {
+    "first-party": [
+      "command.container-runtime",
+      "command.data-protection",
+      "command.encoded-execution",
+      "command.filesystem",
+      "command.git",
+      "command.guard-self-protection",
+      "command.kubernetes-secrets",
+      "command.package.go",
+      "command.package.jvm",
+      "command.package.node",
+      "command.package.php",
+      "command.package.python",
+      "command.package.ruby",
+      "command.package.rust",
+      "command.package.system",
+      "command.shell-mutations",
+      "command.system",
+      "command.windows"
+    ],
+    "trusted-library": [
+      "command.api-gateway",
+      "command.backup.borg",
+      "command.backup.rclone",
+      "command.backup.restic",
+      "command.backup.velero",
+      "command.cdn",
+      "command.cicd.circleci",
+      "command.cicd.github",
+      "command.cicd.gitlab",
+      "command.cloud.aws",
+      "command.cloud.azure",
+      "command.cloud.gcp",
+      "command.database.mongodb",
+      "command.database.mysql",
+      "command.database.postgresql",
+      "command.database.redis",
+      "command.database.sqlite",
+      "command.database.supabase",
+      "command.dns",
+      "command.email",
+      "command.feature-flags",
+      "command.framework.laravel",
+      "command.github",
+      "command.infrastructure-as-code",
+      "command.kubernetes-operations",
+      "command.load-balancer",
+      "command.messaging.kafka",
+      "command.messaging.nats",
+      "command.messaging.rabbitmq",
+      "command.monitoring",
+      "command.payment",
+      "command.platform.heroku",
+      "command.platform.netlify",
+      "command.platform.vercel",
+      "command.remote.rsync",
+      "command.remote.scp",
+      "command.remote.ssh",
+      "command.search.elasticsearch",
+      "command.storage.aws-s3",
+      "command.storage.azure-blob",
+      "command.storage.google-cloud",
+      "command.storage.minio"
+    ],
+    "external": [
+      "command.blitcp",
+      "command.mcp-filesystem",
+      "command.noodle",
+      "command.probe",
+      "command.repo2nb",
+      "command.skill-sunset"
+    ]
+  }
+}

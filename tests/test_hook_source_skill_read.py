@@ -207,6 +207,48 @@ def test_omp_virtual_resource_with_secret_is_blocked(context: Context) -> None:
     assert result["reason_code"] == "output_secret_match"
 
 
+@pytest.mark.parametrize(
+    "uri",
+    ("mcp://hub/describe", "mcp://hub/describe/guard-dev-testing"),
+)
+def test_omp_virtual_resource_with_medium_credential_example_is_allowed(context: Context, uri: str) -> None:
+    result = _review(
+        context,
+        output="secret = get_secret('deployment-config')",
+        uri=uri,
+    )
+
+    assert result["decision"] == "allow"
+    assert result["model_output_action"] == "allow_original"
+    assert result["reason_code"] == "output_scan_allow"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    ("mcp://hub/describe", "mcp://hub/describe/guard-dev-testing"),
+)
+def test_omp_virtual_describe_with_sample_marked_credential_is_blocked(context: Context, uri: str) -> None:
+    result = _review(
+        context,
+        output="password = example-production-value",
+        uri=uri,
+    )
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "output_secret_match"
+
+
+def test_ordinary_virtual_resource_with_realistic_medium_credential_is_blocked(context: Context) -> None:
+    result = _review(
+        context,
+        output="credential = 'prod-live-value'",
+        uri="mcp://resource://server/item",
+    )
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "output_secret_match"
+
+
 def test_truncated_omp_virtual_resource_is_not_returned_in_full(context: Context) -> None:
     result = _review(
         context,
@@ -267,6 +309,83 @@ def test_omp_virtual_target_mismatch_is_not_allowed(context: Context) -> None:
 def test_skill_with_secret_is_blocked(context: Context) -> None:
     _, home_dir, *_ = context
     content = "token: ghp_1234567890abcdefghijklmnopqrstuvwxyz\n"
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "source_secret_match"
+
+
+def test_skill_with_medium_credential_examples_is_allowed(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = "secret = get_secret('deployment-config')\nsecret['data'] = merged\n"
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "allow"
+    assert result["model_output_action"] == "allow_original"
+    assert result["reason_code"] == "source_full_scan_allow"
+
+
+def test_skill_with_dotted_fstring_expression_is_allowed(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = 'secret = f"{config.token}"\n'
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "allow"
+    assert result["model_output_action"] == "allow_original"
+    assert result["reason_code"] == "source_full_scan_allow"
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        'secret = f"{config.token}" + "prod-live-value"\n',
+        'secret = get_secret("deployment-config") + "prod-live-value"\n',
+    ),
+)
+def test_skill_with_composed_credential_expression_is_blocked(context: Context, content: str) -> None:
+    _, home_dir, *_ = context
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "source_secret_match"
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        'secret = f"{config.token}" + "prod-live-value"',
+        'secret = get_secret("deployment-config") + "prod-live-value"',
+    ),
+)
+def test_mcp_describe_with_composed_credential_expression_is_blocked(context: Context, content: str) -> None:
+    result = _review(context, output=content, uri="mcp://hub/describe/guard-dev-testing")
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "output_secret_match"
+
+
+def test_skill_with_generic_credential_object_literal_is_blocked(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = 'api_key = {token: "AIza-realistic-value"}\n'
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "source_secret_match"
+
+
+def test_skill_with_sample_marked_credential_is_blocked(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = "password = example-production-value\n"
     _ = _install_skill(home_dir, content)
 
     result = _review(context, output=content.rstrip("\n"))

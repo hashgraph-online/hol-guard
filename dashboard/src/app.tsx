@@ -863,13 +863,14 @@ export function App() {
         inventory={inventory.kind === "ready" ? inventory.items : []}
         requests={requests.kind === "ready" ? requests.items : []}
         onGoHome={handleGoHome}
+        onOpenApps={handleOpenFleet}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
         onClearPolicy={handleClearPolicy}
         onManagedInstallChanged={refreshStateWithoutResult}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
 
   const policyContent = useMemo(() => {
     if (runtime.kind !== "ready") {
@@ -992,7 +993,7 @@ export function App() {
       extensionsContent={
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
-            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} />
+            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onNavigate={navigate} />
           </Suspense>
         </ErrorBoundary>
       }

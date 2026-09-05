@@ -1,6 +1,17 @@
-import { r as reactExports, aH as buildApprovalProofCredentials, aF as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aG as ApprovalProofFieldInputs, A as ActionButton } from "../guard-dashboard.js";
+import { r as reactExports, aJ as buildApprovalProofCredentials, aH as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aI as ApprovalProofFieldInputs, A as ActionButton } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
-  const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
+  const {
+    title,
+    detail,
+    confirmLabel,
+    approvalGate,
+    busy = false,
+    busyLabel = "Repairing…",
+    error = null,
+    requireFreshTotp = false,
+    onCancel,
+    onConfirm
+  } = props;
   const [password, setPassword] = reactExports.useState("");
   const [totpCode, setTotpCode] = reactExports.useState("");
   const handlePasswordChange = reactExports.useCallback((event) => {
@@ -10,12 +21,17 @@ function ApprovalProofModal(props) {
     setTotpCode(event.target.value);
   }, []);
   const handleConfirm = reactExports.useCallback(() => {
-    onConfirm(buildApprovalProofCredentials(approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
-  }, [approvalGate, onConfirm, password, totpCode]);
+    onConfirm(buildApprovalProofCredentials(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totpCode },
+      requireFreshTotp
+    ));
+  }, [approvalGate, onConfirm, password, requireFreshTotp, totpCode]);
   const confirmDisabled = isApprovalProofSubmitDisabled(
     approvalGate,
     { approvalPassword: password, approvalTotpCode: totpCode },
-    busy
+    busy,
+    requireFreshTotp
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -34,6 +50,7 @@ function ApprovalProofModal(props) {
             approvalGate,
             approvalPassword: password,
             approvalTotpCode: totpCode,
+            requireFreshTotp,
             onApprovalPasswordChange: handlePasswordChange,
             onApprovalTotpCodeChange: handleTotpChange
           }
@@ -41,7 +58,7 @@ function ApprovalProofModal(props) {
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: confirmDisabled, children: busy ? "Repairing…" : confirmLabel })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
         ] })
       ]
     }

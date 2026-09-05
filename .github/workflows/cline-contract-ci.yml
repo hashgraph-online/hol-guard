@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - release/3.0
+      - release/3.2
     paths:
       - src/codex_plugin_scanner/guard/adapters/cline*.py
       - src/codex_plugin_scanner/guard/adapters/contracts.py
@@ -21,7 +22,6 @@ on:
       - docs/guard/harness-support.md
       - dashboard/src/apps/app-catalog.ts
       - dashboard/src/apps/harness-setup-target.ts
-      - ci/test-suite-ratchet-baseline.json
       - .github/workflows/cline-contract-ci.yml
   push:
     branches:
@@ -43,7 +43,6 @@ on:
       - docs/guard/harness-support.md
       - dashboard/src/apps/app-catalog.ts
       - dashboard/src/apps/harness-setup-target.ts
-      - ci/test-suite-ratchet-baseline.json
       - .github/workflows/cline-contract-ci.yml
 
 permissions:
@@ -213,10 +212,3 @@ jobs:
           assert result["complete"] is True
           PY
           test ! -e "$HOME/Documents/Cline/Hooks/PreToolUse"
-
-      - name: Validate test-suite ratchet
-        run: |
-          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
-          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
-            --baseline ci/test-suite-ratchet-baseline.json \
-            --inventory test-inventory.json

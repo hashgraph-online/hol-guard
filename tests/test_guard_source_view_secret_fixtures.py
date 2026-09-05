@@ -2,12 +2,42 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
 
 def _write_text(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "tool_input"),
+    (
+        ("Read", {"file_path": "src/config.py"}),
+        ("mcp__hub__describe", {"skill": "guard-dev-testing"}),
+    ),
+)
+def test_codex_non_shell_post_tool_secret_output_is_blocked(
+    tmp_path: Path,
+    tool_name: str,
+    tool_input: dict[str, str],
+) -> None:
+    token = "".join(("gh", "p_")) + "a" * 30
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "tool_response": {"stdout": f"token={token}"},
+        },
+        config_path=str(tmp_path / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
 
 
 def test_codex_source_view_allows_placeholder_private_key_fixture_output(tmp_path: Path) -> None:
@@ -65,6 +95,37 @@ def test_codex_source_view_allows_oauth_token_service_source_output(tmp_path: Pa
         config_path=str(workspace_dir / ".codex" / "config.toml"),
         source_scope="workspace",
         cwd=workspace_dir,
+    )
+
+    assert artifact is None
+
+
+def test_codex_source_view_allows_medium_examples_from_symlinked_skill(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    real_skill = workspace_dir / ".agents" / "skills" / "guard-dev-testing"
+    skill_file = real_skill / "SKILL.md"
+    _write_text(skill_file, "secret = get_secret('deployment-config')\nsecret['data'] = merged\n")
+    linked_skill = home_dir / ".agents" / "skills" / "guard-dev-testing"
+    linked_skill.parent.mkdir(parents=True)
+    linked_skill.symlink_to(real_skill, target_is_directory=True)
+    command = f"sed -n '1,20p' {linked_skill / 'SKILL.md'}"
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+        home_dir=home_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": skill_file.read_text(encoding="utf-8")},
+        },
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=workspace_dir,
+        home_dir=home_dir,
     )
 
     assert artifact is None

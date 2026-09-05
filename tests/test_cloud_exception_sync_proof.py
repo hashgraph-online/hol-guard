@@ -22,6 +22,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
 )
+from tests.support.network import stub_authenticated_urlopen
 from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
@@ -237,7 +238,7 @@ def test_hglp140_wrong_workspace_bundle_is_rejected(tmp_path: Path, monkeypatch:
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)
@@ -273,7 +274,7 @@ def test_hglp141_bundle_ack_metadata_is_available_for_sync_upload(
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)

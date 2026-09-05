@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,
     cursor_runtime_detected,
+    resolve_environment_harness,
     resolve_runtime_hook_harness,
 )
 
@@ -32,6 +33,30 @@ def test_cursor_hook_query_extras_includes_runtime_harness_and_workspace() -> No
         {"CURSOR_VERSION": "1.2.3", "CURSOR_PROJECT_DIR": "/Users/me/repo"},
     )
     assert extras == {"runtime-harness": "cursor", "workspace": "/Users/me/repo"}
+
+
+def test_resolve_environment_harness_matches_each_runtime_family() -> None:
+    assert resolve_environment_harness({"ZCODE_ENV": "production"}) == "zcode"
+    assert resolve_environment_harness({"ZCODE_APP_VERSION": "3.10.2"}) == "zcode"
+    assert resolve_environment_harness({"__CFBundleIdentifier": "dev.zcode.app"}) == "zcode"
+    assert resolve_environment_harness({"CLAUDECODE": "1"}) == "claude-code"
+    assert resolve_environment_harness({"CLAUDE_CODE_ENTRYPOINT": "cli"}) == "claude-code"
+    assert resolve_environment_harness({"CURSOR_TRACE_ID": "trace-1"}) == "cursor"
+    assert resolve_environment_harness({"CODEX_SANDBOX": "1"}) == "codex"
+
+
+def test_resolve_environment_harness_ignores_blank_and_unrelated_env() -> None:
+    assert resolve_environment_harness({}) is None
+    assert resolve_environment_harness({"PATH": "/usr/bin", "TERM": "xterm-256color"}) is None
+    assert resolve_environment_harness({"ZCODE_ENV": "  "}) is None
+    assert resolve_environment_harness({"__CFBundleIdentifier": "com.apple.Terminal"}) is None
+
+
+def test_resolve_environment_harness_prefers_zcode_over_other_markers() -> None:
+    assert (
+        resolve_environment_harness({"ZCODE_ENV": "production", "CLAUDECODE": "1", "CURSOR_SESSION_ID": "s-1"})
+        == "zcode"
+    )
 
 
 def test_claude_hook_http_url_includes_cursor_runtime_harness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -21,7 +21,10 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+try:
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+except Exception:
+    run_isolated_hook_process = None
 
 GUARD_HOME = __GUARD_HOME__
 GUARD_CLI = __GUARD_CLI__
@@ -239,11 +242,6 @@ def _daemon_hook_result(
         return (None, "authenticated-control-plane-failure")
     if not isinstance(parsed_body, dict):
         return (None, "authenticated-control-plane-failure")
-    if parsed_body.get("reason_code") in {
-        "native_pre_tool_unavailable",
-        "native_post_tool_unavailable",
-    }:
-        return (None, None)
     raw_event_name = _raw_hook_event_name(request_payload)
     if raw_event_name not in {"aftershellexecution", "aftermcpexecution"}:
         policy_action = parsed_body.get("policy_action")
@@ -264,18 +262,20 @@ def _run_guard_fallback(
     try:
         remaining = _remaining_seconds(deadline_monotonic)
         if remaining <= 0:
-            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+        if run_isolated_hook_process is None:
+            raise RuntimeError("HOL Guard isolated hook runtime is unavailable")
         result = run_isolated_hook_process(
-            [*GUARD_CLI, *guard_argv],
+            [*_resolved_guard_cli(), *guard_argv],
             cwd=GUARD_HOME,
             environment=dict(guard_env),
             input_text=payload_json,
             timeout_seconds=remaining,
         )
         if result.timed_out:
-            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], remaining)
+            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], remaining)
         return subprocess.CompletedProcess(
-            [*GUARD_CLI, *guard_argv],
+            [*_resolved_guard_cli(), *guard_argv],
             result.returncode if result.returncode is not None else 1,
             stdout=result.stdout,
             stderr="",
@@ -295,6 +295,8 @@ def _run_guard_recovery(
     try:
         remaining = min(_remaining_seconds(deadline_monotonic), 5.0)
         if remaining <= 0:
+            return
+        if run_isolated_hook_process is None:
             return
         _ = run_isolated_hook_process(
             [*GUARD_RECOVERY_COMMAND, failure_kind],
@@ -436,30 +438,22 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
         prepared["tool_input"] = tool_input
         prepared["cursor_source_hook_event"] = "beforeMCPExecution"
         return prepared
-    if raw_event == "beforereadfile":
+    if raw_event in {"beforereadfile", "beforewritefile"}:
+        write = raw_event == "beforewritefile"
         normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Read")
+        normalized["tool_name"] = "Write" if write else "Read"
         tool_input = _tool_input_dict(normalized.get("tool_input"))
         file_path = normalized.get("file_path")
         if isinstance(file_path, str) and file_path.strip():
             tool_input.setdefault("file_path", file_path.strip())
             tool_input.setdefault("path", file_path.strip())
         normalized["tool_input"] = tool_input
+        if write:
+            normalized["cursor_source_hook_event"] = "beforeWriteFile"
         return normalized
     if raw_event == "pretooluse":
         normalized["hook_event_name"] = "PreToolUse"
     return normalized
-
-
-def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
-    del guard_payload
-    if policy_action not in GUARD_ACTIONS:
-        return "deny"
-    if policy_action in {"block", "sandbox-required"}:
-        return "deny"
-    if policy_action in {"require-reapproval", "review"}:
-        return "ask"
-    return "allow"
 
 
 def _cursor_read_file_permission(permission: str) -> str:
@@ -471,11 +465,17 @@ def _cursor_read_file_permission(permission: str) -> str:
 def _cursor_reason(guard_payload: dict[str, object]) -> str:
     primary_url = guard_payload.get("primary_approval_url")
     reason: str | None = None
-    for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
+    for key in ("reason", "stopReason", "systemMessage", "review_hint", "risk_summary", "why_now", "risk_headline"):
         value = guard_payload.get(key)
         if isinstance(value, str) and value.strip():
             reason = value.strip()
             break
+    if reason is None:
+        hook_output = guard_payload.get("hookSpecificOutput")
+        if isinstance(hook_output, Mapping):
+            nested_reason = hook_output.get("permissionDecisionReason")
+            if isinstance(nested_reason, str) and nested_reason.strip():
+                reason = nested_reason.strip()
     if reason is None:
         decision = guard_payload.get("decision_v2_json")
         if isinstance(decision, Mapping):
@@ -494,6 +494,5 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
             return reason
         return f"{reason} Review: {url_str}"
     return reason
-
 
 '''

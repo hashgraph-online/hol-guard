@@ -134,6 +134,19 @@ def _terminal_session_is_local(terminal_name: str) -> bool:
     return terminal.st_uid == os.geteuid() and stat.S_ISCHR(terminal.st_mode)
 
 
+def _terminal_descriptors_share_session(control_descriptor: int, input_descriptor: int) -> bool:
+    """Confirm that stdin belongs to the foreground controlling-terminal session.
+
+    Linux exposes ``/dev/tty`` as a character-device alias while stdin names
+    the concrete PTY, so their device numbers are expected to differ.
+    """
+
+    try:
+        return os.tcgetpgrp(control_descriptor) == os.tcgetpgrp(input_descriptor)
+    except OSError:
+        return False
+
+
 def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
     if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
         raise ExtensionControlProofError("extension control enrollment requires a local terminal")
@@ -148,7 +161,7 @@ def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment)
             # the concrete /dev/pts or /dev/ttys device. stdin identifies the
             # same controlling terminal for an interactive CLI invocation.
             stdin_descriptor = sys.stdin.fileno()
-            if os.fstat(descriptor).st_rdev != os.fstat(stdin_descriptor).st_rdev:
+            if not _terminal_descriptors_share_session(descriptor, stdin_descriptor):
                 raise ExtensionControlProofError("extension control enrollment requires one interactive local terminal")
             terminal_name = os.ttyname(stdin_descriptor)
         if not os.isatty(descriptor) or not _terminal_session_is_local(terminal_name):

@@ -11,6 +11,9 @@ on:
       - "tests/test_native_runtime_admission.py"
       - "tests/test_daemon_bounded_http.py"
       - "tests/test_rust_daemon_edge_hardening_contracts.py"
+      - "ci/native_runtime/test_native_hook_client.py"
+      - "ci/native_runtime/native_hook_client_support.py"
+      - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-daemon-edge-hardening.yml"
       - "docs/guard/rust-daemon-edge-hardening-*.md"
   push:
@@ -23,6 +26,9 @@ on:
       - "tests/test_native_runtime_admission.py"
       - "tests/test_daemon_bounded_http.py"
       - "tests/test_rust_daemon_edge_hardening_contracts.py"
+      - "ci/native_runtime/test_native_hook_client.py"
+      - "ci/native_runtime/native_hook_client_support.py"
+      - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-daemon-edge-hardening.yml"
   schedule:
     - cron: "37 4 * * 2,5"
@@ -89,6 +95,14 @@ jobs:
       - name: Validate daemon and resident edge behavior
         shell: bash
         run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+      - name: Build and exercise the native hook client
+        shell: bash
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Validate real native client lifecycle
+        shell: bash
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: uv run --no-sync pytest -q ci/native_runtime/test_native_hook_client.py ci/native_runtime/test_native_hook_client_transport.py --tb=short
 
   low-descriptor:
     runs-on: ubuntu-24.04

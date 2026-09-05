@@ -1,10 +1,14 @@
 """Guard CLI Copilot hook helpers."""
 
-# ruff: noqa: F403, F405
+# ruff: noqa: E402, F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision

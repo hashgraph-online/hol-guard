@@ -1,1 +1,7 @@
 47e80fd309a92b2a495aaeac60cb4cebbf952f6a:tests/guard_review_signing_helpers.py:private-key:16
+# Synthetic deterministic Ed25519 test key; no literal private key is stored.
+1e4e87e64c3ccfb870fb45de285d88b59e38a755:tests/test_final_release_evidence.py:generic-api-key:77
+c8b599fa1a262de4751062063677b74e915344c8:tests/test_final_release_evidence.py:generic-api-key:77
+# The test helper was renamed after this commit changed the flagged signature.
+41109cbe4130f4f2c1f8da28e1a3b6e0128f64f7:tests/test_final_release_evidence.py:generic-api-key:77
+ecab2b4949aa53c67014ad06b5162dde273266d6:tests/test_final_release_evidence.py:generic-api-key:77

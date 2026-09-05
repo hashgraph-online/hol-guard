@@ -408,6 +408,7 @@ def _grok_hook_command_is_guard(command: str) -> bool:
         "hol-guard" in tokens
         or any(token.endswith("/hol-guard") or token.endswith("\\hol-guard") for token in tokens)
         or "__guard-bounded-hook" in lowered
+        or "__guard-cursor-hook" in lowered
         or "bounded_cli_hook_bridge" in lowered
         or "codex_plugin_scanner.guard" in lowered
     )
@@ -506,7 +507,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
             "Grok managed permission rules are missing from ~/.grok/managed_config.toml. "
             "Re-run `hol-guard apps connect grok`."
         )
-    elif "Read(~/" in managed_text or "Read(~/" in managed_text:
+    elif "Read(~/" in managed_text:
         warnings.append(
             "Grok managed deny rules still use literal home prefixes that Grok does not expand. "
             "Re-run `hol-guard apps repair grok`."

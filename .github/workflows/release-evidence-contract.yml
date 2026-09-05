@@ -1,0 +1,119 @@
+name: Release evidence contract
+
+on:
+  pull_request:
+    branches: [main, release/3.2]
+    paths:
+      - ".github/workflows/release-evidence-contract.yml"
+      - "scripts/ci/final_release_evidence.py"
+      - "scripts/ci/generate_release_evidence_contract.py"
+      - "scripts/ci/validate_release_artifacts.py"
+      - "scripts/ci/verify_installed_release_matrix.py"
+      - "scripts/release/verify_desktop_core_attestation.py"
+      - "tests/test_final_release_evidence.py"
+      - "tests/test_generate_release_evidence_contract.py"
+      - "tests/test_validate_release_artifacts.py"
+      - "tests/test_verify_desktop_core_attestation.py"
+      - "tests/test_verify_installed_release_matrix.py"
+      - "docs/guard/release-3-0-final-evidence.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/release-evidence-contract.yml"
+      - "scripts/ci/final_release_evidence.py"
+      - "scripts/ci/generate_release_evidence_contract.py"
+      - "scripts/ci/validate_release_artifacts.py"
+      - "scripts/ci/verify_installed_release_matrix.py"
+      - "scripts/release/verify_desktop_core_attestation.py"
+      - "tests/test_final_release_evidence.py"
+      - "tests/test_generate_release_evidence_contract.py"
+      - "tests/test_validate_release_artifacts.py"
+      - "tests/test_verify_desktop_core_attestation.py"
+      - "tests/test_verify_installed_release_matrix.py"
+      - "docs/guard/release-3-0-final-evidence.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Check release evidence formatting
+        run: >-
+          uv run --no-sync python -m ruff format --check
+          scripts/ci/final_release_evidence.py
+          scripts/ci/generate_release_evidence_contract.py
+          scripts/ci/validate_release_artifacts.py
+          scripts/ci/verify_installed_release_matrix.py
+          scripts/release/verify_desktop_core_attestation.py
+          tests/test_final_release_evidence.py
+          tests/test_generate_release_evidence_contract.py
+          tests/test_validate_release_artifacts.py
+          tests/test_verify_desktop_core_attestation.py
+          tests/test_verify_installed_release_matrix.py
+      - name: Check release evidence lint
+        run: >-
+          uv run --no-sync python -m ruff check
+          scripts/ci/final_release_evidence.py
+          scripts/ci/generate_release_evidence_contract.py
+          scripts/ci/validate_release_artifacts.py
+          scripts/ci/verify_installed_release_matrix.py
+          scripts/release/verify_desktop_core_attestation.py
+          tests/test_final_release_evidence.py
+          tests/test_generate_release_evidence_contract.py
+          tests/test_validate_release_artifacts.py
+          tests/test_verify_desktop_core_attestation.py
+          tests/test_verify_installed_release_matrix.py
+      - name: Run release evidence contracts
+        run: >-
+          uv run --no-sync pytest -q
+          tests/test_final_release_evidence.py
+          tests/test_generate_release_evidence_contract.py
+          tests/test_validate_release_artifacts.py
+          tests/test_verify_desktop_core_attestation.py
+          tests/test_verify_installed_release_matrix.py
+          --tb=short
+      - name: Generate aggregate release-evidence fixtures
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          RULE_DIGEST=$(sha256sum docs/guard/contracts/hook-data-plane-ownership.v2.json | cut -d' ' -f1)
+          uv run --no-sync python scripts/ci/generate_release_evidence_contract.py \
+            --version "$VERSION" \
+            --source-sha "${GITHUB_SHA:?}" \
+            --rule-digest "$RULE_DIGEST" \
+            --output-dir "$RUNNER_TEMP/hol-guard-release-evidence"
+      - name: Validate generated installed matrix
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          RULE_DIGEST=$(sha256sum docs/guard/contracts/hook-data-plane-ownership.v2.json | cut -d' ' -f1)
+          uv run --no-sync python scripts/ci/verify_installed_release_matrix.py \
+            --matrix "$RUNNER_TEMP/hol-guard-release-evidence/installed-release-matrix.json" \
+            --version "$VERSION" \
+            --source-sha "${GITHUB_SHA:?}" \
+            --rule-digest "$RULE_DIGEST" \
+            --windows-waiver contract-fixture \
+            --output "$RUNNER_TEMP/hol-guard-release-evidence/installed-release-matrix.normalized.json"
+      - name: Validate generated final evidence
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          RULE_DIGEST=$(sha256sum docs/guard/contracts/hook-data-plane-ownership.v2.json | cut -d' ' -f1)
+          uv run --no-sync python scripts/ci/final_release_evidence.py \
+            --evidence "$RUNNER_TEMP/hol-guard-release-evidence/final-release-evidence.json" \
+            --version "$VERSION" \
+            --source-sha "${GITHUB_SHA:?}" \
+            --rule-digest "$RULE_DIGEST" \
+            --output "$RUNNER_TEMP/hol-guard-release-evidence/final-release-evidence.normalized.json"

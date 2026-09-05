@@ -184,7 +184,7 @@ def test_skill_scanner_no_longer_blocks_python_314(
     with monkeypatch.context() as version_patch:
         version_patch.setattr(cisco_skill_scanner.sys, "version_info", (3, 14, 5))
         assert cisco_skill_scanner.cisco_runtime_unavailable_message() is None
-        mcp_summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+        mcp_summary = cisco_mcp_scanner._run_cisco_mcp_scan_in_process(tmp_path, mode="on", timeout_seconds=None)
 
     assert mcp_summary.status is CiscoIntegrationStatus.UNAVAILABLE
     assert "Cisco MCP scanner is required but not installed" in mcp_summary.message
@@ -690,13 +690,13 @@ def test_cisco_unavailable_and_failed_modes_are_explicit(
         "_load_mcp_scanner_components",
         lambda blocked_root=None: (_ for _ in ()).throw(ImportError("missing")),
     )
-    mcp_summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+    mcp_summary = cisco_mcp_scanner._run_cisco_mcp_scan_in_process(tmp_path, mode="on", timeout_seconds=None)
     monkeypatch.setattr(
         cisco_mcp_scanner,
         "_load_mcp_scanner_components",
         lambda blocked_root=None: (_ for _ in ()).throw(RuntimeError("broken")),
     )
-    failed_summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+    failed_summary = cisco_mcp_scanner._run_cisco_mcp_scan_in_process(tmp_path, mode="on", timeout_seconds=None)
 
     assert skill_summary.status is CiscoIntegrationStatus.UNAVAILABLE
     assert mcp_summary.status is CiscoIntegrationStatus.UNAVAILABLE

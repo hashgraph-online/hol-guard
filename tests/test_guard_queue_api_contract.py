@@ -14,8 +14,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
+from collections.abc import Iterator
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.codex_app_server import _send_app_server_websocket_messages
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -23,6 +25,14 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+@pytest.fixture
+def trusted_socket_path() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory(prefix="hg-") as directory:
+        trusted_directory = Path(directory)
+        trusted_directory.chmod(0o700)
+        yield trusted_directory / "s.sock"
 
 
 def _request(
@@ -450,10 +460,13 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 
-def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Path) -> None:
+def test_codex_resolution_sends_continue_prompt_to_original_thread(
+    tmp_path: Path,
+    trusted_socket_path: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-active", command="echo guard resume")])
-    socket_path = Path(tempfile.gettempdir()) / f"hol-guard-codex-{uuid.uuid4().hex}.sock"
+    socket_path = trusted_socket_path
     received_messages: list[dict[str, object]] = []
     codex_server = _start_fake_codex_app_server(socket_path, received_messages)
     session = store.upsert_guard_session(
@@ -528,8 +541,10 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
     assert store.list_events(event_name="codex/thread_resume")[0]["payload"]["status"] == "sent"
 
 
-def test_codex_resume_completion_timeout_bounds_streaming_noncompletion_frames() -> None:
-    socket_path = Path(tempfile.gettempdir()) / f"hol-guard-codex-{uuid.uuid4().hex}.sock"
+def test_codex_resume_completion_timeout_bounds_streaming_noncompletion_frames(
+    trusted_socket_path: Path,
+) -> None:
+    socket_path = trusted_socket_path
     received_messages: list[dict[str, object]] = []
     codex_server = _start_fake_streaming_codex_app_server(socket_path, received_messages)
 
@@ -573,8 +588,10 @@ def test_codex_resume_completion_timeout_bounds_streaming_noncompletion_frames()
     assert completion_status == "completion_timeout"
 
 
-def test_codex_resume_response_timeout_bounds_streaming_pre_ack_frames() -> None:
-    socket_path = Path(tempfile.gettempdir()) / f"hol-guard-codex-{uuid.uuid4().hex}.sock"
+def test_codex_resume_response_timeout_bounds_streaming_pre_ack_frames(
+    trusted_socket_path: Path,
+) -> None:
+    socket_path = trusted_socket_path
     received_messages: list[dict[str, object]] = []
     codex_server = _start_fake_pre_ack_streaming_codex_app_server(socket_path, received_messages)
 

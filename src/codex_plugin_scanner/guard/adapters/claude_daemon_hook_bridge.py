@@ -18,17 +18,14 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
-from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
+from .claude_daemon_hook_transport import authenticated_claude_hook_response
+from .claude_daemon_state import daemon_port_from_state, state_path_for_query
+from .codex_daemon_hook_auth import _DaemonResponseError
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = (
-    "HOL Guard could not reach the local daemon ({reason}), so it is using Claude's native "
-    "approval prompt as a temporary safety fallback."
-)
-_PRETOOLUSE_DEGRADED_SUFFIX = (
-    " Keep this action blocked unless you intentionally trust it. Restart Guard to restore the "
-    "branded Allow once / Allow during this session / Keep blocked flow."
+    "HOL Guard could not reach the local daemon ({reason}) and continued this action without native review."
 )
 _RISKY_PROMPT_SYSTEM_MESSAGE = (
     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
@@ -74,42 +71,50 @@ def main(
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
     if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
-        sys.stdout.write(_degraded("hook input exceeded the safe size limit", "{}"))
-        return 0
-    data = body.strip() or "{}"
-    recovery_command = _recovery_command(state_path, query)
-    try:
-        endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-        _assert_loopback_http_url(endpoint)
-        response_body = _valid_hook_json_or_degraded(
-            _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
-            reason="daemon returned malformed hook JSON",
-            data=data,
-        )
-    except Exception as error:
-        reason = _daemon_failure_reason(error)
-        failure_kind = _daemon_failure_kind(error)
-        if failure_kind == "authenticated-control-plane-failure":
-            response_body = _authenticated_control_plane_failure(reason, data)
-        elif _daemon_failure_is_recoverable(error):
-            response_body = _recover_retry_or_fallback(
-                reason,
-                data,
-                state_path=state_path,
-                fallback_daemon_url=fallback_daemon_url,
-                fallback_command=fallback_command,
-                recovery_command=recovery_command,
-                query=query,
-                deadline=deadline,
-                failure_kind=failure_kind,
+        event = _event_name(body)
+        if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
+            event = "PreToolUse"
+        sys.stdout.write(_limit_denied("hook input", event))
+    else:
+        data = body.strip() or "{}"
+        try:
+            state_path = state_path_for_query(state_path, query)
+        except ValueError as error:
+            sys.stdout.write(
+                _run_local_fallback(_daemon_failure_reason(error), data, fallback_command, deadline=deadline)
             )
         else:
-            response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
-        sys.stdout.write(response_body)
-        return 0
-    if _should_suppress_output(data, response_body):
-        return 0
-    sys.stdout.write(response_body if response_body.strip() else "{}")
+            recovery_command = _recovery_command(state_path, query)
+            try:
+                endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
+                _assert_loopback_http_url(endpoint)
+                response_body = _valid_hook_json_or_degraded(
+                    _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
+                    reason="daemon returned malformed hook JSON",
+                    data=data,
+                )
+            except Exception as error:
+                reason, failure_kind = _daemon_failure_reason(error), _daemon_failure_kind(error)
+                if failure_kind == "authenticated-control-plane-failure":
+                    response_body = _authenticated_control_plane_failure(reason, data)
+                elif _daemon_failure_is_recoverable(error):
+                    response_body = _recover_retry_or_fallback(
+                        reason,
+                        data,
+                        state_path=state_path,
+                        fallback_daemon_url=fallback_daemon_url,
+                        fallback_command=fallback_command,
+                        recovery_command=recovery_command,
+                        query=query,
+                        deadline=deadline,
+                        failure_kind=failure_kind,
+                    )
+                else:
+                    response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+                sys.stdout.write(response_body)
+            else:
+                if not _should_suppress_output(data, response_body):
+                    sys.stdout.write(response_body if response_body.strip() else "{}")
     return 0
 
 
@@ -194,22 +199,16 @@ def _blocking_post_to_loopback_daemon(
     state_path: str | Path,
     timeout_seconds: float,
 ) -> str:
-    auth_token = load_guard_daemon_auth_token(Path(state_path).parent)
-    headers = {"Content-Type": "application/json"}
-    if isinstance(auth_token, str) and auth_token.strip():
-        headers["X-Guard-Token"] = auth_token
-    request = urllib.request.Request(
-        endpoint,
-        data=data.encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    opener = _build_loopback_opener()
-    with opener.open(request, timeout=timeout_seconds) as response:
-        final_url = response.geturl()
-        if final_url:
-            _assert_loopback_http_url(final_url)
-        return _read_bounded_response(response, deadline=time.monotonic() + timeout_seconds)
+    _assert_loopback_http_url(endpoint)
+    try:
+        return authenticated_claude_hook_response(
+            state_path=state_path,
+            query=urlparse(endpoint).query,
+            data=data,
+            timeout_seconds=timeout_seconds,
+        )
+    except _DaemonResponseError as error:
+        raise _DaemonHTTPError(error.status, error.detail) from error
 
 
 def _read_bounded_response(response: _ResponseReader, *, deadline: float | None = None) -> str:
@@ -232,15 +231,9 @@ def _read_bounded_response(response: _ResponseReader, *, deadline: float | None 
 
 
 def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
-    path = Path(state_path)
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            port = payload.get("port")
-            if isinstance(port, int):
-                return f"http://127.0.0.1:{port}/"
-    except (OSError, ValueError):
-        pass
+    port = daemon_port_from_state(state_path)
+    if port is not None:
+        return f"http://127.0.0.1:{port}/"
     normalized = fallback_daemon_url.rstrip("/") + "/"
     _assert_loopback_http_url(normalized)
     return normalized
@@ -250,11 +243,18 @@ def _event_name(data: str) -> str:
     try:
         payload = json.loads(data or "{}")
     except json.JSONDecodeError:
-        return "PreToolUse"
-    if not isinstance(payload, dict):
-        return "PreToolUse"
-    event = payload.get("hook_event_name", payload.get("event", "PreToolUse"))
-    return str(event or "PreToolUse")
+        payload = None
+    if isinstance(payload, dict):
+        return str(payload.get("hook_event_name") or payload.get("event") or "PreToolUse")
+    prefix = data[:4096]
+    for key in ("hook_event_name", "event"):
+        start = prefix.find(f'"{key}"')
+        colon = prefix.find(":", start, start + 64) if start >= 0 else -1
+        quote = prefix.find('"', colon + 1, colon + 80) if colon >= 0 else -1
+        end = prefix.find('"', quote + 1, quote + 80) if quote >= 0 else -1
+        if quote >= 0 and end > quote:
+            return prefix[quote + 1 : end] or "PreToolUse"
+    return "PreToolUse"
 
 
 def _prompt_text(data: str) -> str:
@@ -285,6 +285,28 @@ def _degraded_prompt(data: str) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}, separators=(",", ":"))
 
 
+def _limit_denied(kind: str, event: str = "PreToolUse") -> str:
+    return _deny_event(event, f"HOL Guard blocked this action because {kind} exceeded the safe size limit.")
+
+
+def _deny_event(event: str, message: str) -> str:
+    if event.startswith("Permission"):
+        output: dict[str, object] = {
+            "hookEventName": event,
+            "decision": {"behavior": "deny", "message": message},
+        }
+        return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
+    if event in {"UserPromptSubmit", "PostToolUse", "Stop"}:
+        body = {"decision": "block", "reason": message, "hookSpecificOutput": {"hookEventName": event}}
+        return json.dumps(body, separators=(",", ":"))
+    output = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": message,
+    }
+    return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
+
+
 def _degraded(reason: str, data: str) -> str:
     event = _event_name(data)
     message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
@@ -293,13 +315,11 @@ def _degraded(reason: str, data: str) -> str:
     if event == "PreToolUse":
         return json.dumps(
             {
-                "systemMessage": (
-                    "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard approval flow."
-                ),
+                "continue": True,
                 "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "ask",
-                    "permissionDecisionReason": message + _PRETOOLUSE_DEGRADED_SUFFIX,
+                    "hookEventName": event,
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": message,
                 },
             },
             separators=(",", ":"),
@@ -309,19 +329,10 @@ def _degraded(reason: str, data: str) -> str:
 
 def _authenticated_control_plane_failure(reason: str, data: str) -> str:
     message = f"HOL Guard denied the action because daemon authentication failed: {reason}"
-    if _event_name(data) == "PreToolUse":
-        return json.dumps(
-            {
-                "systemMessage": message,
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": message,
-                },
-            },
-            separators=(",", ":"),
-        )
-    return json.dumps({"continue": False, "stopReason": message}, separators=(",", ":"))
+    event = _event_name(data)
+    if event.startswith("Permission") or event == "PreToolUse":
+        return _deny_event(event, message)
+    return json.dumps({"continue": True, "stopReason": message}, separators=(",", ":"))
 
 
 def _should_suppress_output(data: str, response_body: str) -> bool:
@@ -372,7 +383,7 @@ def _run_local_fallback(
         )
     suffix = "; fallback timed out" if result.timed_out else f"; fallback exited {result.returncode}"
     if result.output_limit_exceeded:
-        suffix = "; fallback exceeded its output limit"
+        return _limit_denied("hook output", _event_name(data))
     return _degraded(f"{reason}{suffix}", data)
 
 

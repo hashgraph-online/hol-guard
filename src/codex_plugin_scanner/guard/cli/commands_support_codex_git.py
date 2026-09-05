@@ -267,8 +267,10 @@ def _git_diff_operand_is_revision(value: str) -> bool:
 
 
 def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, cwd: Path | None) -> bool:
-    has_no_ext_diff = "--no-ext-diff" in args
-    has_no_textconv = "--no-textconv" in args
+    option_end = args.index("--") if "--" in args else len(args)
+    active_options = args[:option_end]
+    has_no_ext_diff = "--no-ext-diff" in active_options
+    has_no_textconv = "--no-textconv" in active_options
     if has_no_ext_diff and has_no_textconv:
         return True
     return _git_repo_diff_helpers_are_unconfigured(cwd)

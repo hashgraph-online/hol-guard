@@ -62,7 +62,7 @@ _DNS_LONG_LABEL_PATTERN = re.compile(
     r"(?P<host>(?:[A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]{48,}(?:\.[A-Za-z0-9_-]+)*)"
 )
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
-_TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
+_TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_COMMANDS = frozenset({"pbcopy", "xclip", "xsel", "wl-copy", "clip", "clip.exe"})
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"

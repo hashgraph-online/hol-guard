@@ -13,6 +13,8 @@ from typing import Protocol, cast
 
 _CREATE_SUSPENDED = 0x00000004
 _JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x00000800
+_JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x00000008
+_JOB_OBJECT_LIMIT_JOB_MEMORY = 0x00000200
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS = 9
 _TH32CS_SNAPTHREAD = 0x00000004
@@ -133,10 +135,18 @@ def spawn_windows_hook_process(
     cwd: Path,
     environment: dict[str, str],
     allow_breakaway: bool = False,
+    kill_on_close: bool = True,
+    memory_limit_bytes: int | None = None,
+    active_process_limit: int | None = None,
 ) -> tuple[subprocess.Popen[bytes], WindowsHookJob]:
-    """Start suspended, assign to a kill-on-close job, then resume."""
+    """Start suspended, assign to a lifecycle job, then resume."""
 
-    job = _create_job(allow_breakaway=allow_breakaway)
+    job = _create_job(
+        allow_breakaway=allow_breakaway,
+        kill_on_close=kill_on_close,
+        memory_limit_bytes=memory_limit_bytes,
+        active_process_limit=active_process_limit,
+    )
     process: subprocess.Popen[bytes] | None = None
     try:
         process = subprocess.Popen(
@@ -181,7 +191,7 @@ def assign_current_process_to_windows_hook_job(
 
 
 def close_windows_hook_job(job: WindowsHookJob) -> None:
-    """Close the job, deterministically terminating any remaining descendants."""
+    """Close the job, terminating descendants when kill-on-close is enabled."""
 
     try:
         job.close()
@@ -198,7 +208,13 @@ def _kernel32():  # type: ignore[no-untyped-def]
     return win_dll("kernel32", use_last_error=True)
 
 
-def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
+def _create_job(
+    *,
+    allow_breakaway: bool = False,
+    kill_on_close: bool = True,
+    memory_limit_bytes: int | None = None,
+    active_process_limit: int | None = None,
+) -> WindowsHookJob:
     kernel32 = _kernel32()
     create_job = kernel32.CreateJobObjectW
     create_job.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
@@ -212,7 +228,16 @@ def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
     job = WindowsHookJob(handle=int(raw_handle))
     try:
         limits = _ExtendedLimitInformation()
-        limits.basic_limit_information.limit_flags = _job_limit_flags(allow_breakaway=allow_breakaway)
+        limits.basic_limit_information.limit_flags = _job_limit_flags(
+            allow_breakaway=allow_breakaway,
+            kill_on_close=kill_on_close,
+        )
+        if memory_limit_bytes is not None:
+            limits.basic_limit_information.limit_flags |= _JOB_OBJECT_LIMIT_JOB_MEMORY
+            limits.job_memory_limit = memory_limit_bytes
+        if active_process_limit is not None:
+            limits.basic_limit_information.limit_flags |= _JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+            limits.basic_limit_information.active_process_limit = active_process_limit
         if not set_information(
             wintypes.HANDLE(job.handle),
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
@@ -227,8 +252,8 @@ def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
         raise
 
 
-def _job_limit_flags(*, allow_breakaway: bool) -> int:
-    flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+def _job_limit_flags(*, allow_breakaway: bool, kill_on_close: bool = True) -> int:
+    flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE if kill_on_close else 0
     if allow_breakaway:
         flags |= _JOB_OBJECT_LIMIT_BREAKAWAY_OK
     return flags

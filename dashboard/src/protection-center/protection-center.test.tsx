@@ -147,6 +147,20 @@ const customRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
 assert.match(customRow, />Custom</);
 assert.match(customRow, /data-extension-brand="kubernetes"/);
 
+const mcpRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
+  extensionId: "command.mcp-filesystem",
+  name: "Filesystem MCP",
+  description: "Reviews official filesystem MCP tools.",
+  behavior: "Off until you turn it on",
+  mcp: true,
+  external: true,
+  executables: ["npx"],
+  onOpen: () => undefined,
+}));
+assert.match(mcpRow, />MCP</);
+assert.match(mcpRow, />External</);
+assert.match(mcpRow, /Off until you turn it on/);
+
 const technical = renderToStaticMarkup(createElement(TechnicalDetails, { children: createElement("code", null, "command.git") }));
 assert.match(technical, /<details/);
 assert.doesNotMatch(technical, / open/);

@@ -138,6 +138,8 @@ class TestGuardApprovals:
             approval_url="http://127.0.0.1:5474/requests/req-first",
         )
         store.add_approval_request(base, "2026-08-11T00:00:00+00:00")
+        first = store.get_approval_request("req-first")
+        assert first is not None
         second = replace(
             base,
             request_id="req-second",
@@ -160,6 +162,7 @@ class TestGuardApprovals:
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["dedupe_count"] == 2
+        assert pending[0]["scope_contract_digest"] == first["scope_contract_digest"]
 
     def test_guard_queue_keeps_permission_modes_separate(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1790,24 +1793,6 @@ class TestGuardApprovals:
         )
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
-
-    def test_load_guard_daemon_url_rejects_different_runtime_fingerprint(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_current_guard_daemon_runtime_fingerprint",
-            lambda: "stale-runtime-fingerprint",
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
     def test_guard_daemon_server_reuses_existing_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

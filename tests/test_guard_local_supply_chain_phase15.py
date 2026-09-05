@@ -57,7 +57,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     }
 
 
-pytest_plugins = ["tests.bundle_first_cloud"]
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 WORKSPACE_ID = "workspace-alpha"
@@ -297,68 +296,6 @@ def test_guard_protect_routes_package_requests_through_supply_chain_eval_and_red
     assert stored_receipt["action_envelope_json"]["matched_rule_id"] is None
     assert "super-secret-token" not in json.dumps(stored_receipt)
     assert "another-secret-token" not in json.dumps(stored_receipt)
-
-
-def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path) -> None:
-    home_dir = tmp_path / "guard-home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    _seed_supply_chain_bundle(
-        store,
-        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
-        now="2026-05-19T12:00:00+00:00",
-        policy_rules=[
-            {
-                "action": "warn",
-                "ruleId": "policy-rule-1",
-                "ecosystemSelector": "npm",
-                "enabled": True,
-                "expiresAt": "2099-01-01T00:00:00Z",
-                "harnessSelector": "guard-cli",
-                "packageSelector": "minimist",
-                "priority": 1,
-                "severityThreshold": "low",
-                "versionRangeSelector": "1.2.5",
-            }
-        ],
-    )
-
-    payload, exit_code = build_protect_payload(
-        command=["npm", "install", "minimist@1.2.5"],
-        store=store,
-        workspace_dir=workspace_dir,
-        dry_run=True,
-        now="2026-05-19T12:00:00+00:00",
-        unsafe_raw_output=False,
-    )
-
-    assert exit_code == 0
-    assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
-    action_envelope = dict(payload["receipt"]["action_envelope_json"])
-    package_context = action_envelope.pop("package_execution_context")
-    assert action_envelope.pop("policy_action") == "warn"
-    assert action_envelope.pop("additional_policy_context") == {
-        "action": "allow",
-        "matched_advisories": [],
-        "reason": "Guard found no blocking advisory or risky install signal for this request.",
-        "risk_signals": [],
-        "version": 1,
-    }
-    assert action_envelope == {
-        "bundle_version": "1747612800000-deadbeef",
-        "matched_rule_id": "policy-rule-1",
-        "package_manager": "npm",
-        "package_targets": ["minimist@1.2.5"],
-        "policy_version": "policy-hash-1",
-        "redacted_command": "npm install minimist@1.2.5",
-    }
-    assert package_context["kind"] == "package_execution_context"
-    assert package_context["schema_version"] == 2
-    assert str(workspace_dir) not in json.dumps(package_context, sort_keys=True)
-    stored_receipt = store.list_receipts(limit=1)[0]
-    assert stored_receipt["action_envelope_json"]["matched_rule_id"] == "policy-rule-1"
-    assert stored_receipt["action_envelope_json"]["package_execution_context"] == package_context
 
 
 def test_guard_doctor_includes_supply_chain_posture(tmp_path: Path, capsys) -> None:

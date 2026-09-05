@@ -52,6 +52,7 @@ class HookProcessReview:
 
     payload: dict[str, object] | None
     reason_code: str | None
+    receipt: dict[str, object] | None = None
 
 
 def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> bool:
@@ -111,9 +112,10 @@ def retire_worker_slot(slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
             return not slot.process.is_alive()
         slot.retired = True
     if graceful and slot.process.is_alive():
-        with suppress(BrokenPipeError, OSError):
-            slot.connection.send(("stop", None))
-        slot.process.join(timeout=0.2)
+        with slot.handshake_lock:
+            with suppress(BrokenPipeError, OSError):
+                slot.connection.send(("stop", None))
+            slot.process.join(timeout=0.2)
     if os.name != "nt" and slot.isolation_ready:
         tree_contained = terminate_owned_process_group(slot.process, getattr(signal, "SIGKILL", 9))
     elif slot.pre_isolation_contained:

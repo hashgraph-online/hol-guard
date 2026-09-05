@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import queue
 import shlex
 import subprocess
@@ -474,6 +475,13 @@ def _configured_server_environment(
     return {key: launch_env[key] for key in configured_keys if key in launch_env}
 
 
+def _configured_server_launch_environment(configured_keys: Sequence[str]) -> dict[str, str]:
+    """Build a scrubbed child environment plus only explicitly configured values."""
+
+    configured_values = {key: os.environ[key] for key in configured_keys if key in os.environ}
+    return _build_scrubbed_env(configured_values)
+
+
 @dataclass(frozen=True, slots=True)
 class _PackagePolicyResolution:
     base_evaluation: Any
@@ -530,7 +538,7 @@ class RuntimeMcpGuardProxy:
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
-        initial_launch_env = _build_scrubbed_env()
+        initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
         self.server_identity = server_identity or build_mcp_server_identity(
             config_path=self.config_path,
             command=self.command[0] if self.command else "",
@@ -733,7 +741,7 @@ class RuntimeMcpGuardProxy:
         # process must explicitly advertise a complete root-to-terminal list
         # before any saved allow can be reused against it.
         self._reset_child_process_state()
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
         configured_env = _configured_server_environment(launch_env, self.server_env_keys)
         self._active_runtime_launch_identity = build_runtime_launch_identity(
             self.command[0] if self.command else "",
@@ -819,7 +827,7 @@ class RuntimeMcpGuardProxy:
         active_hash = self._active_server_env_values_hash
         if active_hash is not None:
             return active_hash
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
         return build_configured_environment_hash(
             launch_env,
             configured_keys=self.server_env_keys,
@@ -829,7 +837,7 @@ class RuntimeMcpGuardProxy:
         identity = self._active_server_identity
         if identity is not None:
             return identity
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
         return build_mcp_server_identity(
             config_path=self.config_path,
             command=self.command[0] if self.command else "",

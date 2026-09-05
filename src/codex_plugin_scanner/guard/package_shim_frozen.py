@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import os
 import runpy
 import shlex
 import sys
 from collections.abc import Callable
 from pathlib import Path
+
+from .stable_guard_cli import resolve_frozen_guard_cli, trusted_frozen_guard_cli_paths
 
 FROZEN_PACKAGE_SHIM_SENTINEL = "HOL_GUARD_PACKAGE_SHIM_SENTINEL"
 
@@ -20,14 +24,67 @@ def frozen_package_shim_python_path(shim_dir: Path, command: str) -> Path:
     return shim_dir / f".{command}.py"
 
 
+def package_shim_interpreter() -> str:
+    """Return the Guard CLI used to exec package-manager shims.
+
+    Unfrozen installs keep the current Python. Frozen Desktop runtimes use the
+    prune-safe launcher so versioned Core paths can disappear safely.
+    """
+
+    if bool(getattr(sys, "frozen", False)):
+        return resolve_frozen_guard_cli()
+    return sys.executable
+
+
 def package_shim_shell_wrapper(python_path: Path) -> str:
     return "\n".join(
         (
             "#!/bin/sh",
-            f'exec {shlex.quote(sys.executable)} {shlex.quote(str(python_path))} "$@"',
+            f'exec {shlex.quote(package_shim_interpreter())} {shlex.quote(str(python_path))} "$@"',
             "",
         )
     )
+
+
+def package_shim_wrapper_interpreter(wrapper: bytes) -> Path | None:
+    """Return the Guard CLI path baked into a package-shim wrapper, if any."""
+
+    try:
+        text = wrapper.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("exec "):
+            try:
+                tokens = shlex.split(stripped)
+            except ValueError:
+                return None
+            if len(tokens) >= 2 and tokens[0] == "exec":
+                return Path(tokens[1])
+        if stripped.startswith("#!") and not stripped.startswith("#!/bin/sh"):
+            interpreter = stripped[2:].strip()
+            if interpreter:
+                return Path(interpreter)
+    return None
+
+
+def package_shim_interpreter_runnable(wrapper: bytes) -> bool:
+    interpreter = package_shim_wrapper_interpreter(wrapper)
+    if interpreter is None:
+        return True
+    if not interpreter.is_file():
+        return False
+    if os.name != "nt" and not os.access(interpreter, os.X_OK):
+        return False
+    trusted = set(trusted_frozen_guard_cli_paths())
+    names = {str(interpreter)}
+    with contextlib.suppress(OSError):
+        names.add(str(interpreter.resolve()))
+    for path in tuple(trusted):
+        with contextlib.suppress(OSError):
+            trusted.add(str(Path(path).resolve()))
+    return bool(names & trusted)
 
 
 def expected_package_shim_executable_bytes(
@@ -88,6 +145,16 @@ def package_shim_integrity_ok(
     command: str,
     installed_wrapper: bytes,
 ) -> bool:
+    if not package_shim_interpreter_runnable(installed_wrapper):
+        return False
+    sidecar_path = frozen_package_shim_python_path(shim_dir, command)
+    if (
+        package_shim_needs_shell_wrapper()
+        and sidecar_path.is_file()
+        and not sidecar_path.is_symlink()
+        and not package_shim_interpreter_runnable(sidecar_path.read_bytes())
+    ):
+        return False
     expected = expected_package_shim_attestation_bytes(python_source, shim_dir, command)
     current = installed_package_shim_attestation_bytes(shim_dir, command, installed_wrapper)
     if current == expected:
@@ -116,6 +183,8 @@ def classify_installed_package_shim_integrity(
 ) -> str:
     current_hash = hash_content(installed_package_shim_attestation_bytes(shim_dir, command, installed_wrapper))
     expected_hash = hash_content(expected_package_shim_attestation_bytes(python_source, shim_dir, command))
+    if not package_shim_interpreter_runnable(installed_wrapper):
+        return "stale"
     if current_hash == expected_hash or package_shim_integrity_ok(
         python_source=python_source,
         shim_dir=shim_dir,
@@ -166,7 +235,8 @@ def resolve_frozen_package_shim_path(argv: list[str]) -> Path | None:
     except OSError:
         return None
     first_line = text.splitlines()[0] if text else ""
-    if first_line != f"#!{sys.executable}":
+    shebang_interpreter = first_line[2:] if first_line.startswith("#!") else ""
+    if shebang_interpreter not in trusted_frozen_guard_cli_paths():
         return None
     if f"{FROZEN_PACKAGE_SHIM_SENTINEL} = True" not in text:
         return None
@@ -264,8 +334,11 @@ __all__ = [
     "installed_package_shim_attestation_bytes",
     "normalized_package_shim_content",
     "package_shim_integrity_ok",
+    "package_shim_interpreter",
+    "package_shim_interpreter_runnable",
     "package_shim_needs_shell_wrapper",
     "package_shim_shell_wrapper",
+    "package_shim_wrapper_interpreter",
     "resolve_frozen_package_shim_path",
     "run_frozen_package_shim",
     "write_package_manager_shim_files",

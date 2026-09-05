@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon.manager import (
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
+from codex_plugin_scanner.guard.daemon.runtime_peer import live_desktop_owned_daemon
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
@@ -27,9 +28,33 @@ home_dir = (
     if isinstance(home_dir_value, str) and home_dir_value.strip()
     else Path.home().resolve()
 )
+
+
+def desktop_owner_result(attempts, retired_pids):
+    # Guard Desktop supervises its daemon and respawns anything this program
+    # retires, so retirement can never win. When a verified Desktop-owned
+    # daemon is serving the home, keeping it is the safe outcome; it loads
+    # newer bytes when the Desktop app itself updates.
+    identity = live_desktop_owned_daemon(guard_home)
+    if identity is None:
+        return None
+    return {
+        "status": "retained_desktop_owner",
+        "retired": retired_pids,
+        "daemon_url": identity.get("daemon_url"),
+        "daemon_version": identity.get("package_version"),
+        "attempts": attempts,
+        "runtime_verified": True,
+    }
+
+
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))
+    raise SystemExit(0)
+kept_owner = desktop_owner_result(0, [])
+if kept_owner is not None:
+    print(json.dumps(kept_owner))
     raise SystemExit(0)
 try:
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -59,6 +84,10 @@ for attempt in range(1, 4):
             break
         time.sleep(0.1)
     if not retirement_complete:
+        kept_owner = desktop_owner_result(attempt, retired)
+        if kept_owner is not None:
+            print(json.dumps(kept_owner))
+            raise SystemExit(0)
         continue
     clear_guard_daemon_state(guard_home)
     repair_approval_center_locator(guard_home)
@@ -88,6 +117,10 @@ for attempt in range(1, 4):
         if not locator_published:
             result["locator_published"] = False
         print(json.dumps(result))
+        raise SystemExit(0)
+    kept_owner = desktop_owner_result(attempt, retired)
+    if kept_owner is not None:
+        print(json.dumps(kept_owner))
         raise SystemExit(0)
     last_failure_status = "runtime_replaced"
 print(json.dumps({"status": last_failure_status, "retired": retired, "attempts": 3}))

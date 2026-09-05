@@ -48,6 +48,7 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     evaluate_package_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import stub_authenticated_urlopen
 
 
 def _seed_guard_cloud(
@@ -1230,7 +1231,7 @@ def test_evaluate_package_request_artifact_refreshes_expired_cloud_access_token(
 @pytest.mark.parametrize(
     ("refreshed_error", "expected_code", "expected_action"),
     [
-        (TimeoutError("refresh timed out"), "cloud_validation_error", "block"),
+        (TimeoutError("refresh timed out"), "cloud_timeout", "require-reapproval"),
         (ValueError("invalid response"), "cloud_validation_error", "block"),
     ],
 )
@@ -1281,6 +1282,74 @@ def test_cloud_access_token_refresh_failure_returns_safe_evaluation(
     assert result.policy_action == expected_action
     reason_codes = [reason["code"] for reason in result.reasons]
     assert expected_code in reason_codes, reason_codes
+
+
+def test_cloud_non_timeout_transport_error_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
+
+    def raise_connection_error(**_kwargs: object) -> object:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_connection_error)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "cloud_http_error" for reason in result.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in result.reasons)
+
+
+def test_cloud_non_timeout_refresh_error_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
+
+    def resolve_auth(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        del kwargs
+        return {
+            "sync_url": "http://127.0.0.1:8042/api/guard/receipts/sync",
+            "access_token": "token",
+            "dpop_key_material": None,
+        }
+
+    attempts = 0
+
+    def open_cloud(**kwargs: object) -> object:
+        nonlocal attempts
+        attempts += 1
+        request = kwargs["request"]
+        assert isinstance(request, urllib.request.Request)
+        if attempts == 1:
+            raise urllib.error.HTTPError(request.full_url, 401, "expired", {}, None)
+        raise OSError("connection reset")
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", resolve_auth)
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", open_cloud)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert attempts == 2
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "cloud_http_error" for reason in result.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
 def test_unavailable_configured_credentials_use_complete_signed_bundle(
@@ -1398,7 +1467,7 @@ def test_malformed_auth_context_without_sync_url_fails_closed(
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachable(
+def test_evaluate_package_request_artifact_strict_mode_queues_cloud_timeout_for_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1435,10 +1504,10 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "block"
-    assert result.policy_action == "block"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert result.enforcement == "premium_cloud"
-    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
     cached = store.get_cached_supply_chain_evaluation(
         workspace_id=WORKSPACE_ID,
         package_intent_hash=result.package_intent_hash,
@@ -1447,7 +1516,7 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
         scoring_version="scf-v1",
         bundle_version="1747612800000-deadbeef",
     )
-    assert isinstance(cached, dict)
+    assert cached is None
 
     monkeypatch.setattr(
         evaluator_module,
@@ -1467,7 +1536,7 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
     )
 
     assert retried.decision == "monitor"
-    assert not any(reason["code"] == "cloud_validation_error" for reason in retried.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in retried.reasons)
 
 
 def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_before_network(
@@ -2771,7 +2840,7 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     def timeout_urlopen(*args: object, **kwargs: object) -> object:
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(urllib.request, "urlopen", timeout_urlopen)
+    stub_authenticated_urlopen(monkeypatch, timeout_urlopen)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("minimist@^1.2.0"),
         store=store,
@@ -3017,7 +3086,7 @@ def test_evaluate_unlisted_package_still_requires_review_when_registry_identity_
     assert any(reason["code"] == "unidentified_package" for reason in result.reasons)
 
 
-def test_evaluate_unlisted_package_fails_closed_on_unexpected_auth_context_error(
+def test_evaluate_unlisted_package_queues_review_on_unexpected_auth_context_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3047,8 +3116,40 @@ def test_evaluate_unlisted_package_fails_closed_on_unexpected_auth_context_error
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "block"
-    assert result.policy_action == "block"
+    # A trusted-session failure is an availability failure, not a package
+    # verdict: the install stays stopped, but the request must stay actionable
+    # through the approval queue so a human can review it remotely.
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
+
+
+def test_evaluate_trusted_session_failure_queues_review_even_in_strict_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    home_dir.mkdir(parents=True)
+    (home_dir / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
+    store = GuardStore(home_dir)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
+
+    def raise_unexpected_error(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("unexpected auth context failure")
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_unexpected_error)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    # Deliberate policy parity with cloud timeouts: strict mode keeps the
+    # install stopped but still routes the availability failure to review
+    # instead of a terminal block that offers no actionable path.
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
 
 

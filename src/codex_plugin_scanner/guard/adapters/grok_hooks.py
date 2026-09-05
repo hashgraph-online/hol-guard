@@ -193,10 +193,11 @@ def grok_hook_response_from_guard(
     reason: str,
     event_name: str | None = None,
     approval_payload: Mapping[str, object] | None = None,
+    recording_only: bool = False,
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
-    if _is_observe_only_event(event_name):
+    if recording_only or _is_observe_only_event(event_name):
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
@@ -234,17 +235,20 @@ def emit_grok_hook_response(
     output_stream: TextIO | None = None,
 ) -> None:
     global _last_grok_policy_action
+    recording_only = _recording_only_from_guard_home()
     live_action, live_reason, live_payload = _apply_live_approval_wait(
         policy_action=policy_action,
         reason=reason,
         event_name=event_name,
         approval_payload=approval_payload,
+        recording_only=recording_only,
     )
     payload = grok_hook_response_from_guard(
         policy_action=live_action,
         reason=live_reason,
         event_name=event_name,
         approval_payload=live_payload,
+        recording_only=recording_only,
     )
     _last_grok_policy_action = "allow" if payload.get("decision") == "allow" else live_action
     stream = output_stream if output_stream is not None else sys.stdout
@@ -255,6 +259,8 @@ def emit_grok_hook_response(
 def grok_hook_process_exit(policy_action: str) -> int:
     if _last_grok_policy_action == "allow":
         return 0
+    if _recording_only_from_guard_home():
+        return 0
     return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
 
 
@@ -264,7 +270,10 @@ def _apply_live_approval_wait(
     reason: str,
     event_name: str | None,
     approval_payload: Mapping[str, object] | None,
+    recording_only: bool = False,
 ) -> tuple[str, str, Mapping[str, object] | None]:
+    if recording_only:
+        return "allow", reason, approval_payload
     if policy_action not in {"review", "require-reapproval"} or not isinstance(approval_payload, Mapping):
         return policy_action, reason, approval_payload
     store = _guard_store_from_argv()
@@ -308,9 +317,20 @@ def _guard_store_from_argv():
 
 
 def grok_hook_should_block(*, policy_action: str, event_name: str | None = None) -> bool:
-    if _is_observe_only_event(event_name):
+    if _recording_only_from_guard_home() or _is_observe_only_event(event_name):
         return False
     return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
+
+
+def _recording_only_from_guard_home() -> bool:
+    store = _guard_store_from_argv()
+    if store is None:
+        return False
+    from ..config import load_guard_config
+    from ..protection_posture import protection_is_off
+
+    config = load_guard_config(store.guard_home)
+    return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
 __all__ = [

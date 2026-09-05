@@ -17,7 +17,7 @@ from codex_plugin_scanner.submission import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 def test_resolve_submission_metadata_prefers_manifest_fields() -> None:

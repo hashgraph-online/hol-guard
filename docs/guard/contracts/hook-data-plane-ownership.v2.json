@@ -44,7 +44,7 @@
     "kimi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "omp": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "openclaw": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
-    "opencode": {"pre_tool_use": "installed_command_only", "post_tool_use": "unavailable"},
+    "opencode": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
     "pi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical_source_ref"},
     "zcode": {"pre_tool_use": "installed_canonical", "post_tool_use": "normalizer_only_not_installed"}
   },
@@ -65,12 +65,89 @@
     "runtime_download": false,
     "unsupported_platform": "deterministic_fail_safe"
   },
+  "decision_critical_io": {
+    "schema": "hol-guard.decision-critical-io.v1",
+    "native_authority": "rust",
+    "native_modes": ["auto", "force"],
+    "compatibility_modes": ["off", "shadow"],
+    "failure": "fail_closed",
+    "capabilities": [
+      {
+        "id": "post_tool_source_read",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::read_bounded", "guard_hook_core::review_post_tool"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "sensitive_path_and_symlink_classification",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::classify_source_path", "guard_secure_fs::contains_symlink_component"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "pre_post_identity_and_equivalence",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::FileIdentity", "guard_hook_core::review_post_tool"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "archive_decode_package_inspection",
+        "authority": "rust_when_hook_reachable",
+        "rust_symbols": [
+          "guard_command::pretool::evaluate_pre_tool_envelope",
+          "guard_runtime::strict_json::parse",
+          "guard_hook_core::extract_payload_output"
+        ],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "policy_snapshot_admission",
+        "authority": "rust",
+        "rust_symbols": [
+          "guard_runtime::policy_store::PolicySnapshotStore",
+          "guard_runtime::edge::evaluate_envelope_with_store"
+        ],
+        "python_semantic_fallback": false,
+        "python_decision_time_disk_io": false,
+        "failure": "fail_closed"
+      }
+    ]
+  },
+  "privacy_artifacts": {
+    "schema": "hol-guard.native-hook-io-privacy.v1",
+    "raw_source": false,
+    "raw_commands": false,
+    "excluded_fields": [
+      "raw_payload",
+      "command",
+      "prompt",
+      "path",
+      "source",
+      "content",
+      "secret",
+      "token",
+      "private_path"
+    ],
+    "serializers": [
+      "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+      "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_journal.py",
+      "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
+      "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+      "src/codex_plugin_scanner/guard/native_route_receipt.py",
+      "src/codex_plugin_scanner/guard/native_decision_receipt.py",
+      "src/codex_plugin_scanner/guard/store_native_decision_receipts.py"
+    ]
+  },
   "routes": [
     {
       "id": "http_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/daemon/server.py",
-      "current_authority": "rust_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_generic",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -79,7 +156,7 @@
       "id": "http_post_tool_use",
       "event": "PostToolUse",
       "entry": "src/codex_plugin_scanner/guard/daemon/server.py",
-      "current_authority": "rust_supported_python_off_shadow",
+      "current_authority": "rust_raw_edge_fail_safe_disabled",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -88,7 +165,7 @@
       "id": "cli_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-      "current_authority": "rust_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_generic",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -97,7 +174,7 @@
       "id": "cli_post_tool_use",
       "event": "PostToolUse",
       "entry": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-      "current_authority": "rust_supported_python_off_shadow",
+      "current_authority": "rust_raw_edge_fail_safe_disabled",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -123,7 +200,10 @@
         "src/codex_plugin_scanner/guard/adapters/*resume*.py",
         "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
         "src/codex_plugin_scanner/guard/adapters/*transport*.py",
-        "src/codex_plugin_scanner/guard/adapters/hook_python*.py"
+          "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
+          "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
       ],
       "current": "bounded stdin, daemon authentication, HTTP transport, and mechanical response projection",
       "target": "minimal launcher and mechanical serialization only"
@@ -148,7 +228,7 @@
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
         "src/codex_plugin_scanner/guard/adapters/zcode.py"
       ],
-      "current": "harness event, tool, action, and payload normalization before native evaluation",
+      "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
       "target": "Rust raw-envelope normalization"
     },
     {
@@ -156,15 +236,18 @@
       "class": "python_transport",
       "paths": [
         "src/codex_plugin_scanner/guard/daemon/server.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_request_auth.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_capacity.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_protocol.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_request.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_process_creation.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_runner.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_runner_lifecycle.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_slot_review.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_spawner.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_worker.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler_contracts.py",
@@ -184,8 +267,31 @@
         "src/codex_plugin_scanner/guard/runtime/hook_payload_reference.py",
         "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
       ],
-      "current": "harness and event extraction, command extraction, source metadata parsing, and HookReviewRequest construction",
+      "current": "native hook requests use mechanical projection; only explicit test-oracle fixtures may construct a semantic request",
       "target": "unreachable from ordinary production hook semantics"
+    },
+    {
+      "id": "native_edge_launcher",
+      "class": "python_transport",
+      "paths": [
+        "src/codex_plugin_scanner/guard/native_hook_edge.py",
+        "src/codex_plugin_scanner/guard/native_decision_receipt.py",
+        "src/codex_plugin_scanner/guard/native_response_decoder.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_availability_floor.py",
+        "src/codex_plugin_scanner/guard/native_approval_bridge.py",
+        "src/codex_plugin_scanner/guard/native_approval_bridge_v3.py",
+        "src/codex_plugin_scanner/guard/native_approval_errors.py",
+        "src/codex_plugin_scanner/guard/native_approval_models.py",
+        "src/codex_plugin_scanner/guard/native_approval_protocol.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_bridge.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py"
+      ],
+      "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
+      "target": "minimal launcher, serialization, and response projection only"
     },
     {
       "id": "python_reference_oracle",
@@ -198,7 +304,7 @@
         "src/codex_plugin_scanner/guard/runtime/source_paths.py",
         "src/codex_plugin_scanner/guard/native_command_model.py"
       ],
-      "current": "explicit off and shadow compatibility plus generic PreToolUse fallback",
+      "current": "differential-test oracle only; production off is fail-safe and shadow is diagnostic-only",
       "target": "differential tests only"
     },
     {
@@ -208,32 +314,41 @@
         "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_*.py"
       ],
-      "current": "hook CLI support, generic action extraction, policy evaluation, approval continuation, and final decision composition",
+      "current": "hook CLI presentation, approval continuation, and final harness projection",
       "target": "presentation and orchestration only"
     },
     {
       "id": "resident_client_and_supervisor",
       "class": "python_transport",
       "paths": [
+        "src/codex_plugin_scanner/guard/native_resident_client.py",
+        "src/codex_plugin_scanner/guard/native_resident_stream.py",
+        "src/codex_plugin_scanner/guard/native_resident_transport.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_runtime_admission.py",
         "src/codex_plugin_scanner/guard/native_route_receipt.py",
         "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resilience.py"
+        "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py",
+        "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+        "src/codex_plugin_scanner/guard/native_mode.py"
       ],
-      "current": "binary identity, client authentication and framing, process lifecycle, reconnect, restart, and fallback budgeting",
-      "target": "Rust native edge and launcher"
+      "current": "binary identity and mechanical client launch remain Python; authentication, framing, process and peer attestation, bounded generation retirement, supervisor liveness, reconnect, restart, and generation state are Rust-owned; the legacy Python resident module is unreachable from the ordinary graph",
+      "target": "binary identity and minimal Rust client launch only"
     },
     {
       "id": "policy_and_approval_control",
       "class": "python_control",
       "paths": [
         "src/codex_plugin_scanner/guard/approvals.py",
+        "src/codex_plugin_scanner/guard/**/approval*.py",
         "src/codex_plugin_scanner/guard/config.py",
+        "src/codex_plugin_scanner/guard/config_mutation.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
-        "src/codex_plugin_scanner/guard/store_approvals.py"
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
+        "src/codex_plugin_scanner/guard/store_approvals.py",
+        "src/codex_plugin_scanner/guard/**/continuation*.py"
       ],
-      "current": "policy materialization and approval presentation, persistence, and continuation",
+      "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",
       "target": "asynchronous snapshot publication and approval presentation only"
     },
     {
@@ -243,8 +358,10 @@
         "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_metrics.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_journal.py",
         "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
-        "src/codex_plugin_scanner/guard/store.py"
+        "src/codex_plugin_scanner/guard/store.py",
+        "src/codex_plugin_scanner/guard/store_native_decision_receipts.py"
       ],
       "current": "metrics, receipts, activity, and SQLite-backed state",
       "target": "non-blocking and non-authoritative receipt consumption"
@@ -254,11 +371,39 @@
       "class": "python_control",
       "paths": [
         ".github/workflows/native-wheel-ci.yml",
+        ".github/workflows/rust-daemon-edge-hardening.yml",
+        ".github/workflows/rust-runtime.yml",
         ".github/workflows/rust-authority-ownership.yml",
+        ".github/workflows/rust-pretool-authority-acceptance.yml",
+        ".github/workflows/rust-posttool-authority-acceptance.yml",
+        ".github/workflows/native-release-contract.yml",
         "ci/native_runtime/**",
+        "src/codex_plugin_scanner/guard/native_policy_test_support.py",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
+        "docs/guard/contracts/native-hook-decision-receipt-persistence.v1.md",
+        "docs/guard/native-approval-enrollment.md",
         "scripts/ci/hook_data_plane_ownership_contract.py",
-        "scripts/ci/rust_authority_ownership_gate.py"
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_ownership_resolver.py",
+        "scripts/ci/rust_io_privacy_gate.py",
+        "scripts/bench_guard_native_release_gate.py",
+        "scripts/ci/rust_pretool_no_python_gate.py",
+        "scripts/ci/rust_authority_ownership_gate.py",
+        "scripts/ci/native_approval_contract_gate.py",
+        "scripts/ci/python_hook_semantic_callgraph_gate.py",
+        "scripts/ci/python_capability_cleanup_gate.py",
+        "docs/guard/contracts/python-capability-ownership.v1.json",
+        "docs/guard/native-hook-capability-cleanup.md",
+        "docs/guard/adr/0012-python-hook-capability-cleanup.md",
+        "tests/test_python_capability_cleanup_gate.py",
+        "tests/fixtures/native-hook-parity/cases.v1.json",
+        ".github/workflows/publish.yml",
+        "scripts/verify_native_runtime_release.py",
+        "tests/test_rust_io_ownership_gate.py",
+        "tests/test_rust_io_privacy_gate.py",
+        ".github/workflows/decision-critical-io.yml",
+        "tests/test_native_hook_edge.py",
+        "tests/test_native_pretool_generic.py"
       ],
       "current": "installed evidence and ownership enforcement",
       "target": "same"
@@ -286,7 +431,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "command PreToolUse and supported PostToolUse authority with resident server enforcement",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {
@@ -294,7 +439,8 @@
       "class": "rust_io",
       "paths": [
         "rust/crates/guard-hook-core/**",
-        "rust/crates/guard-secure-fs/**"
+        "rust/crates/guard-secure-fs/**",
+        "rust/crates/guard-runtime-windows-process/**"
       ],
       "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, and scanning",
       "target": "all decision-critical hook content and source I/O"
@@ -302,21 +448,53 @@
   ],
   "protected_change_globs": [
     "rust/**",
+    "rust/crates/*/src/approval*.rs",
+    "rust/crates/guard-runtime/src/resident_protocol.rs",
     "src/codex_plugin_scanner/guard/adapters/*.py",
     "src/codex_plugin_scanner/guard/daemon/*hook*.py",
     "src/codex_plugin_scanner/guard/daemon/server.py",
     "src/codex_plugin_scanner/guard/config.py",
+    "src/codex_plugin_scanner/guard/**/approval*.py",
+    "src/codex_plugin_scanner/guard/**/continuation*.py",
     "src/codex_plugin_scanner/guard/native_*.py",
+    "src/codex_plugin_scanner/guard/native_response_decoder.py",
     "src/codex_plugin_scanner/guard/runtime/hook_*.py",
     "src/codex_plugin_scanner/guard/runtime/source_paths.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_*.py",
     ".github/workflows/native-wheel-ci.yml",
+    ".github/workflows/rust-daemon-edge-hardening.yml",
+    ".github/workflows/rust-runtime.yml",
     ".github/workflows/rust-authority-ownership.yml",
+    ".github/workflows/rust-pretool-authority-acceptance.yml",
+    ".github/workflows/rust-posttool-authority-acceptance.yml",
+    ".github/workflows/native-release-contract.yml",
+    ".github/workflows/decision-critical-io.yml",
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
+    "docs/guard/contracts/native-hook-decision-receipt-persistence.v1.md",
+    "docs/guard/native-approval-enrollment.md",
     "scripts/ci/hook_data_plane_ownership_contract.py",
-    "scripts/ci/rust_authority_ownership_gate.py"
+    "scripts/bench_guard_native_release_gate.py",
+    "scripts/ci/rust_pretool_no_python_gate.py",
+    "scripts/ci/rust_authority_ownership_gate.py",
+    "scripts/ci/native_approval_contract_gate.py",
+    "scripts/ci/python_hook_semantic_callgraph_gate.py",
+    "scripts/ci/python_capability_cleanup_gate.py",
+    "docs/guard/contracts/python-capability-ownership.v1.json",
+    "docs/guard/native-hook-capability-cleanup.md",
+    "docs/guard/adr/0012-python-hook-capability-cleanup.md",
+    "tests/test_python_capability_cleanup_gate.py",
+    "tests/fixtures/native-hook-parity/cases.v1.json",
+    ".github/workflows/publish.yml",
+    "scripts/ci/rust_io_ownership_gate.py",
+    "scripts/ci/rust_io_ownership_resolver.py",
+    "scripts/ci/rust_io_privacy_gate.py",
+    "scripts/verify_native_runtime_release.py",
+    "tests/test_rust_io_ownership_gate.py",
+    "tests/test_rust_io_privacy_gate.py",
+    "tests/test_native_hook_edge.py",
+    "tests/test_native_pretool_generic.py"
   ],
   "installed_artifacts": [
     {
@@ -344,8 +522,43 @@
   "migration_prs": {
     "A": "NHD-001-NHD-020",
     "B": "NHD-021-NHD-040",
-    "C": "NHD-041-NHD-060",
+    "C": "NHD-041-NHD-050",
+    "C_follow_up": "NHD-051-NHD-060",
     "D": "NHD-061-NHD-080",
     "E": "NHD-081-NHD-100"
+  },
+  "route_receipts": {
+    "schema": "hol-guard-native-hook-route-receipt.v1",
+    "slice": "NHD-041-NHD-050",
+    "supported_routes": ["native_resident", "native_oneshot", "native_fail_safe"],
+    "pre_tool_authority": "native_resident_or_fail_safe",
+    "python_semantic_for_supported_pre_tool": false,
+    "payload_fields_excluded": ["command", "prompt", "path", "url", "raw_payload", "secret"]
+  },
+  "decision_receipt": {
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "version": 1,
+    "authority": "rust",
+    "contract_document": "docs/guard/contracts/native-hook-decision-receipt-persistence.v1.md",
+    "idempotency_key": "decision_id",
+    "persistence": "python_control_plane_async_non_authoritative",
+    "decision_critical_path": false,
+    "queue": {
+      "max_records": 2000,
+      "max_bytes": 16777216,
+      "drop_policy": "drop_and_degrade_metrics",
+      "wait_for_persistence": false
+    },
+    "retry_restart_safe": true,
+    "privacy_excluded_fields": [
+      "raw_payload",
+      "command",
+      "prompt",
+      "path",
+      "url",
+      "secret",
+      "private_path",
+      "content"
+    ]
   }
 }

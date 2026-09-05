@@ -3,12 +3,132 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod approval_contracts;
+pub use approval_contracts::*;
+mod native_hook_receipt;
+pub use native_hook_receipt::*;
+mod approval_v4_contracts;
+pub use approval_v4_contracts::*;
+
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
+pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
+pub const GUARD_HOOK_EDGE_RESULT_V2_SCHEMA: &str = "guard-hook-edge-result.v2";
+pub const PRE_TOOL_ACTION_V1_SCHEMA: &str = "guard-pre-tool-action.v1";
+pub const PRE_TOOL_RESULT_V1_SCHEMA: &str = "guard-pre-tool-result.v1";
+pub const PRE_TOOL_GENERIC_AUTHORITY_V1: &str = "pre-tool-generic-authority-v1";
 pub const MAX_NATIVE_REQUEST_BYTES: usize = 6 * 1024 * 1024;
 pub const MAX_NATIVE_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookSourceMetadataV2 {
+    #[serde(default)]
+    pub cwd: Option<String>,
+    pub home_dir: String,
+    pub guard_home: String,
+    #[serde(default)]
+    pub source_ref_external_allowed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookEnvelopeV2 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: Option<String>,
+    pub harness: String,
+    pub event: String,
+    pub raw_payload: Value,
+    #[serde(default)]
+    pub deadline_budget_ms: Option<u64>,
+    pub policy_generation: u64,
+    pub policy_snapshot: Value,
+    pub source: GuardHookSourceMetadataV2,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardHookPayloadKindV2 {
+    Inline,
+    SourceFileRef,
+    EncryptedPayloadRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookEdgeResultV2 {
+    pub schema: String,
+    pub authority: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub harness: String,
+    pub event_name: String,
+    pub payload_kind: GuardHookPayloadKindV2,
+    pub result: Value,
+    /// Rust-owned decision evidence.  The Python edge may only transport it
+    /// to a non-authoritative asynchronous consumer.
+    pub receipt: NativeHookDecisionReceiptV1,
+}
+
+/// Result-safe action classes understood by the native PreToolUse edge.
+///
+/// The edge deliberately returns the class and bounded operation metadata,
+/// never the command, prompt, path, URL, or raw tool arguments that led to
+/// the decision.  The request remains inside `GuardHookEnvelopeV2` and is
+/// consumed only by the native edge.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreToolActionTypeV1 {
+    Command,
+    FileRead,
+    FileWrite,
+    Package,
+    McpTool,
+    Network,
+    ProcessService,
+    Browser,
+    Config,
+    Prompt,
+    Harness,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreToolOperationV1 {
+    Execute,
+    Read,
+    Write,
+    Install,
+    Call,
+    Request,
+    Start,
+    Stop,
+    Navigate,
+    Set,
+    Submit,
+    Unknown,
+}
+
+/// Versioned generic PreToolUse result. Keep this contract independent of
+/// harness JSON so adapters can only render the native minimum floor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PreToolResultV1 {
+    pub schema: String,
+    pub version: u16,
+    pub authority: String,
+    pub action: PreToolActionV1,
+    pub decision: String,
+    pub policy_action: String,
+    pub minimum_action: String,
+    pub reason_code: String,
+    pub reason: String,
+    pub explicitly_benign: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -160,5 +280,51 @@ mod tests {
         assert!(encoded.get("reason").is_none());
         assert_eq!(encoded["decision"], "allow");
         assert_eq!(encoded["reason_code"], "output_scan_allow");
+    }
+
+    #[test]
+    fn hook_envelope_v2_rejects_unknown_fields() {
+        let value = serde_json::json!({
+            "schema": GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+            "harness": "claude-code",
+            "event": "PostToolUse",
+            "raw_payload": {},
+            "deadline_budget_ms": 100,
+            "policy_generation": 1,
+            "policy_snapshot": {},
+            "source": {
+                "home_dir": "/home/test",
+                "guard_home": "/home/test/.hol-guard"
+            },
+            "unexpected": true
+        });
+        assert!(serde_json::from_value::<GuardHookEnvelopeV2>(value).is_err());
+    }
+
+    #[test]
+    fn generic_pre_tool_result_rejects_raw_content_and_unknown_fields() {
+        let value = serde_json::json!({
+            "schema": PRE_TOOL_RESULT_V1_SCHEMA,
+            "version": 1,
+            "authority": "rust",
+            "action": {
+                "schema": PRE_TOOL_ACTION_V1_SCHEMA,
+                "version": 1,
+                "harness": "claude-code",
+                "event": "PreToolUse",
+                "action_type": "command",
+                "operation": "execute",
+                "bounded": true,
+                "sensitive_target": false
+            },
+            "decision": "allow",
+            "policy_action": "allow",
+            "minimum_action": "allow",
+            "reason_code": "native_exact_safe_command",
+            "reason": "bounded",
+            "explicitly_benign": true,
+            "command": "must-not-be-in-result"
+        });
+        assert!(serde_json::from_value::<PreToolResultV1>(value).is_err());
     }
 }

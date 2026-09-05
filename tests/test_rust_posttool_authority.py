@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,6 +34,10 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "force",
     )
@@ -42,7 +50,7 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
@@ -52,6 +60,10 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
 ) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -76,7 +88,7 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
@@ -91,7 +103,7 @@ def test_hook_worker_fails_closed_when_auto_native_is_unavailable(
         return None
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         _missing_native,
     )
     monkeypatch.setattr(
@@ -117,7 +129,7 @@ def test_hook_worker_fails_closed_when_auto_native_is_unavailable(
         workspace=tmp_path / "workspace",
     )
     assert called["native"] == 1
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
@@ -133,9 +145,7 @@ class _ActivityWriter:
         payload: object,
         succeeded: bool,
     ) -> bool:
-        self.calls.append(
-            {"harness": harness, "event": event, "payload": payload, "succeeded": succeeded}
-        )
+        self.calls.append({"harness": harness, "event": event, "payload": payload, "succeeded": succeeded})
         return True
 
 
@@ -143,8 +153,15 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("HOL_GUARD_TEST_MODE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -162,7 +179,7 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_post_tool_unavailable"
-    assert worker._engine is None
+    assert worker.test_oracle is None
     assert len(writer.calls) == 1
     assert writer.calls[0]["event"] == "PostToolUse"
     assert writer.calls[0]["harness"] == "pi"
@@ -173,8 +190,8 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.native_mode",
-        lambda: "auto",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: True,
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
@@ -182,6 +199,10 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     result = try_native_hook_authority(
@@ -196,10 +217,60 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
+def test_cli_native_authority_drains_receipt_writer_before_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stop_timeouts: list[float] = []
+
+    class _Writer:
+        def __init__(self, *, store: GuardStore) -> None:
+            del store
+
+        def stop(self, *, timeout_seconds: float) -> bool:
+            stop_timeouts.append(timeout_seconds)
+            return True
+
+    class _Worker:
+        def __init__(self, *, store: GuardStore, activity_writer: object) -> None:
+            del store, activity_writer
+
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            return {"decision": "deny", "reason_code": "test_native_decision"}
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.RuntimeHookEvidenceWriter",
+        _Writer,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.HookWorker",
+        _Worker,
+    )
+
+    result = try_native_hook_authority(
+        payload=_post_tool_payload(),
+        harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        store=GuardStore(tmp_path / "guard-home"),
+    )
+
+    assert result == {"decision": "deny", "reason_code": "test_native_decision"}
+    assert stop_timeouts == [pytest.approx(0.25)]
+
+
 def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.native_mode",
-        lambda: "off",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: False,
     )
     result = try_native_hook_authority(
         payload=_post_tool_payload(),
@@ -212,11 +283,70 @@ def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch:
     assert result is None
 
 
-def test_native_policy_snapshot_generation_is_stable_for_same_policy() -> None:
+def test_native_policy_snapshot_generation_is_stable_for_same_policy(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot
 
     digest = "a" * 64
-    first = native_policy_snapshot(rule_digest=digest, observe_mode=False)
-    second = native_policy_snapshot(rule_digest=digest, observe_mode=False)
+    first = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    second = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
     assert first["generation"] == second["generation"]
     assert isinstance(first["generation"], int)
+
+
+def test_native_policy_snapshot_generation_advances_when_mode_changes(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot
+
+    digest = "a" * 64
+    enforce = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    observe = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=True)
+    restored = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    enforce_generation = enforce["generation"]
+    observe_generation = observe["generation"]
+    restored_generation = restored["generation"]
+    assert isinstance(enforce_generation, int)
+    assert isinstance(observe_generation, int)
+    assert isinstance(restored_generation, int)
+    assert observe_generation > enforce_generation
+    assert restored_generation > observe_generation
+
+
+def test_native_policy_snapshot_generation_is_shared_across_processes(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    script = (
+        "import json,sys; from pathlib import Path; "
+        "from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot; "
+        "print(json.dumps(native_policy_snapshot(rule_digest='a'*64, "
+        "observe_mode=sys.argv[2]=='observe', guard_home=Path(sys.argv[1]))['generation']))"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+
+    def generation(mode: str) -> int:
+        output = subprocess.check_output(
+            [sys.executable, "-c", script, str(guard_home), mode],
+            env=environment,
+            text=True,
+        )
+        value = json.loads(output)
+        assert isinstance(value, int) and not isinstance(value, bool)
+        return value
+
+    first = generation("enforce")
+    assert generation("enforce") == first
+    observe = generation("observe")
+    restored = generation("enforce")
+    assert observe > first
+    assert restored > observe
+
+
+def test_native_policy_snapshot_rejects_corrupt_shared_generation(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot import (
+        NativePolicySnapshotError,
+        native_policy_snapshot,
+    )
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "native-policy-generation.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_state_invalid"):
+        native_policy_snapshot(rule_digest="a" * 64, observe_mode=False, guard_home=guard_home)

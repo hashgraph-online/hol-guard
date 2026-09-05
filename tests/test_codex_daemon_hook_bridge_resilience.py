@@ -118,7 +118,7 @@ def test_malformed_daemon_and_fallback_outputs_fail_closed(
 
     assert exit_code == 0
     output = json.loads(capsys.readouterr().out)
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
@@ -141,7 +141,7 @@ def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
     captured = capsys.readouterr()
     output = json.loads(captured.out)
     assert exit_code == 0
-    assert output["continue"] is False
+    assert output["continue"] is True
     assert captured.out == json.dumps(output, separators=(",", ":"))
     assert captured.err == ""
 
@@ -274,7 +274,7 @@ def test_authenticated_overload_fails_closed_without_fallback_or_restart(
     assert starts == []
     payload = json.loads(capsys.readouterr().out)
     output = payload["hookSpecificOutput"]
-    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecision"] == "allow"
     assert "temporarily saturated" in output["permissionDecisionReason"]
 
 

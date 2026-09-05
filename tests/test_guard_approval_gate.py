@@ -55,6 +55,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.support.network import stub_authenticated_urlopen
 
 
 @pytest.fixture(autouse=True)
@@ -1999,7 +2000,7 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
     def _urlopen(_request, timeout):
         return _Response()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _urlopen)
+    stub_authenticated_urlopen(monkeypatch, _urlopen)
 
     auth_context = {
         "sync_url": "https://hol.org/api/guard/receipts/sync",

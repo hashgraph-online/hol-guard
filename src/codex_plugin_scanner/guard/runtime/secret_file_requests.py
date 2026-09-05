@@ -55,6 +55,9 @@ from .secret_file_request_services.benign_requests import (
     build_tool_action_request_artifact as build_tool_action_request_artifact,
 )
 from .secret_file_request_services.benign_requests import (
+    is_explicitly_benign_native_file_read_request as is_explicitly_benign_native_file_read_request,
+)
+from .secret_file_request_services.benign_requests import (
     is_explicitly_benign_tool_action_request as is_explicitly_benign_tool_action_request,
 )
 from .secret_file_request_services.constants_core import _SHELL_TOOL_NAMES as _SHELL_TOOL_NAMES
@@ -270,6 +273,7 @@ __all__ = [
     "extract_sensitive_file_read_request_from_action",
     "extract_sensitive_file_write_request",
     "extract_sensitive_tool_action_request",
+    "is_explicitly_benign_native_file_read_request",
     "is_explicitly_benign_tool_action_request",
     "is_file_read_tool_name",
     "literal_cd_execution_context",

@@ -1505,30 +1505,22 @@ def _live_hook_verification(
             continue
         try:
             if harness == "codex":
-                from .adapters.codex import codex_native_hook_state
+                from .codex_hook_health import codex_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(codex_native_hook_state(context))
-                if proven is None:
-                    continue
-                verified[harness] = proven
+                verified[harness] = codex_runtime_hooks_verified(context)
                 continue
             if harness == "cursor":
-                from .adapters.cursor_hooks import cursor_native_hook_state
+                from .cursor_hook_health import cursor_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(cursor_native_hook_state(context))
+                proven = cursor_runtime_hooks_verified(context)
                 if proven is None:
                     continue
                 verified[harness] = proven
                 continue
             if harness == "grok":
-                from .cli.install_commands import grok_hooks_protection_ready
+                from .adapters.grok import grok_runtime_hooks_verified
 
-                verified[harness] = grok_hooks_protection_ready(context)
-                continue
-            if harness == "grok":
-                from .cli.install_commands import grok_hooks_protection_ready
-
-                verified[harness] = grok_hooks_protection_ready(context)
+                verified[harness] = grok_runtime_hooks_verified(context)
                 continue
             verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
         except (ImportError, OSError, RuntimeError, TypeError, ValueError):

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import http.client
+import io
 import json
+import time
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import Path
-from typing import TypeGuard
+from typing import Protocol, TypeGuard, cast
 
 from .manager import (
     clear_guard_daemon_state,
@@ -39,8 +43,64 @@ class GuardDaemonTransportError(GuardDaemonRequestError):
     """Raised when the Guard daemon request fails due to transport issues."""
 
 
+class GuardDaemonTimeoutError(GuardDaemonTransportError):
+    """Raised when a bounded Guard daemon request exceeds its deadline."""
+
+
+class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
+    """Raised when the daemon response is not valid JSON object data."""
+
+
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
+_MAX_GET_RESPONSE_BYTES: int = 1_048_576
+
+
+class _ReadableResponse(Protocol):
+    def read(self, n: int = -1) -> bytes: ...
+
+
+def _bound_response_read(response: object, timeout: float) -> bool:
+    """Apply a socket deadline before a blocking urllib response read."""
+
+    if isinstance(response, io.BytesIO):
+        return True
+    candidates: list[object] = [response]
+    seen: set[int] = set()
+    while candidates and len(seen) < 12:
+        candidate = candidates.pop(0)
+        if id(candidate) in seen:
+            continue
+        seen.add(id(candidate))
+        if isinstance(candidate, io.BytesIO):
+            return True
+        set_timeout = getattr(candidate, "settimeout", None)
+        if callable(set_timeout):
+            set_timeout(timeout)
+            return True
+        for attribute in ("fp", "raw", "_sock", "sock", "socket"):
+            nested = getattr(candidate, attribute, None)
+            if nested is not None:
+                candidates.append(nested)
+    return False
+
+
+def _response_is_closed(response: object) -> bool:
+    candidates: list[object] = [response]
+    seen: set[int] = set()
+    while candidates and len(seen) < 12:
+        candidate = candidates.pop(0)
+        if id(candidate) in seen:
+            continue
+        seen.add(id(candidate))
+        is_closed = getattr(candidate, "isclosed", None)
+        if callable(is_closed) and is_closed() is True:
+            return True
+        for attribute in ("fp", "raw"):
+            nested = getattr(candidate, attribute, None)
+            if nested is not None:
+                candidates.append(nested)
+    return False
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -188,6 +248,15 @@ class GuardSurfaceDaemonClient:
             raise GuardDaemonRequestError("Guard daemon returned invalid containment health")
         return value
 
+    def network_status(self) -> dict[str, object]:
+        """Read current network protection truth without starting the daemon.
+
+        Network status is an interactive, loopback-only health read. A 250 ms
+        transport timeout plus a monotonic body deadline prevents daemon limbo.
+        """
+
+        return self._get("/v1/network/status", timeout=_STATUS_REQUEST_TIMEOUT_S)
+
     def resolve_policy_decision(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/policy/resolve", payload)
 
@@ -196,6 +265,7 @@ class GuardSurfaceDaemonClient:
         return response.get("claimed") is True
 
     def _get(self, path: str, *, timeout: float) -> dict[str, object]:
+        deadline = time.monotonic() + timeout
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
             headers={"X-Guard-Token": self.auth_token},
@@ -203,13 +273,86 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return self._decode_json_response(response.read().decode("utf-8"))
+                payload = self._read_response_with_deadline(response, deadline=deadline)
+                return self._decode_json_response(payload.decode("utf-8"))
         except urllib.error.HTTPError as error:
-            raise self._http_request_error(error) from error
+            raise self._http_request_error(error, deadline=deadline) from error
         except GuardDaemonRequestError:
             raise
-        except (OSError, urllib.error.URLError) as error:
-            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
+        except UnicodeDecodeError as error:
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
+        except http.client.IncompleteRead as error:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.05:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            try:
+                with urllib.request.urlopen(request, timeout=remaining) as retry_response:
+                    payload = self._read_response_with_deadline(retry_response, deadline=deadline)
+                    return self._decode_json_response(payload.decode("utf-8"))
+            except TimeoutError as retry_error:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+            except urllib.error.URLError as retry_error:
+                if isinstance(retry_error.reason, TimeoutError):
+                    raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
+            except (OSError, UnicodeDecodeError, http.client.IncompleteRead) as retry_error:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
+        except TimeoutError as error:
+            raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+            raise GuardDaemonTransportError("Guard daemon request failed") from error
+        except OSError as error:
+            raise GuardDaemonTransportError("Guard daemon request failed") from error
+
+    @staticmethod
+    def _read_response_with_deadline(
+        response: _ReadableResponse,
+        *,
+        deadline: float,
+    ) -> bytes:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            raise GuardDaemonTimeoutError("Guard daemon request timed out")
+        if not _bound_response_read(response, remaining):
+            raise GuardDaemonTransportError("Guard daemon response does not support bounded reads")
+        read1 = getattr(response, "read1", None)
+        if not callable(read1):
+            try:
+                payload = response.read(_MAX_GET_RESPONSE_BYTES + 1)
+            except TimeoutError as error:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+            if time.monotonic() >= deadline:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out")
+            if len(payload) > _MAX_GET_RESPONSE_BYTES:
+                raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
+            return payload
+
+        bounded_read = cast(Callable[[int], bytes], read1)
+        chunks: list[bytes] = []
+        total_bytes = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out")
+            if not _bound_response_read(response, remaining):
+                raise GuardDaemonTransportError("Guard daemon response does not support bounded reads")
+            try:
+                chunk = bounded_read(min(65_536, _MAX_GET_RESPONSE_BYTES + 1 - total_bytes))
+            except TimeoutError as error:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+            if time.monotonic() >= deadline:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out")
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > _MAX_GET_RESPONSE_BYTES:
+                raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
+            chunks.append(chunk)
+            if _response_is_closed(response):
+                break
+        return b"".join(chunks)
 
     def _post(
         self,
@@ -234,22 +377,55 @@ class GuardSurfaceDaemonClient:
             raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
             raise
+        except UnicodeDecodeError as error:
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
+        except http.client.IncompleteRead as error:
+            partial = error.partial
+            if partial:
+                try:
+                    return self._decode_json_response(partial.decode("utf-8"))
+                except (UnicodeDecodeError, GuardDaemonResponseSchemaError):
+                    pass
+            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 
-    def _http_request_error(self, error: urllib.error.HTTPError) -> GuardDaemonRequestError:
+    def _http_request_error(
+        self,
+        error: urllib.error.HTTPError,
+        *,
+        deadline: float | None = None,
+    ) -> GuardDaemonRequestError:
         code: str | None = None
         recovery_action: str | None = None
         try:
-            payload = self._decode_json_response(error.read().decode("utf-8"))
+            raw_payload = (
+                self._read_response_with_deadline(error, deadline=deadline)
+                if deadline is not None
+                else error.read(_MAX_GET_RESPONSE_BYTES + 1)
+            )
+            if len(raw_payload) > _MAX_GET_RESPONSE_BYTES:
+                raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
+            payload = self._decode_json_response(raw_payload.decode("utf-8"))
             raw_code = payload.get("error")
             code = raw_code if isinstance(raw_code, str) else None
             recovery = payload.get("recovery")
             if _is_string_object_dict(recovery):
                 raw_action = recovery.get("action")
                 recovery_action = raw_action if isinstance(raw_action, str) else None
-        except (OSError, json.JSONDecodeError, GuardDaemonRequestError):
+        except GuardDaemonTimeoutError:
+            raise
+        except (
+            OSError,
+            UnicodeDecodeError,
+            http.client.IncompleteRead,
+            json.JSONDecodeError,
+            GuardDaemonRequestError,
+        ):
             pass
+        finally:
+            with suppress(OSError):
+                error.close()
         message = code or str(error)
         return GuardDaemonRequestError(
             f"Guard daemon request failed: {message}",
@@ -263,9 +439,9 @@ class GuardSurfaceDaemonClient:
         try:
             payload = json.loads(raw_payload)
         except json.JSONDecodeError as error:
-            raise GuardDaemonRequestError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         if not isinstance(payload, dict):
-            raise GuardDaemonRequestError("Guard daemon request failed: invalid daemon response")
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid")
         return payload
 
 
@@ -282,10 +458,16 @@ def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClie
     return GuardSurfaceDaemonClient(daemon_url, auth_token)
 
 
-def load_running_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+def load_running_guard_surface_daemon_client(
+    guard_home: Path, *, identity_timeout: float = 1.0
+) -> GuardSurfaceDaemonClient:
     """Load the current daemon authority without starting or repairing a daemon."""
 
-    identity = load_running_guard_daemon_identity(guard_home)
+    identity = (
+        load_running_guard_daemon_identity(guard_home)
+        if identity_timeout == 1.0
+        else load_running_guard_daemon_identity(guard_home, health_timeout=identity_timeout)
+    )
     if identity is None:
         raise GuardDaemonTransportError("Guard daemon authority is unavailable")
     daemon_url, auth_token = identity

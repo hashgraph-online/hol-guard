@@ -39,6 +39,11 @@ MACSCOPE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.macscope.feature-writes",
     ),
     (
+        "MacScopeMCPServer --help && MacScopeMCPServer --allow-feature-writes",
+        _FEATURE_ACTION,
+        "command.macscope.feature-writes",
+    ),
+    (
         "'/Applications/MacScope.app/Contents/Resources/MacScopeMCPServer' --allow-feature-writes",
         _FEATURE_ACTION,
         "command.macscope.feature-writes",

@@ -36,6 +36,7 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from .audit_workspace import audit_workspace_is_bound_to_context, bind_relative_audit_workspace
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text
 from .command_payload import result as _command_result
@@ -133,6 +134,13 @@ def _execute_package_shim_operation(
     store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
+    if operation == "guard.packageShims.audit" and not audit_workspace_is_bound_to_context(payload, context):
+        return {
+            "failureCode": "workspace_scope_mismatch",
+            "failureMessage": "Cloud audit requests must target the active local workspace.",
+        }
+    if operation == "guard.packageShims.audit":
+        payload = bind_relative_audit_workspace(payload, context)
     command_context = _package_shim_context(payload, base_context=context, store=store)
     if operation == "guard.packageShims.status":
         return _result(package_shim_status(command_context), generated_at=generated_at)

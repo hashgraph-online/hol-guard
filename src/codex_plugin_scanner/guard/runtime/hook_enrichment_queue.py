@@ -15,6 +15,7 @@ Security rules:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
 
 
 HookEnrichmentTaskType = Literal["receipt_enrichment", "metrics_flush"]
+_REDACTED_VALUE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,63}$")
+_SAFE_DECISIONS = {"allow", "deny", "ask", "block", "warn", "error"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,21 +110,40 @@ class HookEnrichmentQueue:
         reason: str | None = None,
         workspace: str | None = None,
     ) -> HookEnrichmentTask:
-        """Create a redacted receipt enrichment task."""
+        """Create a receipt task containing only bounded, redacted fields.
+
+        ``reason`` and ``workspace`` are accepted for compatibility with
+        callers, but never cross the evidence boundary.  A free-form reason
+        can contain source or command text, and a workspace can disclose a
+        private local path; the task records only its bounded reason code and
+        whether a workspace binding was present.
+        """
+        _ = reason
+        safe_harness = _safe_value(harness, "unknown")
+        safe_event = _safe_value(event_name, "unknown")
+        safe_decision = _safe_value(decision, "deny")
+        if safe_decision not in _SAFE_DECISIONS:
+            safe_decision = "deny"
+        safe_reason_code = _safe_value(reason_code, "redacted_reason")
         return HookEnrichmentTask(
             task_id=task_id,
             task_type="receipt_enrichment",
             payload={
-                "harness": harness,
-                "event_name": event_name,
-                "decision": decision,
-                "reason_code": reason_code,
-                "reason": reason,
-                "workspace": workspace,
-                # No raw output, prompts, or secrets.
+                "schema": "hol-guard-native-hook-evidence.v1",
+                "harness": safe_harness,
+                "event_name": safe_event,
+                "decision": safe_decision,
+                "reason_code": safe_reason_code,
+                "workspace_bound": workspace is not None,
+                # No raw output, source, commands, prompts, paths, or secrets.
             },
             created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
+
+
+def _safe_value(value: str, fallback: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if _REDACTED_VALUE.fullmatch(normalized) else fallback
 
 
 __all__ = ["HookEnrichmentQueue", "HookEnrichmentTask"]

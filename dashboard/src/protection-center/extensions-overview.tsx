@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import {
+  catalogRowSecondLine,
   extensionDisplayName,
   extensionStateLabel,
 } from "../extension-control-center-model";
@@ -29,18 +30,6 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
     ));
 }
 
-/**
- * The row's second line carries the state only when it deviates from the
- * default. A healthy, enabled tool has nothing to decide, so the line shows
- * the tool's executables (or its description) instead — information that
- * helps recognition rather than repeating "Allowed" fifty-nine times.
- */
-function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
-  if (state === "Blocked" || state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
-  const executables = extension.executables.join(" · ").trim();
-  return executables || extension.description;
-}
-
 function CatalogExtensionRow(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
@@ -58,6 +47,8 @@ function CatalogExtensionRow(props: {
       description={props.extension.description}
       behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
       required={props.extension.required}
+      mcp={props.extension.surface === "mcp"}
+      external={props.extension.trust_class === "external"}
       managed={cloudSource || sourceIsManaged(props.effective, props.extension.extension_id)}
       managedLabel={cloudSource ? source : undefined}
       executables={props.extension.executables}

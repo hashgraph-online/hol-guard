@@ -16,10 +16,12 @@ from typing import Protocol, cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 
 class _DaemonInternals(Protocol):
@@ -71,12 +73,23 @@ def _pi_hook_request(*, daemon: GuardDaemonServer, guard_home: str, call_id: str
     )
 
 
-def test_review_required_pi_hook_returns_before_worker_deadline(tmp_path: Path) -> None:
+def test_review_required_pi_hook_returns_before_worker_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     (guard_home / "config.toml").write_text(
         'security_level = "custom"\n[risk_actions]\nlocal_secret_read = "review"\n',
         encoding="utf-8",
+    )
+    # The transport admission deadline binds hint-less reviews; coverage tracing
+    # slows the review pipeline past it into the deliberate fail-open path, so
+    # covered CI runs scale the deadline and the asserted latency bound together.
+    coverage_scale = under_coverage_scale(3.0)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
+        daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -101,7 +114,7 @@ def test_review_required_pi_hook_returns_before_worker_deadline(tmp_path: Path) 
     )
     try:
         started = time.monotonic()
-        with urllib.request.urlopen(request, timeout=2) as response:
+        with urllib.request.urlopen(request, timeout=2 * coverage_scale) as response:
             result = _read_json_object(response)
         elapsed = time.monotonic() - started
     finally:
@@ -109,7 +122,7 @@ def test_review_required_pi_hook_returns_before_worker_deadline(tmp_path: Path) 
 
     assert result["decision"] == "deny"
     assert store.count_pending_requests(harness="pi") == 1
-    assert elapsed < 1.45
+    assert elapsed < 1.45 * coverage_scale
 
 
 def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(

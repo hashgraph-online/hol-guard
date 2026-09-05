@@ -53,6 +53,7 @@ const repairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotic
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(repairMarkup, /Protection needs repair/);
 assert.match(repairMarkup, /Repair protection/);
@@ -67,6 +68,7 @@ const degradedAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthority
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(degradedAckMarkup, /Protection is limited/);
 assert.match(degradedAckMarkup, /Copy repair command/);
@@ -77,17 +79,53 @@ const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityN
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(unenrolledMarkup, /Finish setting up protection/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
 
+const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(approvalSetupMarkup, /Set up approval before enrollment/);
+assert.match(approvalSetupMarkup, /Set up approval/);
+assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
+assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
+
+const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: { enabled: false, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(disabledApprovalMarkup, /Set up approval before enrollment/);
+assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
+
+const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: null,
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(pendingApprovalMarkup, /Checking approval setup/);
+assert.match(pendingApprovalMarkup, /check again/i);
+assert.doesNotMatch(pendingApprovalMarkup, /command controls enroll/);
+assert.doesNotMatch(pendingApprovalMarkup, /Copy setup command/);
+
 const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "protected" },
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.equal(protectedMarkup, "", "no authority surface renders when protection is healthy");
 
@@ -141,7 +179,9 @@ assert.equal(mutationState.effective.layers[0]?.controls.length, 1, "builder mus
 
 const extension: ExtensionCatalogItem = {
   schema_version: 2, extension_id: "command.git", name: "Git", description: "Protects source-control commands.",
-  enabled: true, required: false, source: "built-in", version: "1.2.3", aliases: ["command.scm"],
+  enabled: true, required: false, trust_class: "first-party", activation: "default-on",
+  publisher: { id: "hol", displayName: "Hashgraph Online" }, icon: { kind: "none" },
+  source: "built-in", version: "1.2.3", aliases: ["command.scm"],
   dependencies: [], conflicts: [], delegated_protection: null, ecosystem_ids: ["git"], executables: ["git"],
   project_markers: [".git"], reference_urls: [], action_classes: ["git.history.rewrite"],
   risk_classes: ["history-rewrite"], safer_alternatives: [], rule_count: 1,
@@ -232,6 +272,40 @@ assert.equal(extensionEffectiveState(effective, extension), "enabled");
 assert.equal(permissionEffectiveState(effective, extension, extension.permissions[0]!), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, global_lockdown: true }, { ...extension, required: true }), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, health: "tampered" }, extension), "disabled");
+const noodle = {
+  ...extension,
+  extension_id: "command.noodle",
+  name: "Noodle",
+  enabled: false,
+  trust_class: "external" as const,
+  activation: "opt-in" as const,
+};
+assert.equal(extensionEffectiveState(effective, noodle), "disabled");
+assert.equal(extensionEffectiveState({
+  ...effective,
+  layers: [{
+    schema_version: "1.0.0",
+    kind: "local-admin",
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: false,
+    controls: [{ target_kind: "extension", target_id: "command.noodle", state: "enabled" }],
+  }],
+  projection: {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: 7,
+    catalog_digest: effective.catalog_digest,
+    health: "protected",
+    extensions: [{
+      extension_id: "command.noodle",
+      effective_state: "allowed",
+      local_state: "enabled",
+      managed_state: "inherited",
+      required: false,
+      reason_codes: [],
+    }],
+    permissions: [],
+  },
+}, noodle), "enabled");
 
 assert.equal(extensionPolicyRadioTabStop([
   { value: "inherit" },

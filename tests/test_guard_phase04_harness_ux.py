@@ -257,7 +257,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
 
     assert exit_code == 0
     assert payload["decision"] == "block"
-    assert payload["continue"] is False
+    assert payload["continue"] is True
     assert observed_timeouts == [8]
     assert "Open HOL Guard" in str(payload["reason"])
     assert "/requests/" in str(payload["reason"])

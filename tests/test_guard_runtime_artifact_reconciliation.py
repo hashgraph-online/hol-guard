@@ -219,6 +219,47 @@ def test_reconcile_reports_inactive_package_shim(
     assert result.errors == ("package:npm:path_inactive",)
 
 
+def test_reconcile_projects_profile_activation_for_daemon_health(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store(tmp_path / "guard")
+    monkeypatch.setattr(
+        reconciliation,
+        "refresh_stale_harness_shims",
+        lambda **_kwargs: ShimRefreshResult(refreshed=(), unchanged=(), errors=()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_failing_managed_harness_hooks",
+        lambda *_args, **_kwargs: ((), ()),
+    )
+    raw_status = {
+        "path_status": "restart_required",
+        "shell_profile_configured": True,
+        "installed_managers": ["npm"],
+        "manager_details": [{"manager": "npm", "integrity": "ok", "path_active": False}],
+    }
+    projected_status = {
+        **raw_status,
+        "path_status": "in_path",
+        "path_active": True,
+        "manager_details": [{"manager": "npm", "integrity": "ok", "path_active": True}],
+    }
+    monkeypatch.setattr(reconciliation, "package_shim_status", lambda _context: raw_status)
+    monkeypatch.setattr(reconciliation, "package_shim_dashboard_status", lambda _context: projected_status)
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_package_shims",
+        lambda *_args, **_kwargs: {"repaired": []},
+    )
+
+    result = reconciliation.reconcile_runtime_artifacts(store, home_dir=tmp_path / "home")
+
+    assert result.healthy is True
+    assert result.errors == ()
+
+
 def test_reconcile_reports_unreadable_existing_package_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

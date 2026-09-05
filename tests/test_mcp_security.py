@@ -11,12 +11,27 @@ from typing import Any
 
 from codex_plugin_scanner.checks.mcp_security import resolve_mcp_security_context, run_mcp_security_checks
 from codex_plugin_scanner.integrations import cisco_mcp_scanner as cisco_mcp_module
-from codex_plugin_scanner.integrations.cisco_mcp_scanner import run_cisco_mcp_scan
+from codex_plugin_scanner.integrations.cisco_mcp_scanner import CiscoMcpScanSummary
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def run_cisco_mcp_scan(
+    plugin_dir: Path,
+    mode: str = "auto",
+    *,
+    config_path: Path | None = None,
+) -> CiscoMcpScanSummary:
+    """Exercise analyzer semantics in-process; isolation has dedicated boundary tests."""
+    return cisco_mcp_module._run_cisco_mcp_scan_in_process(
+        plugin_dir,
+        mode=mode,
+        timeout_seconds=None,
+        config_path=config_path,
+    )
 
 
 class FakeCiscoFinding:
@@ -318,6 +333,7 @@ def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_p
     )
 
     summary = run_cisco_mcp_scan(plugin_dir, mode="auto")
+    monkeypatch.setattr("codex_plugin_scanner.checks.mcp_security.run_cisco_mcp_scan", lambda *_args: summary)
     checks = run_mcp_security_checks(plugin_dir, ScanOptions(cisco_mcp_scan="auto"))
 
     availability = next(check for check in checks if check.name == "Cisco MCP scan completed")
@@ -338,6 +354,8 @@ def test_mcp_security_on_mode_requires_dependency(monkeypatch, tmp_path: Path) -
         _raise_import_error,
     )
 
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+    monkeypatch.setattr("codex_plugin_scanner.checks.mcp_security.run_cisco_mcp_scan", lambda *_args: summary)
     checks = run_mcp_security_checks(plugin_dir, ScanOptions(cisco_mcp_scan="on"))
 
     availability = next(check for check in checks if check.name == "Cisco MCP scan completed")
@@ -529,6 +547,10 @@ def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) ->
     monkeypatch.setattr(
         "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
         lambda: {"YaraAnalyzer": FakeYaraAnalyzer},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.checks.mcp_security.run_cisco_mcp_scan",
+        lambda path, mode: run_cisco_mcp_scan(path, mode=mode),
     )
 
     result = scan_plugin(plugin_dir, ScanOptions(cisco_skill_scan="off", cisco_mcp_scan="on"))

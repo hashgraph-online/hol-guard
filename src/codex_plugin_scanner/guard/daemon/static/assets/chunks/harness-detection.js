@@ -1,4 +1,4 @@
-import { r as reactExports, be as isGuardDemoMode, bf as fetchGuardApi } from "../guard-dashboard.js";
+import { r as reactExports, b0 as isGuardDemoMode, b1 as fetchGuardApi } from "../guard-dashboard.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 async function fetchHarnessSetupItems() {
   if (isGuardDemoMode()) return [];
@@ -46,10 +46,9 @@ function isHarnessDetectedItems(items, harness) {
 function resolveDetectedAppStatus(install, protectionHealth, hasInventory, hasReceipts, detected) {
   if (install !== void 0) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
-    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
+    if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
-    if (protectionHealth.state === "partial") return "partial";
-    return "needs_repair";
+    return "partial";
   }
   return hasInventory || hasReceipts || detected ? "found_unprotected" : "not_found";
 }

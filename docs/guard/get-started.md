@@ -351,6 +351,12 @@ Hermes gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/her
 - `pretool-hook.json`
 - `manifest.json`
 
+`install hermes` also writes a fail-closed `hooks.pre_tool_call` entry into the Hermes config file
+(`$HERMES_HOME/config.yaml`) that runs the local bounded hook command.
+That is the Hermes runtime event surface. The cloud `guard:` section is separate and is not a
+substitute for the local shell hook. Guard allowlists only that Guard command in
+`shell-hooks-allowlist.json`; it does not set `hooks_auto_accept`.
+
 Guard injects the managed overlay paths through `HERMES_GUARD_MCP_OVERLAY_PATH` and `HERMES_GUARD_PRETOOL_PATH` when
 you launch Hermes through Guard.
 
@@ -387,6 +393,7 @@ Current strategy:
   detects OpenCode MCP servers, commands, plugins, and skills before launch, and `guard install opencode` adds a
   Guard-owned runtime overlay that keeps native skill loads on ask
 - `hermes`
+  writes a fail-closed `hooks.pre_tool_call` entry so CLI and gateway sessions intercept tools locally,
   prefers the managed Hermes same-channel path when Guard owns the overlay bundle, falls back to the approval center,
   and keeps browser auto-open off for blocked requests
 - `openclaw`

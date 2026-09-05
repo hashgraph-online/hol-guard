@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "pypi_project_storage.py"
 SPEC = importlib.util.spec_from_file_location("pypi_project_storage", SCRIPT_PATH)
@@ -59,6 +61,49 @@ def test_storage_report_fails_when_over_limit(tmp_path: Path) -> None:
     assert pypi_project_storage.main(["--payload", str(payload_path), "--fail-if-over-limit"]) == 1
 
 
+def test_storage_limit_uses_binary_gib_and_rejects_exact_boundary() -> None:
+    limit = 10 * 1024**3
+
+    assert limit == pypi_project_storage.PYPI_PROJECT_LIMIT_BYTES
+    assert pypi_project_storage.over_project_limit(limit - 1, 1) is True
+    assert pypi_project_storage.over_project_limit(limit - 2, 1) is False
+
+
+def test_pending_upload_near_decimal_limit_fits_binary_limit() -> None:
+    used_bytes = 9_964_936_050
+    pending_bytes = 38_802_982
+
+    assert used_bytes + pending_bytes == 10_003_739_032
+    assert pypi_project_storage.over_project_limit(used_bytes, pending_bytes) is False
+
+
+def test_over_limit_without_reclaimable_files_has_safe_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload_path = tmp_path / "pypi.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "releases": {
+                    "3.0.6": [
+                        {
+                            "filename": "hol_guard-3.0.6.tar.gz",
+                            "size": pypi_project_storage.PYPI_PROJECT_LIMIT_BYTES,
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert pypi_project_storage.main(["--payload", str(payload_path), "--fail-if-over-limit"]) == 1
+    error = capsys.readouterr().err
+    assert "at or over the 10 GiB project limit" in error
+    assert "No reclaimable 3.0.0a native wheels or sdists were found" in error
+    assert "Remove old" not in error
+
+
 def test_storage_report_counts_pending_upload_bytes(tmp_path: Path) -> None:
     payload_path = tmp_path / "pypi.json"
     payload_path.write_text(
@@ -95,10 +140,7 @@ def test_storage_report_counts_pending_upload_bytes(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert (
-        pypi_project_storage.main(
-            ["--payload", str(tight), "--fail-if-over-limit", "--pending-dir", str(pending)]
-        )
-        == 1
+        pypi_project_storage.main(["--payload", str(tight), "--fail-if-over-limit", "--pending-dir", str(pending)]) == 1
     )
 
 

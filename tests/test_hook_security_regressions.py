@@ -248,7 +248,7 @@ class TestDaemonWorkerException:
         def broken_inner(request, *, start):
             raise RuntimeError("crash")
 
-        monkeypatch.setattr(worker.engine, "_review_inner", broken_inner)
+        monkeypatch.setattr(worker.test_oracle, "_review_inner", broken_inner)
 
         payload = {
             "hook_event_name": "PostToolUse",

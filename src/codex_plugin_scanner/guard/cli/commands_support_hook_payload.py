@@ -59,9 +59,36 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..adapters.kimi_hooks import normalize_kimi_prompt
 from ..browser_opener import open_browser_url
-from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
+from .commands_support_hook_payload_loader import (
+    _first_hook_tool_call,
+    _load_hook_payload as _load_hook_payload_impl,
+    _normalize_hook_argument_value,
+    _normalize_hook_arguments,
+    _normalize_hook_payload,
+)
+
+
+def _load_hook_payload(
+    event_file: str | None,
+    *,
+    input_text: str | None = None,
+    harness: str | None = None,
+    normalize: bool = True,
+) -> dict[str, object]:
+    """Keep the legacy CLI facade while the loader owns raw input handling."""
+
+    payload = _load_hook_payload_impl(
+        event_file,
+        input_text=input_text,
+        harness=harness,
+        normalize=False,
+    )
+    if normalize:
+        from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
+        payload = hydrate_hook_payload_reference(payload)
+        return _normalize_hook_payload(payload, harness=harness)
+    return payload
 
 def _emit_native_hook_response(
     *,
@@ -142,16 +169,8 @@ def _emit_native_hook_response(
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
-    if event_name == "PostToolUse" and policy_action in {
-        "review",
-        "require-reapproval",
-        "sandbox-required",
-        "block",
-    }:
-        payload["decision"] = "block"
-        payload["reason"] = reason
-        payload["continue"] = False
-        payload["stopReason"] = reason
+    if event_name == "PostToolUse" and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
+        payload.update({"decision": "block", "reason": reason, "continue": True, "stopReason": reason})
         _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
@@ -163,7 +182,22 @@ def _emit_native_hook_response(
         if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
-    _write_json_line(payload, output_stream=output_stream)
+    _write_json_line(
+        _hermes_native_or_payload(harness, policy_action, reason, payload),
+        output_stream=output_stream,
+    )
+
+def _hermes_native_or_payload(
+    harness: str,
+    policy_action: str,
+    reason: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    if _canonical_harness_name(harness) != "hermes":
+        return payload
+    from ..adapters.hermes_runtime_hooks import hermes_native_decision
+    return hermes_native_decision(policy_action=policy_action, reason=reason)
+
 
 def _emit_native_hook_block_stderr(reason: str) -> None:
     print(reason, file=sys.stderr)
@@ -442,41 +476,10 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
         return "never-auto-open"
     return config_policy
 
-def _load_hook_payload(
-    event_file: str | None,
-    *,
-    input_text: str | None = None,
-    harness: str | None = None,
-) -> dict[str, object]:
-    if event_file:
-        payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            payload = hydrate_hook_payload_reference(payload)
-        return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
-    raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
-    if not raw:
-        return {}
-    payload = json.loads(raw)
-    if isinstance(payload, dict):
-        payload = hydrate_hook_payload_reference(payload)
-    return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
-
 _ACTION_ENVELOPE_HARNESSES = frozenset(
     {
-        "codex",
-        "cline",
-        "claude-code",
-        "opencode",
-        "copilot",
-        "gemini",
-        "hermes",
-        "openclaw",
-        "cursor",
-        "grok",
-        "kimi",
-        "pi",
-        "omp",
-        "zcode",
+        "codex", "cline", "claude-code", "opencode", "copilot", "gemini", "hermes",
+        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode",
     }
 )
 
@@ -500,98 +503,6 @@ def _hook_action_envelope(
 
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
     return envelope.to_dict() if envelope is not None else None
-
-def _normalize_hook_payload(
-    payload: dict[str, object],
-    *,
-    harness: str | None = None,
-) -> dict[str, object]:
-    normalized = dict(payload)
-    for source_key, target_key in (
-        ("artifactId", "artifact_id"),
-        ("artifactHash", "artifact_hash"),
-        ("artifactName", "artifact_name"),
-        ("changedCapabilities", "changed_capabilities"),
-        ("hookEventName", "hook_event_name"),
-        ("hookName", "hook_name"),
-        ("preExecutionResult", "pre_execution_result"),
-        ("policyAction", "policy_action"),
-        ("sourceScope", "source_scope"),
-        ("toolName", "tool_name"),
-        ("userOverride", "user_override"),
-    ):
-        if target_key not in normalized and source_key in payload:
-            normalized[target_key] = payload[source_key]
-    if "tool_name" not in normalized or "tool_input" not in normalized:
-        tool_name, tool_input = _first_hook_tool_call(
-            payload.get("toolCalls"),
-            expected_tool_name=normalized.get("tool_name"),
-        )
-        if "tool_name" not in normalized and tool_name is not None:
-            normalized["tool_name"] = tool_name
-        if "tool_input" not in normalized and tool_input is not None:
-            normalized["tool_input"] = tool_input
-    arguments = _normalize_hook_arguments(
-        normalized.get("tool_input"),
-        normalized.get("arguments"),
-        payload.get("toolArgs"),
-        payload.get("toolInput"),
-    )
-    if arguments is not None:
-        normalized["tool_input"] = arguments
-        normalized["arguments"] = arguments
-    if harness is not None and _canonical_harness_name(harness) == "kimi":
-        normalized["prompt"] = normalize_kimi_prompt(normalized.get("prompt"))
-    return normalized
-
-def _normalize_hook_arguments(*values: object | None) -> object | None:
-    for value in values:
-        normalized = _normalize_hook_argument_value(value)
-        if normalized is not None:
-            return normalized
-    return None
-
-def _normalize_hook_argument_value(value: object | None) -> object | None:
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError:
-            return stripped
-        if isinstance(parsed, (dict, list, str)):
-            return parsed
-        return stripped
-    return value
-
-def _first_hook_tool_call(
-    value: object | None,
-    *,
-    expected_tool_name: object | None = None,
-) -> tuple[str | None, object | None]:
-    if not isinstance(value, list):
-        return None, None
-    normalized_expected_tool_name = expected_tool_name.strip() if isinstance(expected_tool_name, str) else None
-    fallback_tool_call: tuple[str, object | None] | None = None
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        tool_name = item.get("name")
-        tool_input = _normalize_hook_argument_value(item.get("args"))
-        if isinstance(tool_name, str) and tool_name.strip():
-            stripped_tool_name = tool_name.strip()
-            if fallback_tool_call is None:
-                fallback_tool_call = (stripped_tool_name, tool_input)
-            if normalized_expected_tool_name is None or stripped_tool_name == normalized_expected_tool_name:
-                return stripped_tool_name, tool_input
-    if fallback_tool_call is not None:
-        return fallback_tool_call
-    return None, None
 
 __all__ = [
     "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_approval_center_browser_url",

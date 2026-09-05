@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, cast
 
-from ..approval_gate import public_config, recent_totp_satisfied, require_high_risk
+from ..approval_gate import ApprovalGateError, public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
+from ..harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
@@ -89,12 +90,21 @@ def enforce_lifecycle_gate(
     if not gate.enabled:
         print(_ENROLLMENT_NOTICE, file=error_stream or sys.stderr)
         return
-    if gate.totp_enabled and recent_totp_satisfied(authority_home):
+    if requirement.action == "apps.disconnect" and not _apps_disconnect_confirmation_matches(args):
+        return
+    require_fresh_totp = gate.totp_enabled and disconnect_requires_fresh_authenticator(requirement.action)
+    if gate.totp_enabled and recent_totp_satisfied(authority_home) and not require_fresh_totp:
         gate_input = None
     elif desktop_proof is not None:
         gate_input = desktop_proof
     else:
-        gate_input = prompt_for_approval_gate(authority_home, use_cooldown=False)
+        gate_input = prompt_for_approval_gate(
+            authority_home,
+            use_cooldown=False,
+            require_fresh_totp=require_fresh_totp,
+        )
+    if require_fresh_totp and not ((gate_input.totp_code if gate_input is not None else None) or "").strip():
+        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",
@@ -134,6 +144,20 @@ def trusted_user_home() -> Path:
     import pwd
 
     return Path(pwd.getpwuid(os.geteuid()).pw_dir).resolve()
+
+
+def _apps_disconnect_confirmation_matches(args: argparse.Namespace) -> bool:
+    harness = _string_attribute(args, "harness")
+    if not harness:
+        return False
+    try:
+        from ..adapters import get_adapter
+        from .install_commands import uninstall_confirmation_token
+
+        expected = uninstall_confirmation_token(get_adapter(harness).harness)
+    except ValueError:
+        return False
+    return _string_attribute(args, "confirm") == expected
 
 
 def _command_subject(args: argparse.Namespace) -> str:

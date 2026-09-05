@@ -27,6 +27,23 @@ from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_cli_facade_isolation import isolate_terminal_block_patches
+
+
+def teardown_module() -> None:
+    """Reset facade overrides propagated into lazily imported CLI modules."""
+
+    from codex_plugin_scanner.guard.approvals import queue_blocked_approvals, wait_for_approval_requests
+    from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
+    from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon
+
+    _sync_namespace(
+        {
+            "ensure_guard_daemon": ensure_guard_daemon,
+            "queue_blocked_approvals": queue_blocked_approvals,
+            "wait_for_approval_requests": wait_for_approval_requests,
+        }
+    )
 
 
 def _context_token() -> str:
@@ -407,9 +424,7 @@ def test_current_terminal_block_is_not_queued_or_browser_approved(
     def unexpected(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("terminal Codex actions must not enter the approval queue or browser wait")
 
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected)
-    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected)
-    monkeypatch.setattr(interaction_module, "wait_for_approval_requests", unexpected)
+    isolate_terminal_block_patches(monkeypatch, unexpected)
     output = StringIO()
     stdout = StringIO()
     with redirect_stdout(stdout):
@@ -446,7 +461,7 @@ def test_current_terminal_block_is_not_queued_or_browser_approved(
     assert rc == 0
     native_payload = json.loads(output.getvalue())
     assert native_payload["decision"] == "block"
-    assert native_payload["continue"] is False
+    assert native_payload["continue"] is True
     assert "/requests/" not in str(native_payload)
     store = GuardStore(guard_home)
     assert store.list_approval_requests(limit=10) == []
