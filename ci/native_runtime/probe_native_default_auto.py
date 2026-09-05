@@ -8,15 +8,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -26,9 +24,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
-    _daemon_response_once,
-)
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
@@ -44,8 +39,19 @@ from codex_plugin_scanner.guard.native_runtime import (
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import proof_environment_violations
+
+_HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_installed_hook_client",
+    Path(__file__).with_name("installed_hook_client.py"),
+)
+if _HOOK_CLIENT_SPEC is None or _HOOK_CLIENT_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: installed hook client could not be loaded")
+_HOOK_CLIENT_MODULE = importlib.util.module_from_spec(_HOOK_CLIENT_SPEC)
+_HOOK_CLIENT_SPEC.loader.exec_module(_HOOK_CLIENT_MODULE)
+_installed_hook_request = _HOOK_CLIENT_MODULE.installed_hook_request
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -137,40 +143,6 @@ def _ownership_routes() -> dict[str, dict[str, str]]:
     return decoded
 
 
-def _installed_hook_request(
-    daemon: GuardDaemonServer,
-    guard_home: Path,
-    workspace: Path,
-    harness: str,
-    event: str,
-    payload: dict[str, object],
-) -> dict[str, object] | None:
-    query = urllib.parse.urlencode({"home": str(guard_home), "workspace": str(workspace)})
-    encoded = json.dumps(payload, separators=(",", ":"))
-    if harness == "codex":
-        return _daemon_response_once(
-            state_path=guard_home / "daemon-state.json",
-            query=query,
-            data=encoded,
-            timeout_seconds=5,
-        )
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-        data=encoded.encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            decoded = json.loads(response.read().decode("utf-8"))
-            return decoded if isinstance(decoded, dict) else None
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")[:512]
-        raise RuntimeError(
-            f"installed hook corpus request failed: harness={harness} event={event} status={error.code} body={detail}"
-        ) from error
-
-
 def _exercise_installed_routes(
     daemon: GuardDaemonServer,
     guard_home: Path,
@@ -248,8 +220,7 @@ def _exercise_mode_invariants(
             _require(
                 response.get("continue") is True
                 and response.get("policy_action") == "allow"
-                and response.get("reason_code")
-                in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
+                and response.get("reason_code") in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
                 {"mode": mode, "response": response},
             )
             mode_invariants[mode] = {
@@ -287,6 +258,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     routes = _ownership_routes()
     daemon.start()
     mode_invariants: dict[str, dict[str, object]] = {}
+    worker_stats = evidence_stats = None
     try:
         readiness_started = time.monotonic()
         prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
@@ -305,22 +277,21 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = daemon._server.hook_worker.metrics.snapshot()
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
+        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
     finally:
         daemon.stop()
-
+    if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
+        raise RuntimeError("native_default_auto_probe_failed: hook corpus stats missing")
     expected = len(route_receipts)
     observed_routes_raw = worker_stats["routes"]
     if not isinstance(observed_routes_raw, dict):
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
-    evidence_stats = writer.stats()
     _require(expected > 0, "installed hook corpus is empty")
     _require(expected == 21, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
-    _require(evidence_stats["receipt_accepted"] == expected, evidence_stats)
-    _require(evidence_stats["receipt_processed"] == expected, evidence_stats)
-    _require(evidence_stats["receipt_dropped"] == 0, evidence_stats)
+    _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
     return {
         "routes": route_receipts,
         "route_count": expected,

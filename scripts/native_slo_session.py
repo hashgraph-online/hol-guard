@@ -20,6 +20,7 @@ from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 from typing import cast
 
+from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
 from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
 from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import _daemon_response_once
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -228,6 +229,22 @@ def _request(
             if error.status != 503:
                 raise RuntimeError("adapter request failed") from error
             return _CAPACITY_FAIL_SAFE.copy()
+    elif harness == "claude-code":
+        try:
+            response = json.loads(
+                authenticated_claude_hook_response(
+                    state_path=guard_home / "daemon-state.json",
+                    query=query,
+                    data=encoded,
+                    timeout_seconds=5,
+                )
+            )
+        except _DaemonResponseError as error:
+            if error.status != 503:
+                raise RuntimeError("adapter request failed") from error
+            return _CAPACITY_FAIL_SAFE.copy()
+        except (OSError, ValueError) as error:
+            raise RuntimeError("adapter request failed") from error
     else:
         try:
             path = f"/v1/hooks/{harness}?{query}"

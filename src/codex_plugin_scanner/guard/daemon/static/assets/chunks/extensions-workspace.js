@@ -946,6 +946,32 @@ function permission(value, extensionId, label) {
     family: catalogText(item.family)
   };
 }
+function mcpLaunch(value, label) {
+  const item = record$2(value, label);
+  return {
+    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"]),
+    command: string$1(item.command, `${label}.command`),
+    package: string$1(item.package, `${label}.package`)
+  };
+}
+function mcpTool(value, label) {
+  const item = record$2(value, label);
+  return {
+    name: string$1(item.name, `${label}.name`),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"])
+  };
+}
+function mcpCatalogFields(item, label) {
+  if (item.surface === void 0) return {};
+  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
+  const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
+  const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
+  return {
+    surface,
+    ...launch ? { mcp_launch: launch } : {},
+    ...tools ? { mcp_tools: tools } : {}
+  };
+}
 function extension(value, label) {
   const item = record$2(value, label);
   const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
@@ -993,7 +1019,8 @@ function extension(value, label) {
     rule_count: ruleCount,
     rules,
     permission_count: permissionCount,
-    permissions
+    permissions,
+    ...mcpCatalogFields(item, label)
   };
 }
 function normalizeExtensionControlLayer(value, label = "layer") {
@@ -3287,6 +3314,7 @@ function ProtectionModuleRow(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex flex-wrap items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: props.name }),
         props.required ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Required by Guard" }) : null,
+        props.mcp ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "MCP" }) : null,
         props.external ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "External" }) : null,
         props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: props.managedLabel ?? "Synced from Guard Cloud" }) : null,
         props.custom ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Custom" }) : null
@@ -4058,7 +4086,7 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
-function authorityNoticeView(health) {
+function authorityNoticeView(health, approvalGateReady) {
   switch (health) {
     case "tampered":
     case "recovery-required":
@@ -4101,6 +4129,34 @@ function authorityNoticeView(health) {
         terminalSummary: "Run this in your terminal to rebuild the trusted settings."
       };
     default:
+      if (approvalGateReady === null) {
+        return {
+          tone: "info",
+          title: "Checking approval setup",
+          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
+          action: { kind: "none" },
+          actionLabel: null,
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
+      if (!approvalGateReady) {
+        return {
+          tone: "info",
+          title: "Set up approval before enrollment",
+          body: "Extension controls require a local approval password or Authenticator before this device can create trusted protection settings. Set up approval first, then return here to enroll.",
+          action: { kind: "configure-approval" },
+          actionLabel: "Set up approval",
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
       return {
         tone: "info",
         title: "Finish setting up protection",
@@ -4117,14 +4173,15 @@ function authorityNoticeView(health) {
 }
 function ProtectionAuthorityNotice(props) {
   const health = props.effective.health;
-  if (health === "protected") return null;
-  const view = authorityNoticeView(health);
+  const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
+  const view = authorityNoticeView(health, approvalGateReady);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
   reactExports.useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
+  if (health === "protected") return null;
   const gatePending = props.approvalGate === null;
   const copyCommand = async () => {
     try {
@@ -4150,6 +4207,10 @@ function ProtectionAuthorityNotice(props) {
               "aria-busy": props.busy,
               disabled: props.busy || gatePending,
               onClick: () => {
+                if (view.action.kind === "configure-approval") {
+                  props.onOpenApprovalSettings();
+                  return;
+                }
                 setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
                 setProofOpen(true);
               },
@@ -4157,7 +4218,7 @@ function ProtectionAuthorityNotice(props) {
               children: gatePending && !props.error ? "Loading approval settings…" : view.actionLabel
             }
           ) : null,
-          view.action.kind === "none" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          view.action.kind === "none" && view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
               type: "button",
@@ -4185,7 +4246,7 @@ function ProtectionAuthorityNotice(props) {
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
+        view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning2 ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
@@ -4205,10 +4266,10 @@ function ProtectionAuthorityNotice(props) {
               }
             )
           ] })
-        ] })
+        ] }) : null
       ] })
     ] }),
-    proofOpen && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    proofOpen && (view.action.kind === "repair" || view.action.kind === "acknowledge") ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {
         title: view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state",
@@ -4286,6 +4347,26 @@ const QUICK_APPLY_CHOICES = [
 ];
 function quickApplyPermissionIds(permissions, effective, state) {
   return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
+}
+function CatalogSearchRow(props) {
+  const handleOpen = reactExports.useCallback(() => {
+    props.onOpen(props.extension);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ProtectionModuleRow,
+    {
+      extensionId: props.extension.extension_id,
+      name: extensionDisplayName(props.extension.name),
+      description: props.extension.description,
+      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
+      required: props.extension.required,
+      mcp: props.extension.surface === "mcp",
+      external: props.extension.trust_class === "external",
+      executables: props.extension.executables,
+      ecosystemIds: props.extension.ecosystem_ids,
+      onOpen: handleOpen
+    }
+  );
 }
 function QuickApplyToolbar(props) {
   const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
@@ -4518,16 +4599,11 @@ function PatternSearchConsole(props) {
       toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Matching tools", className: "guard-pattern-family", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "guard-pattern-family-heading", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tools" }) }),
         toolMatches.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ProtectionModuleRow,
+          CatalogSearchRow,
           {
-            extensionId: extension2.extension_id,
-            name: extensionDisplayName(extension2.name),
-            description: extension2.description,
-            behavior: extension2.executables.join(" · ") || extension2.description,
-            required: extension2.required,
-            executables: extension2.executables,
-            ecosystemIds: extension2.ecosystem_ids,
-            onOpen: () => props.onOpenExtension(extension2)
+            extension: extension2,
+            effective: props.effective,
+            onOpen: props.onOpenExtension
           },
           extension2.extension_id
         ))
@@ -4812,6 +4888,7 @@ function CatalogExtensionRow(props) {
       description: props.extension.description,
       behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
       required: props.extension.required,
+      mcp: props.extension.surface === "mcp",
       external: props.extension.trust_class === "external",
       managed: cloudSource || sourceIsManaged(props.effective, props.extension.extension_id),
       managedLabel: cloudSource ? source : void 0,
@@ -4950,6 +5027,40 @@ function ExtensionActivity(props) {
       "View matching Evidence ",
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
     ] })
+  ] });
+}
+function toolStateLabel(state) {
+  if (state === "allow") return "Allow";
+  if (state === "block") return "Block";
+  return "Recommended";
+}
+function McpServerDefaults({ extension: extension2 }) {
+  if (extension2.surface !== "mcp") return null;
+  const launch = extension2.mcp_launch;
+  const tools = extension2.mcp_tools ?? [];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: launch?.command ?? "Package launcher" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: launch?.package ?? "Unknown package" })
+      ] })
+    ] }),
+    tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "text-xs uppercase tracking-wide text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 pr-4 font-semibold", children: "Tool" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 font-semibold", children: "Default" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: tools.map((tool) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-slate-100", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 pr-4 font-mono text-xs text-brand-dark", children: tool.name }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 text-sm text-brand-dark", children: toolStateLabel(tool.state) })
+      ] }, tool.name)) })
+    ] }) }) : null
   ] });
 }
 const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
@@ -5147,6 +5258,12 @@ function requiredLine(extension2) {
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
 function availabilityCopy(extension2, enabled) {
+  if (extension2.surface === "mcp" && extension2.trust_class === "external") {
+    if (enabled) {
+      return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
+    }
+    return "This community MCP server stays off until you turn it on.";
+  }
   if (extension2.trust_class === "external") {
     if (enabled) {
       return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
@@ -5352,7 +5469,7 @@ function ProtectionModuleDetail(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Commands available" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.extension.surface === "mcp" ? "MCP tools available" : "Commands available" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/75", children: availabilityCopy(props.extension, extensionEnabled) })
         ] })
       ] }) : null,
@@ -5434,7 +5551,8 @@ function ProtectionModuleDetail(props) {
             ] })
           ] })
         ] })
-      ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(McpServerDefaults, { extension: props.extension })
     ] }) : null,
     activeTab === "permissions" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-permissions", role: "tabpanel", "aria-labelledby": "protection-tab-permissions", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       ExtensionPolicyPanel,
@@ -5712,7 +5830,7 @@ function ProtectionCenterWorkspace(props) {
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState(null);
-  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
   const localClis = useLocalCliCatalog();
@@ -5856,10 +5974,13 @@ function ProtectionCenterWorkspace(props) {
   const handleCheckAgain = reactExports.useCallback(() => {
     void load();
     setRecoveryError(null);
-    void resolveApprovalGate({ failClosed: true }).catch(() => {
+    void refreshApprovalGate({ failClosed: true }).catch(() => {
       setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
     });
-  }, [load, resolveApprovalGate]);
+  }, [load, refreshApprovalGate]);
+  const handleOpenApprovalSettings = reactExports.useCallback(() => {
+    props.onNavigate("/settings?section=approval");
+  }, [props.onNavigate]);
   const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
   reactExports.useEffect(() => {
     if (!authorityNeedsAttention) return;
@@ -5893,7 +6014,8 @@ function ProtectionCenterWorkspace(props) {
         status: recoveryStatus,
         approvalGate: resolvedApprovalGate,
         onAction: handleAuthorityAction,
-        onCheckAgain: handleCheckAgain
+        onCheckAgain: handleCheckAgain,
+        onOpenApprovalSettings: handleOpenApprovalSettings
       }
     ) : null,
     state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 text-sm font-medium text-emerald-800", children: recoveryStatus }) : null,

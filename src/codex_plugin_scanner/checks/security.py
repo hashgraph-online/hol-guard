@@ -83,7 +83,7 @@ EXAMPLE_PATH_HINTS = {
     "fixtures",
     "fixture",
 }
-TEST_FILE_RE = re.compile(r"(?:^test_|(?:\.test|\.spec|_test)\.[^.]+$)", re.I)
+TEST_FILE_RE = re.compile(r"(?:^test_|\.test\.[^.]+$|\.spec\.[^.]+$|_test\.[^.]+$)", re.I)
 PLACEHOLDER_MARKERS = (
     "redacted",
     "changeme",

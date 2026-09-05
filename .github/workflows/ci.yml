@@ -306,7 +306,7 @@ jobs:
     needs: [sonar-guard, tests]
     if: needs.sonar-guard.outputs.has-token == 'true' && vars.SONAR_CI_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -338,15 +338,9 @@ jobs:
         with:
           pattern: pytest-coverage-*
           path: coverage-data
-      - name: Combine shard coverage and generate XML report
+      - name: Prepare coverage and pinned Rust analysis
         shell: bash
-        run: |
-          shopt -s globstar nullglob
-          reports=(coverage-data/**/.coverage)
-          echo "Combining ${#reports[@]} shard coverage files"
-          test "${#reports[@]}" -eq 96
-          uv run --no-sync coverage combine "${reports[@]}"
-          uv run --no-sync coverage xml
+        run: bash scripts/ci/prepare_sonar_analysis.sh
       - name: Analyze with SonarQube Cloud
         uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
         env:
@@ -391,6 +385,7 @@ jobs:
           tests/test_guard_extension_control_recovery.py
           tests/test_guard_sandbox.py
           tests/test_guard_js_lockfile_resolution_phase11.py
+          tests/test_guard_runtime_hook_scheduler.py
           --tb=short
 
   compatibility:

@@ -819,7 +819,7 @@ _NEGATED_SECRET_READ_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _FOLLOWING_SECRET_REFERENCE_PATTERN = re.compile(
-    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|token|tokens?|key|keys)\b",
+    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|tokens?|key|keys)\b",
     re.IGNORECASE,
 )
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"

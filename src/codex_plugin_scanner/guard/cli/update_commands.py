@@ -40,6 +40,11 @@ from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_manage
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
 from ..config import load_guard_config, resolve_guard_home
+from ..daemon.runtime_peer import (
+    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
+)
+from ..daemon.runtime_peer import retained_desktop_owner_note, retained_desktop_owner_payload
+from ..daemon.runtime_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
 from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -863,10 +868,9 @@ def run_guard_update(
             if len(repaired_installs) == 1:
                 payload["managed_install"] = repaired_installs[0]
     if context is not None:
-        daemon_refresh_succeeded = (
-            isinstance(daemon_refresh, dict)
-            and daemon_refresh.get("status") in {"restarted", "retained_newer_runtime"}
-            and daemon_refresh.get("runtime_verified") is True
+        daemon_refresh_succeeded = _daemon_refresh_outcome_succeeded(
+            daemon_refresh,
+            allow_not_running=True,
         )
         if daemon_refresh_required and not daemon_refresh_succeeded:
             payload.update(
@@ -2171,6 +2175,9 @@ def refresh_guard_daemon_after_update(
             newer_runtime,
             "Kept the newer HOL Guard runtime active while updating the shell CLI.",
         )
+    desktop_owner = retained_desktop_owner_payload(context.guard_home)
+    if desktop_owner is not None:
+        return desktop_owner, retained_desktop_owner_note(desktop_owner.get("daemon_version"))
     active_context: TrustedUpdateContext | None = None
     try:
         active_context = update_context or _standalone_update_context(context)
@@ -2223,6 +2230,10 @@ def refresh_guard_daemon_after_update(
             cleanup_verified=cleanup_verified,
         )
     status = payload.get("status")
+    if status == "not_running":
+        return payload, "The Guard daemon was not running before the update; nothing to restart."
+    if status == "retained_desktop_owner" and payload.get("runtime_verified") is True:
+        return payload, retained_desktop_owner_note(payload.get("daemon_version"))
     if status != "restarted" or payload.get("runtime_verified") is not True:
         cleanup_verified = _cleanup_failed_guard_daemon_refresh(active_context, context)
         return payload, _daemon_refresh_failure_note(
@@ -2230,40 +2241,6 @@ def refresh_guard_daemon_after_update(
             cleanup_verified=cleanup_verified,
         )
     return payload, "Restarted the Guard daemon to load the updated package."
-
-
-def _verified_newer_guard_daemon(
-    guard_home: Path,
-    *,
-    minimum_version: str | None = None,
-) -> dict[str, object] | None:
-    """Retain a live newer runtime only after signed-state and loopback health agree."""
-
-    from ..daemon.live_identity import verified_live_guard_daemon_identity
-
-    identity = verified_live_guard_daemon_identity(guard_home)
-    if identity is None:
-        return None
-    daemon_version_text = identity.get("package_version")
-    daemon_url = identity.get("daemon_url")
-    if not isinstance(daemon_version_text, str) or not isinstance(daemon_url, str):
-        return None
-    try:
-        daemon_version = Version(daemon_version_text)
-        required_version_text = minimum_version or package_version.__version__
-        required_version = Version(required_version_text)
-    except InvalidVersion:
-        return None
-    if daemon_version <= required_version:
-        return None
-
-    return {
-        "status": "retained_newer_runtime",
-        "daemon_url": daemon_url,
-        "daemon_version": daemon_version_text,
-        "cli_version": required_version_text,
-        "runtime_verified": True,
-    }
 
 
 def _cleanup_failed_guard_daemon_refresh(

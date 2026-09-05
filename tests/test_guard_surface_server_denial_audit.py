@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_hook_test_client import open_authenticated_claude_request
 
 
 def test_guard_daemon_hook_path_denial_survives_audit_timeout(tmp_path, monkeypatch) -> None:
@@ -32,7 +33,7 @@ def test_guard_daemon_hook_path_denial_survives_audit_timeout(tmp_path, monkeypa
             method="POST",
         )
         with pytest.raises(urllib.error.HTTPError) as error:
-            urllib.request.urlopen(request, timeout=2)
+            open_authenticated_claude_request(daemon, request, timeout=2)
         assert error.value.code == 400
         payload = json.loads(error.value.read().decode("utf-8"))
     finally:

@@ -1045,7 +1045,7 @@ jobs:
             if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]]; then
               break
             fi
-            if [[ "$guard_status" != "absent" && "$guard_status" != "present" ]] || \
+            if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
               [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
