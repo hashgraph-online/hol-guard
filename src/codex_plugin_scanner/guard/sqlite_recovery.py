@@ -89,6 +89,45 @@ def sqlite_store_is_proven_unusable(
     return second_state == "fatal" and confirmed_identity == final_identity
 
 
+def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int:
+    """Delete the oldest quarantined store snapshots beyond ``keep`` events.
+
+    Every quarantine preserves a full copy of an unusable database, which on
+    long-lived installs reaches multiple gigabytes per event. Without this
+    sweep the Guard home grows without bound and every later start pays for
+    it. The newest ``keep`` events stay available for support diagnostics.
+    """
+
+    groups: dict[str, float] = {}
+    with suppress(OSError):
+        for entry in guard_home.glob("guard.db.corrupt-*"):
+            if entry.is_symlink() or not entry.is_file():
+                continue
+            # Group the base database with its -wal/-shm sidecars by the
+            # shared quarantine id prefix.
+            name = entry.name
+            base = name
+            for ending in ("-wal", "-shm"):
+                if name.endswith(ending):
+                    base = name[: -len(ending)]
+                    break
+            try:
+                modified = entry.stat().st_mtime
+            except OSError:
+                continue
+            groups[base] = max(groups.get(base, modified), modified)
+    if keep >= len(groups):
+        return 0
+    stale_prefixes = sorted(groups, key=lambda base: groups[base], reverse=True)[keep:]
+    removed = 0
+    for base in stale_prefixes:
+        for ending in ("", "-wal", "-shm"):
+            with suppress(OSError):
+                (guard_home / f"{base}{ending}").unlink()
+                removed += 1
+    return removed
+
+
 def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:
     """Move a quarantined store back when it still opens and passes integrity."""
 

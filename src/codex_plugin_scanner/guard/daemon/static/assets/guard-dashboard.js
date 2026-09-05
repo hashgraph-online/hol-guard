@@ -19901,6 +19901,18 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+function dashboardEmbedsInDesktop() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+    for (const [key, value] of new URLSearchParams(fragment)) {
+      params.set(key, value);
+    }
+    return params.get("desktop_embed") === "1";
+  } catch {
+    return false;
+  }
+}
 var reactDomExports = requireReactDom();
 const GUARD_OVERLAY_ROOT_ID = "guard-overlay-root";
 function ensureGuardOverlayRoot() {
@@ -20170,9 +20182,10 @@ function updateHelpCopy(status, phase, errorMessage) {
 function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
   const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
-  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
-  const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
   const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
@@ -20242,7 +20255,7 @@ function GuardUpdatePanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
     updateChannelSummary,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
-    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
+    embeddedInDesktop && props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen." }) : helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {

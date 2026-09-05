@@ -13,6 +13,7 @@ import {
   type GuardUpdateChannelProof,
 } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { dashboardEmbedsInDesktop } from "./desktop-embed";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
 import type {
   GuardApprovalGatePublicConfig,
@@ -109,14 +110,22 @@ function updateHelpCopy(
 export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
   const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
+  // Inside the Desktop window, updates belong to the app's own updater;
+  // a second button here would race it against the same runtime.
   const showUpdateButton =
+    !embeddedInDesktop &&
     props.updateStatus?.update_available === true &&
     props.updateStatus.auto_updatable &&
     props.updateStatus.update_suppressed !== true &&
     phase !== "updating" &&
     phase !== "reconnecting";
-  const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton =
+    !embeddedInDesktop &&
+    shouldPromptRecoveryReinstall(props.updateStatus) &&
+    phase !== "updating" &&
+    phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha" || (
     props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha"
@@ -196,7 +205,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       {props.updateStatus?.update_available ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/75">{updateStatusLabel(props.updateStatus)}</p>
       ) : null}
-      {helpCopy ? (
+      {embeddedInDesktop && props.updateStatus?.update_available ? (
+        <p className="text-[11px] leading-relaxed text-brand-dark/70">
+          Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar
+          icon, and the app installs this version with its own progress screen.
+        </p>
+      ) : helpCopy ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
       ) : null}
       {showUpdateButton && props.onUpdateGuard ? (

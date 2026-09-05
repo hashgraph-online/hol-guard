@@ -372,4 +372,34 @@ assert(
   "failed desktop updates should say the current install remains",
 );
 
+// Embedded in the HOL Guard Desktop window, the panel must defer updates to
+// the app's own updater instead of offering a second, competing action.
+Object.assign(globalThis, {
+  window: {
+    location: { search: "?desktop_embed=1", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const embeddedMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a241",
+      installer: "desktop",
+      version_check: { source: "desktop_core", status: "stale", current_version: "3.0.0a239", latest_version: "3.0.0a241", update_available: true },
+      auto_updatable: true,
+      update_available: true,
+      blocked_reason: null,
+    }),
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(!embeddedMarkup.includes("Update Guard"), "embedded dashboard must not offer its own Update Guard button");
+assert(
+  embeddedMarkup.includes("Check for Updates in the HOL Guard menu-bar"),
+  "embedded dashboard should point at the app's updater",
+);
+assert(embeddedMarkup.includes("v3.0.0a239"), "embedded dashboard should still show the running version");
+
 console.log("guard-update.test.ts: all tests passed");

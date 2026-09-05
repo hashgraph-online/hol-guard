@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final, Protocol, cast
+
+from .sqlite_recovery import prune_quarantined_store_snapshots
+from .update_staging import prune_stale_update_staging
 
 STORAGE_MAINTENANCE_MIGRATION_VERSION: Final = 20
 STORAGE_QUERY_INDEX_MIGRATION_VERSION: Final = 21
@@ -133,6 +136,12 @@ class StoreStorageMaintenanceMixin:
             )
         if completed:
             _run_passive_housekeeping(self)
+            # File-level sweeps (not SQL): keep quarantined store snapshots
+            # and stale updater staging from accumulating for the whole life
+            # of the install.
+            with suppress(OSError):
+                prune_quarantined_store_snapshots(self.guard_home)
+            prune_stale_update_staging(self.guard_home)
         return StorageMaintenanceResult(
             ran=True,
             completed=completed,
