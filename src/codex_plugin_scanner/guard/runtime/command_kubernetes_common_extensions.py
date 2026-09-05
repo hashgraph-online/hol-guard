@@ -154,9 +154,7 @@ _EXEC = _kubectl("exec")
 _DEBUG = _kubectl("debug")
 _PORT_FORWARD = _kubectl("port-forward")
 _COPY = _kubectl("cp")
-_CERTIFICATE_DECISION = AnyMatcher(
-    matchers=(_kubectl("certificate", "approve"), _kubectl("certificate", "deny"))
-)
+_CERTIFICATE_DECISION = AnyMatcher(matchers=(_kubectl("certificate", "approve"), _kubectl("certificate", "deny")))
 _HELM_INSTALL = _helm("install")
 _HELM_UPGRADE = _helm("upgrade")
 _HELM_ROLLBACK = _helm("rollback")
@@ -217,7 +215,7 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternative="Use --local or a dry run and inspect the resulting object before patching the cluster.",
-        example_command="kubectl patch deployment api -p '{\"spec\":{\"replicas\":2}}'",
+        example_command='kubectl patch deployment api -p \'{"spec":{"replicas":2}}\'',
         safe_variants=_kube_mutation_variants(_PATCH, "Kubernetes patch preview", local=True),
     ),
     rule(

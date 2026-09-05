@@ -102,9 +102,7 @@ def flag_variant(
         variant_matcher: CommandMatcher = _variant_leaf(matcher, required_flags)
     else:
         leaves = tuple(
-            _variant_leaf(child, required_flags)
-            for child in matcher.matchers
-            if isinstance(child, ExecutableMatcher)
+            _variant_leaf(child, required_flags) for child in matcher.matchers if isinstance(child, ExecutableMatcher)
         )
         if len(leaves) != len(matcher.matchers):
             raise ValueError("flag variants require executable matcher leaves")
