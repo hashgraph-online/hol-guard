@@ -11,7 +11,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 PROJECT = "hashgraph-online_hol-guard"
-COMPONENT = PROJECT + ":src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_transport.py"
+SOURCE_PATH = "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_transport.py"
+COMPONENT = PROJECT + ":" + SOURCE_PATH
 SOURCE_BLOB = "82b08a68987e9e4c586aee6b5674bf9a0ace945e"
 FINDINGS = {
     "AaBurY7LOEl4G0YgTSvh": "python:S5332",
@@ -49,12 +50,36 @@ def call(path: str, *, post: bool = False, raw: bool = False, **parameters: obje
     return body if raw else json.loads(body)
 
 
+def verify_source() -> None:
+    local = Path(SOURCE_PATH).read_bytes()
+    actual = hashlib.sha1(b"blob " + str(len(local)).encode() + b"\0" + local).hexdigest()
+    if actual != SOURCE_BLOB:
+        raise RuntimeError("checked-out source differs from the reviewed Git blob")
+    source = call("/api/sources/raw", raw=True, key=COMPONENT, pullRequest=2771)
+    (OUT / "analyzed-source.py").write_bytes(source)
+    (OUT / "reviewed-source.py").write_bytes(local)
+    if source.decode("utf-8").splitlines() != local.decode("utf-8").splitlines():
+        raise RuntimeError("analyzed source differs from the reviewed source lines")
+    print("Every analyzed source line matches the reviewed Git blob")
+
+
+def export_rule_definitions() -> None:
+    result = {}
+    for key in ("python:S8495", "python:S3516", "python:S1313", "python:S1244", "pythonbugs:S2583"):
+        try:
+            result[key] = call("/api/rules/show", key=key)
+        except HTTPError:
+            try:
+                result[key] = call("/api/rules/show", rule=key)
+            except HTTPError as error:
+                result[key] = {"status": error.code}
+    (OUT / "rule-definitions.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     OUT.mkdir(exist_ok=True)
-    source = call("/api/sources/raw", raw=True, key=COMPONENT, pullRequest=2771)
-    actual = hashlib.sha1(b"blob " + str(len(source)).encode() + b"\0" + source).hexdigest()
-    if actual != SOURCE_BLOB:
-        raise RuntimeError("analyzed source differs from the reviewed source: " + actual)
+    export_rule_definitions()
+    verify_source()
     findings = call("/api/issues/search", issues=",".join(FINDINGS), componentKeys=PROJECT, pullRequest=2771, ps=100)
     (OUT / "before.json").write_text(json.dumps(findings, indent=2), encoding="utf-8")
     by_key = {item["key"]: item for item in findings["issues"]}
