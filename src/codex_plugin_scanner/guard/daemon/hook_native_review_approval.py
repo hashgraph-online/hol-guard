@@ -34,8 +34,15 @@ def pause_native_pre_tool_for_approval(
 ) -> dict[str, object]:
     """Pause a native review result and attach any queued approval metadata."""
 
-    launch_target = _native_review_launch_target(payload, native_result)
-    if _native_review_matching_allow(store, harness=harness, launch_target=launch_target, workspace=workspace):
+    launch_target = _native_review_launch_target(payload)
+    tool_name = _native_review_tool_name(payload)
+    if _native_review_matching_allow(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        launch_target=launch_target,
+        workspace=workspace,
+    ):
         allowed = dict(native_result)
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
@@ -75,11 +82,11 @@ def queue_native_pre_tool_review(
     lookup = getattr(store, "get_approval_request", None)
     if not callable(persist) or not callable(lookup):
         return None
-    launch_target = _native_review_launch_target(payload, native_result)
+    launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
     command = pre_tool_command(payload)
     request_id = uuid.uuid4().hex
-    artifact_id = f"{harness}:native-pretool:{tool_name}"
+    artifact_id = _native_review_artifact_id(harness, tool_name)
     approval_center_url = _native_review_approval_center_url(store)
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
@@ -117,10 +124,15 @@ def queue_native_pre_tool_review(
     return stored if isinstance(stored, dict) else None
 
 
+def _native_review_artifact_id(harness: str, tool_name: str) -> str:
+    return f"{harness}:native-pretool:{tool_name}"
+
+
 def _native_review_matching_allow(
     store: object,
     *,
     harness: str,
+    tool_name: str,
     launch_target: str,
     workspace: Path | None,
 ) -> bool:
@@ -134,14 +146,19 @@ def _native_review_matching_allow(
     if not isinstance(rows, list):
         return False
     expected_workspace = str(workspace) if workspace is not None else None
+    expected_artifact_id = _native_review_artifact_id(harness, tool_name)
     for row in rows:
         if not isinstance(row, dict):
             continue
         if row.get("resolution_action") != "allow":
             continue
+        if row.get("artifact_id") != expected_artifact_id:
+            continue
+        if row.get("artifact_name") != tool_name:
+            continue
         if row.get("launch_target") != launch_target:
             continue
-        if expected_workspace is not None and row.get("workspace") != expected_workspace:
+        if row.get("workspace") != expected_workspace:
             continue
         return True
     return False
@@ -206,10 +223,7 @@ def _native_review_tool_name(payload: Mapping[str, object]) -> str:
     return "tool"
 
 
-def _native_review_launch_target(
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-) -> str:
+def _native_review_launch_target(payload: Mapping[str, object]) -> str:
     command = pre_tool_command(payload)
     if command is not None:
         return command
@@ -219,10 +233,7 @@ def _native_review_launch_target(
             value = tool_input.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
-    reason = native_result.get("reason")
-    if isinstance(reason, str) and reason.strip():
-        return reason.strip()
-    return "native PreToolUse review"
+    return f"tool:{_native_review_tool_name(payload)}"
 
 
 __all__ = [

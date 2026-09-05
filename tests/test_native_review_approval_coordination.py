@@ -196,3 +196,53 @@ def test_native_review_honors_resolved_allow_on_retry(
     assert hook_output["permissionDecision"] == "allow"
     assert second["policy_action"] == "allow"
     assert store.list_approval_requests(status="pending") == []
+
+
+def test_native_review_allow_does_not_cross_workspace_or_tool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"))
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "WebFetch",
+        "tool_input": {"url": "https://example.test"},
+    }
+    first = worker.review_http_payload(
+        payload=payload,
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    request_id = first.get("approval_request_id")
+    assert isinstance(request_id, str)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="cursor accepted the native review",
+        resolved_at="2026-09-05T00:01:00+00:00",
+        expected_harness="cursor",
+    )
+    other_workspace = worker.review_http_payload(
+        payload=payload,
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+    )
+    assert other_workspace["policy_action"] == "review"
+    other_tool = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Shell",
+            "tool_input": {"url": "https://example.test"},
+        },
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert other_tool["policy_action"] == "review"

@@ -278,7 +278,6 @@
         "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_response_decoder.py",
         "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
         "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
         "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py",
         "src/codex_plugin_scanner/guard/daemon/hook_availability_floor.py",
@@ -347,6 +346,7 @@
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
         "src/codex_plugin_scanner/guard/store_approvals.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
         "src/codex_plugin_scanner/guard/**/continuation*.py"
       ],
       "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",
