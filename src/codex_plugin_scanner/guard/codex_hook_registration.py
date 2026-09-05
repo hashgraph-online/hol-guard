@@ -472,7 +472,7 @@ def finalize_codex_doctor_setup_status(
             return "active"
         return "broken"
     status = current_status if isinstance(current_status, str) and current_status else "partial"
-    return "broken" if status == "active" and setup_failure else status
+    return "broken" if status == "active" else status
 
 
 __all__ = [

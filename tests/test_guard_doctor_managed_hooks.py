@@ -257,3 +257,11 @@ def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
         )
         == "broken"
     )
+    assert (
+        finalize_codex_doctor_setup_status(
+            "active",
+            {"managed_hook_installed": False, "protection_active": False},
+            [],
+        )
+        == "broken"
+    )

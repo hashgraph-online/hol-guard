@@ -1365,9 +1365,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
         items = warning_items if isinstance(warning_items, list) else []
-        warnings = finalize_codex_doctor_warnings(
-            [str(item) for item in items if isinstance(item, str)], hook_state
-        )
+        warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
         payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
         payload["native_hook_state"] = hook_state
