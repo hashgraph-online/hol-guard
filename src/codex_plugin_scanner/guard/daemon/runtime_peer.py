@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
@@ -12,6 +14,8 @@ _DESKTOP_WINDOWS_INSTALL_PART = "hol guard"
 _DESKTOP_WINDOWS_RUNTIME_DIR = "hol-guard"
 _DESKTOP_BUNDLED_PART = "bundled"
 _DESKTOP_BUNDLED_BIN_PART = "bin"
+_DESKTOP_BUNDLED_CORE_PARTS = ("lib", "hol-guard-core")
+_DESKTOP_CORE_EXECUTABLES = ("hol-guard", "hol-guard.exe")
 _DESKTOP_VERSIONS_PART = "versions"
 _DESKTOP_STABLE_LAUNCHER_PARTS = ("current-hol-guard", "current-hol-guard.cmd")
 
@@ -23,7 +27,9 @@ def daemon_source_is_desktop_core(source_root: object) -> bool:
     tree, the executable bundled inside the macOS ``HOL Guard.app`` bundle,
     the Windows installer layout ``HOL Guard/hol-guard``, and the frozen
     Desktop Core layouts from stable_guard_cli (``versions/<release>/<exe>``,
-    ``bundled/<release>/bin/<exe>``, and the ``current-hol-guard`` launcher).
+    ``bundled/<release>/bin/<exe>``,
+    ``bundled/<release>/lib/hol-guard-core/<exe>``, and the
+    ``current-hol-guard`` launcher).
     A source tree that is merely a checkout, a pipx venv, or another app's
     bundle never matches.
     """
@@ -48,6 +54,14 @@ def daemon_source_is_desktop_core(source_root: object) -> bool:
         and index + 2 < len(parts)
         and parts[index + 2] == _DESKTOP_BUNDLED_BIN_PART
         for index in range(len(parts) - 2)
+    ):
+        return True
+    if any(
+        parts[index] == _DESKTOP_BUNDLED_PART
+        and len(parts) - index == 5
+        and parts[index + 2 : index + 4] == _DESKTOP_BUNDLED_CORE_PARTS
+        and parts[index + 4] in _DESKTOP_CORE_EXECUTABLES
+        for index in range(len(parts) - 4)
     ):
         return True
     return any(parts[index] == _DESKTOP_VERSIONS_PART and len(parts) - index == 3 for index in range(len(parts) - 2))
@@ -146,6 +160,49 @@ def live_desktop_owned_daemon(guard_home: Path) -> dict[str, object] | None:
     if not daemon_desktop_core_source_available(identity.get("source_root")):
         return None
     return identity
+
+
+def load_guard_daemon_endpoint(guard_home: Path) -> tuple[str, str] | None:
+    """Resolve a verified daemon endpoint, preferring the current runtime or Desktop owner."""
+
+    from .manager import load_guard_daemon_auth_token, load_guard_daemon_url
+
+    daemon_url = load_guard_daemon_url(guard_home)
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if isinstance(daemon_url, str) and daemon_url.strip() and isinstance(auth_token, str) and auth_token.strip():
+        return daemon_url, auth_token
+
+    identity = live_desktop_owned_daemon(guard_home)
+    if identity is None:
+        return None
+    identity_guard_home = identity.get("guard_home")
+    try:
+        if (
+            not isinstance(identity_guard_home, str)
+            or Path(identity_guard_home).expanduser().resolve() != guard_home.expanduser().resolve()
+        ):
+            return None
+    except (OSError, RuntimeError, ValueError):
+        return None
+    owner_url = identity.get("daemon_url")
+    if not isinstance(owner_url, str) or not owner_url.strip():
+        return None
+    owner_token = load_guard_daemon_auth_token(guard_home)
+    if not isinstance(owner_token, str) or not owner_token.strip():
+        return None
+    auth_token_id = identity.get("auth_token_id")
+    if not isinstance(auth_token_id, str) or not auth_token_id.strip():
+        return None
+    if not secrets.compare_digest(hashlib.sha256(owner_token.encode("utf-8")).hexdigest(), auth_token_id):
+        return None
+    return owner_url, owner_token
+
+
+def load_guard_daemon_endpoint_url(guard_home: Path) -> str | None:
+    """Return the URL from a verified current-runtime or Desktop-owned endpoint."""
+
+    endpoint = load_guard_daemon_endpoint(guard_home)
+    return endpoint[0] if endpoint is not None else None
 
 
 def retained_newer_runtime_payload(

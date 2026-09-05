@@ -4146,8 +4146,8 @@ function authorityNoticeView(health, approvalGateReady) {
       if (!approvalGateReady) {
         return {
           tone: "info",
-          title: "Set up approval before enrollment",
-          body: "Extension controls require a local approval password or Authenticator before this device can create trusted protection settings. Set up approval first, then return here to enroll.",
+          title: "Set up local approval before enrollment",
+          body: "Extension controls require this device's local approval gate. Guard Cloud sign-in and account MFA are separate and do not enable this gate. In Settings > Approval gate, enable Ask for proof on allow decisions and set an Approval password, then return here to enroll. Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown.",
           action: { kind: "configure-approval" },
           actionLabel: "Set up approval",
           actionDetail: null,
