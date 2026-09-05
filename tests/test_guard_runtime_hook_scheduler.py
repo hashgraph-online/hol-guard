@@ -4,8 +4,10 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
-from tests.coverage_ci import under_coverage_scale
+from tests.coverage_ci import UNDER_COVERAGE_TRACING, under_coverage_scale
 
 
 def test_scheduler_waits_for_capacity_instead_of_rejecting() -> None:
@@ -61,6 +63,10 @@ def test_scheduler_dynamic_capacity_wakes_waiter() -> None:
     assert scheduler.stats()["active_limit"] == 1
 
 
+@pytest.mark.skipif(
+    UNDER_COVERAGE_TRACING,
+    reason="Concurrent scheduler throughput shifts under coverage tracing; run untraced",
+)
 def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> None:
     coverage_scale = under_coverage_scale(3.0)
     scheduler = RuntimeHookScheduler(
