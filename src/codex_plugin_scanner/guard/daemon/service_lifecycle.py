@@ -18,13 +18,24 @@ def startup_generation_is_current(server: GuardDaemonServer, generation: int | N
         return generation == server._lifecycle_generation and not server._shutdown_started.is_set()
 
 
+def _failed_sqlite_identity(error: BaseException) -> tuple[int, int] | None:
+    identity = getattr(error, "guard_failed_sqlite_identity", None)
+    if isinstance(identity, tuple) and len(identity) == 2 and all(isinstance(part, int) for part in identity):
+        return identity[0], identity[1]
+    return None
+
+
 def _begin_owned_service_with_store_recovery(server: GuardDaemonServer, generation: int) -> None:
     """Retry owned startup once after a fatal SQLite store is quarantined."""
 
     try:
         server._begin_owned_service(generation)
     except sqlite3.DatabaseError as error:
-        if not server._server.store._recover_fatal_sqlite_store(error):
+        store = server._server.store
+        if not store._recover_fatal_sqlite_store(
+            error,
+            failed_identity=_failed_sqlite_identity(error),
+        ):
             raise
         server._begin_owned_service(generation)
 
