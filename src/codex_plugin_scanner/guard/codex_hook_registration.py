@@ -142,8 +142,6 @@ def _has_codex_harness(blob: str) -> bool:
 def _looks_like_guard_codex_hook(blob: str) -> bool:
     if "codex_daemon_hook_bridge.py" in blob:
         return True
-    if FROZEN_CODEX_BRIDGE_ARG in blob:
-        return True
     if not _has_codex_harness(blob):
         return False
     if "hol-guard hook" in blob:

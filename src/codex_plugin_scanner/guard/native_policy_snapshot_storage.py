@@ -445,9 +445,8 @@ def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_dige
 def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
     """Return the compact hook binding from a still-valid ACKed snapshot cache.
 
-    A CLI hook process cannot ACK a second publisher while the resident already
-    holds the daemon's snapshot. The cache is written only after a successful
-    ACK, so an unexpired signed generation is a valid request binding.
+    The cache is written before resident IPC. Reuse it only when an unexpired
+    signed snapshot is backed by a matching resident generation file.
     """
 
     guard_home = getattr(store, "guard_home", None)
@@ -477,6 +476,13 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
     if not isinstance(expires_at_ms, int) or expires_at_ms <= int(time.time() * 1_000):
         return None
     if not isinstance(digest, str) or not isinstance(identity, str) or not isinstance(mode, str):
+        return None
+    expected = f"generation-{generation:020d}.json"
+    try:
+        present = any((Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY).glob(f"resident-v3-*/{expected}"))
+    except OSError:
+        return None
+    if not present:
         return None
     return {
         "generation": generation,
