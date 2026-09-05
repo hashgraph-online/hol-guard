@@ -10,7 +10,15 @@ from pathlib import Path
 from .data_flow import extract_command_segments, extract_command_substitutions, extract_input_redirects
 from .env_wrapper import parse_env_wrapper
 from .kubernetes_command_support import (
+    ASSIGNMENT_PATTERN,
+    EXEC_BOOLEAN_SHORT_CLUSTER,
+    KUBECTL_BOOLEAN_OPTIONS,
+    KUBECTL_OPTIONS_WITH_VALUES,
+    SHELL_EXECUTABLES,
+    WRAPPER_COMMANDS,
+    WRAPPER_OPTIONS_WITH_VALUES,
     WRITE_ONLY_COMMANDS,
+    exec_remote_tokens_after_resource,
     interpreter_reads_sensitive_env,
     is_output_redirect_target,
     is_proc_environ_path,
@@ -30,96 +38,9 @@ from .kubernetes_command_support import (
 from .kubernetes_heredoc_support import kubernetes_heredoc_secret_source
 from .shell_command_wrappers import normalize_transparent_shell_command
 
-_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
-_OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
-_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
-_WRAPPER_OPTIONS_WITH_VALUES = {
-    "nice": frozenset({"-n", "--adjustment"}),
-    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
-    "sudo": frozenset(
-        {
-            "-C",
-            "-D",
-            "-R",
-            "-T",
-            "-g",
-            "-h",
-            "-p",
-            "-r",
-            "-t",
-            "-u",
-            "--chdir",
-            "--chroot",
-            "--close-from",
-            "--command-timeout",
-            "--group",
-            "--host",
-            "--prompt",
-            "--role",
-            "--type",
-            "--user",
-        }
-    ),
-    "time": frozenset({"-f", "--format", "-o", "--output"}),
-}
-_KUBECTL_OPTIONS_WITH_VALUES = frozenset(
-    {
-        "--as",
-        "--as-group",
-        "--as-uid",
-        "--cache-dir",
-        "--certificate-authority",
-        "--chunk-size",
-        "--client-certificate",
-        "--client-key",
-        "--cluster",
-        "--context",
-        "--field-manager",
-        "--field-selector",
-        "--filename",
-        "--kubeconfig",
-        "--label-selector",
-        "--namespace",
-        "--output",
-        "--password",
-        "--profile",
-        "--profile-output",
-        "--request-timeout",
-        "--selector",
-        "--server",
-        "--sort-by",
-        "--subresource",
-        "--template",
-        "--token",
-        "--user",
-        "--username",
-        "-c",
-        "-f",
-        "-l",
-        "-n",
-        "-o",
-    }
-)
-_KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
-_EXEC_OPTIONS_WITH_VALUES = frozenset(
-    {
-        "--container",
-        "--namespace",
-        "--pod-running-timeout",
-        "--profile",
-        "--profile-output",
-        "--request-timeout",
-        "--shell",
-        "-c",
-        "-n",
-    }
-)
-_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-q", "-t"})
-_EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
 _CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", "-c", "-n"})
 _CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
 _REMOTE_CP_OPTIONS_WITH_VALUES = frozenset({"--target-directory", "-t"})
-_SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
 _READ_ONLY_INVENTORY_RESOURCES = frozenset(
     {
         "cronjob",
@@ -247,9 +168,9 @@ def _read_only_get_resource_and_output(args: tuple[str, ...]) -> tuple[str | Non
         option_consumed = kubernetes_option_tokens_consumed(
             args,
             index,
-            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
-            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS | _READ_ONLY_GET_BOOLEAN_OPTIONS,
-            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            base_value_flags=KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=KUBECTL_BOOLEAN_OPTIONS | _READ_ONLY_GET_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=EXEC_BOOLEAN_SHORT_CLUSTER,
         )
         if option_consumed is not None:
             index += option_consumed
@@ -336,11 +257,11 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
     index = 0
     while index < len(tokens):
         token = tokens[index]
-        if _ASSIGNMENT_PATTERN.match(token):
+        if ASSIGNMENT_PATTERN.match(token):
             index += 1
             continue
         command_name = Path(token).name.lower()
-        if command_name not in _WRAPPER_COMMANDS:
+        if command_name not in WRAPPER_COMMANDS:
             return index
         if command_name == "env":
             parsed = parse_env_wrapper(tokens[index + 1 :])
@@ -360,7 +281,7 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
             if current == "--":
                 index += 1
                 break
-            if _ASSIGNMENT_PATTERN.match(current):
+            if ASSIGNMENT_PATTERN.match(current):
                 index += 1
                 continue
             if not current.startswith("-"):
@@ -371,9 +292,9 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
 
 _skip_kubectl_options = partial(
     skip_kubectl_options,
-    value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
-    boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
-    boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+    value_flags=KUBECTL_OPTIONS_WITH_VALUES,
+    boolean_flags=KUBECTL_BOOLEAN_OPTIONS,
+    boolean_short_cluster=EXEC_BOOLEAN_SHORT_CLUSTER,
 )
 
 
@@ -414,31 +335,7 @@ def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
 
 
 def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    resource_seen = False
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return tokens[index + 1 :]
-        option_consumed = kubernetes_option_tokens_consumed(
-            tokens,
-            index,
-            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
-            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
-            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
-            value_flags=_EXEC_OPTIONS_WITH_VALUES,
-            boolean_flags=_EXEC_BOOLEAN_OPTIONS,
-            boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
-        )
-        if option_consumed is not None:
-            index += option_consumed
-            continue
-        if not resource_seen:
-            resource_seen = True
-            index += 1
-            continue
-        return tokens[index:]
-    return ()
+    return exec_remote_tokens_after_resource(tokens)
 
 
 def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
@@ -459,10 +356,10 @@ def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int
         if "|" in env_args:
             env_args = env_args[: env_args.index("|")]
         env_names = tuple(
-            token for token in env_args if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token)
+            token for token in env_args if not token.startswith("-") and not ASSIGNMENT_PATTERN.match(token)
         )
         return not env_names
-    if command_name in _SHELL_EXECUTABLES:
+    if command_name in SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
         if script is not None:
             if script_reads_sensitive_env(script):
@@ -487,7 +384,7 @@ def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int =
     if 0 < unwrapped_index < len(tokens):
         return _remote_command_reads_secret_volume(tokens[unwrapped_index:], depth=depth + 1)
     command_name = Path(tokens[0]).name.lower()
-    if command_name in _SHELL_EXECUTABLES:
+    if command_name in SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
         if script is not None:
             for candidate in _command_candidates(script):
@@ -522,9 +419,9 @@ def _kubectl_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
         option_consumed = kubernetes_option_tokens_consumed(
             tokens,
             index,
-            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
-            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
-            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            base_value_flags=KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=EXEC_BOOLEAN_SHORT_CLUSTER,
             value_flags=_CP_OPTIONS_WITH_VALUES,
             boolean_flags=_CP_BOOLEAN_OPTIONS,
         )
@@ -596,7 +493,7 @@ def _shell_stdin_secret_source(tokens: tuple[str, ...]) -> str | None:
 
 
 def _option_tokens_consumed(command_name: str, token: str) -> int:
-    options_with_values = _WRAPPER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
+    options_with_values = WRAPPER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
     if token in options_with_values:
         return 2
     if any(token.startswith(f"{option}=") for option in options_with_values if option.startswith("--")):

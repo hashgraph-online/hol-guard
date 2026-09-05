@@ -193,7 +193,7 @@ def test_growing_or_oversized_json_identity_is_never_complete(
 ) -> None:
     del manager_path
     workspace = _workspace(tmp_path, "eslint")
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.local_node_runner_evidence._MAX_JSON_BYTES", 1)
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.package_evidence_common._MAX_MANIFEST_JSON_BYTES", 1)
 
     evidence = _evidence(workspace, ("--no-install", "eslint", "--no-cache", "src/example.ts"))
 

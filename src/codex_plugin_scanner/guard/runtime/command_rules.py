@@ -14,6 +14,7 @@ from .command_option_parsing import (
     known_option_advance,
     matches_subcommands_conservatively,
 )
+from .executable_flag_contract import _ExecutableContractBase
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
@@ -24,22 +25,10 @@ _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"
 
 @final
 @dataclass(frozen=True, slots=True)
-class ExecutableMatcher:
+class ExecutableMatcher(_ExecutableContractBase):
     """Match executable names with optional subcommand and flag constraints."""
 
-    executables: frozenset[str]
     subcommands: tuple[str, ...] = ()
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    allow_leading_options: bool = False
-    leading_options_with_values: frozenset[str] = frozenset()
-    interspersed_options_with_values: frozenset[str] = frozenset()
-    interspersed_flags: frozenset[str] = frozenset()
-    options_with_values: frozenset[str] = frozenset()
-    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
-    required_flags_in_all_arguments: bool = False
-    fail_secure_unknown_options: bool = False
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
