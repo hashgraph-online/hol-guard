@@ -33,9 +33,12 @@ class _SameHostRedirectHandler(HTTPRedirectHandler):
     def redirect_request(
         self, req: Request, fp: object, code: int, msg: str, headers: object, newurl: str
     ) -> Request | None:
-        target_host = (urlsplit(newurl).hostname or "").lower()
+        split = urlsplit(newurl)
+        target_host = (split.hostname or "").lower()
         if target_host != self.allowed_host:
             raise URLError(f"refusing cross-host GitHub API redirect to {newurl}")
+        if split.scheme != "https" and target_host not in _LOOPBACK_HOSTS:
+            raise URLError(f"refusing downgraded GitHub API redirect to {newurl}")
         return super().redirect_request(
             req,
             cast("IO[bytes]", fp),

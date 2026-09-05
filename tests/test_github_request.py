@@ -11,7 +11,7 @@ from urllib.error import URLError
 
 import pytest
 
-from codex_plugin_scanner.github_request import github_request_json
+from codex_plugin_scanner.github_request import _SameHostRedirectHandler, github_request_json
 
 
 class _RecordingApiServer(ThreadingHTTPServer):
@@ -84,3 +84,15 @@ def test_github_request_json_rejects_cross_host_redirects(local_api_server: _Rec
         github_request_json(
             "GET", f"{_server_url(local_api_server)}/redirect-cross-host", "token", user_agent="guard-test"
         )
+
+
+def test_redirect_handler_rejects_remote_https_to_http_downgrade() -> None:
+    handler = _SameHostRedirectHandler("api.github.example.com")
+    with pytest.raises(URLError, match="downgraded"):
+        handler.redirect_request(None, None, 302, "Found", None, "http://api.github.example.com/steal")
+
+
+def test_redirect_handler_rejects_remote_cross_host_before_downgrade_check() -> None:
+    handler = _SameHostRedirectHandler("api.github.example.com")
+    with pytest.raises(URLError, match="cross-host"):
+        handler.redirect_request(None, None, 302, "Found", None, "http://evil.example.com/steal")
