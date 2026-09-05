@@ -40,7 +40,12 @@ jobs:
           root = Path.cwd()
           for command in commands:
               canonical = parse_shell_command(command, cwd=root, home_dir=root)
+              segment = canonical.segments[0]
               print('COMMAND', command)
+              print('NORMALIZED', canonical.normalized_text)
+              print('SEGMENT', repr(segment))
+              print('TOKENS', segment.tokens)
+              print('ARGUMENTS', segment.arguments)
               for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
                   for rule in extension.rules:
                       if rule.matcher is None or not rule.matcher.match(canonical):
@@ -53,12 +58,11 @@ jobs:
                           for leaf in leaves:
                               if not isinstance(leaf, ExecutableMatcher):
                                   continue
-                              segment = canonical.segments[0]
                               args = tuple(arg.lower() for arg in segment.arguments)
                               subargs = _without_options(args, leaf.interspersed_options_with_values, leaf.interspersed_flags)
                               if leaf.allow_leading_options:
                                   subargs = _after_leading_options(subargs, leaf.leading_options_with_values, leaf.interspersed_flags)
                               flagargs = subargs[len(leaf.subcommands):] if leaf.subcommands else subargs
                               semantics = argument_semantics(flagargs, options_with_values=(leaf.options_with_values | leaf.leading_options_with_values | leaf.interspersed_options_with_values), inverse_flag_pairs=leaf.inverse_flag_pairs)
-                              print('LEAF', leaf.subcommands, 'FLAGARGS', flagargs, 'SEMANTICS', semantics, 'REQVALS', leaf.required_option_values, 'REQFLAGS', leaf.required_flags, 'FORBID', leaf.forbidden_flags)
+                              print('LEAF', leaf.subcommands, 'ARGS', args, 'SUBARGS', subargs, 'FLAGARGS', flagargs, 'SEMANTICS', semantics, 'REQVALS', leaf.required_option_values, 'REQFLAGS', leaf.required_flags, 'FORBID', leaf.forbidden_flags)
           PY
