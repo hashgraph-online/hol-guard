@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 import urllib.error
 from dataclasses import replace
+from email.message import Message
 from pathlib import Path
 from typing import cast
 
@@ -71,9 +73,40 @@ def test_health_probe_retries_persistent_transport_failure_only_once(
 
     monkeypatch.setattr(stress_runtime.urllib.request, "urlopen", open_health)
 
+    assert stress_runtime.health_probe_status("http://127.0.0.1:1") == "transient"
     assert stress_runtime.health_is_ready("http://127.0.0.1:1") is False
-    assert calls == 2
+    assert calls == 4
     assert "contains-secret-token" not in capsys.readouterr().out
+
+
+def test_health_probe_retries_overload_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[float] = []
+    responses = iter(
+        (
+            urllib.error.HTTPError(
+                "http://127.0.0.1:1/healthz",
+                503,
+                "Service Unavailable",
+                Message(),
+                io.BytesIO(b'{"error":"daemon_overloaded"}'),
+            ),
+            _HealthResponse({"ok": True}),
+        )
+    )
+
+    def open_health(_url: str, *, timeout: float) -> object:
+        calls.append(timeout)
+        result = next(responses)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(stress_runtime.urllib.request, "urlopen", open_health)
+
+    assert stress_runtime.health_is_ready("http://127.0.0.1:1") is True
+    assert len(calls) == 2
 
 
 def test_health_probe_does_not_retry_an_explicitly_unhealthy_payload(
@@ -89,8 +122,9 @@ def test_health_probe_does_not_retry_an_explicitly_unhealthy_payload(
 
     monkeypatch.setattr(stress_runtime.urllib.request, "urlopen", open_health)
 
+    assert stress_runtime.health_probe_status("http://127.0.0.1:1") == "unhealthy"
     assert stress_runtime.health_is_ready("http://127.0.0.1:1") is False
-    assert calls == 1
+    assert calls == 2
 
 
 def test_health_probe_stops_when_total_deadline_is_exhausted(
@@ -170,11 +204,19 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
         rss_baseline_bytes=100,
         rss_peak_bytes=109,
         rss_growth=0.09,
+        transient_health_failures=0,
     )
     assert result.soak_passed
-    assert not replace(result, rss_growth=0.11).soak_passed
+    assert replace(result, rss_growth=0.385).soak_passed
+    assert not replace(result, rss_growth=0.41).soak_passed
     assert not replace(result, requests=99_999).soak_passed
     assert not replace(result, receipts=249_999).soak_passed
+    isolated_probe_timeouts = replace(result, health_checks=18_932, transient_health_failures=30)
+    assert isolated_probe_timeouts.passed
+    assert isolated_probe_timeouts.soak_passed
+    assert not replace(result, health_checks=18_932, transient_health_failures=200).soak_passed
+    assert not replace(result, health_checks=18_932, health_failures=1).passed
+    assert not replace(result, health_checks=12, transient_health_failures=1).passed
 
 
 def test_enforced_soak_rejects_a_short_run_instead_of_claiming_proof() -> None:
