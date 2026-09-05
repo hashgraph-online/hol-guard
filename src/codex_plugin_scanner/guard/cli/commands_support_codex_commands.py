@@ -10,21 +10,20 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .codex_output_safety import (
-    output_uses_placeholder_private_key_fixture,
-    source_name_stem_has_compound_secret_segment,
+from .codex_output_safety import output_uses_placeholder_private_key_fixture
+from .commands_support_codex_reads import (
+    _codex_source_name_stem_has_compound_secret_segment as _codex_source_name_stem_has_compound_secret_segment,
+)
+from .commands_support_codex_reads import (
+    codex_scan_targets_secret_like_source_name,
 )
 
 if TYPE_CHECKING:
     from .commands_support_codex_git import _git_grep_search_args
-    from .commands_support_codex_paths import _codex_search_target_is_source_like
     from .commands_support_codex_reads import (
         _codex_command_is_read_only_source_inspection,
         _codex_command_is_read_only_source_search,
         _codex_command_is_read_only_source_view,
-        _codex_source_inspection_target_tokens,
-        _split_codex_safe_read_only_chain,
-        _split_codex_safe_read_only_pipeline,
     )
     from .commands_support_runtime_artifacts import _codex_command_references_sensitive_local_source
 
@@ -472,26 +471,6 @@ def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
         return False
     return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
 
-_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
-    {
-        "auth",
-        "credential",
-        "credentials",
-        "passwd",
-        "password",
-        "private-key",
-        "private_key",
-        "secret",
-        "secrets",
-        "token",
-    }
-)
-
-
-_codex_source_name_stem_has_compound_secret_segment = partial(
-    source_name_stem_has_compound_secret_segment,
-    secret_like_stems=_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS,
-)
 
 
 def _codex_command_targets_secret_like_source_name(
@@ -500,44 +479,12 @@ def _codex_command_targets_secret_like_source_name(
     cwd: Path | None = None,
     home_dir: Path | None = None,
 ) -> bool:
-    chained_segments = _split_codex_safe_read_only_chain(command_text)
-    if chained_segments is not None:
-        return any(
-            _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir)
-            for segment in chained_segments
-        )
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments:
-        return _codex_command_targets_secret_like_source_name(
-            pipeline_segments[0],
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return False
-    for part in _codex_source_inspection_target_tokens(parts):
-        stripped = part.strip().strip("'\"")
-        if not stripped:
-            continue
-        name = Path(stripped).name.lower().lstrip(".")
-        stem = Path(name).stem or name
-        exact_secret_like = stem.lower() in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
-        compound_secret_like = _codex_source_name_stem_has_compound_secret_segment(
-            stem,
-            split_compound=cwd is not None,
-        )
-        if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
-            continue
-        if compound_secret_like and cwd is not None and _codex_search_target_is_source_like(
-            stripped,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            continue
-        return True
-    return False
+    return codex_scan_targets_secret_like_source_name(
+        command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        recurse=lambda segment: _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir),
+    )
 
 __all__ = """
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN _CODEX_BENIGN_SOURCE_DOTFILES _CODEX_GIT_DIFF_BOOLEAN_OPTIONS

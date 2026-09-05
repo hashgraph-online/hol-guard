@@ -682,6 +682,40 @@ class StorePolicyMixin:
             row["expires_at"],
         )
 
+    def _runtime_policy_row_is_eligible(
+        self,
+        candidate,
+        *,
+        policy_bundle_decision_identities: frozenset[tuple[object, ...]],
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        runtime_exact_match_key: str | None,
+        portable_runtime_exact_match_key: str | None,
+        global_runtime_exact_match_key: str | None,
+    ) -> bool:
+        """Return True when a stored runtime policy row may serve this lookup."""
+
+        if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
+            return False
+        if (
+            str(candidate["source"]) == "policy-bundle"
+            and self._materialized_policy_bundle_row_identity(candidate) not in policy_bundle_decision_identities
+        ):
+            return False
+        return not _scoped_runtime_row_requires_exact_match(
+            scope=str(candidate["scope"]),
+            stored_artifact_id=str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None,
+            stored_artifact_hash=(
+                str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
+            ),
+            source=str(candidate["source"]),
+            requested_artifact_id=artifact_id,
+            requested_artifact_hash=artifact_hash,
+            requested_runtime_exact_match_key=runtime_exact_match_key,
+            requested_portable_exact_match_key=portable_runtime_exact_match_key,
+            requested_global_exact_match_key=global_runtime_exact_match_key,
+        )
+
     def _cached_policy_bundle_decision_identities(
         self,
         *,
@@ -1755,28 +1789,14 @@ class StorePolicyMixin:
             has_local_rows = any(not is_remote_policy_source(str(candidate["source"])) for candidate in rows)
             if not has_local_rows:
                 for candidate in rows:
-                    if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
-                        continue
-                    if (
-                        str(candidate["source"]) == "policy-bundle"
-                        and self._materialized_policy_bundle_row_identity(candidate)
-                        not in policy_bundle_decision_identities
-                    ):
-                        continue
-                    if _scoped_runtime_row_requires_exact_match(
-                        scope=str(candidate["scope"]),
-                        stored_artifact_id=(
-                            str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
-                        ),
-                        stored_artifact_hash=(
-                            str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
-                        ),
-                        source=str(candidate["source"]),
-                        requested_artifact_id=artifact_id,
-                        requested_artifact_hash=artifact_hash,
-                        requested_runtime_exact_match_key=runtime_exact_match_key,
-                        requested_portable_exact_match_key=portable_runtime_exact_match_key,
-                        requested_global_exact_match_key=global_runtime_exact_match_key,
+                    if not self._runtime_policy_row_is_eligible(
+                        candidate,
+                        policy_bundle_decision_identities=policy_bundle_decision_identities,
+                        artifact_id=artifact_id,
+                        artifact_hash=artifact_hash,
+                        runtime_exact_match_key=runtime_exact_match_key,
+                        portable_runtime_exact_match_key=portable_runtime_exact_match_key,
+                        global_runtime_exact_match_key=global_runtime_exact_match_key,
                     ):
                         continue
                     integrity_result = self._policy_integrity_result_for_row(
@@ -1852,28 +1872,14 @@ class StorePolicyMixin:
             trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
             key, key_id = self._policy_integrity_secret_material(create=True)
             for candidate in rows:
-                if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
-                    continue
-                if (
-                    str(candidate["source"]) == "policy-bundle"
-                    and self._materialized_policy_bundle_row_identity(candidate)
-                    not in policy_bundle_decision_identities
-                ):
-                    continue
-                if _scoped_runtime_row_requires_exact_match(
-                    scope=str(candidate["scope"]),
-                    stored_artifact_id=(
-                        str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
-                    ),
-                    stored_artifact_hash=(
-                        str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
-                    ),
-                    source=str(candidate["source"]),
-                    requested_artifact_id=artifact_id,
-                    requested_artifact_hash=artifact_hash,
-                    requested_runtime_exact_match_key=runtime_exact_match_key,
-                    requested_portable_exact_match_key=portable_runtime_exact_match_key,
-                    requested_global_exact_match_key=global_runtime_exact_match_key,
+                if not self._runtime_policy_row_is_eligible(
+                    candidate,
+                    policy_bundle_decision_identities=policy_bundle_decision_identities,
+                    artifact_id=artifact_id,
+                    artifact_hash=artifact_hash,
+                    runtime_exact_match_key=runtime_exact_match_key,
+                    portable_runtime_exact_match_key=portable_runtime_exact_match_key,
+                    global_runtime_exact_match_key=global_runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(

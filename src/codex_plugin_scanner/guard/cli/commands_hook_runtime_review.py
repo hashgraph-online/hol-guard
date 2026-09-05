@@ -24,7 +24,7 @@ if TYPE_CHECKING:
         _should_emit_prequeue_native_hook_response,
     )
     from .commands_support_interaction import (
-        _attach_primary_approval_link,
+        _bind_hook_blocked_operation_queue,
         _codex_bridge_wait_process,
         _codex_browser_wait_metadata,
         _preferred_approval_review_url,
@@ -404,26 +404,20 @@ def _review_runtime_artifact_hook(
                     approval_center_url=approval_center_url,
                     now=_now(),
                 )
+                _bind_hook_blocked_operation_queue(
+                    harness=args.harness,
+                    approval_center_url=approval_center_url,
+                    response_payload=response_payload,
+                    queued=queued,
+                )
             else:
-                operation = blocked_operation.get("operation")
-                if not isinstance(operation, dict):
-                    operation = {}
-                queued = blocked_operation.get("approval_requests")
-                if not isinstance(queued, list):
-                    queued = []
-                operation_id = _optional_string(operation.get("operation_id"))
-                if operation_id is not None:
-                    response_payload["operation_id"] = operation_id
-                response_payload["operation"] = operation
-                approval_request_ids = operation.get("approval_request_ids")
-                if isinstance(approval_request_ids, list):
-                    response_payload["approval_request_ids"] = approval_request_ids
-            response_payload["approval_requests"] = queued
-            _attach_primary_approval_link(
-                response_payload,
-                harness=_optional_string(args.harness) or args.harness,
-                approval_center_url=approval_center_url,
-            )
+                queued = _bind_hook_blocked_operation_queue(
+                    harness=args.harness,
+                    approval_center_url=approval_center_url,
+                    response_payload=response_payload,
+                    queued=[],
+                    blocked_operation=blocked_operation,
+                )
             _attach_cursor_approval_request_ids(
                 args=args,
                 event_name=event_name,
