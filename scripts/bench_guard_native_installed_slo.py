@@ -64,7 +64,7 @@ _DEFAULT_RECOVERY_ITERATIONS = 3
 _MAX_READINESS_SAMPLES = 8
 _MAX_CONCURRENCY = 64
 # RSS includes this benchmark process as well as the daemon's descendants. Keep
-# the bounded c64 load-generator workers alive across baseline and stress so
+# the bounded c64 load-generator workers alive across baseline and c64 stress so
 # their thread allocation cannot be misclassified as resident runtime growth.
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 _CONCURRENT_WAVE_TIMEOUT_SECONDS = 5.0
@@ -351,6 +351,10 @@ def _measure_slo(
 ) -> SloMeasurements:
     rss_baseline = 0
     rss_peak = 0
+    concurrent_16: list[Observation] = []
+    concurrent_64: list[Observation] = []
+    errors_16 = 0
+    errors_64 = 0
     # Cold probes stop the session's resident before each one-shot call. Keep
     # them in a separate session so this lifecycle exercise does not consume
     # the bounded restart budget used by warmup and recovery.
@@ -367,6 +371,26 @@ def _measure_slo(
             "serialized resident pool warmup did not stay on the allowed native route",
         )
         ready_workers = _stabilize_ready_hook_workers(session)
+
+        # Keep the c16 latency proof faithful to production contention: it needs
+        # only sixteen client workers. A prestarted c64 client pool materially
+        # perturbs the Intel macOS hosted runner even while 48 threads are idle.
+        native_overloads_before_16 = session.native_overload_count()
+        if include_capacity:
+            with ThreadPoolExecutor(max_workers=16) as latency_executor:
+                concurrent_16, errors_16 = _run_concurrent(session, routes, 16, latency_executor)
+        native_overloads_after_16 = session.native_overload_count()
+        if include_capacity:
+            concurrent_16 = _classify_native_overloads(
+                concurrent_16,
+                overload_delta=native_overloads_after_16 - native_overloads_before_16,
+            )
+
+        # RSS is a separate steady-state proof. Prime the c64 load generator
+        # before the RSS baseline, then keep exactly that allocation alive for
+        # the c64 wave so benchmark-side thread stacks cannot appear as runtime
+        # growth. The preceding c16 proof is folded into steady state instead of
+        # trading latency validity for RSS accounting.
         load_concurrency = _MAX_CONCURRENCY if include_capacity else ready_workers
         with ThreadPoolExecutor(max_workers=load_concurrency) as load_executor:
             _prime_load_executor(load_executor, load_concurrency)
@@ -381,27 +405,17 @@ def _measure_slo(
                 expected_warmup_count=ready_workers,
             )
             rss_peak = rss_baseline
-            native_overloads_before_16 = session.native_overload_count()
-            concurrent_16, errors_16 = (
-                _run_concurrent(session, routes, 16, load_executor) if include_capacity else ([], 0)
-            )
-            native_overloads_after_16 = session.native_overload_count()
-            native_overloads_before_64 = native_overloads_after_16
-            concurrent_64, errors_64 = (
-                _run_concurrent(session, routes, 64, load_executor) if include_capacity else ([], 0)
-            )
+            native_overloads_before_64 = session.native_overload_count()
+            if include_capacity:
+                concurrent_64, errors_64 = _run_concurrent(session, routes, 64, load_executor)
             native_overloads_after_64 = session.native_overload_count()
             if include_capacity:
-                concurrent_16 = _classify_native_overloads(
-                    concurrent_16,
-                    overload_delta=native_overloads_after_16 - native_overloads_before_16,
-                )
                 concurrent_64 = _classify_native_overloads(
                     concurrent_64,
                     overload_delta=native_overloads_after_64 - native_overloads_before_64,
                 )
             # The post-stress sample keeps daemon/runtime growth in the comparison
-            # while the same bounded load-generator allocation stays in baseline.
+            # while the same bounded c64 load-generator allocation stays in baseline.
             rss_peak = max(rss_peak, process_rss_bytes())
         readiness = [session.readiness_ms]
     if readiness_samples > 1:
