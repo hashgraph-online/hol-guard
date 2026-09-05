@@ -113,7 +113,7 @@ export function PolicyExceptionsToolbar({
       <ActionButton variant="primary" onClick={onRequestException} disabled={!cloudConnected}>
         + Request cloud exception
       </ActionButton>
-      {cloudControlsUrl ? (
+      {cloudConnected && cloudControlsUrl ? (
         <ActionButton href={cloudControlsUrl} variant="secondary">
           <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Open Guard Cloud

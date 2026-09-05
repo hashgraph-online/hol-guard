@@ -222,7 +222,7 @@ assert(
 const toolbarMarkup = renderToStaticMarkup(
   <PolicyExceptionsToolbar
     cloudConnected={false}
-    cloudControlsUrl={null}
+    cloudControlsUrl="https://hol.org/guard/connect"
     onRequestException={() => undefined}
   />,
 );
@@ -232,7 +232,11 @@ assert(
 );
 assert(
   !toolbarMarkup.includes('href="https://hol.org/guard/connect"'),
-  "exceptions toolbar must not blind-link to the static connect page",
+  "exceptions toolbar must not blind-link to the static connect page while disconnected",
+);
+assert(
+  !toolbarMarkup.includes("Open Guard Cloud"),
+  "exceptions toolbar should not offer a cloud dashboard link while disconnected",
 );
 
 console.log("connect-guard-cloud-button.test.tsx passed");
