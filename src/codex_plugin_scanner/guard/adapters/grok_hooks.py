@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import TextIO
 
 from .grok_approval_resume import grok_resume_metadata_from_guard_payload
+from .hook_payloads import normalize_session_and_workspace_aliases
 
 _GROK_TOOL_ALIASES: dict[str, str] = {
     "run_terminal_command": "Bash",
@@ -157,15 +158,7 @@ def prepare_grok_hook_payload(payload: Mapping[str, object]) -> dict[str, object
         tool_input = mapped_input
     elif tool_input is not None:
         normalized["tool_input"] = tool_input
-    session_id = normalized.get("session_id")
-    if session_id is None and isinstance(normalized.get("sessionId"), str):
-        normalized["session_id"] = normalized["sessionId"]
-    workspace_root = normalized.get("workspace_root")
-    if workspace_root is None and isinstance(normalized.get("workspaceRoot"), str):
-        workspace_root = normalized["workspaceRoot"]
-        normalized["workspace_root"] = workspace_root
-    if workspace_root is None and isinstance(normalized.get("cwd"), str):
-        normalized["workspace_root"] = normalized["cwd"]
+    normalize_session_and_workspace_aliases(normalized)
     if isinstance(normalized.get("permissionMode"), str) and "permission_mode" not in normalized:
         normalized["permission_mode"] = normalized["permissionMode"]
     if isinstance(normalized.get("subagentType"), str) and "subagent_type" not in normalized:
