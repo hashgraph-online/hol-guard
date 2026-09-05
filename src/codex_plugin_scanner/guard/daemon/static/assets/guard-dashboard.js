@@ -19936,11 +19936,11 @@ function updateStatusLabel(status) {
   }
   return `Version ${status.current_version}`;
 }
-function shouldPromptRecoveryReinstall$1(status) {
+function shouldPromptRecoveryReinstall(status) {
   return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
 function recoveryReinstallHelpCopy(status) {
-  if (!shouldPromptRecoveryReinstall$1(status)) {
+  if (!shouldPromptRecoveryReinstall(status)) {
     return null;
   }
   const blockedReason = status?.blocked_reason ?? "";

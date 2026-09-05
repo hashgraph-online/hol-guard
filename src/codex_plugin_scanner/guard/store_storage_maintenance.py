@@ -24,6 +24,8 @@ _MAX_BATCH_SIZE: Final = 10_000
 
 
 class _ConnectionOwner(Protocol):
+    guard_home: Path
+
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
