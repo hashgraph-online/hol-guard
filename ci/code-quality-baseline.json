@@ -514,7 +514,7 @@
     "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py": 1074,
     "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py": 1074,
     "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py": 807,
-    "src/codex_plugin_scanner/guard/cli/connect_flow.py": 1476,
+    "src/codex_plugin_scanner/guard/cli/connect_flow.py": 1493,
     "src/codex_plugin_scanner/guard/cli/install_commands.py": 671,
     "src/codex_plugin_scanner/guard/cli/product.py": 636,
     "src/codex_plugin_scanner/guard/cli/render.py": 2913,

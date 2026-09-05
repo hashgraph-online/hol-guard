@@ -7,12 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlparse
-from urllib.request import Request, urlopen
 
 from .checks.manifest import load_manifest
+from .github_request import github_request_json
 from .models import GRADE_LABELS, ScanResult
 
-REQUEST_TIMEOUT_SECONDS = 30
 SUBMISSION_URL_MARKER_PREFIX = "<!-- plugin-scanner-plugin-url: "
 LEGACY_SUBMISSION_URL_MARKER_PREFIX = "<!-- codex-plugin-scanner-plugin-url: "
 SUBMISSION_URL_MARKER_SUFFIX = " -->"
@@ -103,15 +102,7 @@ def _request_json(
     token: str,
     payload: dict[str, object] | None = None,
 ) -> dict[str, object] | list[dict[str, object]]:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = Request(url, data=data, method=method)
-    request.add_header("Accept", "application/vnd.github+json")
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("User-Agent", "plugin-scanner")
-    if data is not None:
-        request.add_header("Content-Type", "application/json")
-    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return github_request_json(method, url, token, payload, user_agent="plugin-scanner")
 
 
 def resolve_submission_metadata(
