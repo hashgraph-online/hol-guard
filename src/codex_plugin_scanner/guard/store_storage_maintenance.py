@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Final, Protocol, cast
 
 from .sqlite_recovery import prune_quarantined_store_snapshots
