@@ -143,6 +143,7 @@ _DISPLAY_NAMES = {
     "pi": "Pi",
     "omp": "Oh My Pi",
     "zcode": "ZCode",
+    "termcoder": "TermCoder",
 }
 
 
@@ -423,6 +424,20 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "and background sessions that run without an active terminal do not surface hook events."
         ),
         smoke_command="hol-guard install zcode --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="termcoder",
+        install_aliases=("termcoder", "term-code"),
+        config_paths=("~/.config/termcoder/config.json", "~/.config/termcoder/guard.json"),
+        event_surfaces=("shell",),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Guard observes only pre-exec shell commands from /run, BUILD/CHAT, /install, and /uninstall. "
+            "Read-only /doctor, /packages, and /git operations are intentionally outside the hook."
+        ),
+        smoke_command="hol-guard install termcoder --dry-run",
     ),
 )
 
