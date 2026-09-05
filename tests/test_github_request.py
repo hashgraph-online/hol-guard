@@ -6,8 +6,7 @@ import json
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from urllib.error import URLError
 from urllib.request import Request
 
@@ -88,13 +87,19 @@ def test_github_request_json_rejects_cross_host_redirects(local_api_server: _Rec
         )
 
 
+def _unused_request() -> Request:
+    return Request("https://unused.example.test/probe")
+
+
 def test_redirect_handler_rejects_remote_https_to_http_downgrade() -> None:
     handler = _SameHostRedirectHandler("api.github.example.com")
     with pytest.raises(URLError, match="downgraded"):
-        handler.redirect_request(cast("Request", None), None, 302, "Found", None, "http://api.github.example.com/steal")
+        handler.redirect_request(
+            _unused_request(), None, 302, "Found", None, "http://api.github.example.com/steal"
+        )
 
 
 def test_redirect_handler_rejects_remote_cross_host_before_downgrade_check() -> None:
     handler = _SameHostRedirectHandler("api.github.example.com")
     with pytest.raises(URLError, match="cross-host"):
-        handler.redirect_request(cast("Request", None), None, 302, "Found", None, "http://evil.example.com/steal")
+        handler.redirect_request(_unused_request(), None, 302, "Found", None, "http://evil.example.com/steal")
