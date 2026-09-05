@@ -1,0 +1,53 @@
+name: Branch kubectl dry-run diagnostic
+
+on:
+  push:
+    branches:
+      - fix/docker-kubernetes-command-coverage
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/docker-kubernetes-command-coverage
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Print command inspection diagnostics
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+          from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+          from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+          from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+          from codex_plugin_scanner.guard.runtime.command_extension_interaction import classify_command_extension_interaction
+
+          commands = [
+              'kubectl autoscale deployment api --min=2 --max=4 --dry-run=server',
+              'kubectl replace --force -f deployment.yaml --dry-run=server',
+              'kubectl run debug --image=alpine --dry-run=client',
+              'kubectl.exe drain node-a --dry-run=server',
+          ]
+          root = Path.cwd()
+          for command in commands:
+              canonical = parse_shell_command(command, cwd=root, home_dir=root)
+              observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(canonical)
+              interaction = classify_command_extension_interaction(canonical, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+              payload = inspect_command(command, cwd=root, home_dir=root)
+              print('COMMAND', command)
+              print('INTERACTION', interaction)
+              print('PAYLOAD', json.dumps(payload, sort_keys=True))
+              for observation in observations:
+                  if observation.matcher_evidence:
+                      print('OBS', json.dumps(observation.to_dict(), sort_keys=True))
+          PY
