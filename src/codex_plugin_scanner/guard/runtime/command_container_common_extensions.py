@@ -6,8 +6,21 @@ from .command_common_extension_helpers import executable_matcher, help_variant, 
 from .command_rules import AnyMatcher, ExecutableMatcher
 
 _DOCKER = frozenset({"docker", "docker.exe"})
-_DOCKER_COMPOSE = frozenset({"docker-compose", "docker-compose.exe"})
-_DOCKER_GLOBAL_OPTIONS = frozenset({"--config", "--context", "--host", "-h", "--log-level"})
+_DOCKER_GLOBAL_OPTIONS = frozenset(
+    {
+        "--config",
+        "--context",
+        "-c",
+        "--host",
+        "-H",
+        "--log-level",
+        "-l",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+    }
+)
+_DOCKER_GLOBAL_FLAGS = frozenset({"--debug", "-D", "--tls", "--tlsverify"})
 _DOCKER_COMPOSE_OPTIONS = frozenset(
     {
         "--ansi",
@@ -42,7 +55,7 @@ def _docker(
         forbidden_flags=forbidden_flags,
         leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
         interspersed_options_with_values=interspersed_options_with_values,
-        interspersed_flags=interspersed_flags,
+        interspersed_flags=_DOCKER_GLOBAL_FLAGS | interspersed_flags,
         options_with_values=options_with_values,
     )
 
@@ -58,21 +71,6 @@ def _compose(
         *subcommands,
         required_flags=required_flags,
         forbidden_flags=forbidden_flags,
-        interspersed_options_with_values=_DOCKER_COMPOSE_OPTIONS,
-        interspersed_flags=_DOCKER_COMPOSE_FLAGS,
-        options_with_values=options_with_values,
-    )
-
-
-def _legacy_compose(
-    *subcommands: str,
-    required_flags: frozenset[str] = _EMPTY,
-    options_with_values: frozenset[str] = _EMPTY,
-) -> ExecutableMatcher:
-    return executable_matcher(
-        _DOCKER_COMPOSE,
-        *subcommands,
-        required_flags=required_flags,
         interspersed_options_with_values=_DOCKER_COMPOSE_OPTIONS,
         interspersed_flags=_DOCKER_COMPOSE_FLAGS,
         options_with_values=options_with_values,
@@ -97,18 +95,17 @@ _NETWORK_PRUNE = _docker("network", "prune")
 _BUILD_CACHE_PRUNE = AnyMatcher(matchers=(_docker("builder", "prune"), _docker("buildx", "prune")))
 _BUILDX_REMOVE = _docker("buildx", "rm")
 _COMPOSE_DESTRUCTIVE_CLEANUP = AnyMatcher(
-    matchers=tuple(
-        matcher
-        for command in ("down", "rm")
-        for flag in ("--volumes", "-v")
-        for matcher in (
-            _compose(command, required_flags=frozenset({flag})),
-            _legacy_compose(command, required_flags=frozenset({flag})),
-        )
-    )
-    + (
-        _compose("down", required_flags=frozenset({"--rmi"})),
-        _legacy_compose("down", required_flags=frozenset({"--rmi"})),
+    matchers=(
+        *(
+            _compose(command, required_flags=frozenset({flag}))
+            for command in ("down", "rm")
+            for flag in ("--volumes", "-v")
+        ),
+        _compose(
+            "down",
+            required_flags=frozenset({"--rmi"}),
+            options_with_values=frozenset({"--rmi"}),
+        ),
     )
 )
 _CONTAINER_EXEC = AnyMatcher(
@@ -132,11 +129,6 @@ _PRIVILEGED_EXEC = AnyMatcher(
             options_with_values=_EXEC_OPTIONS,
         ),
         _compose("exec", required_flags=frozenset({"--privileged"}), options_with_values=_EXEC_OPTIONS),
-        _legacy_compose(
-            "exec",
-            required_flags=frozenset({"--privileged"}),
-            options_with_values=_EXEC_OPTIONS,
-        ),
     )
 )
 _SWARM_REMOVE = AnyMatcher(
@@ -287,7 +279,9 @@ CONTAINER_COMMON_COMMAND_RULES = (
         matcher=_COMPOSE_DESTRUCTIVE_CLEANUP,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell",),
-        safer_alternative="Run ordinary Compose teardown first and remove volumes or images only after reviewing retained data.",
+        safer_alternative=(
+            "Run ordinary Compose teardown first and remove volumes or images only after reviewing retained data."
+        ),
         example_command="docker compose down --volumes",
         severity="critical",
         safe_variants=(help_variant(_COMPOSE_DESTRUCTIVE_CLEANUP),),
