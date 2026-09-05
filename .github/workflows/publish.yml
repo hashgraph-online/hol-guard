@@ -895,8 +895,8 @@ jobs:
               exit 1
             fi
             status=$(jq -r '.status' <<< "$result")
-            if [[ "$status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry testpypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist; then
+            if [[ "$status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry testpypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist || exit 1
               break
             fi
             if [[ "$status" != "absent" && "$status" != "exact" ]] || [[ "$attempt" == "60" ]]; then
@@ -1040,8 +1040,8 @@ jobs:
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure; then
+            if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure || exit 1
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
@@ -1366,8 +1366,8 @@ jobs:
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full; then
+            if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
