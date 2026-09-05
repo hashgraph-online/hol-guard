@@ -18,15 +18,21 @@ def _install_state_binding_fakes(
     *,
     closed: list[tuple[object, object]],
 ) -> tuple[types.SimpleNamespace, tuple[object, object], tuple[object, object], set[object]]:
+    """Install deterministic handle ownership fakes for state-binding tests."""
+
     guard_handle = (object(), object())
     state_handle = (object(), object())
     live_handles = {guard_handle[1], state_handle[1]}
 
     @contextmanager
     def private_descriptor(_directory: bool):
+        """Yield a minimal private-descriptor contract for the binding."""
+
         yield object(), object(), object(), "S-1-5-21-1"
 
     def close_handle(kernel32: object, handle: object) -> None:
+        """Close each synthetic handle exactly once and record ownership release."""
+
         if handle not in live_handles:
             raise NativePolicySnapshotError("native_policy_windows_handle_close_failed")
         live_handles.remove(handle)
@@ -53,6 +59,8 @@ def _install_state_binding_fakes(
 def test_windows_private_state_binding_closes_refreshed_barrier_handle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Close the live replacement handle rather than the released stale barrier."""
+
     closed: list[tuple[object, object]] = []
     api, guard_handle, original_state_handle, live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
     restored_state_handle = (object(), object())
@@ -70,6 +78,8 @@ def test_windows_private_state_binding_closes_refreshed_barrier_handle(
 def test_windows_private_state_binding_does_not_reclose_released_barrier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Avoid a second close when a released state barrier has no replacement."""
+
     closed: list[tuple[object, object]] = []
     api, guard_handle, original_state_handle, _live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
 
@@ -84,12 +94,16 @@ def test_windows_private_state_binding_does_not_reclose_released_barrier(
 def test_windows_rename_barrier_retains_handle_when_release_close_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Retain barrier ownership until CloseHandle succeeds so outer cleanup retries."""
+
     closed: list[tuple[object, object]] = []
     api, guard_handle, original_state_handle, _live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
     original_close = api._windows_close_handle
     failed_release = False
 
     def fail_first_state_close(kernel32: object, handle: object) -> None:
+        """Fail the first state-barrier release while allowing cleanup retry."""
+
         nonlocal failed_release
         if handle == original_state_handle[1] and not failed_release:
             failed_release = True
