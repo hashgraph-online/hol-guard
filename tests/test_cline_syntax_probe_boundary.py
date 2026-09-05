@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 
@@ -64,7 +64,7 @@ def test_managed_probe_ends_option_parsing_and_preserves_exit_status(tmp_path, m
 
     assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "return_code": 1}
     run.assert_called_once_with(
-        ["node", "--check", "--", str(path)], capture_output=True, text=True, timeout=5, check=False
+        ["node", "--check", "--", str(path)], capture_output=True, text=True, timeout=5, check=False, env=ANY
     )
 
 

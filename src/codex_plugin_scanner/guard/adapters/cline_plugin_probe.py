@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from collections.abc import Mapping
 
+from ..codex_hook_launch_runtime import isolated_hook_environment
 from .base import HarnessContext
 from .cline_paths import cline_plugin_root
 
@@ -14,7 +15,6 @@ def probe_cline_plugin_syntax(context: HarnessContext, state: Mapping[str, objec
     """Validate generated JavaScript without executing plugin code when Node is available."""
 
     path_value = state.get("index_path")
-    node = shutil.which("node")
     if not isinstance(path_value, str):
         return {"ok": False, "reason": "plugin_state_missing"}
     try:
@@ -23,6 +23,7 @@ def probe_cline_plugin_syntax(context: HarnessContext, state: Mapping[str, objec
         return {"ok": False, "reason": "plugin_path_unsafe"}
     if path_value != str(index_path):
         return {"ok": False, "reason": "plugin_state_path_mismatch"}
+    node = shutil.which("node")
     if node is None:
         return {"ok": True, "skipped": True, "reason": "node_not_available"}
     try:
@@ -32,6 +33,7 @@ def probe_cline_plugin_syntax(context: HarnessContext, state: Mapping[str, objec
             text=True,
             timeout=5,
             check=False,
+            env=isolated_hook_environment(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return {"ok": False, "reason": type(exc).__name__}

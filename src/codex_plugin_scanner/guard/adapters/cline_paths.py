@@ -81,13 +81,20 @@ def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> None:
 
     home = context.home_dir.resolve(strict=False)
     guard_home = context.guard_home.resolve(strict=False)
+    lexical_parent = Path(os.path.abspath(path.parent))
+    lexical_path = Path(os.path.abspath(path))
+    lexical_roots = {home, guard_home, Path(os.path.abspath(context.home_dir)), Path(os.path.abspath(context.guard_home))}
+    if not any(lexical_parent.is_relative_to(root) and lexical_path.is_relative_to(root) for root in lexical_roots):
+        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
     data_root = cline_data_dir(context).resolve(strict=False)
     parent = path.parent.resolve(strict=False)
     permitted_roots = (home, guard_home, data_root)
     if not any(parent == root or parent.is_relative_to(root) for root in permitted_roots):
         raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
 
-    lexical_roots = {context.home_dir.absolute(), context.guard_home.absolute(), cline_data_dir(context).absolute()}
+    # Canonical paths from persisted state can use the physical trusted root.
+    lexical_roots = {home, guard_home, context.home_dir.absolute(), context.guard_home.absolute()}
+    lexical_roots.add(cline_data_dir(context).absolute())
     current = path.parent.absolute()
     while True:
         if current.is_symlink():
