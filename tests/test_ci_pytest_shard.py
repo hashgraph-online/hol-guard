@@ -50,7 +50,9 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "name: pytest-shard-plan" in tests_job
     assert "shard-%02d.txt" in tests_job
     assert "python scripts/ci/pytest_shard.py" not in tests_job
-    assert 'test "${#reports[@]}" -eq 96' in workflow
+    assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
+    sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
+    assert 'test "${#reports[@]}" -eq 96' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
@@ -65,3 +67,26 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     for job_name, next_job_name, expected_count in cache_consumers:
         job = _workflow_job(workflow, job_name, next_job_name)
         assert job.count("save-cache: false") >= expected_count
+
+
+def test_sonar_scope_includes_native_rust_workspace() -> None:
+    config = (ROOT / "sonar-project.properties").read_text(encoding="utf-8")
+    properties = dict(
+        line.split("=", 1)
+        for line in config.splitlines()
+        if line and not line.startswith("#") and "=" in line
+    )
+
+    assert properties["sonar.sources"] == "src,rust"
+    assert properties["sonar.tests"] == "tests,rust"
+    assert properties["sonar.test.inclusions"] == (
+        "**/test_*.py,rust/**/tests/**/*.rs,rust/**/*_tests.rs"
+    )
+    assert properties["sonar.rust.cargo.manifestPaths"] == "rust/Cargo.toml"
+    assert "src/codex_plugin_scanner/guard/daemon/static/**" in properties["sonar.exclusions"]
+    assert "rust/**/tests/**" in properties["sonar.exclusions"]
+    assert "rust/**/*_tests.rs" in properties["sonar.exclusions"]
+    assert "src/codex_plugin_scanner/guard/daemon/static/**" in properties["sonar.cpd.exclusions"]
+    assert "tests/**" in properties["sonar.cpd.exclusions"]
+    assert "rust/**/tests/**" in properties["sonar.cpd.exclusions"]
+    assert "rust/**/*_tests.rs" in properties["sonar.cpd.exclusions"]
