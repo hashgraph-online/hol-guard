@@ -77,35 +77,41 @@ def is_cline_owned_path(context: HarnessContext, path: Path) -> bool:
 
 
 def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> None:
-    """Reject writes outside known roots or through an existing symlink ancestor."""
+    """Reject untrusted paths and symlink nodes before resolving the destination."""
 
+    if ".." in path.parts:
+        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
     home = context.home_dir.resolve(strict=False)
     guard_home = context.guard_home.resolve(strict=False)
-    lexical_parent = Path(os.path.abspath(path.parent))
-    lexical_path = Path(os.path.abspath(path))
-    lexical_roots = {home, guard_home, Path(os.path.abspath(context.home_dir)), Path(os.path.abspath(context.guard_home))}
-    if not any(lexical_parent.is_relative_to(root) and lexical_path.is_relative_to(root) for root in lexical_roots):
-        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
-    data_root = cline_data_dir(context).resolve(strict=False)
-    parent = path.parent.resolve(strict=False)
-    permitted_roots = (home, guard_home, data_root)
-    if not any(parent == root or parent.is_relative_to(root) for root in permitted_roots):
+    home_alias = Path(os.path.abspath(context.home_dir))
+    guard_alias = Path(os.path.abspath(context.guard_home))
+    destination = Path(os.path.abspath(path))
+    parent = destination.parent
+    if not (
+        (destination.is_relative_to(home) and parent.is_relative_to(home))
+        or (destination.is_relative_to(guard_home) and parent.is_relative_to(guard_home))
+        or (destination.is_relative_to(home_alias) and parent.is_relative_to(home_alias))
+        or (destination.is_relative_to(guard_alias) and parent.is_relative_to(guard_alias))
+    ):
         raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
 
-    # Canonical paths from persisted state can use the physical trusted root.
-    lexical_roots = {home, guard_home, context.home_dir.absolute(), context.guard_home.absolute()}
-    lexical_roots.add(cline_data_dir(context).absolute())
-    current = path.parent.absolute()
-    while True:
-        if current.is_symlink():
-            raise RuntimeError(f"Cline destination parent is a symlink: {current}")
-        if current in lexical_roots:
-            break
+    # Probe only lexically contained nodes. Resolving first can follow an
+    # untrusted symlink even when the destination would eventually be rejected.
+    lexical_roots = {home, guard_home, home_alias, guard_alias}
+    ancestors = [parent]
+    while ancestors[-1] not in lexical_roots:
+        current = ancestors[-1]
         if current == current.parent:
             raise RuntimeError("Cline destination could not be anchored to a trusted root")
-        current = current.parent
-    if path.is_symlink():
-        raise RuntimeError(f"Cline destination is a symlink: {path}")
+        ancestors.append(current.parent)
+    for current in reversed(ancestors):
+        if current.is_symlink():
+            raise RuntimeError(f"Cline destination parent is a symlink: {current}")
+    if destination.is_symlink():
+        raise RuntimeError(f"Cline destination is a symlink: {destination}")
+    resolved_parent = parent.resolve(strict=False)
+    if not (resolved_parent.is_relative_to(home) or resolved_parent.is_relative_to(guard_home)):
+        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
 
 
 __all__ = [
