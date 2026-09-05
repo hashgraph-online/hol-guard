@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from .command_container_common_extensions import CONTAINER_COMMON_COMMAND_RULES
 from .command_extension_specs import CommandExtensionSpec
+from .command_kubernetes_common_extensions import KUBERNETES_COMMON_COMMAND_RULES
 from .command_rules import (
     AnyMatcher,
     CommandRuleSeverity,
@@ -11,14 +13,80 @@ from .command_rules import (
     ExecutableMatcher,
 )
 
-_DOCKER_GLOBAL_OPTIONS = frozenset({"--config", "--context", "--host", "-h", "--log-level"})
-_KUBECTL_GLOBAL_OPTIONS = frozenset(
-    {"--as", "--as-group", "--cluster", "--context", "--kubeconfig", "--namespace", "-n", "--server", "--user"}
+_DOCKER_EXECUTABLES = frozenset({"docker", "docker.exe"})
+_KUBECTL_EXECUTABLES = frozenset({"kubectl", "kubectl.exe"})
+_HELM_EXECUTABLES = frozenset({"helm", "helm.exe"})
+_DOCKER_GLOBAL_OPTIONS = frozenset(
+    {
+        "--config",
+        "--context",
+        "-c",
+        "--host",
+        "-H",
+        "--log-level",
+        "-l",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+    }
 )
-_HELM_GLOBAL_OPTIONS = frozenset({"--kube-context", "--kubeconfig", "--namespace", "-n", "--registry-config"})
+_DOCKER_GLOBAL_FLAGS = frozenset({"--debug", "-D", "--tls", "--tlsverify"})
+_KUBECTL_GLOBAL_OPTIONS = frozenset(
+    {
+        "--as",
+        "--as-group",
+        "--as-uid",
+        "--cache-dir",
+        "--certificate-authority",
+        "--client-certificate",
+        "--client-key",
+        "--cluster",
+        "--context",
+        "--kubeconfig",
+        "--namespace",
+        "-n",
+        "--password",
+        "--profile-output",
+        "--request-timeout",
+        "--server",
+        "-s",
+        "--tls-server-name",
+        "--token",
+        "--user",
+        "--username",
+    }
+)
+_KUBECTL_GLOBAL_FLAGS = frozenset(
+    {
+        "--disable-compression",
+        "--insecure-skip-tls-verify",
+        "--match-server-version",
+        "--warnings-as-errors",
+    }
+)
+_HELM_GLOBAL_OPTIONS = frozenset(
+    {
+        "--burst-limit",
+        "--kube-apiserver",
+        "--kube-as-group",
+        "--kube-as-user",
+        "--kube-ca-file",
+        "--kube-context",
+        "--kube-token",
+        "--kubeconfig",
+        "--namespace",
+        "-n",
+        "--qps",
+        "--registry-config",
+        "--repository-cache",
+        "--repository-config",
+    }
+)
+_HELM_GLOBAL_FLAGS = frozenset({"--debug", "--kube-insecure-skip-tls-verify"})
 _TERRAFORM_GLOBAL_OPTIONS = frozenset({"-chdir"})
 _PULUMI_GLOBAL_OPTIONS = frozenset({"--cwd", "-c", "--stack", "-s"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
+_EMPTY_OPTION_REQUIREMENTS: tuple[tuple[str, frozenset[str]], ...] = ()
 
 
 def _executable_matcher(
@@ -26,6 +94,9 @@ def _executable_matcher(
     *subcommands: str,
     required_flags: frozenset[str] = _EMPTY_STRING_SET,
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    interspersed_flags: frozenset[str] = _EMPTY_STRING_SET,
+    options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,
 ) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=executables,
@@ -33,6 +104,9 @@ def _executable_matcher(
         required_flags=required_flags,
         allow_leading_options=bool(leading_options_with_values),
         leading_options_with_values=leading_options_with_values,
+        interspersed_flags=interspersed_flags,
+        options_with_values=options_with_values,
+        required_option_values=required_option_values,
     )
 
 
@@ -41,6 +115,7 @@ def _flag_variants(
     *subcommands: str,
     flags: frozenset[str],
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    interspersed_flags: frozenset[str] = _EMPTY_STRING_SET,
 ) -> tuple[ExecutableMatcher, ...]:
     return tuple(
         _executable_matcher(
@@ -48,6 +123,7 @@ def _flag_variants(
             *subcommands,
             required_flags=frozenset({flag}),
             leading_options_with_values=leading_options_with_values,
+            interspersed_flags=interspersed_flags,
         )
         for flag in sorted(flags)
     )
@@ -63,6 +139,9 @@ def _help_variant(matcher: ExecutableMatcher) -> CommandSafeVariant:
             required_flags=frozenset({"--help"}),
             allow_leading_options=matcher.allow_leading_options,
             leading_options_with_values=matcher.leading_options_with_values,
+            interspersed_options_with_values=matcher.interspersed_options_with_values,
+            interspersed_flags=matcher.interspersed_flags,
+            options_with_values=matcher.options_with_values,
         ),
     )
 
@@ -75,6 +154,9 @@ def _help_variant_for_any(matcher: AnyMatcher) -> CommandSafeVariant:
             required_flags=frozenset({"--help"}),
             allow_leading_options=child.allow_leading_options,
             leading_options_with_values=child.leading_options_with_values,
+            interspersed_options_with_values=child.interspersed_options_with_values,
+            interspersed_flags=child.interspersed_flags,
+            options_with_values=child.options_with_values,
         )
         for child in matcher.matchers
         if isinstance(child, ExecutableMatcher)
@@ -92,16 +174,41 @@ def _kubernetes_dry_run_variant(subcommand: str) -> CommandSafeVariant:
     return CommandSafeVariant(
         variant_id="dry-run",
         title=f"Kubernetes {subcommand} preview",
-        matcher=AnyMatcher(
-            matchers=tuple(
-                _executable_matcher(
-                    frozenset({"kubectl"}),
-                    subcommand,
-                    required_flags=frozenset({f"--dry-run={mode}"}),
-                    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-                )
-                for mode in ("client", "server")
-            )
+        matcher=_executable_matcher(
+            _KUBECTL_EXECUTABLES,
+            subcommand,
+            leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
+            interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
+            options_with_values=frozenset({"--dry-run"}),
+            required_option_values=(("--dry-run", frozenset({"client", "server"})),),
+        ),
+    )
+
+
+def _helm_dry_run_variants(subcommand: str, title: str) -> tuple[CommandSafeVariant, ...]:
+    return (
+        CommandSafeVariant(
+            variant_id="dry-run",
+            title=title,
+            matcher=_executable_matcher(
+                _HELM_EXECUTABLES,
+                subcommand,
+                required_flags=frozenset({"--dry-run"}),
+                leading_options_with_values=_HELM_GLOBAL_OPTIONS,
+                interspersed_flags=_HELM_GLOBAL_FLAGS,
+            ),
+        ),
+        CommandSafeVariant(
+            variant_id="dry-run-mode",
+            title=title,
+            matcher=_executable_matcher(
+                _HELM_EXECUTABLES,
+                subcommand,
+                leading_options_with_values=_HELM_GLOBAL_OPTIONS,
+                interspersed_flags=_HELM_GLOBAL_FLAGS,
+                options_with_values=frozenset({"--dry-run"}),
+                required_option_values=(("--dry-run", frozenset({"client", "server"})),),
+            ),
         ),
     )
 
@@ -132,59 +239,67 @@ def _rule(
 
 
 _DOCKER_SYSTEM_PRUNE = _executable_matcher(
-    frozenset({"docker"}),
+    _DOCKER_EXECUTABLES,
     "system",
     "prune",
     leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
+    interspersed_flags=_DOCKER_GLOBAL_FLAGS,
 )
 _DOCKER_FORCE_REMOVE = AnyMatcher(
     matchers=(
         *_flag_variants(
-            frozenset({"docker"}),
+            _DOCKER_EXECUTABLES,
             "rm",
             flags=frozenset({"--force", "-f"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
+            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
         ),
         *_flag_variants(
-            frozenset({"docker"}),
+            _DOCKER_EXECUTABLES,
             "container",
             "rm",
             flags=frozenset({"--force", "-f"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
+            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
         ),
     )
 )
 _DOCKER_PRIVILEGED_RUN = AnyMatcher(
     matchers=(
         _executable_matcher(
-            frozenset({"docker"}),
+            _DOCKER_EXECUTABLES,
             "run",
             required_flags=frozenset({"--privileged"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
+            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
         ),
         _executable_matcher(
-            frozenset({"docker"}),
+            _DOCKER_EXECUTABLES,
             "container",
             "run",
             required_flags=frozenset({"--privileged"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
+            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
         ),
     )
 )
 _KUBECTL_DELETE = _executable_matcher(
-    frozenset({"kubectl"}),
+    _KUBECTL_EXECUTABLES,
     "delete",
     leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
+    interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
 )
 _KUBECTL_DRAIN = _executable_matcher(
-    frozenset({"kubectl"}),
+    _KUBECTL_EXECUTABLES,
     "drain",
     leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
+    interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
 )
 _HELM_UNINSTALL = _executable_matcher(
-    frozenset({"helm"}),
+    _HELM_EXECUTABLES,
     "uninstall",
     leading_options_with_values=_HELM_GLOBAL_OPTIONS,
+    interspersed_flags=_HELM_GLOBAL_FLAGS,
 )
 _TERRAFORM_DESTROY = _executable_matcher(
     frozenset({"terraform", "tofu"}),
@@ -274,16 +389,7 @@ DOMAIN_COMMAND_RULES = (
         safer_alternative="Run Helm uninstall with dry-run and confirm the release and namespace first.",
         safe_variants=(
             _help_variant(_HELM_UNINSTALL),
-            CommandSafeVariant(
-                variant_id="dry-run",
-                title="Helm uninstall preview",
-                matcher=_executable_matcher(
-                    frozenset({"helm"}),
-                    "uninstall",
-                    required_flags=frozenset({"--dry-run"}),
-                    leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-                ),
-            ),
+            *_helm_dry_run_variants("uninstall", "Helm uninstall preview"),
         ),
     ),
     _rule(
@@ -334,6 +440,8 @@ DOMAIN_COMMAND_RULES = (
             ),
         ),
     ),
+    *CONTAINER_COMMON_COMMAND_RULES,
+    *KUBERNETES_COMMON_COMMAND_RULES,
 )
 
 
@@ -341,16 +449,31 @@ DOMAIN_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.kubernetes-operations",
         name="Kubernetes operation protection",
-        description="Reviews cluster operations that delete resources, evict workloads, or remove releases.",
-        action_classes=("Kubernetes destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
+        description=(
+            "Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, "
+            "and Helm lifecycle operations."
+        ),
+        action_classes=(
+            "Kubernetes destructive command",
+            "Kubernetes remote execution command",
+            "Kubernetes network tunnel command",
+            "Kubernetes remote file transfer command",
+            "Kubernetes security administration command",
+        ),
+        risk_classes=("destructive_shell", "network_egress", "execution", "local_secret_read"),
         safer_alternatives=(
             "Use client-side dry runs and explicit namespaces before mutating cluster resources.",
             "Review disruption budgets and exact workload scope before draining nodes.",
+            "Use the narrowest remote session, file path, and network binding required for operational work.",
         ),
         reference_urls=(
+            "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_apply/",
             "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/",
             "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_drain/",
+            "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/",
+            "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/",
+            "https://helm.sh/docs/helm/helm_install/",
+            "https://helm.sh/docs/helm/helm_upgrade/",
             "https://helm.sh/docs/helm/helm_uninstall/",
         ),
     ),
