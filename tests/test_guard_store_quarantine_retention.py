@@ -168,3 +168,15 @@ def test_staging_sweep_refuses_a_linked_runtime_tree(tmp_path: Path) -> None:
 
     # The sweep must not follow the link: the target tree stays untouched.
     assert stale.exists()
+
+
+def test_truncated_quarantine_stamp_is_ignored_without_raising(tmp_path: Path) -> None:
+    # A 21-character digit-led name (everything but the trailing Z) must not
+    # reach the stamp comparison and crash the sweep.
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260101T00000000000", age_seconds=0)
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260905T132908303335Z-real", age_seconds=99 * 24 * 60 * 60)
+
+    removed = prune_quarantined_store_snapshots(tmp_path, keep=1)
+
+    assert removed == 1
+    assert (tmp_path / "guard.db.corrupt-20260905T132908303335Z-real").exists()

@@ -106,7 +106,7 @@ def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, s
     # Only the exact `%Y%m%dT%H%M%S%fZ` quarantine shape ranks as stamped;
     # a digit-led but malformed name must not outrank real event ids.
     if (
-        len(stamp) >= 21
+        len(stamp) >= 22
         and stamp[:8].isdigit()
         and stamp[8] == "T"
         and stamp[9:15].isdigit()
