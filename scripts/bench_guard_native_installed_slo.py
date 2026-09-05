@@ -67,10 +67,10 @@ _MAX_CONCURRENCY = 64
 # the bounded c64 load-generator workers alive across baseline and c64 stress so
 # their thread allocation cannot be misclassified as resident runtime growth.
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
-# This is intentionally one hard wall-clock limit for the complete parallel
-# wave, not 5 seconds per future. The c64 contract requires a bounded no-hang
-# result, so allowing sequential per-future timeout slack would weaken it.
-_CONCURRENT_WAVE_TIMEOUT_SECONDS = 5.0
+# AdapterSession transport I/O is individually bounded at five seconds. Every
+# worker is prestarted before a measured wave, and this one-second envelope lets
+# those transport deadlines resolve before the executor-level no-hang bound.
+_CONCURRENT_WAVE_TIMEOUT_SECONDS = 6.0
 _HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
 
@@ -221,7 +221,7 @@ def _load_executor_worker(barrier: threading.Barrier) -> int:
 
 
 def _prime_load_executor(executor: ThreadPoolExecutor, concurrency: int) -> int:
-    """Start every bounded load-generator thread before the RSS baseline."""
+    """Start every bounded load-generator thread before a measured wave."""
 
     _require(0 < concurrency <= _MAX_CONCURRENCY, "load executor concurrency exceeds benchmark limit")
     barrier = threading.Barrier(
@@ -233,6 +233,7 @@ def _prime_load_executor(executor: ThreadPoolExecutor, concurrency: int) -> int:
         barrier.wait()
         worker_ids = {future.result(timeout=_LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS) for future in futures}
     except (threading.BrokenBarrierError, TimeoutError) as error:
+        executor.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("native_installed_slo_failed: load executor prewarm timed out") from error
     _require(len(worker_ids) == concurrency, "load executor did not reach configured concurrency")
     return len(worker_ids)
@@ -252,11 +253,13 @@ def _run_concurrent(
     futures = [executor.submit(session.observe, harness, event, "1k") for harness, event in selected]
     _, unfinished = wait(futures, timeout=_CONCURRENT_WAVE_TIMEOUT_SECONDS)
     if unfinished:
-        # Cancellation only stops requests that are still queued. Any request
-        # already executing is drained by executor shutdown when this fatal
-        # benchmark error unwinds the enclosing executor context.
+        # Every worker is prestarted and AdapterSession transport calls have a
+        # five-second I/O bound, so the six-second wave envelope should outlive
+        # legitimate in-flight work. Fail closed without a blocking executor
+        # shutdown if that contract is ever violated.
         for future in unfinished:
             future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
     for future in futures:
         try:
@@ -379,14 +382,21 @@ def _measure_slo(
         ready_workers = _stabilize_ready_hook_workers(session)
 
         # Keep the c16 latency proof faithful to production contention: it needs
-        # only sixteen client workers. A prestarted c64 client pool materially
-        # perturbs the Intel macOS hosted runner even while 48 threads are idle.
-        native_overloads_before_16 = session.native_overload_count()
+        # only sixteen client workers. Prestart those exact workers so thread
+        # creation is not charged to request latency and every transport timeout
+        # begins well inside the executor-level no-hang envelope.
         if include_capacity:
-            with ThreadPoolExecutor(max_workers=16) as latency_executor:
+            latency_executor = ThreadPoolExecutor(max_workers=16)
+            try:
+                _prime_load_executor(latency_executor, 16)
+                native_overloads_before_16 = session.native_overload_count()
                 concurrent_16, errors_16 = _run_concurrent(session, routes, 16, latency_executor)
-        native_overloads_after_16 = session.native_overload_count()
-        if include_capacity:
+                native_overloads_after_16 = session.native_overload_count()
+            except BaseException:
+                latency_executor.shutdown(wait=False, cancel_futures=True)
+                raise
+            else:
+                latency_executor.shutdown(wait=True)
             concurrent_16 = _classify_native_overloads(
                 concurrent_16,
                 overload_delta=native_overloads_after_16 - native_overloads_before_16,
@@ -398,7 +408,8 @@ def _measure_slo(
         # growth. The preceding c16 proof is folded into steady state instead of
         # trading latency validity for RSS accounting.
         load_concurrency = _MAX_CONCURRENCY if include_capacity else ready_workers
-        with ThreadPoolExecutor(max_workers=load_concurrency) as load_executor:
+        load_executor = ThreadPoolExecutor(max_workers=load_concurrency)
+        try:
             _prime_load_executor(load_executor, load_concurrency)
             rss_baseline = _steady_state_rss_baseline(
                 lambda: _prewarm_ready_hook_workers(
@@ -423,6 +434,11 @@ def _measure_slo(
             # The post-stress sample keeps daemon/runtime growth in the comparison
             # while the same bounded c64 load-generator allocation stays in baseline.
             rss_peak = max(rss_peak, process_rss_bytes())
+        except BaseException:
+            load_executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            load_executor.shutdown(wait=True)
         readiness = [session.readiness_ms]
     if readiness_samples > 1:
         readiness.extend(_readiness_samples(runtime, readiness_samples - 1))
