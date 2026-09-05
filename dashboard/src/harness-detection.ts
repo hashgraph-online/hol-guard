@@ -92,7 +92,7 @@ export function resolveDetectedAppStatus(
 ): DetectedAppStatus {
   if (install !== undefined) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
-    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
+    if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
     return "partial";
   }
