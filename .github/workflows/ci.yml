@@ -391,6 +391,7 @@ jobs:
           tests/test_guard_extension_control_recovery.py
           tests/test_guard_sandbox.py
           tests/test_guard_js_lockfile_resolution_phase11.py
+          tests/test_guard_runtime_hook_scheduler.py
           --tb=short
 
   compatibility:

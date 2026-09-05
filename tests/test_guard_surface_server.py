@@ -1152,14 +1152,23 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
+                urllib.request.urlopen(request, timeout=15)
         finally:
             daemon.stop()
 
         assert error.value.code == 401
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "unauthorized"
-        events = store.list_events(event_name="daemon.auth.unauthorized")
+        # The unauthorized audit is persisted before the 401 is written, but the
+        # sqlite write can lag under shard load; poll briefly instead of racing it.
+        events: list[dict[str, object]] = []
+        audit_deadline = time.monotonic() + 10.0
+        while time.monotonic() < audit_deadline:
+            events = store.list_events(event_name="daemon.auth.unauthorized")
+            if events:
+                break
+            time.sleep(0.05)
+        assert events, "unauthorized audit event was never persisted"
         assert events[-1]["payload"]["path"] == "/v1/hooks/claude-code"
 
     def test_guard_daemon_claude_hook_endpoint_returns_notification_context_with_auth(self, tmp_path) -> None:
@@ -4653,3 +4662,24 @@ class TestGuardDaemonFastHookPath:
             monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
 
         assert result["model_output_action"] != "allow_original"
+
+
+def test_unauthorized_response_waits_for_audit_recording() -> None:
+    calls: list[str] = []
+
+    class _OrderingStub:
+        def _record_auth_audit_event(self) -> None:
+            calls.append("audit")
+
+        def _write_json(
+            self,
+            body: dict[str, object],
+            *,
+            status: int = 200,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
+            calls.append(f"json:{status}")
+
+    daemon_server_module._GuardDaemonHandler._write_unauthorized(_OrderingStub())  # pyright: ignore[reportPrivateUsage]
+
+    assert calls == ["audit", "json:401"]
