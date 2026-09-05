@@ -10,7 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline_plugin
+from codex_plugin_scanner.guard.adapters import cline_plugin, cline_plugin_probe
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
 
@@ -33,8 +33,8 @@ def test_bad_recorded_plugin_path_never_starts_node(tmp_path, monkeypatch, value
     context = _context(tmp_path, monkeypatch)
     _write_state(context, value)
     run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin.shutil, "which", Mock(return_value="node"))
-    monkeypatch.setattr(cline_plugin.subprocess, "run", run)
+    monkeypatch.setattr(cline_plugin_probe.shutil, "which", Mock(return_value="node"))
+    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
 
     result = cline_plugin.cline_plugin_syntax_probe(context)
 
@@ -48,7 +48,7 @@ def test_external_regular_file_is_not_a_plugin_probe_target(tmp_path, monkeypatc
     external.write_text("export default {};", encoding="utf-8")
     _write_state(context, str(external))
     run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin.subprocess, "run", run)
+    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
 
     assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "reason": "plugin_state_path_mismatch"}
     run.assert_not_called()
@@ -59,8 +59,8 @@ def test_managed_probe_ends_option_parsing_and_preserves_exit_status(tmp_path, m
     path = cline_plugin.cline_plugin_root(context) / "index.js"
     _write_state(context, str(path))
     run = Mock(return_value=subprocess.CompletedProcess([], 1))
-    monkeypatch.setattr(cline_plugin.shutil, "which", Mock(return_value="node"))
-    monkeypatch.setattr(cline_plugin.subprocess, "run", run)
+    monkeypatch.setattr(cline_plugin_probe.shutil, "which", Mock(return_value="node"))
+    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
 
     assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "return_code": 1}
     run.assert_called_once_with(
@@ -72,8 +72,8 @@ def test_unsafe_managed_root_never_starts_node(tmp_path, monkeypatch) -> None:
     context = _context(tmp_path, monkeypatch)
     _write_state(context, "index.js")
     run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin.subprocess, "run", run)
-    monkeypatch.setattr(cline_plugin, "cline_plugin_root", Mock(side_effect=RuntimeError("symlink")))
+    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
+    monkeypatch.setattr(cline_plugin_probe, "cline_plugin_root", Mock(side_effect=RuntimeError("symlink")))
 
     assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "reason": "plugin_path_unsafe"}
     run.assert_not_called()
