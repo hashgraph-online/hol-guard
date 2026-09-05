@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
@@ -1363,36 +1364,31 @@ class RuntimeMcpGuardProxy:
                         remember_risk_categories=decision.risk_categories,
                     )
                     return response, package_event
+                deny_tool_call = partial(
+                    self._deny_inline_tool_call,
+                    message=message,
+                    tool_name=tool_name,
+                    event=event,
+                    artifact=artifact,
+                    artifact_hash=tool_artifact_hash,
+                    decision=decision,
+                    scanner_evidence=decision_scanner_evidence,
+                    arguments=arguments,
+                )
                 if _approval_denies(approval_result):
-                    return self._deny_inline_tool_call(
+                    return deny_tool_call(
                         decision_source="inline-denied",
                         event_decision="deny-inline",
                         reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                        message=message,
-                        tool_name=tool_name,
-                        event=event,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
-                        decision=decision,
-                        scanner_evidence=decision_scanner_evidence,
-                        arguments=arguments,
                     )
                 if _approval_invalid(approval_result):
-                    return self._deny_inline_tool_call(
+                    return deny_tool_call(
                         decision_source="inline-invalid",
                         event_decision="deny-inline-invalid",
                         reason=(
                             f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
                             "approval returned an invalid response."
                         ),
-                        message=message,
-                        tool_name=tool_name,
-                        event=event,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
-                        decision=decision,
-                        scanner_evidence=decision_scanner_evidence,
-                        arguments=arguments,
                     )
             if self.config.mode == "observe":
                 response, package_event = self._handle_package_request(
@@ -1489,36 +1485,31 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
+            deny_tool_call = partial(
+                self._deny_inline_tool_call,
+                message=message,
+                tool_name=tool_name,
+                event=event,
+                artifact=artifact,
+                artifact_hash=tool_artifact_hash,
+                decision=decision,
+                scanner_evidence=decision_scanner_evidence,
+                arguments=arguments,
+            )
             if _approval_denies(approval_result):
-                return self._deny_inline_tool_call(
+                return deny_tool_call(
                     decision_source="inline-denied",
                     event_decision="deny-inline",
                     reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                    message=message,
-                    tool_name=tool_name,
-                    event=event,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    decision=decision,
-                    scanner_evidence=decision_scanner_evidence,
-                    arguments=arguments,
                 )
             if _approval_invalid(approval_result):
-                return self._deny_inline_tool_call(
+                return deny_tool_call(
                     decision_source="inline-invalid",
                     event_decision="deny-inline-invalid",
                     reason=(
                         f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
                         "approval returned an invalid response."
                     ),
-                    message=message,
-                    tool_name=tool_name,
-                    event=event,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    decision=decision,
-                    scanner_evidence=decision_scanner_evidence,
-                    arguments=arguments,
                 )
         if self.config.mode == "observe":
             try:

@@ -504,7 +504,7 @@
     "src/codex_plugin_scanner/guard/cli/commands_support_claude_approval.py": 543,
     "src/codex_plugin_scanner/guard/cli/commands_support_codex_commands.py": 561,
     "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py": 583,
-    "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py": 920,
+    "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py": 924,
     "src/codex_plugin_scanner/guard/cli/commands_support_connect.py": 542,
     "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py": 515,
     "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py": 1149,
