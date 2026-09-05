@@ -15,7 +15,10 @@ from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
 from .hook_request_parsing import pre_tool_command
-from .hook_worker_responses import harness_json_from_native_pre_tool_review
+from .hook_worker_responses import (
+    harness_json_from_native_pre_tool,
+    harness_json_from_native_pre_tool_review,
+)
 
 _DEFAULT_APPROVAL_CENTER_PORT = 4781
 
@@ -31,6 +34,13 @@ def pause_native_pre_tool_for_approval(
 ) -> dict[str, object]:
     """Pause a native review result and attach any queued approval metadata."""
 
+    launch_target = _native_review_launch_target(payload, native_result)
+    if _native_review_matching_allow(store, harness=harness, launch_target=launch_target, workspace=workspace):
+        allowed = dict(native_result)
+        allowed["decision"] = "allow"
+        allowed["minimum_action"] = "allow"
+        allowed["policy_action"] = "allow"
+        return harness_json_from_native_pre_tool(harness, allowed)
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
@@ -39,6 +49,14 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
         guard_home=guard_home,
     )
+    if queued is None:
+        failed = dict(native_result)
+        failed["decision"] = "deny"
+        failed["minimum_action"] = "block"
+        failed["policy_action"] = "block"
+        failed["reason_code"] = "native_review_queue_failed"
+        failed["reason"] = "HOL Guard could not record this review for approval."
+        return harness_json_from_native_pre_tool(harness, failed)
     return harness_json_from_native_pre_tool_review(harness, native_result, approval=queued)
 
 
@@ -61,7 +79,7 @@ def queue_native_pre_tool_review(
     tool_name = _native_review_tool_name(payload)
     command = pre_tool_command(payload)
     request_id = uuid.uuid4().hex
-    artifact_id = f"{harness}:native-pretool:{request_id[:16]}"
+    artifact_id = f"{harness}:native-pretool:{tool_name}"
     approval_center_url = _native_review_approval_center_url(store)
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
@@ -97,6 +115,36 @@ def queue_native_pre_tool_review(
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return None
     return stored if isinstance(stored, dict) else None
+
+
+def _native_review_matching_allow(
+    store: object,
+    *,
+    harness: str,
+    launch_target: str,
+    workspace: Path | None,
+) -> bool:
+    listing = getattr(store, "list_approval_requests", None)
+    if not callable(listing) or not launch_target:
+        return False
+    try:
+        rows = listing(status="resolved", harness=harness, limit=50)
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False
+    if not isinstance(rows, list):
+        return False
+    expected_workspace = str(workspace) if workspace is not None else None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("resolution_action") != "allow":
+            continue
+        if row.get("launch_target") != launch_target:
+            continue
+        if expected_workspace is not None and row.get("workspace") != expected_workspace:
+            continue
+        return True
+    return False
 
 
 def _native_review_action_envelope(

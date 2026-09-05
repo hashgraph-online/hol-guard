@@ -73,6 +73,8 @@ def test_cursor_native_review_asks_and_queues_approval(
     assert hook_output["permissionDecision"] == "ask"
     assert response["policy_action"] == "review"
     assert isinstance(response.get("approval_request_id"), str)
+    assert response["primary_approval_request_id"] == response["approval_request_id"]
+    assert response["guardApprovalRequestId"] == response["approval_request_id"]
     pending = store.list_approval_requests(status="pending")
     assert len(pending) == 1
     assert pending[0]["policy_action"] == "review"
@@ -131,7 +133,7 @@ def test_native_review_does_not_raise_worker_unsupported(
         pytest.fail("native review must queue an approval instead of raising HookWorkerUnsupported")
 
 
-def test_native_review_without_a_queue_still_pauses_closed(
+def test_native_review_queue_failure_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -153,7 +155,44 @@ def test_native_review_without_a_queue_still_pauses_closed(
     hook_output = response["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "deny"
-    assert response["policy_action"] == "review"
+    assert response["policy_action"] == "block"
+    assert response["reason_code"] == "native_review_queue_failed"
     assert "approval_request_id" not in response
     assert "approval_url" not in response
-    assert "Approve this request in HOL Guard" not in str(response.get("reason") or "")
+    assert store.list_approval_requests(status="pending") == []
+
+
+def test_native_review_honors_resolved_allow_on_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"))
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "WebFetch",
+        "tool_input": {"url": "https://example.test"},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": tmp_path / "workspace",
+    }
+    first = worker.review_http_payload(**kwargs)
+    request_id = first.get("approval_request_id")
+    assert isinstance(request_id, str)
+    resolved = store.resolve_harness_native_approval_request(
+        request_id,
+        reason="cursor accepted the native review",
+        resolved_at="2026-09-05T00:01:00+00:00",
+        expected_harness="cursor",
+    )
+    assert resolved is True
+    second = worker.review_http_payload(**kwargs)
+    hook_output = second["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
+    assert second["policy_action"] == "allow"
+    assert store.list_approval_requests(status="pending") == []

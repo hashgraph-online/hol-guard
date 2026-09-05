@@ -204,6 +204,7 @@ def harness_json_from_native_pre_tool_review(
             output["approval_url"] = approval_url
         if approval_request_id is not None:
             output["approval_request_id"] = approval_request_id
+        _attach_native_review_approval_aliases(output, approval_request_id, approval_url)
         return output
     hook_specific: dict[str, object] = {
         "hookEventName": "PreToolUse",
@@ -220,7 +221,22 @@ def harness_json_from_native_pre_tool_review(
         rendered["approval_url"] = approval_url
     if approval_request_id is not None:
         rendered["approval_request_id"] = approval_request_id
+    _attach_native_review_approval_aliases(rendered, approval_request_id, approval_url)
     return rendered
+
+
+def _attach_native_review_approval_aliases(
+    payload: dict[str, object],
+    approval_request_id: str | None,
+    approval_url: str | None,
+) -> None:
+    if approval_request_id is None or approval_url is None:
+        return
+    payload["primary_approval_request_id"] = approval_request_id
+    payload["primary_approval_url"] = approval_url
+    payload["guardApprovalRequestId"] = approval_request_id
+    payload["guardApprovalUrl"] = approval_url
+    payload["approval_requests"] = [{"request_id": approval_request_id, "approval_url": approval_url}]
 
 
 def _native_review_permission_decision(harness: str) -> str:

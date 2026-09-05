@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
@@ -59,8 +59,12 @@ class _HookWorkerMetrics(Protocol):
     def record_route(self, route: str) -> None: ...
 
 
+if TYPE_CHECKING:
+    from ..store import GuardStore
+
+
 class _HookWorkerNativeHost(Protocol):
-    store: object
+    store: GuardStore
 
     @property
     def metrics(self) -> _HookWorkerMetrics: ...
