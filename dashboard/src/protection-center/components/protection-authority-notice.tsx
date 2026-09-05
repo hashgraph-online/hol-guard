@@ -7,6 +7,7 @@ import type { EffectiveExtensionControls } from "../../extension-controls-api";
 export type AuthorityNoticeAction =
   | { kind: "repair" }
   | { kind: "acknowledge" }
+  | { kind: "configure-approval" }
   | { kind: "none" };
 
 type AuthorityNoticeView = {
@@ -28,7 +29,10 @@ type AuthorityNoticeView = {
  * one path forward: a proof-bound dashboard action where the daemon supports
  * it, or the terminal command with a copy button where it does not.
  */
-function authorityNoticeView(health: EffectiveExtensionControls["health"]): AuthorityNoticeView {
+function authorityNoticeView(
+  health: EffectiveExtensionControls["health"],
+  approvalGateReady: boolean | null,
+): AuthorityNoticeView {
   switch (health) {
     case "tampered":
     case "recovery-required":
@@ -71,6 +75,34 @@ function authorityNoticeView(health: EffectiveExtensionControls["health"]): Auth
         terminalSummary: "Run this in your terminal to rebuild the trusted settings.",
       };
     default:
+      if (approvalGateReady === null) {
+        return {
+          tone: "info",
+          title: "Checking approval setup",
+          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
+          action: { kind: "none" },
+          actionLabel: null,
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: "",
+        };
+      }
+      if (!approvalGateReady) {
+        return {
+          tone: "info",
+          title: "Set up approval before enrollment",
+          body: "Extension controls require a local approval password or Authenticator before this device can create trusted protection settings. Set up approval first, then return here to enroll.",
+          action: { kind: "configure-approval" },
+          actionLabel: "Set up approval",
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: "",
+        };
+      }
       return {
         tone: "info",
         title: "Finish setting up protection",
@@ -94,10 +126,13 @@ export function ProtectionAuthorityNotice(props: {
   approvalGate: Parameters<typeof ApprovalProofModal>[0]["approvalGate"];
   onAction: (kind: "repair" | "acknowledge", credentials: { approval_password?: string; approval_totp_code?: string }) => void;
   onCheckAgain: () => void;
+  onOpenApprovalSettings: () => void;
 }) {
   const health = props.effective.health;
-  if (health === "protected") return null;
-  const view = authorityNoticeView(health);
+  const approvalGateReady = props.approvalGate === null
+    ? null
+    : props.approvalGate.configured && props.approvalGate.enabled;
+  const view = authorityNoticeView(health, approvalGateReady);
   const [proofOpen, setProofOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"repair" | "acknowledge" | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -106,6 +141,7 @@ export function ProtectionAuthorityNotice(props: {
   useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
+  if (health === "protected") return null;
   const gatePending = props.approvalGate === null;
 
   const copyCommand = async () => {
@@ -135,10 +171,17 @@ export function ProtectionAuthorityNotice(props: {
             type="button"
             aria-busy={props.busy}
             disabled={props.busy || gatePending}
-            onClick={() => { setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge"); setProofOpen(true); }}
+            onClick={() => {
+              if (view.action.kind === "configure-approval") {
+                props.onOpenApprovalSettings();
+                return;
+              }
+              setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
+              setProofOpen(true);
+            }}
             className="inline-flex min-h-11 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
           >{gatePending && !props.error ? "Loading approval settings…" : view.actionLabel}</button> : null}
-          {view.action.kind === "none" ? <button
+          {view.action.kind === "none" && view.command ? <button
             type="button"
             onClick={() => { void copyCommand(); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark"
@@ -153,7 +196,7 @@ export function ProtectionAuthorityNotice(props: {
         {props.busy ? <p role="status" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>{pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…"}</p> : null}
         {props.error ? <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{props.error}</p> : null}
         {props.status ? <p role="status" className="mt-3 text-sm font-medium text-brand-dark">{props.status}</p> : null}
-        <details className="mt-4">
+        {view.command ? <details className="mt-4">
           <summary className={`cursor-pointer text-sm font-semibold ${warning ? "text-amber-950" : "text-brand-dark"}`}>{view.commandLabel}</summary>
           <p className={`mt-2 text-sm leading-6 ${warning ? "text-amber-950/80" : "text-brand-dark/70"}`}>{view.terminalSummary}</p>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -164,10 +207,10 @@ export function ProtectionAuthorityNotice(props: {
               className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40"
             >{copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}{copyState === "copied" ? "Copied" : "Copy command"}</button>
           </div>
-        </details>
+        </details> : null}
       </div>
     </div>
-    {proofOpen && view.action.kind !== "none" ? <ApprovalProofModal
+    {proofOpen && (view.action.kind === "repair" || view.action.kind === "acknowledge") ? <ApprovalProofModal
       title={view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state"}
       detail={view.actionDetail ?? ""}
       confirmLabel={view.actionLabel ?? "Confirm"}

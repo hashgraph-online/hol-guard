@@ -53,6 +53,7 @@ const repairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotic
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(repairMarkup, /Protection needs repair/);
 assert.match(repairMarkup, /Repair protection/);
@@ -67,6 +68,7 @@ const degradedAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthority
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(degradedAckMarkup, /Protection is limited/);
 assert.match(degradedAckMarkup, /Copy repair command/);
@@ -77,17 +79,53 @@ const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityN
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.match(unenrolledMarkup, /Finish setting up protection/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
 
+const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(approvalSetupMarkup, /Set up approval before enrollment/);
+assert.match(approvalSetupMarkup, /Set up approval/);
+assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
+assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
+
+const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: { enabled: false, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(disabledApprovalMarkup, /Set up approval before enrollment/);
+assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
+
+const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: null,
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(pendingApprovalMarkup, /Checking approval setup/);
+assert.match(pendingApprovalMarkup, /check again/i);
+assert.doesNotMatch(pendingApprovalMarkup, /command controls enroll/);
+assert.doesNotMatch(pendingApprovalMarkup, /Copy setup command/);
+
 const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "protected" },
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
   onAction: () => undefined,
   onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
 }));
 assert.equal(protectedMarkup, "", "no authority surface renders when protection is healthy");
 

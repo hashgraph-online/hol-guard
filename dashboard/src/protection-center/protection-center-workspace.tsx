@@ -124,7 +124,10 @@ export function buildExtensionMutation(
   };
 }
 
-export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapshot | null }) {
+export function ProtectionCenterWorkspace(props: {
+  runtime?: GuardRuntimeSnapshot | null;
+  onNavigate: (path: string) => void;
+}) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [routeState, setRouteState] = useState<RouteState>(() => currentExtensionRouteState());
   const [pending, setPending] = useState<ProtectionPendingChange | null>(null);
@@ -133,7 +136,7 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
-  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = useRef<string | null>(null);
   const overviewKeepAlive = useRef(false);
   const localClis = useLocalCliCatalog();
@@ -298,10 +301,14 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
   const handleCheckAgain = useCallback(() => {
     void load();
     setRecoveryError(null);
-    void resolveApprovalGate({ failClosed: true }).catch(() => {
+    void refreshApprovalGate({ failClosed: true }).catch(() => {
       setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
     });
-  }, [load, resolveApprovalGate]);
+  }, [load, refreshApprovalGate]);
+
+  const handleOpenApprovalSettings = useCallback(() => {
+    props.onNavigate("/settings?section=approval");
+  }, [props.onNavigate]);
 
   const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
   useEffect(() => {
@@ -347,6 +354,7 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
           approvalGate={resolvedApprovalGate}
           onAction={handleAuthorityAction}
           onCheckAgain={handleCheckAgain}
+          onOpenApprovalSettings={handleOpenApprovalSettings}
         />
       ) : null}
       {state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? (
