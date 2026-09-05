@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
-from .frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
+from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
 
 _STATE_PATH_RE = re.compile(r'"state_path"\s*:\s*"([^"]+)"')
 _GUARD_HOME_QUERY_RE = re.compile(r"guard-home=([^&\"'\s]+)")
@@ -205,7 +205,7 @@ def _is_live_guard_codex_hook_command(command: str) -> bool:
     if first in _FROZEN_GUARD_CLI_NAMES:
         if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
             return True
-        if any(token == FROZEN_CODEX_BRIDGE_ARG or token.startswith(f"{FROZEN_CODEX_BRIDGE_ARG}=") for token in rest):
+        if frozen_codex_bridge_tokens_are_live(rest):
             return True
         return "hook" in rest and _has_codex_harness(" ".join(rest))
     return False
