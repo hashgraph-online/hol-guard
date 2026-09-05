@@ -373,10 +373,20 @@ class HarnessAdapter:
         detection = self._detection_with_guard_launcher(context, self.detect(context))
         runtime_probe = self.runtime_probe(context)
         warnings = self.diagnostic_warnings(detection, runtime_probe)
+        setup_status = _diagnostic_setup_status(detection, warnings)
+        if self.harness == "codex":
+            from .codex import codex_native_hook_state
+
+            hook_state = codex_native_hook_state(context)
+            if bool(hook_state.get("managed_hook_installed")):
+                warnings = [
+                    warning for warning in warnings if "guard is not installed for this harness" not in warning.lower()
+                ]
+                setup_status = "active" if bool(hook_state.get("protection_active")) else "broken"
         return {
             "harness": self.harness,
             "installed": detection.installed,
-            "setup_status": _diagnostic_setup_status(detection, warnings),
+            "setup_status": setup_status,
             "command_available": detection.command_available,
             "config_paths": list(detection.config_paths),
             "artifacts": [artifact.to_dict() for artifact in detection.artifacts],
