@@ -109,6 +109,7 @@ def test_exact_omp_shell_approval_temporal_reuse_after_store_restart(
         assert persisted[0]["expires_at"] is None
     else:
         assert persisted == []
+        expires_at = resolved_at + timedelta(minutes=15)
         before_expiry = restarted.resolve_policy_decision(
             "omp",
             _GENERIC_ARTIFACT_ID,
@@ -118,7 +119,18 @@ def test_exact_omp_shell_approval_temporal_reuse_after_store_restart(
             consume_one_shot=False,
         )
         assert before_expiry is not None
-        assert before_expiry["expires_at"] == (resolved_at + timedelta(minutes=15)).isoformat(timespec="microseconds")
+        assert before_expiry["expires_at"] == expires_at.isoformat(timespec="microseconds")
+        assert (
+            restarted.resolve_policy_decision(
+                "omp",
+                _GENERIC_ARTIFACT_ID,
+                artifact_hash=artifact_hash,
+                workspace=str(workspace),
+                now=expires_at.isoformat(),
+                consume_one_shot=False,
+            )
+            is None
+        )
 
     after_expiry = (resolved_at + timedelta(minutes=16)).isoformat()
     clock["now"] = after_expiry
@@ -330,6 +342,7 @@ def test_exact_omp_npx_approval_survives_store_restart_after_fifteen_minutes(
         assert policies[0]["expires_at"] is None
     else:
         assert restarted.list_policy_decisions("omp") == []
+        expires_at = resolved_at + timedelta(minutes=15)
         before_expiry = restarted.resolve_policy_decision(
             "omp",
             artifact_id,
@@ -339,7 +352,18 @@ def test_exact_omp_npx_approval_survives_store_restart_after_fifteen_minutes(
             consume_one_shot=False,
         )
         assert before_expiry is not None
-        assert before_expiry["expires_at"] == (resolved_at + timedelta(minutes=15)).isoformat(timespec="microseconds")
+        assert before_expiry["expires_at"] == expires_at.isoformat(timespec="microseconds")
+        assert (
+            restarted.resolve_policy_decision(
+                "omp",
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=None,
+                now=expires_at.isoformat(),
+                consume_one_shot=False,
+            )
+            is None
+        )
 
     clock["now"] = (resolved_at + timedelta(minutes=16)).isoformat()
     if not durable:
