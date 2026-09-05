@@ -346,6 +346,7 @@
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
         "src/codex_plugin_scanner/guard/store_approvals.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
         "src/codex_plugin_scanner/guard/**/continuation*.py"
       ],
       "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",
