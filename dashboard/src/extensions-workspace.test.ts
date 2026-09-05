@@ -93,8 +93,13 @@ const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthori
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(approvalSetupMarkup, /Set up approval before enrollment/);
+assert.match(approvalSetupMarkup, /Set up local approval before enrollment/);
 assert.match(approvalSetupMarkup, /Set up approval/);
+assert.match(approvalSetupMarkup, /Guard Cloud sign-in and account MFA are separate and do not enable this gate/);
+assert.match(approvalSetupMarkup, /Settings &gt; Approval gate/);
+assert.match(approvalSetupMarkup, /Ask for proof on allow decisions/);
+assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown/);
+assert.doesNotMatch(approvalSetupMarkup, /Authy/);
 assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
 assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
 
@@ -105,7 +110,7 @@ const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuth
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(disabledApprovalMarkup, /Set up approval before enrollment/);
+assert.match(disabledApprovalMarkup, /Set up local approval before enrollment/);
 assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
 
 const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
-import json
 import re
 import sys
 from datetime import datetime
@@ -15,11 +14,13 @@ from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.manager import _guard_daemon_url_port, _load_state, load_guard_daemon_url, read_approval_center_locator
+from ..daemon.runtime_peer import daemon_source_is_desktop_core, load_guard_daemon_endpoint_url
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..policy_integrity import is_remote_policy_source
 from ..store import GuardStore
 from .commands_support_interaction import _emit
+from .trust_install_surface import _installed_trust_cli_payload
 from .update_commands import build_guard_install_surface_payload
 
 _TRUST_SECRET_ASSIGNMENT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -115,10 +116,8 @@ def _trust_status_payload(
         raise ValueError("guard_home is required")
     resolved = resolve_passive_trust_state(store, guard_home=resolved_guard_home, backend_requested=backend)
     trust_status = resolved.trust_status.to_dict()
-    degraded_reasons = trust_status.get("degraded_reasons")
-    reasons = (
-        [reason for reason in degraded_reasons if isinstance(reason, str)] if isinstance(degraded_reasons, list) else []
-    )
+    raw_reasons = trust_status.get("degraded_reasons")
+    reasons = [reason for reason in raw_reasons if isinstance(reason, str)] if isinstance(raw_reasons, list) else []
     runtime_protection = str(trust_status.get("runtime_protection") or "unknown")
     remembered_rules = str(trust_status.get("remembered_rules") or "unknown")
     cloud_policies = str(trust_status.get("cloud_policies") or "unknown")
@@ -162,70 +161,15 @@ def _trust_status_payload(
     }
 
 
-def _installed_trust_cli_payload() -> dict[str, object]:
-    version = None
-    installation_mode = "unknown"
-    editable_install = False
-    official_install = False
-    install_surface = build_guard_install_surface_payload()
-    binary_diagnostics = install_surface.get("binary_diagnostics")
-    if not isinstance(binary_diagnostics, dict):
-        binary_diagnostics = {}
-    try:
-        distribution = importlib.metadata.distribution("hol-guard")
-    except importlib.metadata.PackageNotFoundError:
-        distribution = None
-    if distribution is not None:
-        version = distribution.version
-        direct_url_text = distribution.read_text("direct_url.json")
-        if isinstance(direct_url_text, str) and direct_url_text.strip():
-            try:
-                direct_url_payload = json.loads(direct_url_text)
-            except json.JSONDecodeError:
-                direct_url_payload = None
-            dir_info = direct_url_payload.get("dir_info") if isinstance(direct_url_payload, dict) else None
-            editable_install = bool(isinstance(dir_info, dict) and dir_info.get("editable") is True)
-        try:
-            distribution_root = str(distribution.locate_file("")).replace("\\", "/")
-        except Exception:
-            distribution_root = ""
-        official_install = (
-            "pipx/venvs/hol-guard/" in distribution_root or "/venvs/hol-guard/" in distribution_root
-        ) and not editable_install
-        if official_install:
-            installation_mode = "official-pipx"
-        elif editable_install:
-            installation_mode = "editable"
-        else:
-            installation_mode = "packaged"
-    active_command_status = str(binary_diagnostics.get("path_status") or "unknown")
-    active_command_verified = active_command_status in {
-        "pipx_shim_detected",
-        "uv_tool_shim_detected",
-        "matches_installer",
-    }
-    return {
-        "package": "hol-guard",
-        "version": version,
-        "installation_mode": installation_mode,
-        "official_install": official_install,
-        "official_install_verified": official_install and active_command_status == "pipx_shim_detected",
-        "editable_install": editable_install,
-        "installer": install_surface.get("installer"),
-        "active_command_path": binary_diagnostics.get("resolved_hol_guard"),
-        "active_command_status": active_command_status,
-        "active_command_verified": active_command_verified,
-        "expected_script_dir": binary_diagnostics.get("expected_script_dir"),
-        "self_check_command": "command -v hol-guard && hol-guard --version",
-        "update_command": "hol-guard update",
-        "dry_run_command": "hol-guard update --dry-run --json",
-    }
-
-
 def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
     state = _load_state(guard_home)
     daemon_package_version = state.get("package_version") if isinstance(state, dict) else None
-    restart_required = isinstance(daemon_package_version, str) and daemon_package_version != __version__
+    # The Desktop app supervises and respawns its own daemon, so a CLI-side
+    # restart or repair can never reconcile a version skew against this
+    # install; only a Desktop update loads the matching Core package.
+    desktop_owned = isinstance(state, dict) and daemon_source_is_desktop_core(state.get("source_root"))
+    version_skew = isinstance(daemon_package_version, str) and daemon_package_version != __version__
+    restart_required = version_skew and not desktop_owned
     locator = read_approval_center_locator(guard_home)
     if locator is not None and _approval_center_locator_is_fresh(
         locator.pid,
@@ -238,6 +182,11 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             detail = (
                 f"Guard daemon is still serving hol-guard {daemon_package_version}. "
                 f"Restart it so browser approvals use hol-guard {__version__}."
+            )
+        elif desktop_owned and version_skew:
+            detail = (
+                f"Guard daemon is managed by HOL Guard Desktop and still serving hol-guard "
+                f"{daemon_package_version}. It loads the new Core package when the Desktop app updates."
             )
         return {
             "active": True,
@@ -252,16 +201,23 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             "pid": locator.pid,
             "snapshot_fresh": True,
             "restart_required": restart_required,
+            "desktop_owned": desktop_owned,
+            "desktop_update_pending": desktop_owned and version_skew,
             "daemon_package_version": daemon_package_version,
             "detail": detail,
         }
-    daemon_url = load_guard_daemon_url(guard_home)
+    daemon_url = load_guard_daemon_url(guard_home) or load_guard_daemon_endpoint_url(guard_home)
     if isinstance(daemon_url, str) and daemon_url.strip():
         detail = "Guard daemon is healthy, but the browser approval locator has not been refreshed yet."
         if restart_required:
             detail = (
                 f"Guard daemon is still serving hol-guard {daemon_package_version}. "
                 f"Restart it so browser approvals use hol-guard {__version__}."
+            )
+        elif desktop_owned and version_skew:
+            detail = (
+                f"Guard daemon is managed by HOL Guard Desktop and still serving hol-guard "
+                f"{daemon_package_version}. It loads the new Core package when the Desktop app updates."
             )
         return {
             "active": True,
@@ -271,6 +227,8 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             "detail": detail,
             "snapshot_fresh": False,
             "restart_required": restart_required,
+            "desktop_owned": desktop_owned,
+            "desktop_update_pending": desktop_owned and version_skew,
             "daemon_package_version": daemon_package_version,
         }
     return {
@@ -278,6 +236,8 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
         "detail": "No active Guard approval center daemon detected.",
         "snapshot_fresh": False,
         "restart_required": False,
+        "desktop_owned": desktop_owned,
+        "desktop_update_pending": False,
         "daemon_package_version": daemon_package_version,
     }
 
@@ -306,7 +266,10 @@ def build_trust_doctor_payload_from_status(
     guard_home: Path,
 ) -> dict[str, object]:
     approval_center = _approval_center_status_payload(guard_home)
-    install_info = _installed_trust_cli_payload()
+    install_info = _installed_trust_cli_payload(
+        install_surface=build_guard_install_surface_payload(),
+        resolve_distribution=importlib.metadata.distribution,
+    )
     remembered_rules = str(payload.get("remembered_rules") or "unknown")
     runtime_protection = str(payload.get("runtime_protection") or "unknown")
     if runtime_protection != "protected":
@@ -349,6 +312,10 @@ def build_trust_doctor_payload_from_status(
     elif bool(approval_center.get("restart_required")):
         payload["recommended_actions"].append(
             "Run `hol-guard daemon repair` or restart the Guard daemon so browser approvals reconnect to this install."
+        )
+    elif bool(approval_center.get("desktop_update_pending")):
+        payload["recommended_actions"].append(
+            "Update or restart the HOL Guard Desktop app to refresh the Guard daemon it manages."
         )
     elif not bool(approval_center.get("snapshot_fresh")):
         payload["recommended_actions"].append(
