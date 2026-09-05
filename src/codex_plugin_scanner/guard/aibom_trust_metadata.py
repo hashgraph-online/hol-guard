@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -176,6 +177,52 @@ def _local_security_for_artifact(
     )
 
 
+def _cisco_local_security_layer(
+    run: object,
+    *,
+    findings: list[dict[str, object]],
+    totals: Mapping[str, Callable[[object], int]],
+    metadata_keys: tuple[str, ...],
+) -> tuple[str, dict[str, object] | None, dict[str, object]]:
+    """Build the shared severity/score/safety/metadata layer for local Cisco security runs."""
+
+    findings = sorted(
+        findings,
+        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    )
+    severity_counts = _cisco_severity_counts(run)
+    analyzers_used = _cisco_analyzers_used(run)
+    status = str(getattr(run, "status", "unknown"))
+    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
+    safety: dict[str, object] | None = None
+    if score is not None:
+        safety = {
+            "score": score,
+            "label": _local_skill_security_label(score),
+            "findingsTotal": len(findings),
+            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
+            **{key: total(run) for key, total in totals.items()},
+            "permissionsMissing": [],
+        }
+
+    run_metadata = getattr(run, "metadata", None)
+    metadata_payload: dict[str, object] = {
+        "scannerSource": str(getattr(run, "source", "unknown")),
+        "message": str(getattr(run, "message", "")),
+        "findingsBySeverity": severity_counts,
+        "totalFindings": len(findings),
+    }
+    duration_ms = getattr(run, "duration_ms", None)
+    if isinstance(duration_ms, int):
+        metadata_payload["durationMs"] = duration_ms
+    if isinstance(run_metadata, dict):
+        for key in metadata_keys:
+            value = run_metadata.get(key)
+            if value is not None:
+                metadata_payload[key] = value
+    return status, safety, metadata_payload
+
+
 def _local_skill_security_for_artifact(
     artifact: object,
     *,
@@ -211,42 +258,14 @@ def _local_skill_security_for_artifact(
     if run is None:
         return None
 
-    status = str(getattr(run, "status", "unknown"))
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
     findings = _local_skill_security_findings(run, skill_root=trust_root)
-    findings = sorted(
-        findings,
-        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    status, safety, metadata_payload = _cisco_local_security_layer(
+        run,
+        findings=findings,
+        totals={"scriptsTotal": _local_skill_scripts_total},
+        metadata_keys=("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"),
     )
-    severity_counts = _cisco_severity_counts(run)
-    analyzers_used = _cisco_analyzers_used(run)
-    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
-    safety = None
-    if score is not None:
-        safety = {
-            "score": score,
-            "label": _local_skill_security_label(score),
-            "findingsTotal": len(findings),
-            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
-            "scriptsTotal": _local_skill_scripts_total(run),
-            "permissionsMissing": [],
-        }
-
-    run_metadata = getattr(run, "metadata", None)
-    metadata_payload: dict[str, object] = {
-        "scannerSource": str(getattr(run, "source", "unknown")),
-        "message": str(getattr(run, "message", "")),
-        "findingsBySeverity": severity_counts,
-        "totalFindings": len(findings),
-    }
-    duration_ms = getattr(run, "duration_ms", None)
-    if isinstance(duration_ms, int):
-        metadata_payload["durationMs"] = duration_ms
-    if isinstance(run_metadata, dict):
-        for key in ("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"):
-            value = run_metadata.get(key)
-            if value is not None:
-                metadata_payload[key] = value
 
     metadata_payload["evidenceHash"] = guard_evidence_hash(
         {
@@ -304,44 +323,15 @@ def _local_mcp_security_for_artifact(
     if run is None:
         return None
 
-    status = str(getattr(run, "status", "unknown"))
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
     scan_root = _cisco_run_target_path(run) or trust_root
     findings = _local_mcp_security_findings(run, scan_root=scan_root)
-    findings = sorted(
-        findings,
-        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    status, safety, metadata_payload = _cisco_local_security_layer(
+        run,
+        findings=findings,
+        totals={"scriptsTotal": _local_mcp_targets_total, "targetsScanned": _local_mcp_targets_total},
+        metadata_keys=("analyzersUsed", "scanMode", "mode", "targetsScanned"),
     )
-    severity_counts = _cisco_severity_counts(run)
-    analyzers_used = _cisco_analyzers_used(run)
-    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
-    safety = None
-    if score is not None:
-        safety = {
-            "score": score,
-            "label": _local_skill_security_label(score),
-            "findingsTotal": len(findings),
-            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
-            "scriptsTotal": _local_mcp_targets_total(run),
-            "targetsScanned": _local_mcp_targets_total(run),
-            "permissionsMissing": [],
-        }
-
-    run_metadata = getattr(run, "metadata", None)
-    metadata_payload: dict[str, object] = {
-        "scannerSource": str(getattr(run, "source", "unknown")),
-        "message": str(getattr(run, "message", "")),
-        "findingsBySeverity": severity_counts,
-        "totalFindings": len(findings),
-    }
-    duration_ms = getattr(run, "duration_ms", None)
-    if isinstance(duration_ms, int):
-        metadata_payload["durationMs"] = duration_ms
-    if isinstance(run_metadata, dict):
-        for key in ("analyzersUsed", "scanMode", "mode", "targetsScanned"):
-            value = run_metadata.get(key)
-            if value is not None:
-                metadata_payload[key] = value
 
     metadata_payload["evidenceHash"] = guard_evidence_hash(
         {

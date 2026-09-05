@@ -13,7 +13,11 @@ bootstrap_compatibility_module(globals())
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
-    from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
+    from .commands_support_hook_payload import (
+        _action_envelope_json,
+        _apply_blocked_operation_payload,
+        _approval_surface_policy_for_flow,
+    )
     from .commands_support_interaction import (
         _attach_primary_approval_link,
         _codex_browser_wait_metadata,
@@ -487,26 +491,19 @@ def _run_hook_copilot_permission_request(
             approval_center_url=approval_center_url,
             now=now,
         )
+        response_payload["approval_requests"] = queued
+        _attach_primary_approval_link(
+            response_payload,
+            harness=_optional_string(args.harness) or args.harness,
+            approval_center_url=approval_center_url,
+        )
     else:
-        operation = blocked_operation.get("operation")
-        if not isinstance(operation, dict):
-            operation = {}
-        queued = blocked_operation.get("approval_requests")
-        if not isinstance(queued, list):
-            queued = []
-        operation_id = _optional_string(operation.get("operation_id"))
-        if operation_id is not None:
-            response_payload["operation_id"] = operation_id
-        response_payload["operation"] = operation
-        approval_request_ids = operation.get("approval_request_ids")
-        if isinstance(approval_request_ids, list):
-            response_payload["approval_request_ids"] = approval_request_ids
-    response_payload["approval_requests"] = queued
-    _attach_primary_approval_link(
-        response_payload,
-        harness=_optional_string(args.harness) or args.harness,
-        approval_center_url=approval_center_url,
-    )
+        queued = _apply_blocked_operation_payload(
+            response_payload,
+            blocked_operation,
+            args=args,
+            approval_center_url=approval_center_url,
+        )
     response_payload["approval_center_url"] = approval_center_url
     response_payload["review_hint"] = approval_center_hint(
         context=context,

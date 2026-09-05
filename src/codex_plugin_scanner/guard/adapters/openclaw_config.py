@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+from ...json_comment_stripping import SINGLE_AND_DOUBLE_QUOTE, strip_jsonc_comments
+
 _MAX_INCLUDE_DEPTH = 8
 _CONFIG_SUFFIXES = {".json", ".json5", ".yaml", ".yml"}
 
@@ -89,56 +91,7 @@ def _parse_config_payload(raw: str) -> object:
 
 
 def _strip_json_comments(text: str) -> str:
-    output: list[str] = []
-    quote: str | None = None
-    escape = False
-    in_line_comment = False
-    in_block_comment = False
-    index = 0
-    while index < len(text):
-        char = text[index]
-        next_char = text[index + 1] if index + 1 < len(text) else ""
-        if in_line_comment:
-            if char == "\n":
-                in_line_comment = False
-                output.append(char)
-            index += 1
-            continue
-        if in_block_comment:
-            if char == "*" and next_char == "/":
-                in_block_comment = False
-                index += 2
-                continue
-            if char == "\n":
-                output.append(char)
-            index += 1
-            continue
-        if quote is not None:
-            output.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == quote:
-                quote = None
-            index += 1
-            continue
-        if char in {"'", '"'}:
-            quote = char
-            output.append(char)
-            index += 1
-            continue
-        if char == "/" and next_char == "/":
-            in_line_comment = True
-            index += 2
-            continue
-        if char == "/" and next_char == "*":
-            in_block_comment = True
-            index += 2
-            continue
-        output.append(char)
-        index += 1
-    return "".join(output)
+    return strip_jsonc_comments(text, string_quotes=SINGLE_AND_DOUBLE_QUOTE)
 
 
 def _strip_trailing_json_commas(text: str) -> str:

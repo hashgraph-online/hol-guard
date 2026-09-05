@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
     from .commands_support_hook_payload import (
         _action_envelope_json,
+        _apply_blocked_operation_payload,
         _approval_surface_policy_for_flow,
         _emit_native_hook_notification_stderr,
         _emit_native_hook_response,
@@ -404,26 +405,19 @@ def _review_runtime_artifact_hook(
                     approval_center_url=approval_center_url,
                     now=_now(),
                 )
+                response_payload["approval_requests"] = queued
+                _attach_primary_approval_link(
+                    response_payload,
+                    harness=_optional_string(args.harness) or args.harness,
+                    approval_center_url=approval_center_url,
+                )
             else:
-                operation = blocked_operation.get("operation")
-                if not isinstance(operation, dict):
-                    operation = {}
-                queued = blocked_operation.get("approval_requests")
-                if not isinstance(queued, list):
-                    queued = []
-                operation_id = _optional_string(operation.get("operation_id"))
-                if operation_id is not None:
-                    response_payload["operation_id"] = operation_id
-                response_payload["operation"] = operation
-                approval_request_ids = operation.get("approval_request_ids")
-                if isinstance(approval_request_ids, list):
-                    response_payload["approval_request_ids"] = approval_request_ids
-            response_payload["approval_requests"] = queued
-            _attach_primary_approval_link(
-                response_payload,
-                harness=_optional_string(args.harness) or args.harness,
-                approval_center_url=approval_center_url,
-            )
+                queued = _apply_blocked_operation_payload(
+                    response_payload,
+                    blocked_operation,
+                    args=args,
+                    approval_center_url=approval_center_url,
+                )
             _attach_cursor_approval_request_ids(
                 args=args,
                 event_name=event_name,

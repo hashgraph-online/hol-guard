@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from ._commands_shared import _GUARD_CLIENT_VERSION, _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
     from .commands_support_interaction import _attach_primary_approval_link, _preferred_approval_review_url
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
+    from .commands_support_runtime_artifacts import _optional_string
 
 
 from ._commands_shared import *
@@ -234,6 +236,87 @@ def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
         return []
     return [item for item in value if isinstance(item, Mapping)]
 
+def _apply_approval_wait_fields(
+    payload: dict[str, object],
+    *,
+    args: argparse.Namespace,
+    store: GuardStore,
+    config: GuardConfig,
+    queued: list[dict[str, object]],
+    approval_flow: dict[str, object],
+    managed_install: dict[str, object] | None,
+    should_wait_for_approvals: bool,
+    approval_center_url: str,
+    on_operation_status: Callable[[str], None] | None = None,
+) -> dict[str, object]:
+    """Populate approval delivery/wait fields and review hints for queued approvals."""
+
+    payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
+    _localize_pending_approval_copy(payload, harness=args.harness)
+    if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
+        payload["approval_wait"] = {
+            "resolved": False,
+            "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
+            "items": [],
+        }
+        return payload
+    wait_result = wait_for_approval_requests(
+        store=store,
+        request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+        timeout_seconds=config.approval_wait_timeout_seconds,
+    )
+    payload["approval_wait"] = wait_result
+    if bool(wait_result.get("resolved")):
+        resolved_items = _mapping_list(wait_result.get("items"))
+        payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
+        if on_operation_status is not None:
+            with suppress(RuntimeError):
+                on_operation_status("blocked" if bool(payload["blocked"]) else "completed")
+        if not bool(payload["blocked"]):
+            payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
+    else:
+        pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
+        if on_operation_status is not None:
+            with suppress(RuntimeError):
+                on_operation_status("waiting_on_approval")
+        payload["review_hint"] = (
+            f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
+            f"{', '.join(str(item) for item in pending_request_ids)}."
+        )
+    return payload
+
+
+def _apply_blocked_operation_payload(
+    response_payload: dict[str, object],
+    blocked_operation: Mapping[str, object],
+    *,
+    args: argparse.Namespace,
+    approval_center_url: str,
+) -> list[dict[str, object]]:
+    """Fold a queued daemon operation and primary approval link into a hook response."""
+
+    operation = blocked_operation.get("operation")
+    if not isinstance(operation, dict):
+        operation = {}
+    queued = blocked_operation.get("approval_requests")
+    if not isinstance(queued, list):
+        queued = []
+    operation_id = _optional_string(operation.get("operation_id"))
+    if operation_id is not None:
+        response_payload["operation_id"] = operation_id
+    response_payload["operation"] = operation
+    approval_request_ids = operation.get("approval_request_ids")
+    if isinstance(approval_request_ids, list):
+        response_payload["approval_request_ids"] = approval_request_ids
+    response_payload["approval_requests"] = queued
+    _attach_primary_approval_link(
+        response_payload,
+        harness=_optional_string(args.harness) or args.harness,
+        approval_center_url=approval_center_url,
+    )
+    return queued
+
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -252,6 +335,25 @@ def _headless_approval_resolver(
             context.guard_home,
             home_dir=context.home_dir,
         )
+
+        def apply_approval_wait(
+            payload: dict[str, object],
+            *,
+            queued: list[dict[str, object]],
+            on_operation_status: Callable[[str], None] | None = None,
+        ) -> dict[str, object]:
+            return _apply_approval_wait_fields(
+                payload,
+                args=args,
+                store=store,
+                config=config,
+                queued=queued,
+                approval_flow=approval_flow,
+                managed_install=managed_install,
+                should_wait_for_approvals=should_wait_for_approvals,
+                approval_center_url=approval_center_url,
+                on_operation_status=on_operation_status,
+            )
 
         def resolve_from_local_queue():
             queued = queue_blocked_approvals(
@@ -276,34 +378,7 @@ def _headless_approval_resolver(
                 queued=queued,
                 review_url=_preferred_approval_review_url(payload, harness=args.harness),
             )
-            payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-            _localize_pending_approval_copy(payload, harness=args.harness)
-            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
-                payload["approval_wait"] = {
-                    "resolved": False,
-                    "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
-                    "items": [],
-                }
-                return payload
-            wait_result = wait_for_approval_requests(
-                store=store,
-                request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-                timeout_seconds=config.approval_wait_timeout_seconds,
-            )
-            payload["approval_wait"] = wait_result
-            if bool(wait_result.get("resolved")):
-                resolved_items = _mapping_list(wait_result.get("items"))
-                payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
-                if not payload["blocked"]:
-                    payload["blocked"] = False
-                    payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
-            else:
-                pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
-                payload["review_hint"] = (
-                    f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
-                    f"{', '.join(str(item) for item in pending_request_ids)}."
-                )
-            return payload
+            return apply_approval_wait(payload, queued=queued)
 
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
@@ -359,51 +434,19 @@ def _headless_approval_resolver(
             managed_install=managed_install,
             review_url=_preferred_approval_review_url(payload, harness=args.harness),
         )
-        payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-        _localize_pending_approval_copy(payload, harness=args.harness)
-        if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
-            payload["approval_wait"] = {
-                "resolved": False,
-                "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
-                "items": [],
-            }
-            return payload
-        wait_result = wait_for_approval_requests(
-            store=store,
-            request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-            timeout_seconds=config.approval_wait_timeout_seconds,
-        )
-        payload["approval_wait"] = wait_result
-        if bool(wait_result.get("resolved")):
-            resolved_items = _mapping_list(wait_result.get("items"))
-            payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
-            if not payload["blocked"]:
-                payload["blocked"] = False
-                with suppress(RuntimeError):
-                    daemon_client.update_operation_status(
-                        operation_id=str(operation["operation_id"]),
-                        status="completed",
-                    )
-                payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
-            else:
-                with suppress(RuntimeError):
-                    daemon_client.update_operation_status(
-                        operation_id=str(operation["operation_id"]),
-                        status="blocked",
-                    )
-        else:
-            pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
-            with suppress(RuntimeError):
-                daemon_client.update_operation_status(
-                    operation_id=str(operation["operation_id"]),
-                    status="waiting_on_approval",
-                    approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-                )
-            payload["review_hint"] = (
-                f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
-                f"{', '.join(str(item) for item in pending_request_ids)}."
+        def _record_operation_status(status: str) -> None:
+            extra_kwargs: dict[str, object] = {}
+            if status == "waiting_on_approval":
+                extra_kwargs["approval_request_ids"] = [
+                    str(item["request_id"]) for item in queued if "request_id" in item
+                ]
+            daemon_client.update_operation_status(
+                operation_id=str(operation["operation_id"]),
+                status=status,
+                **extra_kwargs,
             )
-        return payload
+
+        return apply_approval_wait(payload, queued=queued, on_operation_status=_record_operation_status)
 
     return resolve
 
@@ -505,7 +548,8 @@ def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, obj
     return envelope.to_dict() if envelope is not None else None
 
 __all__ = [
-    "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_approval_center_browser_url",
+    "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_apply_approval_wait_fields",
+    "_apply_blocked_operation_payload", "_approval_center_browser_url",
     "_approval_surface_policy_for_flow", "_browser_url_with_guard_params", "_coalesce_string",
     "_copilot_hook_permission_decision", "_emit_native_hook_block_stderr",
     "_emit_native_hook_notification_stderr", "_emit_native_hook_response", "_first_hook_tool_call",

@@ -10,6 +10,7 @@ import json
 import os
 import stat
 import zipfile
+from collections.abc import Callable
 from contextlib import suppress
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -874,6 +875,26 @@ def _read_bounded_descriptor(
         raise UpdateArtifactError(reason_code) from error
 
 
+def _bind_windows_file_apis(kernel32: ctypes.CDLL) -> tuple[Callable[..., object], Callable[..., object]]:
+    """Bind CreateFileW/GetFileInformationByHandle prototypes with explicit marshalling."""
+
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    get_information = kernel32.GetFileInformationByHandle
+    get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
+    get_information.restype = wintypes.BOOL
+    return create_file, get_information
+
+
 def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
     """Hold a non-delete-shared directory handle so its path cannot be swapped."""
 
@@ -883,21 +904,7 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
     handle: object | None = None
     try:
         kernel32 = win_dll("kernel32", use_last_error=True)
-
-        create_file = kernel32.CreateFileW
-        create_file.argtypes = [
-            wintypes.LPCWSTR,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            wintypes.HANDLE,
-        ]
-        create_file.restype = wintypes.HANDLE
-        get_information = kernel32.GetFileInformationByHandle
-        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
-        get_information.restype = wintypes.BOOL
+        create_file, get_information = _bind_windows_file_apis(kernel32)
         handle = create_file(
             str(path),
             _WINDOWS_FILE_READ_ATTRIBUTES,
@@ -936,21 +943,7 @@ def _open_windows_receipt_child_lock(path: Path, *, reason_code: str) -> object:
     handle: object | None = None
     try:
         kernel32 = win_dll("kernel32", use_last_error=True)
-
-        create_file = kernel32.CreateFileW
-        create_file.argtypes = [
-            wintypes.LPCWSTR,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            wintypes.HANDLE,
-        ]
-        create_file.restype = wintypes.HANDLE
-        get_information = kernel32.GetFileInformationByHandle
-        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
-        get_information.restype = wintypes.BOOL
+        create_file, get_information = _bind_windows_file_apis(kernel32)
         lock_path = path / f".{_LOCAL_WHEEL_RECEIPT_NAME}.lock.{os.getpid()}.{os.urandom(16).hex()}"
         handle = create_file(
             str(lock_path),
@@ -996,21 +989,7 @@ def _open_windows_regular_descriptor(
     try:
         msvcrt = importlib.import_module("msvcrt")
         kernel32 = win_dll("kernel32", use_last_error=True)
-
-        create_file = kernel32.CreateFileW
-        create_file.argtypes = [
-            wintypes.LPCWSTR,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            wintypes.HANDLE,
-        ]
-        create_file.restype = wintypes.HANDLE
-        get_information = kernel32.GetFileInformationByHandle
-        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
-        get_information.restype = wintypes.BOOL
+        create_file, get_information = _bind_windows_file_apis(kernel32)
         handle = create_file(
             str(path),
             _WINDOWS_GENERIC_READ,
