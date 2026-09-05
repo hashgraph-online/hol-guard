@@ -44,12 +44,7 @@ def _signed_desktop_daemon(
     guard_home.mkdir(parents=True, exist_ok=True)
     if source_root is None:
         managed_source = (
-            guard_home.parent
-            / "org.hol.guard.desktop"
-            / "core"
-            / "versions"
-            / _DESKTOP_CORE_VERSION
-            / "hol-guard"
+            guard_home.parent / "org.hol.guard.desktop" / "core" / "versions" / _DESKTOP_CORE_VERSION / "hol-guard"
         )
         managed_source.parent.mkdir(parents=True, exist_ok=True)
         managed_source.write_text("synthetic desktop core", encoding="utf-8")
@@ -194,24 +189,27 @@ def test_client_keeps_strict_current_runtime_path_before_desktop_fallback(
 
 def test_client_rejects_desktop_owner_for_mismatched_home(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
-    with _signed_desktop_daemon(guard_home, state_guard_home=tmp_path / "other-home"), pytest.raises(
-        GuardDaemonRequestError, match="not running"
+    with (
+        _signed_desktop_daemon(guard_home, state_guard_home=tmp_path / "other-home"),
+        pytest.raises(GuardDaemonRequestError, match="not running"),
     ):
         extension_controls_commands._client(guard_home)
 
 
 def test_client_rejects_desktop_owner_for_mismatched_health_home(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
-    with _signed_desktop_daemon(guard_home, details_guard_home=tmp_path / "other-home"), pytest.raises(
-        GuardDaemonRequestError, match="not running"
+    with (
+        _signed_desktop_daemon(guard_home, details_guard_home=tmp_path / "other-home"),
+        pytest.raises(GuardDaemonRequestError, match="not running"),
     ):
         extension_controls_commands._client(guard_home)
 
 
 def test_client_rejects_desktop_owner_with_mismatched_auth_token(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
-    with _signed_desktop_daemon(guard_home, state_token="wrong-token"), pytest.raises(
-        GuardDaemonRequestError, match="not running"
+    with (
+        _signed_desktop_daemon(guard_home, state_token="wrong-token"),
+        pytest.raises(GuardDaemonRequestError, match="not running"),
     ):
         extension_controls_commands._client(guard_home)
 
@@ -220,8 +218,9 @@ def test_client_rejects_arbitrary_daemon_identity_even_when_authenticated_shape_
     tmp_path: Path,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    with _signed_desktop_daemon(guard_home, source_root="/opt/hol-guard/lib/python"), pytest.raises(
-        GuardDaemonRequestError, match="not running"
+    with (
+        _signed_desktop_daemon(guard_home, source_root="/opt/hol-guard/lib/python"),
+        pytest.raises(GuardDaemonRequestError, match="not running"),
     ):
         extension_controls_commands._client(guard_home)
 
@@ -252,3 +251,87 @@ def test_product_status_uses_verified_desktop_endpoint_for_mismatched_cli_runtim
     assert observed_homes == [guard_home]
     assert payload["approval_center_url"] == "http://127.0.0.1:8234"
     assert payload["runtime_status"] == "active"
+
+
+def test_trust_doctor_keeps_desktop_owned_peer_without_restart_advice(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(commands_dispatch_trust, "__version__", "3.0.88")
+    monkeypatch.setattr(commands_dispatch_trust, "read_approval_center_locator", lambda _home: None)
+
+    with _signed_desktop_daemon(guard_home) as (_daemon_url, _token):
+        payload = commands_dispatch_trust._approval_center_status_payload(guard_home)
+
+    assert payload["active"] is True
+    assert payload["desktop_owned"] is True
+    assert payload["desktop_update_pending"] is True
+    assert payload["restart_required"] is False
+    assert "HOL Guard Desktop" in payload["detail"]
+    assert "Restart it" not in payload["detail"]
+
+
+def test_trust_doctor_still_directs_cli_owned_daemons_to_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(commands_dispatch_trust, "__version__", "3.0.88")
+    monkeypatch.setattr(commands_dispatch_trust, "read_approval_center_locator", lambda _home: None)
+    monkeypatch.setattr(commands_dispatch_trust, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:8234")
+    monkeypatch.setattr(
+        commands_dispatch_trust,
+        "_load_state",
+        lambda _home: {
+            "package_version": "3.0.86",
+            "source_root": str(guard_home / "pipx" / "venvs" / "hol-guard" / "lib"),
+        },
+    )
+
+    payload = commands_dispatch_trust._approval_center_status_payload(guard_home)
+
+    assert payload["active"] is True
+    assert payload["desktop_owned"] is False
+    assert payload["desktop_update_pending"] is False
+    assert payload["restart_required"] is True
+    assert "Restart it" in payload["detail"]
+
+
+def test_trust_doctor_recommends_desktop_update_for_owned_peer_skew(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    managed_source = tmp_path / "org.hol.guard.desktop" / "core" / "versions" / _DESKTOP_CORE_VERSION / "hol-guard"
+    managed_source.parent.mkdir(parents=True, exist_ok=True)
+    managed_source.write_text("synthetic desktop core", encoding="utf-8")
+    monkeypatch.setattr(commands_dispatch_trust, "__version__", "3.0.88")
+    monkeypatch.setattr(commands_dispatch_trust, "read_approval_center_locator", lambda _home: None)
+    monkeypatch.setattr(commands_dispatch_trust, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:8234")
+    monkeypatch.setattr(
+        commands_dispatch_trust,
+        "load_guard_daemon_endpoint_url",
+        lambda _home: "http://127.0.0.1:8234",
+    )
+    monkeypatch.setattr(
+        commands_dispatch_trust,
+        "_load_state",
+        lambda _home: {
+            "pid": 4321,
+            "port": 8234,
+            "package_version": _DESKTOP_CORE_VERSION,
+            "source_root": str(managed_source),
+            "started_at": "2026-09-05T00:00:00+00:00",
+        },
+    )
+
+    payload = commands_dispatch_trust.build_trust_doctor_payload(store)
+
+    assert payload["approval_center"]["active"] is True
+    assert payload["approval_center"]["restart_required"] is False
+    assert payload["approval_center"]["desktop_owned"] is True
+    actions = " ".join(payload["recommended_actions"])
+    assert "HOL Guard Desktop" in actions
+    assert "daemon repair" not in actions
