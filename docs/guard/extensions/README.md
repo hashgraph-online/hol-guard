@@ -86,6 +86,7 @@ Protection model meanings:
 | `command.platform.heroku` | Reviews app destruction, pipeline promotion, and release rollback. | 2 | Built in |
 | `command.platform.netlify` | Reviews site deletion and production deployments. | 2 | Built in |
 | `command.platform.vercel` | Reviews deployment and project deletion plus production deployment, promotion, and rollback. | 2 | Built in |
+| `command.remote.essh` | Reviews essh invocations that execute commands across a host group or delete cached hosts, keys, and workspaces. | 2 | External opt-in |
 | `command.remote.rsync` | Reviews rsync options that delete destination data or remove synchronized source files. | 2 | Built in |
 | `command.remote.scp` | Reviews SCP transfers that can overwrite local or remote destination files. | 1 | Built in |
 | `command.remote.ssh` | Reviews SSH invocations that explicitly execute a remote command. | 2 | Built in |
