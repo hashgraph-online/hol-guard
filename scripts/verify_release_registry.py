@@ -3,16 +3,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import os
 import re
 import sys
 import tempfile
-import time
-import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
@@ -20,6 +17,7 @@ from packaging.utils import InvalidSdistFilename, InvalidWheelFilename, parse_sd
 from packaging.version import InvalidVersion, Version
 
 if __package__:
+    from . import release_registry_retry
     from .release_registry_types import (
         Registry,
         RegistryResult,
@@ -29,6 +27,7 @@ if __package__:
         TestPyPIResult,
     )
 else:
+    import release_registry_retry  # pyright: ignore[reportImplicitRelativeImport]
     from release_registry_types import (  # pyright: ignore[reportImplicitRelativeImport]
         Registry,
         RegistryResult,
@@ -41,19 +40,9 @@ else:
 DEFAULT_PROJECT_NAME: Final = "hol-guard"
 SUPPORTED_PROJECT_NAMES: Final = ("hol-guard", "plugin-scanner")
 MAX_RESPONSE_BYTES: Final = 256 * 1024 * 1024
-REGISTRY_RETRY_ATTEMPTS: Final = 6
-REGISTRY_RETRY_INITIAL_DELAY_SECONDS: Final = 2.0
-REGISTRY_RETRY_MAX_DELAY_SECONDS: Final = 30.0
-REGISTRY_RETRY_MAX_ATTEMPTS: Final = REGISTRY_RETRY_ATTEMPTS
-REGISTRY_RETRY_MAX_TOTAL_DELAY_SECONDS: Final = 60.0
 _SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 
 Fetcher = Callable[[str], bytes]
-Sleeper = Callable[[float], None]
-
-
-class _RetryableRegistryError(RegistryVerificationError):
-    """A registry response may become valid during the bounded retry window."""
 
 
 def stdlib_fetch(url: str) -> bytes:
@@ -98,26 +87,6 @@ def _release_url(registry: Registry, project_name: str, version: str) -> str:
     return f"https://{registry.api_host}/pypi/{_validated_project_name(project_name)}/{quoted_version}/json"
 
 
-def _fetch_payload(
-    url: str,
-    *,
-    fetcher: Fetcher,
-    allow_not_found: bool = False,
-) -> bytes | None:
-    try:
-        return fetcher(url)
-    except urllib.error.HTTPError as exc:
-        if allow_not_found and exc.code == 404:
-            return None
-        if exc.code == 404 or exc.code in {408, 425, 429} or 500 <= exc.code < 600:
-            raise _RetryableRegistryError(f"Registry request failed with HTTP {exc.code}") from exc
-        raise RegistryVerificationError(f"Registry request failed with HTTP {exc.code}") from exc
-    except RegistryVerificationError:
-        raise
-    except (OSError, TimeoutError, urllib.error.URLError) as exc:
-        raise _RetryableRegistryError("Registry request failed") from exc
-
-
 def _decode_object(payload: bytes, *, label: str) -> dict[str, object]:
     try:
         decoded = json.loads(payload.decode("utf-8"))
@@ -146,7 +115,7 @@ def list_registry_versions(
     project_name: str = DEFAULT_PROJECT_NAME,
     fetcher: Fetcher = stdlib_fetch,
 ) -> tuple[str, ...]:
-    payload = _fetch_payload(_project_url(registry, project_name), fetcher=fetcher)
+    payload = release_registry_retry._fetch_payload(_project_url(registry, project_name), fetcher=fetcher)
     if payload is None:
         raise RegistryVerificationError("Registry project response was unexpectedly absent")
     document = _decode_object(payload, label="Registry project response")
@@ -221,7 +190,7 @@ def inspect_release(
     fetcher: Fetcher = stdlib_fetch,
 ) -> ReleaseInspection:
     version = _canonical_public_version(version_text, label="Requested version")
-    payload = _fetch_payload(
+    payload = release_registry_retry._fetch_payload(
         _release_url(registry, project_name, str(version)),
         fetcher=fetcher,
         allow_not_found=True,
@@ -240,7 +209,7 @@ def inspect_release(
     if not isinstance(urls, list):
         raise RegistryVerificationError("Existing registry release has no distribution files")
     if not urls:
-        raise _RetryableRegistryError("Existing registry release has no distribution files yet")
+        raise release_registry_retry._PendingRegistryError("Existing registry release has no distribution files yet")
 
     files: list[ReleaseFile] = []
     seen: set[str] = set()
@@ -262,7 +231,7 @@ def inspect_release(
         download_url = _validated_download_url(item.get("url"), filename, registry)
         files.append(ReleaseFile(filename=filename, sha256=sha256, download_url=download_url))
     if not files:
-        raise _RetryableRegistryError("Existing registry release has no distribution files yet")
+        raise release_registry_retry._PendingRegistryError("Existing registry release has no distribution files yet")
     return ReleaseInspection(
         registry=registry,
         version=str(version),
@@ -321,97 +290,6 @@ def compute_local_distribution_hashes(
     return hashes
 
 
-def _compare_digest_sets(
-    local_hashes: Mapping[str, str],
-    remote_hashes: Mapping[str, str],
-    *,
-    registry: Registry,
-) -> None:
-    local_names = set(local_hashes)
-    remote_names = set(remote_hashes)
-    if local_names != remote_names:
-        missing = sorted(local_names - remote_names)
-        extra = sorted(remote_names - local_names)
-        details: list[str] = []
-        if missing:
-            details.append(f"missing={','.join(missing)}")
-        if extra:
-            details.append(f"extra={','.join(extra)}")
-        mismatch = RegistryVerificationError(
-            f"{registry.value} distribution set does not match the local build ({'; '.join(details)})"
-        )
-        if _is_eventually_complete_distribution_set(local_hashes, remote_hashes):
-            raise _RetryableRegistryError(str(mismatch))
-        raise mismatch
-    mismatched = sorted(filename for filename, digest in local_hashes.items() if remote_hashes[filename] != digest)
-    if mismatched:
-        raise RegistryVerificationError(f"{registry.value} distribution digest mismatch: {','.join(mismatched)}")
-
-
-def _is_eventually_complete_distribution_set(
-    local_hashes: Mapping[str, str],
-    remote_hashes: Mapping[str, str],
-) -> bool:
-    """Return true only for a matching remote subset missing local artifacts."""
-
-    local_names = set(local_hashes)
-    remote_names = set(remote_hashes)
-    return remote_names < local_names and all(
-        local_hashes[filename] == remote_hashes[filename] for filename in remote_names
-    )
-
-
-def _retry_delay(attempt: int, *, initial: float, maximum: float) -> float:
-    capped_attempt = min(attempt, REGISTRY_RETRY_MAX_ATTEMPTS - 1)
-    return min(maximum, initial * (2**capped_attempt))
-
-
-def _is_valid_retry_delay_value(delay: object) -> bool:
-    if isinstance(delay, bool) or not isinstance(delay, (int, float)):
-        return False
-    return isinstance(delay, int) or math.isfinite(delay)
-
-
-def _validate_retry_settings(
-    attempts: int,
-    initial_delay: float,
-    maximum_delay: float,
-) -> None:
-    if isinstance(attempts, bool) or not isinstance(attempts, int) or not 1 <= attempts <= REGISTRY_RETRY_MAX_ATTEMPTS:
-        raise RegistryVerificationError(
-            f"Registry retry attempts must be between one and {REGISTRY_RETRY_MAX_ATTEMPTS}"
-        )
-    if not all(_is_valid_retry_delay_value(delay) for delay in (initial_delay, maximum_delay)):
-        raise RegistryVerificationError("Registry retry delays must be finite numbers")
-    if initial_delay < 0 or maximum_delay < initial_delay:
-        raise RegistryVerificationError("Registry retry delays must be non-negative and ordered")
-    if maximum_delay > REGISTRY_RETRY_MAX_TOTAL_DELAY_SECONDS:
-        raise RegistryVerificationError(
-            f"Registry retry delay must not exceed {REGISTRY_RETRY_MAX_TOTAL_DELAY_SECONDS:g} seconds"
-        )
-    total_delay = sum(
-        _retry_delay(attempt, initial=initial_delay, maximum=maximum_delay) for attempt in range(attempts - 1)
-    )
-    if total_delay > REGISTRY_RETRY_MAX_TOTAL_DELAY_SECONDS:
-        raise RegistryVerificationError(
-            f"Registry retry delay budget must not exceed {REGISTRY_RETRY_MAX_TOTAL_DELAY_SECONDS:g} seconds"
-        )
-
-
-def _wait_for_retry(
-    attempt: int,
-    *,
-    attempts: int,
-    initial_delay: float,
-    maximum_delay: float,
-    sleep: Sleeper,
-) -> bool:
-    if attempt == attempts - 1:
-        return False
-    sleep(_retry_delay(attempt, initial=initial_delay, maximum=maximum_delay))
-    return True
-
-
 def download_verified_release(
     inspection: ReleaseInspection,
     destination: Path,
@@ -426,7 +304,7 @@ def download_verified_release(
         temporary_dir = Path(temporary_dir_text)
         staged: list[tuple[Path, Path]] = []
         for item in inspection.files:
-            payload = _fetch_payload(item.download_url, fetcher=fetcher)
+            payload = release_registry_retry._fetch_payload(item.download_url, fetcher=fetcher)
             if payload is None:
                 raise RegistryVerificationError(f"Registry distribution was absent: {item.filename}")
             actual_digest = hashlib.sha256(payload).hexdigest()
@@ -449,52 +327,40 @@ def verify_registry_release(
     project_name: str = DEFAULT_PROJECT_NAME,
     download_dir: Path | None = None,
     fetcher: Fetcher = stdlib_fetch,
-    retry_attempts: int = REGISTRY_RETRY_ATTEMPTS,
-    retry_initial_delay_seconds: float = REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
-    retry_max_delay_seconds: float = REGISTRY_RETRY_MAX_DELAY_SECONDS,
-    sleep: Sleeper | None = None,
+    retry_attempts: int = release_registry_retry.REGISTRY_RETRY_ATTEMPTS,
+    retry_initial_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
+    retry_max_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_MAX_DELAY_SECONDS,
+    sleep: release_registry_retry.Sleeper | None = None,
 ) -> RegistryResult:
     local_hashes = compute_local_distribution_hashes(dist_dir, version_text, project_name)
-    _validate_retry_settings(
-        retry_attempts,
-        retry_initial_delay_seconds,
-        retry_max_delay_seconds,
-    )
-    sleep_fn = time.sleep if sleep is None else sleep
 
-    for attempt in range(retry_attempts):
-        try:
-            inspection = inspect_release(registry, version_text, project_name=project_name, fetcher=fetcher)
-            if not inspection.exists:
-                return RegistryResult(
-                    registry=registry,
-                    status="absent",
-                    version=inspection.version,
-                    files=tuple(sorted(local_hashes)),
-                )
-
-            _compare_digest_sets(local_hashes, inspection.digests, registry=registry)
-            downloaded = (
-                download_verified_release(inspection, download_dir, fetcher=fetcher) if download_dir is not None else ()
-            )
+    def verify_once() -> RegistryResult:
+        inspection = inspect_release(registry, version_text, project_name=project_name, fetcher=fetcher)
+        if not inspection.exists:
             return RegistryResult(
                 registry=registry,
-                status="exact",
+                status="absent",
                 version=inspection.version,
                 files=tuple(sorted(local_hashes)),
-                downloaded_paths=downloaded,
             )
-        except _RetryableRegistryError:
-            if not _wait_for_retry(
-                attempt,
-                attempts=retry_attempts,
-                initial_delay=retry_initial_delay_seconds,
-                maximum_delay=retry_max_delay_seconds,
-                sleep=sleep_fn,
-            ):
-                raise
 
-    raise AssertionError("Registry verification exhausted without a result")
+        release_registry_retry._compare_digest_sets(local_hashes, inspection.digests, registry=registry)
+        downloaded = download_verified_release(inspection, download_dir, fetcher=fetcher) if download_dir else ()
+        return RegistryResult(
+            registry=registry,
+            status="exact",
+            version=inspection.version,
+            files=tuple(sorted(local_hashes)),
+            downloaded_paths=downloaded,
+        )
+
+    return release_registry_retry._retry_registry_operation(
+        verify_once,
+        retry_attempts=retry_attempts,
+        retry_initial_delay_seconds=retry_initial_delay_seconds,
+        retry_max_delay_seconds=retry_max_delay_seconds,
+        sleep=sleep,
+    )
 
 
 def verify_testpypi_release(
@@ -504,10 +370,10 @@ def verify_testpypi_release(
     project_name: str = DEFAULT_PROJECT_NAME,
     download_dir: Path | None = None,
     fetcher: Fetcher = stdlib_fetch,
-    retry_attempts: int = REGISTRY_RETRY_ATTEMPTS,
-    retry_initial_delay_seconds: float = REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
-    retry_max_delay_seconds: float = REGISTRY_RETRY_MAX_DELAY_SECONDS,
-    sleep: Sleeper | None = None,
+    retry_attempts: int = release_registry_retry.REGISTRY_RETRY_ATTEMPTS,
+    retry_initial_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
+    retry_max_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_MAX_DELAY_SECONDS,
+    sleep: release_registry_retry.Sleeper | None = None,
 ) -> TestPyPIResult:
     """Compatibility wrapper for existing TestPyPI workflow callers."""
 
@@ -587,7 +453,12 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None, *, fetcher: Fetcher = stdlib_fetch) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    fetcher: Fetcher = stdlib_fetch,
+    sleep: release_registry_retry.Sleeper | None = None,
+) -> int:
     args = _parser().parse_args(argv)
     command = getattr(args, "command", None)
     try:
@@ -596,13 +467,26 @@ def main(argv: Sequence[str] | None = None, *, fetcher: Fetcher = stdlib_fetch) 
             output: object = list_registry_versions(registry, project_name=args.project, fetcher=fetcher)
         elif command == "inspect-release":
             registry = Registry(args.registry)
-            inspection = inspect_release(
+            version = _canonical_public_version(args.version, label="Requested version")
+            inspection = release_registry_retry._inspect_release_with_retry(
                 registry,
-                args.version,
+                str(version),
+                inspector=inspect_release,
                 project_name=args.project,
                 fetcher=fetcher,
+                pending_on_incomplete=True,
+                sleep=sleep,
             )
-            output = _inspection_output(inspection)
+            output = (
+                {
+                    "registry": registry.value,
+                    "version": str(version),
+                    "status": "pending",
+                    "files": [],
+                }
+                if inspection is None
+                else _inspection_output(inspection)
+            )
         elif command == "verify-testpypi":
             result = verify_testpypi_release(
                 args.version,
