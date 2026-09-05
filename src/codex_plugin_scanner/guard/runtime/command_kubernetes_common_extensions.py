@@ -7,6 +7,7 @@ from .command_common_extension_helpers import (
     flag_variant,
     help_variant,
     kubernetes_dry_run_variant,
+    option_value_variant,
     rule,
 )
 from .command_rules import AnyMatcher, CommandSafeVariant, ExecutableMatcher
@@ -17,6 +18,7 @@ _KUBECTL_GLOBAL_OPTIONS = frozenset(
     {
         "--as",
         "--as-group",
+        "--as-uid",
         "--cache-dir",
         "--certificate-authority",
         "--client-certificate",
@@ -110,12 +112,24 @@ def _kube_mutation_variants(
     return tuple(variants)
 
 
-def _helm_dry_run_variant(matcher: ExecutableMatcher | AnyMatcher, title: str) -> CommandSafeVariant:
-    return flag_variant(
-        matcher,
-        variant_id="dry-run",
-        title=title,
-        required_flags=frozenset({"--dry-run"}),
+def _helm_dry_run_variants(
+    matcher: ExecutableMatcher | AnyMatcher,
+    title: str,
+) -> tuple[CommandSafeVariant, ...]:
+    return (
+        flag_variant(
+            matcher,
+            variant_id="dry-run",
+            title=title,
+            required_flags=frozenset({"--dry-run"}),
+        ),
+        option_value_variant(
+            matcher,
+            variant_id="dry-run-mode",
+            title=title,
+            option="--dry-run",
+            allowed_values=frozenset({"client", "server"}),
+        ),
     )
 
 
@@ -213,7 +227,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_EDIT,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Export the resource, review a diff, and apply a reviewed manifest instead of editing live state.",
+        safer_alternative=(
+            "Export the resource, review a diff, and apply a reviewed manifest instead of editing live state."
+        ),
         example_command="kubectl edit deployment api",
         safe_variants=(help_variant(_EDIT),),
     ),
@@ -235,7 +251,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_AUTOSCALE,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Use a dry run and review minimum, maximum, and target utilization before enabling autoscaling.",
+        safer_alternative=(
+            "Use a dry run and review minimum, maximum, and target utilization before enabling autoscaling."
+        ),
         example_command="kubectl autoscale deployment api --min=2 --max=10 --cpu-percent=80",
         safe_variants=_kube_mutation_variants(_AUTOSCALE, "Kubernetes autoscale preview"),
     ),
@@ -257,7 +275,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_RUN,
         action_class="Kubernetes destructive command",
         risk_classes=("execution", "network_egress"),
-        safer_alternative="Use a client-side dry run and review image, service account, environment, and command first.",
+        safer_alternative=(
+            "Use a client-side dry run and review image, service account, environment, and command first."
+        ),
         example_command="kubectl run debug --image=alpine -- sh",
         safe_variants=_kube_mutation_variants(_RUN, "Kubernetes run preview"),
     ),
@@ -347,18 +367,24 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_EXEC,
         action_class="Kubernetes remote execution command",
         risk_classes=("execution", "network_egress"),
-        safer_alternative="Prefer read-only inspection and avoid exposing secrets or host-mounted paths to the session.",
+        safer_alternative=(
+            "Prefer read-only inspection and avoid exposing secrets or host-mounted paths to the session."
+        ),
         example_command="kubectl exec deployment/api -- sh -lc 'id'",
         severity="critical",
     ),
     rule(
         rule_id="command.kubernetes-operations.debug",
         title="Kubernetes debug session",
-        description="Identifies debug operations that can add ephemeral containers, copy Pods, or enter node namespaces.",
+        description=(
+            "Identifies debug operations that can add ephemeral containers, copy Pods, or enter node namespaces."
+        ),
         matcher=_DEBUG,
         action_class="Kubernetes remote execution command",
         risk_classes=("execution", "network_egress", "destructive_shell"),
-        safer_alternative="Use the narrowest debug target and profile, and avoid host namespace access unless required.",
+        safer_alternative=(
+            "Use the narrowest debug target and profile, and avoid host namespace access unless required."
+        ),
         example_command="kubectl debug node/node-a -it --image=busybox",
         severity="critical",
     ),
@@ -369,7 +395,9 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_PORT_FORWARD,
         action_class="Kubernetes network tunnel command",
         risk_classes=("network_egress",),
-        safer_alternative="Bind only to loopback, forward the minimum required port, and verify the exact target first.",
+        safer_alternative=(
+            "Bind only to loopback, forward the minimum required port, and verify the exact target first."
+        ),
         example_command="kubectl port-forward service/api 8080:80",
     ),
     rule(
@@ -405,7 +433,7 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         example_command="helm install api ./chart --namespace prod",
         safe_variants=(
             help_variant(_HELM_INSTALL),
-            _helm_dry_run_variant(_HELM_INSTALL, "Helm install preview"),
+            *_helm_dry_run_variants(_HELM_INSTALL, "Helm install preview"),
         ),
     ),
     rule(
@@ -415,11 +443,13 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         matcher=_HELM_UPGRADE,
         action_class="Kubernetes destructive command",
         risk_classes=("execution", "network_egress", "destructive_shell"),
-        safer_alternative="Dry-run the upgrade and review rendered manifests, hooks, values, and rollback readiness first.",
+        safer_alternative=(
+            "Dry-run the upgrade and review rendered manifests, hooks, values, and rollback readiness first."
+        ),
         example_command="helm upgrade api ./chart --namespace prod",
         safe_variants=(
             help_variant(_HELM_UPGRADE),
-            _helm_dry_run_variant(_HELM_UPGRADE, "Helm upgrade preview"),
+            *_helm_dry_run_variants(_HELM_UPGRADE, "Helm upgrade preview"),
         ),
     ),
     rule(
@@ -433,7 +463,7 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         example_command="helm rollback api 2 --namespace prod",
         safe_variants=(
             help_variant(_HELM_ROLLBACK),
-            _helm_dry_run_variant(_HELM_ROLLBACK, "Helm rollback preview"),
+            *_helm_dry_run_variants(_HELM_ROLLBACK, "Helm rollback preview"),
         ),
     ),
     rule(
@@ -447,7 +477,7 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         example_command="helm delete api --namespace prod",
         safe_variants=(
             help_variant(_HELM_REMOVE_ALIASES),
-            _helm_dry_run_variant(_HELM_REMOVE_ALIASES, "Helm uninstall preview"),
+            *_helm_dry_run_variants(_HELM_REMOVE_ALIASES, "Helm uninstall preview"),
         ),
     ),
 )
