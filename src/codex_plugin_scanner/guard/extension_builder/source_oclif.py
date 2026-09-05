@@ -55,15 +55,17 @@ def _flags(value: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
 def _command_path(command_id: object, separator: str) -> tuple[str, ...]:
     if not isinstance(command_id, str):
         raise BuilderError("oclif_command", "oclif command IDs must be strings.")
-    if command_id in {"", "."}:
-        return ()
-    value = token(command_id, pattern=COMMAND_TOKEN_PATTERN, maximum=128)
-    parts = value.split(":")
-    if any(not part for part in parts):
-        raise BuilderError("oclif_command", "oclif command IDs contain an empty topic component.")
-    if separator == "space":
-        return tuple(token(part) for part in parts)
-    return (token(value, pattern=COMMAND_TOKEN_PATTERN),)
+    path: list[str] = []
+    if command_id not in {"", "."}:
+        value = token(command_id, pattern=COMMAND_TOKEN_PATTERN, maximum=128)
+        parts = value.split(":")
+        if any(not part for part in parts):
+            raise BuilderError("oclif_command", "oclif command IDs contain an empty topic component.")
+        if separator == "space":
+            path.extend(token(part) for part in parts)
+        else:
+            path.append(token(value, pattern=COMMAND_TOKEN_PATTERN))
+    return tuple(path)
 
 
 def oclif_surface(value: object, *, topic_separator: str = "colon") -> tuple[tuple[Operation, ...], tuple[str, ...]]:

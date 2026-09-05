@@ -48,6 +48,12 @@ class ReviewedLiteralCommandMatcher:
         validate_reviewed_literal_argv(self.executable, self.arguments)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        if self._matches(command):
+            evidence.append(MatcherEvidence(0, self.executable, "Matched one explicitly reviewed literal invocation."))
+        return tuple(evidence)
+
+    def _matches(self, command: CanonicalCommand) -> bool:
         expected = " ".join((self.executable, *self.arguments))
         if (
             command.dialect != "posix"
@@ -61,9 +67,9 @@ class ReviewedLiteralCommandMatcher:
             or command.path_overridden
             or len(command.segments) != 1
         ):
-            return ()
+            return False
         segment = command.segments[0]
-        if (
+        return not (
             segment.executable != self.executable
             or segment.tokens != (self.executable, *self.arguments)
             or segment.arguments != self.arguments
@@ -71,6 +77,4 @@ class ReviewedLiteralCommandMatcher:
             or segment.wrapper_chain
             or segment.path_overridden
             or segment.pipeline_index != 0
-        ):
-            return ()
-        return (MatcherEvidence(0, self.executable, "Matched one explicitly reviewed literal invocation."),)
+        )
