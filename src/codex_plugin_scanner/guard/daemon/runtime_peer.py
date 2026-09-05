@@ -203,6 +203,13 @@ def load_guard_daemon_endpoint(guard_home: Path) -> tuple[str, str] | None:
     return owner_url, owner_token
 
 
+def load_guard_daemon_endpoint_url(guard_home: Path) -> str | None:
+    """Return the URL from a verified current-runtime or Desktop-owned endpoint."""
+
+    endpoint = load_guard_daemon_endpoint(guard_home)
+    return endpoint[0] if endpoint is not None else None
+
+
 def retained_newer_runtime_payload(
     guard_home: Path,
     *,

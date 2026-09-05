@@ -11,7 +11,7 @@ from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..consumer.service import diff_artifact
-from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
@@ -95,8 +95,7 @@ def _build_guard_product_payload(
     receipt_count = store.count_receipts()
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
     runtime_state = store.get_runtime_state()
-    daemon_endpoint = load_guard_daemon_endpoint(context.guard_home)
-    approval_center_url = daemon_endpoint[0] if daemon_endpoint is not None else None
+    approval_center_url = load_guard_daemon_endpoint_url(context.guard_home)
     from ..protection_posture import protection_status_fields
 
     payload: dict[str, object] = {

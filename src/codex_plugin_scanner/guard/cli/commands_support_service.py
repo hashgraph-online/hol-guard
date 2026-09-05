@@ -15,8 +15,7 @@ if TYPE_CHECKING:
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
 
-from ..daemon.manager import load_guard_daemon_url
-from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -221,10 +220,7 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
                 running = True
         except Exception:
             pass
-    url = load_guard_daemon_url(guard_home) if running else None
-    if url is None and running:
-        daemon_endpoint = load_guard_daemon_endpoint(guard_home)
-        url = daemon_endpoint[0] if daemon_endpoint is not None else None
+    url = load_guard_daemon_endpoint_url(guard_home) if running else None
     authenticated_state = load_authenticated_daemon_state(guard_home) if running else None
     package_version = authenticated_state.get("package_version") if authenticated_state is not None else None
     daemon_version = package_version if isinstance(package_version, str) and package_version else None
