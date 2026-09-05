@@ -65,3 +65,13 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     for job_name, next_job_name, expected_count in cache_consumers:
         job = _workflow_job(workflow, job_name, next_job_name)
         assert job.count("save-cache: false") >= expected_count
+
+
+def test_sonar_scope_includes_native_rust_workspace() -> None:
+    config = (ROOT / "sonar-project.properties").read_text(encoding="utf-8")
+
+    assert "sonar.sources=src,rust" in config
+    assert "sonar.tests=tests,rust" in config
+    assert "sonar.test.inclusions=**/test_*.py,rust/**/tests/**/*.rs" in config
+    assert "sonar.rust.cargo.manifestPaths=rust/Cargo.toml" in config
+    assert "rust/**/tests/**" in config
