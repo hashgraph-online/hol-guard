@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import stat
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -14,7 +12,14 @@ from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from .containment_executor import file_sha256
-from .package_evidence_common import resolved_package_bin_target, valid_sha512_integrity
+from .package_evidence_common import (
+    object_mapping,
+    read_json_with_integrity,
+    require,
+    resolved_package_bin_target,
+    valid_sha512_integrity,
+    version_spec_matches,
+)
 from .package_intent_common import LocalPackageExecutionEvidence, PackageExecutionFileEvidence
 
 RunnerKind = Literal["vitest", "eslint", "tsx"]
@@ -25,7 +30,6 @@ _RUNNER_OPERATION = {"vitest": "test", "eslint": "lint", "tsx": "diagnostic"}
 _SOURCE_PREFIXES = ("file:", "git+", "git://", "github:", "http://", "https://", "npm:", "workspace:")
 _TEST_SUFFIXES = (".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts", ".spec.tsx")
 _LINT_SUFFIXES = (".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx")
-_MAX_JSON_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,12 +70,12 @@ def build_local_node_runner_evidence(
         return None
     runner, runner_args, input_files, argument_reasons = parsed
     reasons = list(argument_reasons)
-    _require(manager == "npx", "manager_mismatch", reasons)
-    _require(execution.manager_name == manager, "manager_evidence_mismatch", reasons)
-    _require(execution.local_only_requested or runner == "tsx", "remote_install_not_disabled", reasons)
-    _require(execution.package_name == runner, "package_mismatch", reasons)
-    _require(execution.executable_name == runner, "executable_mismatch", reasons)
-    _require(
+    require(manager == "npx", "manager_mismatch", reasons)
+    require(execution.manager_name == manager, "manager_evidence_mismatch", reasons)
+    require(execution.local_only_requested or runner == "tsx", "remote_install_not_disabled", reasons)
+    require(execution.package_name == runner, "package_mismatch", reasons)
+    require(execution.executable_name == runner, "executable_mismatch", reasons)
+    require(
         execution.manager is not None and execution.manager.status == "available",
         "manager_identity_incomplete",
         reasons,
@@ -80,7 +84,7 @@ def build_local_node_runner_evidence(
     executable = execution.local_executable
     executable_path = executable.resolved_path if executable is not None else None
     executable_hash = executable.content_hash if executable is not None else None
-    _require(
+    require(
         executable is not None
         and executable.status == "available"
         and executable_path is not None
@@ -93,35 +97,39 @@ def build_local_node_runner_evidence(
     lockfile = workspace / "package-lock.json"
     package_root = workspace / "node_modules" / runner
     package_manifest = package_root / "package.json"
-    root_payload, root_hash = _read_json(root_manifest)
-    lock_payload, lock_hash = _read_json(lockfile)
-    package_payload, package_hash = _read_json(package_manifest)
-    _require(_evidence_contains(execution.manifests, root_manifest, root_hash), "manifest_identity_drift", reasons)
-    _require(_evidence_contains(execution.lockfiles, lockfile, lock_hash), "lock_identity_drift", reasons)
-    _require(_has_only_package_lock(execution), "lock_source_ambiguous", reasons)
+    root_payload, root_hash = read_json_with_integrity(root_manifest)
+    lock_payload, lock_hash = read_json_with_integrity(lockfile)
+    package_payload, package_hash = read_json_with_integrity(package_manifest)
+    require(_evidence_contains(execution.manifests, root_manifest, root_hash), "manifest_identity_drift", reasons)
+    require(_evidence_contains(execution.lockfiles, lockfile, lock_hash), "lock_identity_drift", reasons)
+    require(_has_only_package_lock(execution), "lock_source_ambiguous", reasons)
 
     declared_version = _dependency_version(root_payload, runner)
     locked_version, lock_source_ok = _locked_version(lock_payload, runner)
     installed_name = _string_value(package_payload, "name")
     installed_version = _string_value(package_payload, "version")
-    _require(declared_version is not None, "manifest_dependency_missing", reasons)
-    _require(
+    require(declared_version is not None, "manifest_dependency_missing", reasons)
+    require(
         declared_version is not None and not declared_version.lower().startswith(_SOURCE_PREFIXES),
         "manifest_source_drift",
         reasons,
     )
-    _require(locked_version is not None, "lock_dependency_missing", reasons)
-    _require(lock_source_ok, "lock_source_drift", reasons)
-    _require(installed_name == runner, "installed_package_name_mismatch", reasons)
-    _require(installed_version is not None, "installed_package_missing", reasons)
-    _require(_version_spec_matches(declared_version, locked_version), "manifest_lock_version_drift", reasons)
-    _require(locked_version == installed_version, "lock_install_version_drift", reasons)
-    _require(execution.declared_version == declared_version, "declared_dependency_mismatch", reasons)
+    require(locked_version is not None, "lock_dependency_missing", reasons)
+    require(lock_source_ok, "lock_source_drift", reasons)
+    require(installed_name == runner, "installed_package_name_mismatch", reasons)
+    require(installed_version is not None, "installed_package_missing", reasons)
+    require(
+        version_spec_matches(declared_version, locked_version, version_re=_VERSION_RE, caret_pins_zero_major=True),
+        "manifest_lock_version_drift",
+        reasons,
+    )
+    require(locked_version == installed_version, "lock_install_version_drift", reasons)
+    require(execution.declared_version == declared_version, "declared_dependency_mismatch", reasons)
 
     bin_target = _package_bin_target(package_payload, runner)
     expected_executable = _resolved_bin_target(package_root, bin_target)
-    _require(bin_target is not None, "package_bin_missing", reasons)
-    _require(
+    require(bin_target is not None, "package_bin_missing", reasons)
+    require(
         executable_path is not None
         and expected_executable is not None
         and Path(executable_path) == expected_executable,
@@ -133,7 +141,7 @@ def build_local_node_runner_evidence(
             observed_hash = f"sha256:{file_sha256(executable_path)}"
         except (OSError, ValueError):
             observed_hash = None
-        _require(observed_hash == executable_hash, "executable_identity_drift", reasons)
+        require(observed_hash == executable_hash, "executable_identity_drift", reasons)
 
     normalized_reasons = tuple(dict.fromkeys(reasons))
     binding_payload = {
@@ -247,41 +255,6 @@ def _validated_input_files(
     return tuple(result)
 
 
-def _read_json(path: Path) -> tuple[dict[str, object] | None, str | None]:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return None, None
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > _MAX_JSON_BYTES:
-            return None, None
-        content = bytearray()
-        while chunk := os.read(descriptor, 1024 * 1024):
-            content.extend(chunk)
-            if len(content) > _MAX_JSON_BYTES:
-                return None, None
-        after = os.fstat(descriptor)
-    except OSError:
-        return None, None
-    finally:
-        os.close(descriptor)
-    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-        after.st_dev,
-        after.st_ino,
-        after.st_size,
-        after.st_mtime_ns,
-    ):
-        return None, None
-    try:
-        encoded = bytes(content)
-        payload = cast(object, json.loads(encoded.decode("utf-8")))
-    except (UnicodeDecodeError, ValueError):
-        return None, None
-    return _object_mapping(payload), f"sha256:{hashlib.sha256(encoded).hexdigest()}"
-
-
 def _evidence_contains(
     values: Sequence[PackageExecutionFileEvidence],
     path: Path,
@@ -305,7 +278,7 @@ def _dependency_version(payload: dict[str, object] | None, package: str) -> str 
     if payload is None:
         return None
     for group in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
-        values = _object_mapping(payload.get(group))
+        values = object_mapping(payload.get(group))
         version = values.get(package) if values is not None else None
         if isinstance(version, str) and version.strip():
             return version.strip()
@@ -313,8 +286,8 @@ def _dependency_version(payload: dict[str, object] | None, package: str) -> str 
 
 
 def _locked_version(payload: dict[str, object] | None, package: str) -> tuple[str | None, bool]:
-    packages = _object_mapping(payload.get("packages")) if payload is not None else None
-    item = _object_mapping(packages.get(f"node_modules/{package}")) if packages is not None else None
+    packages = object_mapping(payload.get("packages")) if payload is not None else None
+    item = object_mapping(packages.get(f"node_modules/{package}")) if packages is not None else None
     version = item.get("version") if item is not None else None
     resolved = item.get("resolved") if item is not None else None
     integrity = item.get("integrity") if item is not None else None
@@ -354,7 +327,7 @@ def _package_bin_target(payload: dict[str, object] | None, runner: str) -> str |
     value = payload.get("bin")
     if isinstance(value, str) and value.strip():
         return value.strip()
-    mapping = _object_mapping(value)
+    mapping = object_mapping(value)
     target = mapping.get(runner) if mapping is not None else None
     return target.strip() if isinstance(target, str) and target.strip() else None
 
@@ -365,40 +338,6 @@ _resolved_bin_target = resolved_package_bin_target
 def _string_value(payload: dict[str, object] | None, key: str) -> str | None:
     value = payload.get(key) if payload is not None else None
     return value.strip() if isinstance(value, str) and value.strip() else None
-
-
-def _version_spec_matches(specifier: str | None, version: str | None) -> bool:
-    if specifier is None or version is None:
-        return False
-    spec_match = _VERSION_RE.fullmatch(specifier)
-    version_match = _VERSION_RE.fullmatch(version)
-    if spec_match is None or version_match is None:
-        return False
-    spec_parts = tuple(int(value) for value in spec_match.groups())
-    version_parts = tuple(int(value) for value in version_match.groups())
-    if specifier.startswith("^"):
-        if spec_parts[0] > 0:
-            return version_parts >= spec_parts and version_parts[0] == spec_parts[0]
-        if spec_parts[1] > 0:
-            return version_parts >= spec_parts and version_parts[:2] == spec_parts[:2]
-        return version_parts == spec_parts
-    if specifier.startswith("~"):
-        return version_parts >= spec_parts and version_parts[:2] == spec_parts[:2]
-    return version_parts == spec_parts
-
-
-def _object_mapping(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    raw = cast(dict[object, object], value)
-    if not all(isinstance(key, str) for key in raw):
-        return None
-    return {str(key): item for key, item in raw.items()}
-
-
-def _require(condition: bool, reason: str, reasons: list[str]) -> None:
-    if not condition:
-        reasons.append(reason)
 
 
 __all__ = ("LocalNodeRunnerEvidence", "build_local_node_runner_evidence")

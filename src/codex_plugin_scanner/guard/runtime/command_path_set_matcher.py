@@ -12,7 +12,12 @@ from .command_option_parsing import (
     flags_present_in_all_option_parses,
     matches_subcommands_conservatively,
 )
-from .command_rules import _after_leading_options, _segment_matches_executable, _without_options
+from .command_rules import (
+    _after_leading_options,
+    _ExecutableContractBase,
+    _segment_matches_executable,
+    _without_options,
+)
 
 
 def _normalized_string_set(values: frozenset[str], *, field_name: str) -> frozenset[str]:
@@ -72,22 +77,10 @@ def _normalized_required_option_values(
 
 @final
 @dataclass(frozen=True, slots=True)
-class ExecutablePathSetMatcher:
+class ExecutablePathSetMatcher(_ExecutableContractBase):
     """Match one executable against a set of subcommand paths without matcher explosion."""
 
-    executables: frozenset[str]
-    paths: frozenset[tuple[str, ...]]
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    allow_leading_options: bool = False
-    leading_options_with_values: frozenset[str] = frozenset()
-    interspersed_options_with_values: frozenset[str] = frozenset()
-    interspersed_flags: frozenset[str] = frozenset()
-    options_with_values: frozenset[str] = frozenset()
-    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
-    required_flags_in_all_arguments: bool = False
-    fail_secure_unknown_options: bool = False
+    paths: frozenset[tuple[str, ...]] = frozenset()
     _path_lengths_desc: tuple[int, ...] = field(init=False, repr=False, compare=False)
     _paths_desc: tuple[tuple[str, ...], ...] = field(init=False, repr=False, compare=False)
 

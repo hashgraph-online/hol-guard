@@ -22,13 +22,11 @@ _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 
 
-@final
 @dataclass(frozen=True, slots=True)
-class ExecutableMatcher:
-    """Match executable names with optional subcommand and flag constraints."""
+class _ExecutableContractBase:
+    """Shared executable-matcher contract fields."""
 
     executables: frozenset[str]
-    subcommands: tuple[str, ...] = ()
     required_flags: frozenset[str] = frozenset()
     forbidden_flags: frozenset[str] = frozenset()
     allow_leading_options: bool = False
@@ -40,6 +38,14 @@ class ExecutableMatcher:
     required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
     required_flags_in_all_arguments: bool = False
     fail_secure_unknown_options: bool = False
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class ExecutableMatcher(_ExecutableContractBase):
+    """Match executable names with optional subcommand and flag constraints."""
+
+    subcommands: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
