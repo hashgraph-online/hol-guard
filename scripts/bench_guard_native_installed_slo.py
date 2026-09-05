@@ -44,7 +44,13 @@ from scripts.native_slo_adapter import (  # noqa: E402
     route_matrix,
     source_payloads,
 )
-from scripts.native_slo_capacity import measure_capacity  # noqa: E402
+from scripts.native_slo_baseline import (  # noqa: E402, F401
+    steady_state_rss_baseline as _steady_state_rss_baseline,
+)
+from scripts.native_slo_capacity import (  # noqa: E402, F401
+    _stabilize_ready_hook_workers,
+    measure_capacity,
+)
 from scripts.native_slo_contract import SIZE_CLASSES  # noqa: E402
 from scripts.native_slo_reporting import (  # noqa: E402
     SloMeasurements,
@@ -61,7 +67,7 @@ _DEFAULT_RECOVERY_ITERATIONS = 3
 _MAX_READINESS_SAMPLES = 8
 _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
 
-# Keep the historical private import available to contract tests and downstream tooling.
+# Keep historical private imports available to contract tests and downstream tooling.
 _safe_failure_rate = safe_failure_rate
 
 
