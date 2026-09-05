@@ -56,7 +56,11 @@ def test_cursor_native_review_asks_and_queues_approval(
 ) -> None:
     worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"))
     response = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_name": "WebFetch", "tool_input": {"url": "https://example.test"}},
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "WebFetch",
+            "tool_input": {"url": "https://example.test"},
+        },
         params={},
         default_harness="cursor",
         home_dir=tmp_path / "home",
@@ -72,6 +76,13 @@ def test_cursor_native_review_asks_and_queues_approval(
     pending = store.list_approval_requests(status="pending")
     assert len(pending) == 1
     assert pending[0]["policy_action"] == "review"
+    envelope = pending[0].get("action_envelope_json")
+    assert isinstance(envelope, dict)
+    assert envelope["tool_name"] == "WebFetch"
+    assert envelope["event_name"] == "PreToolUse"
+    assert envelope["pre_execution_result"] == "review"
+    assert envelope["action_type"] == "network_request"
+    assert "example.test" in envelope.get("network_hosts", [])
 
 
 def test_native_block_stays_terminal_without_an_approval_request(
@@ -118,3 +129,31 @@ def test_native_review_does_not_raise_worker_unsupported(
         )
     except HookWorkerUnsupported:
         pytest.fail("native review must queue an approval instead of raising HookWorkerUnsupported")
+
+
+def test_native_review_without_a_queue_still_pauses_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("codex"))
+
+    def fail_persist(*_args: object, **_kwargs: object) -> str:
+        raise OSError("approval store unavailable")
+
+    monkeypatch.setattr(store, "add_approval_request", fail_persist)
+    response = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+        params={},
+        default_harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert response["policy_action"] == "review"
+    assert "approval_request_id" not in response
+    assert "approval_url" not in response
+    assert "Approve this request in HOL Guard" not in str(response.get("reason") or "")

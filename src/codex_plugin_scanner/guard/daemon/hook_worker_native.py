@@ -9,6 +9,7 @@ from typing import Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
+from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_availability_policy import (
@@ -190,14 +191,8 @@ class HookWorkerNativeMixin:
             else:
                 action = str(native.get("minimum_action") or "")
                 if action == "review":
-                    return pause_native_pre_tool_for_approval(
-                        self.store,
-                        harness=harness,
-                        payload=payload,
-                        native_result=native,
-                        workspace=workspace,
-                        guard_home=guard_home,
-                    )
+                    record_python_semantic_hook_route()
+                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return harness_json_from_native_pre_tool(harness, native)
         if recording_only:
             return _record_unavailable_native(
