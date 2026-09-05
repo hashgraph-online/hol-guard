@@ -100,7 +100,8 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
         extension_id="command.container-runtime",
         name="Container runtime protection",
         description=(
-            "Reviews container lifecycle, cleanup, execution, network, and persistent-data operations that can expose credentials or mutate host state."
+            "Reviews container lifecycle, cleanup, execution, network, and persistent-data operations "
+            "that can expose credentials or mutate host state."
         ),
         action_classes=("docker-sensitive command", "Docker client config access"),
         risk_classes=("network_egress", "destructive_shell", "local_secret_read", "execution"),
