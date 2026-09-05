@@ -196,10 +196,10 @@ def _windows_private_state_binding(guard_home: Path) -> Iterator[_WindowsDirecto
             dacl=dacl,
             owner_sid=owner_sid,
         )
-        state_binding: tuple[Any, Any] | None = None
+        binding: _WindowsDirectoryBinding | None = None
         try:
             state_path = guard_binding.path / NATIVE_RUNTIME_STATE_DIRECTORY
-            _created, state_binding = _windows_bind_directory_component(
+            _created, state_handle = _windows_bind_directory_component(
                 state_path,
                 api=api,
                 descriptor=descriptor,
@@ -207,14 +207,16 @@ def _windows_private_state_binding(guard_home: Path) -> Iterator[_WindowsDirecto
                 owner_sid=owner_sid,
                 private=True,
             )
-            yield _WindowsDirectoryBinding(
+            binding = _WindowsDirectoryBinding(
                 state_path,
-                [*guard_binding.handles, state_binding],
+                [*guard_binding.handles, state_handle],
             )
+            yield binding
         finally:
             try:
-                if state_binding is not None:
-                    api._windows_close_handle(*state_binding)
+                if binding is not None:
+                    state_handles = binding.handles[len(guard_binding.handles) :]
+                    _windows_close_directory_binding(_WindowsDirectoryBinding(binding.path, state_handles), api)
             finally:
                 _windows_close_directory_binding(guard_binding, api)
 
