@@ -170,6 +170,66 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
     }
 
 
+def harness_json_from_native_pre_tool_review(
+    harness: str,
+    response: Mapping[str, object],
+    *,
+    approval: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Pause a native review without treating it as a terminal block."""
+
+    reason = str(response.get("reason") or "HOL Guard requires review before this action can execute.")
+    reason_code = str(response.get("reason_code") or "native_pre_tool_review")
+    approval_url = None
+    approval_request_id = None
+    if approval is not None:
+        raw_url = approval.get("approval_url")
+        raw_request_id = approval.get("request_id")
+        if isinstance(raw_url, str) and raw_url.strip():
+            approval_url = raw_url.strip()
+            reason = f"{reason} Approve this request in HOL Guard: {approval_url}"
+        if isinstance(raw_request_id, str) and raw_request_id.strip():
+            approval_request_id = raw_request_id.strip()
+    permission_decision = _native_review_permission_decision(harness)
+    if _canonical_hook_harness(harness) in {"pi", "omp"}:
+        output: dict[str, object] = {
+            "decision": "deny",
+            "reason": reason,
+            "model_output_action": "block",
+            "notice": "warning",
+            "policy_action": "review",
+            "reason_code": reason_code,
+        }
+        if approval_url is not None:
+            output["approval_url"] = approval_url
+        if approval_request_id is not None:
+            output["approval_request_id"] = approval_request_id
+        return output
+    hook_specific: dict[str, object] = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": permission_decision,
+        "permissionDecisionReason": reason,
+    }
+    rendered: dict[str, object] = {
+        "policy_action": "review",
+        "reason_code": reason_code,
+        "reason": reason,
+        "hookSpecificOutput": hook_specific,
+    }
+    if approval_url is not None:
+        rendered["approval_url"] = approval_url
+    if approval_request_id is not None:
+        rendered["approval_request_id"] = approval_request_id
+    return rendered
+
+
+def _native_review_permission_decision(harness: str) -> str:
+    canonical = _canonical_hook_harness(harness)
+    if canonical in {"codex", "kimi", "grok", "zcode", "hermes"}:
+        return "deny"
+    return "ask"
+
+
 def harness_json_from_native_post_tool(
     harness: str,
     response: Mapping[str, object],
@@ -360,6 +420,7 @@ def harness_json_from_review_response(
 __all__ = [
     "harness_json_from_native_post_tool",
     "harness_json_from_native_pre_tool",
+    "harness_json_from_native_pre_tool_review",
     "harness_json_from_review_response",
     "integrity_fail_closed_pre_tool_response",
     "observe_lifecycle_fail_safe_response",

@@ -9,7 +9,6 @@ from typing import Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
-from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_availability_policy import (
@@ -17,6 +16,7 @@ from .hook_availability_policy import (
     hook_review_is_recording_only,
     recording_only_pre_tool_response,
 )
+from .hook_native_review_approval import pause_native_pre_tool_for_approval
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -59,6 +59,8 @@ class _HookWorkerMetrics(Protocol):
 
 
 class _HookWorkerNativeHost(Protocol):
+    store: object
+
     @property
     def metrics(self) -> _HookWorkerMetrics: ...
 
@@ -188,8 +190,14 @@ class HookWorkerNativeMixin:
             else:
                 action = str(native.get("minimum_action") or "")
                 if action == "review":
-                    record_python_semantic_hook_route()
-                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
+                    return pause_native_pre_tool_for_approval(
+                        self.store,
+                        harness=harness,
+                        payload=payload,
+                        native_result=native,
+                        workspace=workspace,
+                        guard_home=guard_home,
+                    )
             return harness_json_from_native_pre_tool(harness, native)
         if recording_only:
             return _record_unavailable_native(
@@ -296,6 +304,16 @@ class HookWorkerNativeMixin:
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
+            action = str(native_result.get("minimum_action") or "")
+            if action == "review":
+                return pause_native_pre_tool_for_approval(
+                    self.store,
+                    harness=native_harness,
+                    payload=payload,
+                    native_result=native_result,
+                    workspace=workspace,
+                    guard_home=guard_home,
+                )
             return harness_json_from_native_pre_tool(native_harness, native_result)
         if recording_only:
             native_result = _watch_native_post_tool_result(native_result)
