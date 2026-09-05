@@ -42,6 +42,23 @@ CLAUDE_TMUX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "claude tmux process prune command",
         "command.claude-tmux.process-prune",
     ),
+    # No target and no selection flag is the widest form: the interactive sweep
+    # with every prompt answered for you.
+    (
+        "ctc --force",
+        "claude tmux session teardown command",
+        "command.claude-tmux.session-teardown",
+    ),
+    (
+        "yes | ctc --all",
+        "claude tmux session teardown command",
+        "command.claude-tmux.session-teardown",
+    ),
+    (
+        "yes | ctc --all --prune",
+        "claude tmux process prune command",
+        "command.claude-tmux.process-prune",
+    ),
 )
 
 
@@ -159,18 +176,57 @@ def test_claude_tmux_extension_publishes_reference_and_action_risks() -> None:
     assert risk_classes_for_command_action("claude tmux process prune command") == ("destructive_shell",)
 
 
-def test_session_teardown_needs_both_selection_and_force(tmp_path: Path) -> None:
-    """Either flag alone leaves a gate: no selection kills nothing, no --force prompts."""
+def test_session_teardown_turns_on_force_not_on_selection(tmp_path: Path) -> None:
+    """--force alone is the widest kill: with no target it sweeps every session."""
 
     def parsed(command: str):
         return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
 
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --force"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc api --force"))
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all --force"))
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --every --force"))
     assert _CTC_SESSION_TEARDOWN.match(parsed("claude-tmux-cleanup --all --force"))
+    # Without --force every one of these stops on a prompt.
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all")) == ()
-    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --force")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc api")) == ()
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc")) == ()
+
+
+def test_help_exits_before_anything_is_killed(tmp_path: Path) -> None:
+    """Help prints and returns, so the flags on the same line describe no risk."""
+
+    def parsed(command: str):
+        return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --help")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --force --help")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc -h -f")) == ()
+    assert _CTC_PROCESS_PRUNE.match(parsed("ctc --force --prune --help")) == ()
+
+
+def test_a_piped_yes_answers_the_prompt_the_same_way_force_does(tmp_path: Path) -> None:
+    """The prompt reads one line of stdin, so a feed of consent is unattended too."""
+
+    def parsed(command: str):
+        return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes | ctc"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes | ctc --all"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes y | ctc --all"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("echo y | ctc api"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("printf 'y\\n' | ctc --all"))
+    assert _CTC_PROCESS_PRUNE.match(parsed("yes | ctc --prune"))
+    assert _CTC_PROCESS_PRUNE.match(parsed("yes yes | ctc --all --prune"))
+    # A refusal is not consent, and neither is arbitrary piped data.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes n | ctc --all")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("cat notes | ctc --all")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("echo | ctc --all")) == ()
+    # `&&` and `;` start their own execution context and share no stdin.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes && ctc --all")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes ; ctc --all")) == ()
+    # The feed has to come before the cleanup, not after it.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all | yes")) == ()
 
 
 def test_process_prune_is_matched_independently_of_session_selection(tmp_path: Path) -> None:
@@ -193,13 +249,14 @@ def test_short_flags_and_clusters_carry_the_same_meaning(tmp_path: Path) -> None
     def parsed(command: str):
         return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
 
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc -f"))
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc -a -f"))
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc -af"))
     assert _CTC_PROCESS_PRUNE.match(parsed("ctc -afp"))
     assert _CTC_PROCESS_PRUNE.match(parsed("ctc -fp"))
     # Arguments are lower-cased before matching, so -A (--every) and -a (--all)
-    # are one token here. Both select sessions for the same unattended kill, so
-    # the collapse only widens the rule.
+    # are one token here. Neither selects anything the force flag has not
+    # already claimed, so the collapse changes nothing for these rules.
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc -A -f"))
 
 
