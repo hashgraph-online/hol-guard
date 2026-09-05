@@ -16,9 +16,22 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str) and item.strip())
 
 
+def _encode_mcp_suffix(raw: str) -> str:
+    encoded: list[str] = []
+    for character in raw:
+        if character == "x":
+            encoded.append("xx")
+        elif character == ".":
+            encoded.append("xd")
+        elif character == "-":
+            encoded.append("xh")
+        else:
+            encoded.append(character)
+    return "".join(encoded)
+
+
 def _action_class_for(mcp_id: str) -> str:
-    suffix = mcp_id.removeprefix("mcp.").replace(".", "-dot-").strip()
-    return f"mcp {suffix} tool"
+    return f"mcp {_encode_mcp_suffix(mcp_id.removeprefix('mcp.'))} tool"
 
 
 def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues:

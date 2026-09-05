@@ -78,22 +78,21 @@ def test_action_classes_preserve_id_separators() -> None:
 
     dotted = _action_class_for("mcp.foo.bar")
     hyphen = _action_class_for("mcp.foo-bar")
-    assert dotted != hyphen
-    dotted_permission = permissions_for_action_classes(
-        "command.mcp-foo.bar",
-        "1.0.0",
-        (dotted,),
-        ("Inspect first.",),
-        configurable=False,
-    )[0].permission_id
-    hyphen_permission = permissions_for_action_classes(
-        "command.mcp-foo-bar",
-        "1.0.0",
-        (hyphen,),
-        ("Inspect first.",),
-        configurable=False,
-    )[0].permission_id
-    assert dotted_permission != hyphen_permission
+    encoded = _action_class_for("mcp.foo-dot-bar")
+    assert len({dotted, hyphen, encoded}) == 3
+    assert _action_class_for("mcp.filesystem") == "mcp filesystem tool"
+    extension_id = "command.mcp-test"
+    ids = {
+        permissions_for_action_classes(
+            extension_id,
+            "1.0.0",
+            (action_class,),
+            ("Inspect first.",),
+            configurable=False,
+        )[0].permission_id
+        for action_class in (dotted, hyphen, encoded)
+    }
+    assert len(ids) == 3
 
 
 def test_declared_display_name_matches_live_tool_name() -> None:
