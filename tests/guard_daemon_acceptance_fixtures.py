@@ -159,7 +159,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             f"workspace={urllib.parse.quote(str(workspace))}"
         )
         try:
-            if harness == "codex":
+            if harness in {"codex", "claude-code"}:
                 result = None
                 for attempt in range(2):
                     nonce = secrets.token_hex(32)
@@ -188,7 +188,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                         challenge = cast(dict[str, object], json.loads(challenge_body))
                         connection.request(
                             "POST",
-                            f"/v1/hooks/codex?{query}",
+                            f"/v1/hooks/{harness}?{query}",
                             body=json.dumps(payload).encode(),
                             headers={
                                 "Connection": "close",
