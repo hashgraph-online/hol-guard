@@ -1,4 +1,4 @@
-"""Apply three individually reviewed local-IPC dispositions after source verification."""
+"""Record individually reviewed local-IPC dispositions after source verification."""
 
 from __future__ import annotations
 
@@ -20,12 +20,14 @@ FINDINGS = {
     "AaBurY7LOEl4G0YgTSvj": "pythonsecurity:S5144",
 }
 COMMENT = (
-    "Reviewed against 5baa16260049dffe518e5d0409d218d942ac61b1. This is local daemon IPC, not an external HTTP endpoint. "
-    "_authenticated_state verifies the owner-only signed discovery record, restricts the host to exact loopback names, "
-    "and validates the port. The client verifies a fresh nonce-bound daemon proof and unchanged generation before "
-    "sending hook data on the same connection. HTTPConnection does not follow redirects. No reusable bearer token "
-    "is sent by the Claude bridge. Existing Claude bridge and path-authority regression suites pass. "
-    "The reported remote-destination/cleartext-network exposure does not exist on this authenticated local-only path."
+    "Reviewed against 5baa16260049dffe518e5d0409d218d942ac61b1. This is local daemon IPC, "
+    "not an external HTTP endpoint. _authenticated_state verifies the owner-only signed "
+    "discovery record, restricts the host to exact loopback names, and validates the port. "
+    "The client verifies a fresh nonce-bound daemon proof and unchanged generation before "
+    "sending hook data on the same connection. HTTPConnection does not follow redirects. "
+    "No reusable bearer token is sent by the Claude bridge. The 51 existing Claude bridge "
+    "and path-authority regressions pass. The reported remote-destination/cleartext-network "
+    "exposure does not exist on this authenticated local-only path."
 )
 OUT = Path("sonar-loopback-review")
 
@@ -58,27 +60,17 @@ def verify_source() -> None:
     source = call("/api/sources/raw", raw=True, key=COMPONENT, pullRequest=2771)
     (OUT / "analyzed-source.py").write_bytes(source)
     (OUT / "reviewed-source.py").write_bytes(local)
-    if source.decode("utf-8").splitlines() != local.decode("utf-8").splitlines():
+    if source.decode("utf-8").rstrip("\r\n").splitlines() != local.decode("utf-8").rstrip("\r\n").splitlines():
         raise RuntimeError("analyzed source differs from the reviewed source lines")
     print("Every analyzed source line matches the reviewed Git blob")
 
 
-def export_rule_definitions() -> None:
-    result = {}
-    for key in ("python:S8495", "python:S3516", "python:S1313", "python:S1244", "pythonbugs:S2583"):
-        try:
-            result[key] = call("/api/rules/show", key=key)
-        except HTTPError:
-            try:
-                result[key] = call("/api/rules/show", rule=key)
-            except HTTPError as error:
-                result[key] = {"status": error.code}
-    (OUT / "rule-definitions.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-
-
 def main() -> None:
     OUT.mkdir(exist_ok=True)
-    export_rule_definitions()
+    rules = {}
+    for key in ("python:S8495", "python:S3516", "python:S1313", "python:S1244", "pythonbugs:S2583"):
+        rules[key] = call("/api/rules/show", key=key, organization="hashgraph-online")
+    (OUT / "rule-definitions.json").write_text(json.dumps(rules, indent=2), encoding="utf-8")
     verify_source()
     findings = call("/api/issues/search", issues=",".join(FINDINGS), componentKeys=PROJECT, pullRequest=2771, ps=100)
     (OUT / "before.json").write_text(json.dumps(findings, indent=2), encoding="utf-8")
@@ -86,8 +78,7 @@ def main() -> None:
     if set(by_key) != set(FINDINGS):
         raise RuntimeError("reviewed issue set changed; no dispositions applied")
     for key, rule in FINDINGS.items():
-        issue = by_key[key]
-        if issue["component"] != COMPONENT or issue["rule"] != rule:
+        if by_key[key]["component"] != COMPONENT or by_key[key]["rule"] != rule:
             raise RuntimeError("reviewed issue identity changed")
     results = []
     for key in FINDINGS:
@@ -95,13 +86,12 @@ def main() -> None:
         if issue.get("resolution") in {"FALSE-POSITIVE", "FIXED"} or issue.get("issueStatus") in {"FALSE_POSITIVE", "FIXED"}:
             results.append({"key": key, "already_resolved": True})
             continue
-        comments = issue.get("comments", [])
-        if not any(item.get("markdown") == COMMENT for item in comments):
+        if not any(item.get("markdown") == COMMENT for item in issue.get("comments", [])):
             call("/api/issues/add_comment", post=True, issue=key, text=COMMENT)
         result = call("/api/issues/do_transition", post=True, issue=key, transition="falsepositive")
         results.append({"key": key, "result": result})
+        (OUT / "dispositions.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
         print("Reviewed local-only IPC finding:", key)
-    (OUT / "dispositions.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     gate = call("/api/qualitygates/project_status", projectKey=PROJECT, pullRequest=2771)
     (OUT / "gate.json").write_text(json.dumps(gate, indent=2), encoding="utf-8")
     print(json.dumps(gate))
