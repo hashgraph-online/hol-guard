@@ -11,10 +11,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TypedDict
+from typing import NoReturn, TypedDict
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -31,6 +31,7 @@ from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
+from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
@@ -642,6 +643,77 @@ def request_device_authorization(url: str, body: str) -> dict[str, object]:
     return payload
 
 
+def _guard_token_request_with_dpop(
+    endpoint: str,
+    *,
+    body: bytes,
+    dpop_key_material: GuardDpopKeyMaterial,
+    now: datetime | None,
+    nonce: str | None,
+) -> urllib.request.Request:
+    return urllib.request.Request(
+        endpoint,
+        data=body,
+        method="POST",
+        headers=_guard_oauth_request_headers(
+            dpop=_sign_dpop_proof(
+                token_endpoint=endpoint,
+                dpop_key_material=dpop_key_material,
+                now=now or datetime.now(timezone.utc),
+                nonce=nonce,
+            ),
+        ),
+    )
+
+
+def _rethrow_guard_oauth_http_error(error: urllib.error.HTTPError, _payload: dict[str, object] | None) -> NoReturn:
+    raise error
+
+
+def _raise_guard_oauth_token_exchange_error(
+    error: urllib.error.HTTPError, payload: dict[str, object] | None
+) -> NoReturn:
+    raise _guard_oauth_token_exchange_error_from_http_error(error, payload) from error
+
+
+def _post_guard_token_request_with_nonce_retry(
+    *,
+    endpoint: str,
+    body: bytes,
+    dpop_key_material: GuardDpopKeyMaterial,
+    urlopen,
+    now: datetime | None,
+    on_http_error: Callable[[urllib.error.HTTPError, dict[str, object] | None], NoReturn],
+) -> object:
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
+    while True:
+        request = _guard_token_request_with_dpop(
+            endpoint,
+            body=body,
+            dpop_key_material=dpop_key_material,
+            now=now,
+            nonce=dpop_nonce,
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            payload = _load_error_payload(error)
+            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
+            on_http_error(error, payload)
+
+
+def _require_guard_oauth_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
+    return payload
+
+
 def exchange_guard_device_code(
     *,
     token_endpoint: str,
@@ -663,18 +735,12 @@ def exchange_guard_device_code(
     dpop_nonce: str | None = None
     nonce_retry_count = 0
     while True:
-        request = urllib.request.Request(
+        request = _guard_token_request_with_dpop(
             token_endpoint,
-            data=_device_token_request_body(client_id=client_id, device_code=device_code),
-            method="POST",
-            headers=_guard_oauth_request_headers(
-                dpop=_sign_dpop_proof(
-                    token_endpoint=token_endpoint,
-                    dpop_key_material=dpop_key_material,
-                    now=now or datetime.now(timezone.utc),
-                    nonce=dpop_nonce,
-                ),
-            ),
+            body=_device_token_request_body(client_id=client_id, device_code=device_code),
+            dpop_key_material=dpop_key_material,
+            now=now,
+            nonce=dpop_nonce,
         )
         try:
             with urlopen(request, timeout=20) as response:
@@ -741,36 +807,15 @@ def exchange_guard_authorization_code(
             "code_verifier": code_verifier,
         }
     ).encode("utf-8")
-    dpop_nonce: str | None = None
-    nonce_retry_count = 0
-    while True:
-        request = urllib.request.Request(
-            token_endpoint,
-            data=request_body,
-            method="POST",
-            headers=_guard_oauth_request_headers(
-                dpop=_sign_dpop_proof(
-                    token_endpoint=token_endpoint,
-                    dpop_key_material=dpop_key_material,
-                    now=now or datetime.now(timezone.utc),
-                    nonce=dpop_nonce,
-                ),
-            ),
-        )
-        try:
-            with urlopen(request, timeout=20) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            payload = _load_error_payload(error)
-            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
-                dpop_nonce = challenge_nonce
-                nonce_retry_count += 1
-                continue
-            raise
-        if not isinstance(payload, dict):
-            raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
-        return _parse_guard_token_exchange_payload(payload)
+    payload = _post_guard_token_request_with_nonce_retry(
+        endpoint=token_endpoint,
+        body=request_body,
+        dpop_key_material=dpop_key_material,
+        urlopen=urlopen,
+        now=now,
+        on_http_error=_rethrow_guard_oauth_http_error,
+    )
+    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload))
 
 
 def refresh_guard_access_token(
@@ -782,39 +827,15 @@ def refresh_guard_access_token(
     urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
-    dpop_nonce: str | None = None
-    nonce_retry_count = 0
-    while True:
-        request = urllib.request.Request(
-            token_endpoint,
-            data=_refresh_token_request_body(
-                client_id=client_id,
-                refresh_token=refresh_token,
-            ),
-            method="POST",
-            headers=_guard_oauth_request_headers(
-                dpop=_sign_dpop_proof(
-                    token_endpoint=token_endpoint,
-                    dpop_key_material=dpop_key_material,
-                    now=now or datetime.now(timezone.utc),
-                    nonce=dpop_nonce,
-                ),
-            ),
-        )
-        try:
-            with urlopen(request, timeout=20) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            payload = _load_error_payload(error)
-            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
-                dpop_nonce = challenge_nonce
-                nonce_retry_count += 1
-                continue
-            raise _guard_oauth_token_exchange_error_from_http_error(error, payload) from error
-        if not isinstance(payload, dict):
-            raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
-        return _parse_guard_token_exchange_payload(payload)
+    payload = _post_guard_token_request_with_nonce_retry(
+        endpoint=token_endpoint,
+        body=_refresh_token_request_body(client_id=client_id, refresh_token=refresh_token),
+        dpop_key_material=dpop_key_material,
+        urlopen=urlopen,
+        now=now,
+        on_http_error=_raise_guard_oauth_token_exchange_error,
+    )
+    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload))
 
 
 class GuardOAuthTokenExchangeError(RuntimeError):
@@ -1351,9 +1372,16 @@ def build_connect_status_payload(
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]
         workspace_id = review_event_binding["workspace_id"]
-        payload["review_event_recovery_command"] = (
-            f"hol-guard connect reassign-quarantined --confirm-source {source} --confirm-workspace {workspace_id}"
-        )
+        recovery_arguments = [
+            "hol-guard",
+            "connect",
+            "reassign-quarantined",
+            "--confirm-source",
+            source,
+            "--confirm-workspace",
+            workspace_id,
+        ]
+        payload.update(portable_command_payload("review_event_recovery_command", recovery_arguments))
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"
         payload["repair_message"] = "Run hol-guard connect to start browser sign-in."

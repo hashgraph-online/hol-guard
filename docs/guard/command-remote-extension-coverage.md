@@ -25,4 +25,4 @@ Interactive SSH connections remain outside the explicit remote-execution rule. O
 - [OpenSSH client configuration](https://man.openbsd.org/ssh_config)
 - [OpenSSH secure copy client](https://man.openbsd.org/scp)
 - [Rsync manual](https://rsync.samba.org/ftp/rsync/rsync.1.html)
-- [essh](https://github.com/matthart1983/essh)
+- [essh CLI parser](https://github.com/matthart1983/essh/blob/209d946e64ea8ded976eab5b8a42418b58e15f67/src/cli/mod.rs)

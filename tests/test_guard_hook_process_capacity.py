@@ -45,9 +45,9 @@ def _load(
 
 @pytest.mark.parametrize(
     ("cpu_count", "expected"),
-    [(1, 2), (2, 2), (4, 4), (8, 8), (64, 8)],
+    [(1, 2), (2, 2), (4, 2), (8, 2), (64, 2)],
 )
-def test_initial_target_follows_cpu_budget(cpu_count: int, expected: int) -> None:
+def test_initial_target_caps_warm_process_trees(cpu_count: int, expected: int) -> None:
     assert initial_hook_worker_target(cpu_count) == expected
 
 
@@ -149,6 +149,25 @@ def test_process_tree_rss_rejects_path_shadowed_ps(
         capacity_module.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("untrusted ps must not execute"),
+    )
+
+    assert process_tree_rss_bytes((10,)) is None
+
+
+def test_process_tree_rss_reports_unavailable_when_root_is_not_enumerated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(capacity_module.shutil, "which", lambda _name: "/usr/bin/ps")
+    monkeypatch.setattr(capacity_module, "is_trusted_absolute_command_path", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        capacity_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: capacity_module.subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="99 1 1000\n",
+            stderr="",
+        ),
     )
 
     assert process_tree_rss_bytes((10,)) is None

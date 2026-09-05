@@ -34,29 +34,32 @@ def _and_or_skipped_indexes(
     primary_command: PrimaryCommand,
 ) -> set[int]:
     skipped: set[int] = set()
-    accumulated: bool | None = None
+    accumulated_statuses: frozenset[bool] = frozenset()
     for pipeline_index, pipeline in enumerate(pipelines):
         if not pipeline:
-            accumulated = None
+            accumulated_statuses = frozenset()
             continue
         truth = _literal_pipeline_truth(pipeline, primary_command)
+        pipeline_statuses: frozenset[bool] = frozenset({False, True}) if truth is None else frozenset({truth})
         if pipeline_index == 0:
-            accumulated = truth
+            accumulated_statuses = pipeline_statuses
             continue
         connector = connectors.get(pipeline_index)
         if connector == "&&":
-            if accumulated is False:
+            if True not in accumulated_statuses:
                 skipped.add(pipeline_index)
                 continue
-            accumulated = truth if accumulated is True else None
+            preserved_statuses: frozenset[bool] = frozenset({False}) if False in accumulated_statuses else frozenset()
+            accumulated_statuses = pipeline_statuses | preserved_statuses
             continue
         if connector == "||":
-            if accumulated is True:
+            if False not in accumulated_statuses:
                 skipped.add(pipeline_index)
                 continue
-            accumulated = truth if accumulated is False else None
+            preserved_statuses = frozenset({True}) if True in accumulated_statuses else frozenset()
+            accumulated_statuses = pipeline_statuses | preserved_statuses
             continue
-        accumulated = truth
+        accumulated_statuses = pipeline_statuses
     return skipped
 
 

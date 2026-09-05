@@ -1,109 +1,24 @@
-import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, $ as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a0 as HiMiniEye, a1 as HiMiniXCircle, a2 as HiMiniClipboardDocumentCheck, a3 as HiMiniClipboard } from "../guard-dashboard.js";
+import { r as reactExports, R as remainingProtectionRepairParts, T as ProtectionRepairFlowError, U as waitForAuthorizeUrl, V as startOrRecoverCloudConnect, X as safeCloudConnectUrl, Y as openPackageFirewallAuthorizeFallback, Z as waitForCloudConnection, _ as activeFailedHarnesses, j as jsxRuntimeExports, $ as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, a0 as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a1 as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a2 as HiMiniEye, a3 as HiMiniXCircle, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard } from "../guard-dashboard.js";
 import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
-class CloudRequestTimeoutError extends Error {
-  constructor() {
-    super("Guard Cloud did not respond within 5 seconds. Try again.");
-    this.name = "CloudRequestTimeoutError";
-  }
-}
-async function withCloudRequestTimeout(request, parentSignal) {
-  if (parentSignal?.aborted) {
-    throw new DOMException("Cloud connection request stopped", "AbortError");
-  }
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener("abort", abort, { once: true });
-  let timedOut = false;
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, 5e3);
-  try {
-    return await request(controller.signal);
-  } catch (error) {
-    if (timedOut && !parentSignal?.aborted && error instanceof DOMException && error.name === "AbortError") {
-      throw new CloudRequestTimeoutError();
-    }
-    throw error;
-  } finally {
-    globalThis.clearTimeout(timeout);
-    parentSignal?.removeEventListener("abort", abort);
-  }
-}
-async function startOrRecoverCloudConnect(signal) {
-  try {
-    return await withCloudRequestTimeout(startGuardCloudConnect, signal);
-  } catch (error) {
-    if (!(error instanceof CloudRequestTimeoutError)) throw error;
-    return await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-  }
-}
-function waitForPoll(delayMs, signal) {
-  if (signal.aborted) {
-    return Promise.reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-  }
-  return new Promise((resolve, reject) => {
-    const finish = () => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    };
-    const timeout = globalThis.setTimeout(finish, delayMs);
-    const abort = () => {
-      globalThis.clearTimeout(timeout);
-      reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-async function waitForAuthorizeUrl(initialStatus, signal) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const flow = status.connect_flow;
-    if (!status.connect_required || flow?.authorize_url || !flow || !["starting", "running"].includes(flow.state)) {
-      return status;
-    }
-    const pollDelayMs = Math.max(100, Math.min(5e3, flow.poll_after_ms ?? 1e3));
-    await waitForPoll(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-  }
-  return status;
-}
-async function waitForCloudConnection(initialStatus, {
-  signal,
-  fetchStatus = fetchGuardCloudConnectStatus,
-  wait = waitForPoll,
-  maxAttempts = 300
-}) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < maxAttempts && status.connect_required; attempt += 1) {
-    if (status.connect_flow?.state === "failed") return status;
-    const pollDelayMs = Math.max(250, Math.min(5e3, status.connect_flow?.poll_after_ms ?? 1e3));
-    await wait(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchStatus, signal);
-  }
-  return status;
-}
-function recoverySummary(failCount, unknownCount, needsConnectedApp) {
+function recoverySummary(failCount, unknownCount, needsConnectedApp, failedLabels = []) {
   if (needsConnectedApp) {
     return "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected.";
   }
   if (failCount === 0) {
     return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
   }
-  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
   }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
+  const namedFail = failedLabels[0]?.trim() ?? "";
+  if (failCount === 1 && namedFail) {
+    return `Repair ${namedFail} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
+  }
+  const failedNoun = failCount === 1 ? "check" : "checks";
+  return `Repair the ${failCount} failed ${failedNoun} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
 }
 function repairButtonLabel(repairState, needsConnectedApp) {
   if (repairState?.status === "working") return "Repairing…";
@@ -150,12 +65,12 @@ const PROTECTION_CHECK_ACTIONS = {
   }
 };
 function cloudPolicyRecoveryHint(input) {
-  const cloudProofUnavailable = input.cloudState !== "paired_active" || input.cloudSyncState !== "healthy" || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
+  const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
+  if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.connectUrl,
+    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl,
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof"
   };
@@ -204,9 +119,6 @@ function TargetedRepairButton({
   ] });
 }
 function cloudConnectPendingMessage(hasAuthorizeUrl, opened) {
-  if (!hasAuthorizeUrl) {
-    return "Open the secure sign-in link below. This page will update automatically.";
-  }
   if (opened) {
     return "Complete sign-in in the opened window. This page will update automatically.";
   }
@@ -216,20 +128,6 @@ function cloudConnectButtonLabel(state, defaultLabel) {
   if (state?.status === "working") return "Starting sign-in…";
   if (state?.status === "success") return "Guard Cloud connected";
   return defaultLabel;
-}
-function safeCloudConnectUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 function FleetProtectionRecovery(props) {
   const [repairState, setRepairState] = reactExports.useState(null);
@@ -305,17 +203,16 @@ function FleetProtectionRecovery(props) {
       }
       const flow = status.connect_flow;
       const authorizeUrl = safeCloudConnectUrl(flow?.authorize_url);
-      const signInUrl = authorizeUrl ?? safeCloudConnectUrl(flow?.connect_url);
-      if (!flow || !signInUrl) {
+      if (!flow || !authorizeUrl) {
         throw new Error(
           flow?.detail || "Guard could not generate a secure sign-in link. Try again."
         );
       }
-      const opened = authorizeUrl ? openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened) : false;
+      const opened = openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened);
       if (!isActiveCloudConnect(controller)) return;
       setCloudConnectState({
-        authorizeUrl: signInUrl,
-        message: cloudConnectPendingMessage(Boolean(authorizeUrl), opened),
+        authorizeUrl,
+        message: cloudConnectPendingMessage(true, opened),
         status: "pending"
       });
       const connectedStatus = await waitForCloudConnection(status, {
@@ -331,8 +228,9 @@ function FleetProtectionRecovery(props) {
         return;
       }
       const detail = connectedStatus.connect_flow?.detail;
+      const nextAuthorizeUrl = safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url);
       setCloudConnectState({
-        authorizeUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? safeCloudConnectUrl(connectedStatus.connect_flow?.connect_url) ?? signInUrl,
+        authorizeUrl: nextAuthorizeUrl ?? authorizeUrl,
         message: connectedStatus.connect_flow?.state === "failed" ? detail || "Guard Cloud sign-in could not finish. Try again." : "Automatic checking stopped before sign-in finished. Complete sign-in, then try again.",
         status: connectedStatus.connect_flow?.state === "failed" ? "error" : "pending"
       });
@@ -386,11 +284,16 @@ function FleetProtectionRecovery(props) {
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore local protection" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount, needsConnectedApp) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(
+              failCount,
+              unknownCount,
+              needsConnectedApp,
+              gaps.filter((check) => check.status === "fail").map((check) => actionForCheck(check, props.repairHarness).label)
+            ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState, needsConnectedApp) })
         ] }),
-        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600", children: [
+        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: cloudPolicyHint.title }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1", children: cloudPolicyHint.detail }),
           cloudPolicyHint.startsOAuth ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-3", children: [
@@ -540,7 +443,7 @@ function repairHarnessesFor(installs, health) {
   return Array.from(new Set(
     installs.filter((install) => install.active !== true || health.apps.find(
       (app) => app.harness === install.harness
-    )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true).map((install) => install.harness)
+    )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass").map((install) => install.harness)
   ));
 }
 function toInstallStatus(status) {
@@ -680,7 +583,8 @@ function FleetWorkspace(props) {
           cloudState: props.runtime.cloud_state,
           cloudSyncState: props.runtime.cloud_sync_health.state,
           cloudPolicySyncError: props.runtime.cloud_policy_sync_error,
-          connectUrl: props.runtime.connect_url
+          connectUrl: props.runtime.connect_url,
+          dashboardUrl: props.runtime.dashboard_url
         },
         health: protectionHealth,
         repairHarness,

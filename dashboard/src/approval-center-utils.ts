@@ -370,35 +370,12 @@ export function inferProjectFolder(configPath: string): string {
   return configPath;
 }
 
-function capitalizeHarness(harness: string): string {
-  if (harness.length === 0) {
-    return harness;
-  }
-  return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
-}
-
-const HARNESS_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
-const HEX_TOKEN_HARNESS_PATTERN = /^[a-f0-9]{16,64}$/;
-const UUID_HARNESS_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-const NON_APP_HARNESS_SLUGS = new Set(["*", "all", "any", "global"]);
-
-export function normalizeHarnessSlug(harness: string | null | undefined): string | null {
-  const slug = typeof harness === "string" ? harness.trim().toLowerCase() : "";
-  if (
-    slug.length === 0 ||
-    NON_APP_HARNESS_SLUGS.has(slug) ||
-    HEX_TOKEN_HARNESS_PATTERN.test(slug) ||
-    UUID_HARNESS_PATTERN.test(slug) ||
-    !HARNESS_SLUG_PATTERN.test(slug)
-  ) {
-    return null;
-  }
-  return slug;
-}
-
-export function isDisplayableHarness(harness: string | null | undefined): harness is string {
-  return normalizeHarnessSlug(harness) !== null;
-}
+export {
+  capitalizeHarness,
+  isDisplayableHarness,
+  normalizeHarnessSlug,
+} from "./harness-slug";
+import { capitalizeHarness, normalizeHarnessSlug } from "./harness-slug";
 
 export function normalizeHarnessFilter(harness: string | null | undefined): string {
   return harness === "all" ? "all" : normalizeHarnessSlug(harness) ?? "all";
@@ -548,6 +525,8 @@ export function harnessDisplayName(harness: string): string {
       return "Grok";
     case "omp":
       return "Oh My Pi";
+    case "zcode":
+      return "ZCode";
     default:
       return capitalizeHarness(normalized);
   }

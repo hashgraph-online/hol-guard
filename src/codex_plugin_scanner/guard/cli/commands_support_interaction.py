@@ -292,10 +292,9 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return (
-        _canonical_harness_name(args.harness) in {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
-        and not getattr(args, "json", False)
-    )
+    harness = _canonical_harness_name(args.harness)
+    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
+    return harness == "hermes" or (harness in natives and not getattr(args, "json", False))
 
 def _should_emit_claude_native_pretooluse_notice(
     args: argparse.Namespace,
@@ -330,10 +329,10 @@ def _should_emit_native_hook_json_response(
     )
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
-    # the tool. Blocking must be communicated through the JSON hook response.
     canonical = _canonical_harness_name(args.harness)
-    if canonical in {"kimi", "grok", "pi", "omp", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
+    compact_event = event_name.replace("_", "").replace("-", "").lower()
+    blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and blocking:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 

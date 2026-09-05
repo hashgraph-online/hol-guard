@@ -24,14 +24,13 @@ from .custom_extension_continuity import (
     _plan_exact_settings,
     _require_monotonic_observation,
     _timestamp,
+    _validated_observation_frame,
 )
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
-_MAX_ITEMS = 100
 _MAX_DEVICE_BINDINGS_PER_ITEM = 1
-_TOP_LEVEL_FIELDS = frozenset({"schemaVersion", "revision", "observedAt", "expiresAt", "items"})
 _ITEM_FIELDS = frozenset({"identityHash", "deviceIdentityHashes", "state"})
 _HEX = frozenset("0123456789abcdef")
 
@@ -169,10 +168,13 @@ def _plan_projection_items(store: GuardStore, preflight: _V2Preflight, *, worksp
         for local in matches:
             cli_id = cast(str, local["cli_id"])
             raw_identity_hash = local.get("identity_hash")
+            observed_count = local.get("observed_count")
             status, reason = "pending_observation", "local_identity_not_observed"
             if isinstance(raw_identity_hash, str):
                 plan.observation_preconditions[cli_id] = _observation_precondition(local)
-            if preflight.stale:
+            if type(observed_count) is not int or observed_count < 1:
+                pass
+            elif preflight.stale:
                 status, reason = "stale", "cloud_observation_expired"
             elif not isinstance(raw_identity_hash, str):
                 pass
@@ -268,6 +270,9 @@ def _plan_context_cleanup(
         prior_identity = raw.get("local_identity_hash", raw.get("identity_hash"))
         if local is None or local.get("identity_hash") != prior_identity or not isinstance(prior_identity, str):
             continue
+        observed_count = local.get("observed_count")
+        if type(observed_count) is not int or observed_count < 1:
+            continue
         if _local_override_matches(removals.get(cli_id), identity_hash=prior_identity, cloud_revision=cloud_revision):
             continue
         current = store.read_local_cli_grant(cli_id)
@@ -307,22 +312,7 @@ def _prior_local_items(previous: object, *, scoped_identity: str) -> tuple[str, 
 
 
 def _parse_observation(value: object) -> dict[str, object]:
-    if not isinstance(value, dict) or set(value) != _TOP_LEVEL_FIELDS:
-        raise CustomExtensionContinuityError("continuity observation contains unsupported fields")
-    if value.get("schemaVersion") != CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2:
-        raise CustomExtensionContinuityError("unsupported continuity observation schema")
-    revision = value.get("revision")
-    if type(revision) is not int or cast(int, revision) < 1:
-        raise CustomExtensionContinuityError("continuity revision must be positive")
-    observed_at = value.get("observedAt")
-    expires_at = value.get("expiresAt")
-    if not isinstance(observed_at, str) or not isinstance(expires_at, str):
-        raise CustomExtensionContinuityError("continuity timestamps are required")
-    if _timestamp(expires_at, "expiry") <= _timestamp(observed_at, "observation"):
-        raise CustomExtensionContinuityError("continuity expiry must follow observation")
-    raw_items = value.get("items")
-    if not isinstance(raw_items, list) or len(raw_items) > _MAX_ITEMS:
-        raise CustomExtensionContinuityError("continuity item limit exceeded")
+    payload, raw_items = _validated_observation_frame(value, schema_version=CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2)
     items: list[dict[str, object]] = []
     seen: set[str] = set()
     for raw_item in raw_items:
@@ -351,7 +341,7 @@ def _parse_observation(value: object) -> dict[str, object]:
                 "state": state,
             }
         )
-    return {**value, "items": sorted(items, key=lambda item: cast(str, item["identityHash"]))}
+    return {**payload, "items": sorted(items, key=lambda item: cast(str, item["identityHash"]))}
 
 
 def _sha256(value: object) -> bool:

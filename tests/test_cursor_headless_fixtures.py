@@ -101,7 +101,10 @@ def _cursor_hook_env(tmp_path: Path) -> tuple[HarnessContext, Path]:
     assert hook_script.is_file()
     source = hook_script.read_text(encoding="utf-8")
     assert "GUARD_CLI" in source
-    assert "GUARD_PYTHON" not in source
+    # The managed launcher may carry explicit test-only oracle markers, but it
+    # must not embed the removed direct Python interpreter fallback.
+    assert "GUARD_PYTHON = " not in source
+    assert "GUARD_HOOK_LAUNCHER" not in source
     return context, hook_script
 
 

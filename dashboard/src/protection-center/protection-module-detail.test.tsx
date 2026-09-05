@@ -95,6 +95,38 @@ assert.match(technical, /Developer details/);
 assert.doesNotMatch(technical, /data-testid="protection-more-detail"[^>]* open/, "developer details stay collapsed by default");
 assert.doesNotMatch(simple, /Change settings/);
 assert.doesNotMatch(simple, />Extension</);
+assert.doesNotMatch(simple, /MCP server defaults/);
+
+const filesystem = protectionModuleFixture({
+  extension_id: "command.mcp-filesystem",
+  name: "Filesystem MCP",
+  description: "Reviews official filesystem MCP tools. Off until you turn it on.",
+  enabled: false,
+  trust_class: "external",
+  activation: "opt-in",
+  executables: ["npx"],
+  surface: "mcp",
+  mcp_launch: { kind: "package-launcher", command: "npx", package: "@modelcontextprotocol/server-filesystem" },
+  mcp_tools: [
+    { name: "read_file", state: "inherit" },
+    { name: "write_file", state: "block" },
+    { name: "other", state: "inherit" },
+  ],
+});
+const mcpDetail = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: filesystem,
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+  onRequestExtensionChange: () => undefined,
+}));
+assert.match(mcpDetail, /MCP server defaults/);
+assert.match(mcpDetail, /@modelcontextprotocol\/server-filesystem/);
+assert.match(mcpDetail, /write_file/);
+assert.match(mcpDetail, />Block</);
+assert.match(mcpDetail, /This community MCP server stays off until you turn it on/);
+assert.match(mcpDetail, /MCP tools available/);
 
 const partial = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,

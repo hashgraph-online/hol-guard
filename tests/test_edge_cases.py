@@ -8,7 +8,7 @@ from codex_plugin_scanner.cli import format_text
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 class TestRichOutputBranch:
@@ -76,7 +76,10 @@ class TestOSErrorBranches:
         with tempfile.TemporaryDirectory() as tmpdir:
             d = Path(tmpdir)
             (d / "LICENSE").write_text("text")
-            with patch("pathlib.Path.read_text", side_effect=OSError("Permission denied")):
+            with patch(
+                "codex_plugin_scanner.checks.security.read_text_file_within_root",
+                side_effect=OSError("Permission denied"),
+            ):
                 r = check_license(d)
                 assert not r.passed
                 assert "could not be read" in r.message
@@ -87,10 +90,13 @@ class TestOSErrorBranches:
         with tempfile.TemporaryDirectory() as tmpdir:
             d = Path(tmpdir)
             (d / ".mcp.json").write_text("{}")
-            with patch("pathlib.Path.read_text", side_effect=OSError("Permission denied")):
+            with patch(
+                "codex_plugin_scanner.checks.security.read_text_file_within_root",
+                side_effect=OSError("Permission denied"),
+            ):
                 r = check_no_dangerous_mcp(d)
-                assert r.passed
-                assert not r.applicable
+                assert not r.passed
+                assert "Could not safely read" in r.message
 
 
 class TestSecurityEdgeCases:
@@ -130,9 +136,53 @@ class TestSecurityEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             d = Path(tmpdir)
             (d / "test.txt").write_text('password = "longpassword"')
-            with patch("pathlib.Path.read_text", side_effect=OSError("Permission denied")):
+            with patch(
+                "codex_plugin_scanner.checks.security.read_text_file_within_root",
+                side_effect=OSError("Permission denied"),
+            ):
                 r = check_no_hardcoded_secrets(d)
-                assert r.passed
+                assert not r.passed
+                assert "could not safely read test.txt" in r.message
+
+    def test_secrets_oserror_in_directory_traversal(self):
+        from codex_plugin_scanner.checks.security import check_no_hardcoded_secrets
+
+        def unreadable_walk(*_args, onerror, **_kwargs):
+            onerror(PermissionError("Permission denied"))
+            return iter(())
+
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch("codex_plugin_scanner.checks.security.os.walk", side_effect=unreadable_walk),
+        ):
+            result = check_no_hardcoded_secrets(Path(tmpdir))
+
+        assert not result.passed
+        assert "filesystem traversal failed" in result.message
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+        assert "readable" in result.findings[0].remediation
+
+    def test_missing_plugin_directory_fails_closed(self, tmp_path: Path):
+        from codex_plugin_scanner.checks.security import check_no_hardcoded_secrets
+
+        result = check_no_hardcoded_secrets(tmp_path / "missing")
+
+        assert not result.passed
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
+    def test_approval_bypass_scan_fails_closed_on_unreadable_input(self, tmp_path: Path):
+        from codex_plugin_scanner.checks.security import check_no_approval_bypass_defaults
+
+        candidate = tmp_path / "settings.json"
+        candidate.write_text("{}", encoding="utf-8")
+        with patch(
+            "codex_plugin_scanner.checks.security.read_text_file_within_root",
+            side_effect=OSError("Permission denied"),
+        ):
+            result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert not result.passed
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
 
 
 class TestCodeQualityEdgeCases:

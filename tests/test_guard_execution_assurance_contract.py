@@ -115,7 +115,9 @@ class TestFramedDigest:
 
 class TestProviderIdentity:
     def test_thumbprint_stable(self) -> None:
-        assert _identity().thumbprint() == _identity().thumbprint()
+        first = _identity().thumbprint()
+        second = _identity().thumbprint()
+        assert first == second
 
     def test_rejects_bad_digest(self) -> None:
         with pytest.raises(ValueError, match="binary_or_image_digest"):

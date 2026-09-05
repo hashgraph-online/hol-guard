@@ -241,6 +241,7 @@ def test_requeue_appends_snapshot_without_replacing_history(tmp_path) -> None:
     store.add_approval_request(_request("request-1"), _NOW)
 
     assert store.requeue_pending_review_events(changed_at=_LATER) == 1
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 0
     rows = store.list_ready_review_events(now=_LATER, limit=10, **binding)
     assert [row["event_type"] for row in rows] == [
         "review.request.created",
@@ -301,6 +302,24 @@ def test_requeue_never_retargets_request_after_identity_change(tmp_path) -> None
     assert rows[-1]["workspace_id"] == old_binding["workspace_id"]
     assert rows[-1]["binding_status"] == "quarantined"
     assert rows[-1]["quarantine_reason"] == "identity_changed_requires_confirmation"
+    assert store.list_ready_review_events(now=_LATER, limit=10, **new_binding) == []
+
+
+def test_requeue_does_not_deduplicate_snapshot_from_previous_identity(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    old_binding = _connect(store, grant_id="grant-old", workspace_id="workspace-old")
+    store.add_approval_request(_request("request-1"), _NOW)
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 1
+
+    new_binding = _connect(store, grant_id="grant-new", workspace_id="workspace-new")
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 1
+
+    rows = _all_events(store)
+    assert len(rows) == 3
+    assert rows[1]["binding_status"] == "ready"
+    assert rows[1]["oauth_subject_hash"] == old_binding["oauth_subject_hash"]
+    assert rows[2]["binding_status"] == "quarantined"
+    assert rows[2]["quarantine_reason"] == "identity_changed_requires_confirmation"
     assert store.list_ready_review_events(now=_LATER, limit=10, **new_binding) == []
 
 

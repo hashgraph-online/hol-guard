@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import time
 from contextlib import suppress
 from hashlib import sha256
@@ -13,6 +11,7 @@ from pathlib import Path
 
 from .base import HarnessContext
 from .cline_paths import cline_plugin_root as _resolve_cline_plugin_root
+from .cline_plugin_probe import probe_cline_plugin_syntax
 from .guard_cli_attestation import guard_hook_command, resolve_attested_guard_cli
 
 _MANAGED_MARKER = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1"
@@ -337,15 +336,13 @@ const plugin = {{
     async afterTool({{ toolCall, input, result }}) {{
       const active = activeTransport();
       if (active !== "plugin") {{
-        if (active !== undefined) return undefined;
-        proof("posttool", "replaced");
-        const reason = "HOL Guard Cline transport state is unavailable; this tool result was withheld.";
-        return blockedResult(reason, result?.metadata);
+        proof("posttool", "unchanged");
+        return undefined;
       }}
       const decision = invokeGuard("PostToolUse", toolCall, input, result);
       if (!decision.ok) {{
-        proof("posttool", "replaced");
-        return blockedResult(decision.reason, result?.metadata);
+        proof("posttool", "unchanged");
+        return undefined;
       }}
       const replacement = reviewedOutput(decision.payload);
       if (guardBlocks(decision.payload)) {{
@@ -477,26 +474,9 @@ def cline_plugin_state(context: HarnessContext) -> dict[str, object]:
 
 
 def cline_plugin_syntax_probe(context: HarnessContext) -> dict[str, object]:
-    """Validate generated JavaScript without executing plugin code when Node is available."""
+    """Validate the managed plugin without executing its JavaScript."""
 
-    state = _load_state(context)
-    path_value = state.get("index_path")
-    node = shutil.which("node")
-    if not isinstance(path_value, str):
-        return {"ok": False, "reason": "plugin_state_missing"}
-    if node is None:
-        return {"ok": True, "skipped": True, "reason": "node_not_available"}
-    try:
-        result = subprocess.run(
-            [node, "--check", path_value],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return {"ok": False, "reason": type(exc).__name__}
-    return {"ok": result.returncode == 0, "return_code": result.returncode}
+    return probe_cline_plugin_syntax(context, _load_state(context))
 
 
 def uninstall_cline_plugin(context: HarnessContext) -> dict[str, object]:

@@ -27,9 +27,14 @@ def _retry_at(now: str, attempt_count: int) -> str:
 
 
 class StoreReviewEventOutboxMixin:
-    def requeue_pending_review_events(self, *, changed_at: str) -> int:
+    def requeue_pending_review_events(self, *, changed_at: str, require_binding: bool = False) -> int:
         with self._connect() as connection:
-            return requeue_pending_request_events(connection, source=self._guard_source, changed_at=changed_at)
+            return requeue_pending_request_events(
+                connection,
+                source=self._guard_source,
+                changed_at=changed_at,
+                require_binding=require_binding,
+            )
 
     def requeue_pending_review_events_with_marker(
         self,

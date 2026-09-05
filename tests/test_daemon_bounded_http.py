@@ -8,6 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler
 
+import pytest
+
+from codex_plugin_scanner.guard.daemon import bounded_http
 from codex_plugin_scanner.guard.daemon.bounded_http import (
     BoundedThreadingHTTPServer,
     daemon_admission_snapshot,
@@ -57,6 +60,134 @@ def _get(port: int, path: str) -> tuple[int, bytes]:
         return response.status, response.read()
     finally:
         connection.close()
+
+
+def test_bounded_server_honors_stop_requested_before_loop_entry() -> None:
+    server = BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    server.request_serve_stop()
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        thread.join(timeout=1)
+        assert not thread.is_alive()
+    finally:
+        server.server_close()
+
+
+def test_bounded_server_rolls_back_listener_and_wakeup_sockets_on_setblocking_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _TrackedWakeupSocket:
+        def __init__(self, wrapped: socket.socket) -> None:
+            self.wrapped = wrapped
+            self.closed = False
+
+        def setblocking(self, _flag: bool) -> None:
+            raise OSError("injected wakeup setblocking failure")
+
+        def close(self) -> None:
+            self.closed = True
+            self.wrapped.close()
+
+    wakeups: list[_TrackedWakeupSocket] = []
+    original_socketpair = socket.socketpair
+
+    def failing_socketpair() -> tuple[_TrackedWakeupSocket, _TrackedWakeupSocket]:
+        reader, writer = original_socketpair()
+        tracked = (_TrackedWakeupSocket(reader), _TrackedWakeupSocket(writer))
+        wakeups.extend(tracked)
+        return tracked
+
+    listeners: list[BoundedThreadingHTTPServer] = []
+    original_parent_init = bounded_http.ThreadingHTTPServer.__init__
+
+    def capture_listener(server: BoundedThreadingHTTPServer, *args: object, **kwargs: object) -> None:
+        original_parent_init(server, *args, **kwargs)
+        listeners.append(server)
+
+    monkeypatch.setattr(bounded_http.socket, "socketpair", failing_socketpair)
+    monkeypatch.setattr(bounded_http.ThreadingHTTPServer, "__init__", capture_listener)
+
+    with pytest.raises(OSError, match="setblocking"):
+        BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+
+    assert all(endpoint.closed for endpoint in wakeups)
+    assert listeners
+    assert listeners[0].socket.fileno() == -1
+
+
+def test_bounded_server_rolls_back_listener_and_wakeup_sockets_on_capacity_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _TrackedWakeupSocket:
+        def __init__(self, wrapped: socket.socket) -> None:
+            self.wrapped = wrapped
+            self.closed = False
+
+        def setblocking(self, flag: bool) -> None:
+            self.wrapped.setblocking(flag)
+
+        def close(self) -> None:
+            self.closed = True
+            self.wrapped.close()
+
+    wakeups: list[_TrackedWakeupSocket] = []
+    original_socketpair = socket.socketpair
+
+    def tracked_socketpair() -> tuple[_TrackedWakeupSocket, _TrackedWakeupSocket]:
+        reader, writer = original_socketpair()
+        tracked = (_TrackedWakeupSocket(reader), _TrackedWakeupSocket(writer))
+        wakeups.extend(tracked)
+        return tracked
+
+    listeners: list[BoundedThreadingHTTPServer] = []
+    original_parent_init = bounded_http.ThreadingHTTPServer.__init__
+    original_bounded_int = bounded_http._bounded_int
+
+    def capture_listener(server: BoundedThreadingHTTPServer, *args: object, **kwargs: object) -> None:
+        original_parent_init(server, *args, **kwargs)
+        listeners.append(server)
+
+    def fail_capacity(name: str, default: int, maximum: int) -> int:
+        if name == "HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS":
+            raise RuntimeError("injected capacity failure")
+        return original_bounded_int(name, default, maximum)
+
+    monkeypatch.setattr(bounded_http.socket, "socketpair", tracked_socketpair)
+    monkeypatch.setattr(bounded_http.ThreadingHTTPServer, "__init__", capture_listener)
+    monkeypatch.setattr(bounded_http, "_bounded_int", fail_capacity)
+
+    with pytest.raises(RuntimeError, match="capacity"):
+        BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+
+    assert all(endpoint.closed for endpoint in wakeups)
+    assert listeners
+    assert listeners[0].socket.fileno() == -1
+
+
+def test_bounded_server_releases_admission_when_socket_timeout_fails() -> None:
+    class _FailingTimeoutSocket:
+        closed = False
+
+        def settimeout(self, _timeout: float) -> None:
+            raise OSError("injected request timeout failure")
+
+        def close(self) -> None:
+            self.closed = True
+
+    server = BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    before = daemon_admission_snapshot()
+    request = _FailingTimeoutSocket()
+    try:
+        assert not server._guard_admit_request(request)  # pyright: ignore[reportArgumentType]
+        after = daemon_admission_snapshot()
+        assert request.closed
+        assert after["active"] == before["active"]
+        assert after["accepted"] == before["accepted"] + 1
+        assert server._guard_slots.acquire(blocking=False)
+        server._guard_slots.release()
+    finally:
+        server.server_close()
 
 
 def test_bounded_server_recovers_after_client_abort() -> None:

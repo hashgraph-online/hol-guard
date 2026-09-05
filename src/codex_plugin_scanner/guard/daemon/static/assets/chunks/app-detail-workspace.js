@@ -1,6 +1,357 @@
-import { r as reactExports, j as jsxRuntimeExports, aV as fetchApprovalPage, aW as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aQ as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, q as GuardHero, $ as ProofStrip, aX as HiMiniHome, N as HiMiniBolt, ab as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, w as formatRelativeTime, M as HiMiniExclamationTriangle, aY as guardActionPresentation, P as Badge, aZ as DEFAULT_FILTER_STATE, a_ as filterEvidence, a$ as sortEvidence, b0 as computeMetrics, b1 as CommandActivityWorkspace, m as EmptyState, b2 as EvidenceFilterBar, b3 as EvidenceInsightStrip, b4 as EvidenceActionList, b5 as EvidenceActionDetail, K as useFocusTrap, b6 as policyIdentityKey, I as HiMiniCloud, b7 as HiMiniChartBar, ay as Tag, o as HiMiniCheckCircle, a1 as HiMiniXCircle, b8 as runHarnessAction, b9 as GuardHarnessActionError, ba as HiMiniRocketLaunch, aD as HiMiniArrowPath, bb as HiMiniTrash, bc as clearLabelForScope, bd as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, i as harnessDisplayName, ah as fetchSettings, aY as runHarnessAction, aZ as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, a_ as HiMiniRocketLaunch, t as HiMiniShieldCheck, aF as HiMiniArrowPath, w as formatRelativeTime, M as HiMiniExclamationTriangle, o as HiMiniCheckCircle, a$ as HiMiniTrash, b0 as isGuardDemoMode, b1 as fetchGuardApi, b2 as formatHarnessCommand, ad as HiMiniAdjustmentsHorizontal, b3 as fetchApprovalPage, b4 as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aS as HiMiniArrowLeft, c as HiMiniChevronRight, q as GuardHero, a1 as ProofStrip, b5 as HiMiniHome, N as HiMiniBolt, b6 as guardActionPresentation, P as Badge, b7 as DEFAULT_FILTER_STATE, b8 as filterEvidence, b9 as sortEvidence, ba as computeMetrics, bb as CommandActivityWorkspace, m as EmptyState, bc as EvidenceFilterBar, bd as EvidenceInsightStrip, be as EvidenceActionList, bf as EvidenceActionDetail, K as useFocusTrap, bg as policyIdentityKey, I as HiMiniCloud, aA as Tag, a3 as HiMiniXCircle, bh as clearLabelForScope, bi as HiMiniChartBar } from "../guard-dashboard.js";
+import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 import { a as appSetupTarget } from "./harness-setup-target.js";
 import { u as useHarnessDetection, i as isHarnessDetected } from "./harness-detection.js";
+function HarnessSetupPanel(props) {
+  const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
+  const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
+  const [approvalGate, setApprovalGate] = reactExports.useState(void 0);
+  const [gateLoadFailed, setGateLoadFailed] = reactExports.useState(false);
+  const active = props.install?.active === true;
+  const displayName = harnessDisplayName(props.harness);
+  const gateLoaded = approvalGate !== void 0;
+  const disconnectRequiresProof = approvalGate?.enabled === true;
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    void fetchSettings().then((payload) => {
+      if (!cancelled) {
+        setApprovalGate(payload.settings.approval_gate ?? null);
+        setGateLoadFailed(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setApprovalGate(void 0);
+        setGateLoadFailed(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const refreshAfterMutation = reactExports.useCallback(async () => {
+    await props.onManagedInstallChanged?.();
+  }, [props.onManagedInstallChanged]);
+  const loadPlan = reactExports.useCallback(async () => {
+    setSetupState({ kind: "loading", action: active ? "verify" : "install" });
+    try {
+      const result = active ? await runHarnessAction({ harness: props.harness, action: "verify" }) : await runHarnessAction({ harness: props.harness, action: "install", dryRun: true });
+      setSetupState({ kind: "ready", plan: result });
+    } catch (error) {
+      setSetupState({
+        kind: "error",
+        action: active ? "verify" : "install",
+        message: error instanceof Error ? error.message : "Unable to load setup plan."
+      });
+    }
+  }, [active, props.harness]);
+  reactExports.useEffect(() => {
+    void loadPlan();
+  }, [loadPlan]);
+  const runAction = reactExports.useCallback(
+    async (action, options = {}) => {
+      setSetupState({ kind: "loading", action });
+      try {
+        const result = action === "uninstall" && options.dryRun !== true ? await runDisconnectWithProof({
+          harness: props.harness,
+          confirmationPhrase: options.confirmationPhrase ?? `disconnect-${props.harness}`,
+          approval_password: options.approval_password,
+          approval_totp_code: options.approval_totp_code
+        }) : await runHarnessAction({
+          harness: props.harness,
+          action,
+          dryRun: options.dryRun,
+          confirmationPhrase: options.confirmationPhrase
+        });
+        if (!(action === "uninstall" && options.dryRun === true)) {
+          setDisconnectArmed(false);
+        }
+        setSetupState({ kind: "success", action, result });
+        if (action !== "verify" && options.dryRun !== true) {
+          await refreshAfterMutation();
+        }
+      } catch (error) {
+        if (error instanceof GuardHarnessActionError) {
+          setSetupState({
+            kind: "error",
+            action,
+            message: setupActionErrorMessage(error),
+            confirmationPhrase: error.payload?.confirmation_phrase,
+            confirmCommand: error.payload?.confirm_command
+          });
+        } else {
+          setSetupState({
+            kind: "error",
+            action,
+            message: error instanceof Error ? error.message : "Harness action failed."
+          });
+        }
+      }
+    },
+    [props.harness, refreshAfterMutation]
+  );
+  const handleConnect = reactExports.useCallback(() => {
+    void runAction("install", { dryRun: false });
+  }, [runAction]);
+  const handleVerify = reactExports.useCallback(() => {
+    void runAction("verify");
+  }, [runAction]);
+  const handleRepair = reactExports.useCallback(() => {
+    void runAction("repair", { dryRun: false });
+  }, [runAction]);
+  const handleRequestDisconnect = reactExports.useCallback(() => {
+    setDisconnectArmed(true);
+    void runAction("uninstall", { dryRun: true });
+  }, [runAction]);
+  const disconnectPhrase = reactExports.useCallback(() => {
+    if (setupState.kind === "error" && setupState.confirmationPhrase) {
+      return setupState.confirmationPhrase;
+    }
+    if (setupState.kind === "success" && setupState.result.confirmation_phrase) {
+      return setupState.result.confirmation_phrase;
+    }
+    return `disconnect-${props.harness}`;
+  }, [props.harness, setupState]);
+  const handleConfirmDisconnect = reactExports.useCallback((credentials) => {
+    void runAction("uninstall", {
+      dryRun: false,
+      confirmationPhrase: disconnectPhrase(),
+      approval_password: credentials?.approval_password,
+      approval_totp_code: credentials?.approval_totp_code
+    });
+  }, [disconnectPhrase, runAction]);
+  const handleCancelDisconnect = reactExports.useCallback(() => {
+    setDisconnectArmed(false);
+    void loadPlan();
+  }, [loadPlan]);
+  const busy = setupState.kind === "loading";
+  let currentPlan = null;
+  if (setupState.kind === "ready") {
+    currentPlan = setupState.plan;
+  } else if (setupState.kind === "success") {
+    currentPlan = setupState.result;
+  }
+  const steps = setupStepsFor(currentPlan, active);
+  const notes = setupNotesFor(currentPlan);
+  const showSimpleConfirm = active && disconnectArmed && gateLoaded && !disconnectRequiresProof && !gateLoadFailed;
+  const showProofModal = active && disconnectArmed && disconnectRequiresProof && approvalGate != null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local harness install" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: active ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard." : "Guard will install the local managed hooks through the daemon. No copied shell command required." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2 max-xl:w-full max-xl:justify-start", children: [
+        !active && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: busy, "data-primary": "true", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniRocketLaunch, { className: "h-4 w-4", "aria-hidden": "true" }),
+          busy && setupState.kind === "loading" && setupState.action === "install" ? "Connecting..." : "Connect app"
+        ] }),
+        active && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleVerify, disabled: busy, variant: "outline", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Test"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRepair, disabled: busy, variant: "outline", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Repair"
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid gap-3 md:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: installStateLabel(active, props.status), active }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Config source", value: props.install?.workspace ?? "Local machine" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Last changed", value: props.install ? formatRelativeTime(props.install.updated_at) : "Not yet" })
+    ] }),
+    setupState.kind === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+          "Could not finish ",
+          setupActionLabel(setupState.action)
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-words text-sm text-muted-foreground", children: setupState.message }),
+        setupState.confirmCommand && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-3 block overflow-x-auto rounded-lg bg-white/80 px-3 py-2 font-mono text-xs text-brand-dark", children: setupState.confirmCommand })
+      ] })
+    ] }) }),
+    setupState.kind === "success" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-green/20 bg-brand-green/[0.045] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: setupSuccessTitle(setupState.action, displayName) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: setupState.action === "verify" ? "Safe local check completed. No app config was changed." : "Dashboard action completed through the local Guard daemon." })
+      ] })
+    ] }) }),
+    steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-2", children: steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessSetupStepRow, { step }, step.step_id)) }),
+    notes.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-200/70 bg-white/80 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-widest text-slate-400", children: "What changed" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1.5", children: notes.slice(0, 4).map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "break-words text-xs leading-relaxed text-muted-foreground", children: note }, note)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => void loadPlan(),
+          disabled: busy,
+          className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+          children: "Refresh setup"
+        }
+      ),
+      active && !disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: handleRequestDisconnect,
+          disabled: busy,
+          className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Disconnect"
+          ]
+        }
+      ),
+      showSimpleConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => handleConfirmDisconnect(),
+            disabled: busy,
+            className: "inline-flex min-h-10 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50",
+            children: busy && setupState.kind === "loading" && setupState.action === "uninstall" ? "Disconnecting..." : "Confirm disconnect"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleCancelDisconnect,
+            disabled: busy,
+            className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+            children: "Keep connected"
+          }
+        )
+      ] }),
+      active && disconnectArmed && !showSimpleConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: handleCancelDisconnect,
+          disabled: busy,
+          className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+          children: "Keep connected"
+        }
+      )
+    ] }),
+    active && disconnectArmed && !gateLoaded && !gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-muted-foreground", children: "Checking approval requirements before disconnect." }) : null,
+    active && disconnectArmed && gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "alert", children: "Guard could not load approval settings. Keep the app connected and retry disconnect." }) : null,
+    showProofModal ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: `Disconnect ${displayName}`,
+        detail: approvalGate.totp_enabled === true ? "Enter a fresh authenticator code to remove Guard protection from this app." : "Enter your approval password to remove Guard protection from this app.",
+        confirmLabel: "Disconnect app",
+        busyLabel: "Disconnecting...",
+        approvalGate,
+        requireFreshTotp: approvalGate.totp_enabled === true,
+        busy: busy && setupState.kind === "loading" && setupState.action === "uninstall",
+        error: setupState.kind === "error" && setupState.action === "uninstall" ? setupState.message : null,
+        onCancel: handleCancelDisconnect,
+        onConfirm: handleConfirmDisconnect
+      }
+    ) : null
+  ] });
+}
+async function runDisconnectWithProof(input) {
+  if (isGuardDemoMode()) {
+    return {
+      harness: input.harness,
+      action: "uninstall",
+      dry_run: false,
+      steps: []
+    };
+  }
+  const response = await fetchGuardApi(
+    `/v1/harnesses/${encodeURIComponent(input.harness)}/uninstall`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        dry_run: false,
+        confirmation_phrase: input.confirmationPhrase,
+        ...input.approval_password ? { approval_password: input.approval_password } : {},
+        ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
+      })
+    }
+  );
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isHarnessActionErrorPayload(payload) ? payload : null
+    );
+  }
+  return payload;
+}
+function isHarnessActionErrorPayload(value) {
+  return typeof value === "object" && value !== null && typeof value.error === "string";
+}
+function HarnessSetupStepRow({ step }) {
+  const commandText = formatHarnessCommand(step.command);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-200/70 bg-white/80 p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue", children: step.writes_config ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body }),
+      commandText && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: commandText })
+    ] })
+  ] }) });
+}
+function SetupMetric(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 rounded-xl border border-slate-200/70 bg-white/80 p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 truncate text-sm font-semibold ${props.active ? "text-brand-green" : "text-brand-dark"}`, children: props.value })
+  ] });
+}
+function installStateLabel(active, status) {
+  if (active) return "Installed";
+  if (status === "observed") return "Observed";
+  return "Not connected";
+}
+function setupStepsFor(result, active) {
+  if (!result) return [];
+  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
+  if (result.verification?.steps) return result.verification.steps;
+  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
+  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
+  return [];
+}
+function setupNotesFor(result) {
+  const manifest = result?.managed_install?.manifest;
+  const notes = manifest?.["notes"];
+  return Array.isArray(notes) ? notes.filter((note) => typeof note === "string") : [];
+}
+function setupActionLabel(action) {
+  if (action === "install") return "connect";
+  if (action === "verify") return "test";
+  if (action === "repair") return "repair";
+  return "disconnect";
+}
+function setupActionErrorMessage(error) {
+  if (error.payload?.error === "confirmation_required") {
+    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
+  }
+  if (error.payload?.error === "approval_gate_totp_required") {
+    return "Enter a fresh authenticator code to disconnect this app.";
+  }
+  if (error.payload?.error === "approval_gate_required" || error.payload?.error === "approval_gate_password_required") {
+    return "Enter your approval password to disconnect this app.";
+  }
+  return error.payload?.error ?? error.message;
+}
+function setupSuccessTitle(action, displayName) {
+  if (action === "install") return `${displayName} connected`;
+  if (action === "verify") return `${displayName} test complete`;
+  if (action === "repair") return `${displayName} repaired`;
+  return `${displayName} disconnected`;
+}
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
   const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
@@ -258,7 +609,7 @@ function AppDetailWorkspace(props) {
     onGoSettings: handleGoSettings
   });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "flex items-center gap-2", "aria-label": "Breadcrumb", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
@@ -271,9 +622,16 @@ function AppDetailWorkspace(props) {
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-muted-foreground", children: "Apps" }),
+      props.onOpenApps ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: props.onOpenApps,
+          className: "rounded-full px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
+          children: "Apps"
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-muted-foreground", children: "Apps" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", "aria-current": "page", children: harnessDisplayName(harness) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
@@ -418,9 +776,9 @@ function AppOverviewTab(props) {
     inventoryCount: props.harnessInventory.length,
     pendingCount: props.pendingItems.length
   });
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      showFirstRunGuide && /* @__PURE__ */ jsxRuntimeExports.jsx(
+  if (showFirstRunGuide) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
         FirstRunGuide,
         {
           harness: props.harness,
@@ -429,37 +787,41 @@ function AppOverviewTab(props) {
           onManagedInstallChanged: props.onManagedInstallChanged
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Status" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: props.status === "active" ? "Guard is actively protecting this app." : props.status === "needs_setup" ? "Guard detected this app but it needs setup." : props.status === "observed" ? "Guard has seen activity from this app." : "This app has not been seen yet." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { status: props.status })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total actions", value: props.totalActions }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: props.allowedCount, tone: "green" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Review", value: props.reviewedCount, tone: props.reviewedCount > 0 ? "blue" : "slate" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Blocked", value: props.blockedCount, tone: props.blockedCount > 0 ? "attention" : "slate" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Block rate", value: `${props.blockRate}%`, tone: props.blockRate > 10 ? "attention" : "slate" })
-        ] }),
-        props.harnessReceipts.length >= 5 && /* @__PURE__ */ jsxRuntimeExports.jsx(RiskSnapshot, { receipts: props.harnessReceipts }),
-        props.lastActivity && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-xs text-muted-foreground", children: [
-          "Last activity: ",
-          formatRelativeTime(props.lastActivity)
-        ] }),
-        props.harnessReceipts.length >= 3 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivitySparkline, { receipts: props.harnessReceipts }),
-        props.blockedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CloudValueBanner,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AppStatusCard,
           {
-            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }),
-            title: "Team alerts available",
-            body: "Cloud would alert your team when Guard blocks actions like this.",
-            cta: { label: "Learn more", href: "https://hol.org/guard/pricing" }
+            status: props.status,
+            totalActions: props.totalActions,
+            allowedCount: props.allowedCount,
+            reviewedCount: props.reviewedCount,
+            blockedCount: props.blockedCount,
+            blockRate: props.blockRate,
+            harnessReceipts: props.harnessReceipts,
+            lastActivity: props.lastActivity,
+            protection: props.protection
           }
-        )
-      ] }),
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection }) })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AppStatusCard,
+        {
+          status: props.status,
+          totalActions: props.totalActions,
+          allowedCount: props.allowedCount,
+          reviewedCount: props.reviewedCount,
+          blockedCount: props.blockedCount,
+          blockRate: props.blockRate,
+          harnessReceipts: props.harnessReceipts,
+          lastActivity: props.lastActivity,
+          protection: props.protection
+        }
+      ),
       props.pendingItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Pending review" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
@@ -489,7 +851,7 @@ function AppOverviewTab(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      props.harnessReceipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      props.harnessReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent events" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => {
@@ -513,16 +875,7 @@ function AppOverviewTab(props) {
             receipt.receipt_id
           );
         }) })
-      ] }) : showFirstRunGuide ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue", children: step.index }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body })
-          ] })
-        ] }, step.title)) })
-      ] }) : null,
+      ] }),
       props.harnessInventory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Discovered items" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Tools and plugins Guard found in this app." }),
@@ -540,6 +893,45 @@ function AppOverviewTab(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection })
     ] })
+  ] });
+}
+const STATUS_DESCRIPTIONS = {
+  active: "Guard is actively protecting this app.",
+  needs_setup: "Guard detected this app but it needs setup.",
+  observed: "Guard has seen activity from this app.",
+  unknown: "This app has not been seen yet."
+};
+function AppStatusCard(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Status" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: STATUS_DESCRIPTIONS[props.status] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { status: props.status })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total actions", value: props.totalActions }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: props.allowedCount, tone: "green" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Review", value: props.reviewedCount, tone: props.reviewedCount > 0 ? "blue" : "slate" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Blocked", value: props.blockedCount, tone: props.blockedCount > 0 ? "attention" : "slate" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Block rate", value: `${props.blockRate}%`, tone: props.blockRate > 10 ? "attention" : "slate" })
+    ] }),
+    props.harnessReceipts.length >= 5 && /* @__PURE__ */ jsxRuntimeExports.jsx(RiskSnapshot, { receipts: props.harnessReceipts }),
+    props.lastActivity && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-xs text-muted-foreground", children: [
+      "Last activity: ",
+      formatRelativeTime(props.lastActivity)
+    ] }),
+    props.harnessReceipts.length >= 3 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivitySparkline, { receipts: props.harnessReceipts }),
+    props.blockedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CloudValueBanner,
+      {
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }),
+        title: "Team alerts available",
+        body: "Cloud would alert your team when Guard blocks actions like this.",
+        cta: { label: "Learn more", href: "https://hol.org/guard/pricing" }
+      }
+    )
   ] });
 }
 function AppFirewallStatusCard({ protection }) {
@@ -577,36 +969,46 @@ function shouldShowFirstRunGuide(input) {
 }
 function FirstRunGuide(props) {
   const displayName = harnessDisplayName(props.harness);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col justify-between gap-6 p-5 sm:p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
-          "Start protecting ",
-          displayName
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark", children: [
-          "Connect ",
-          displayName,
-          ", restart it once, then let Guard pause risky actions before they run."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground", children: firstRunIntro(props.harness) })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
+        "Start protecting ",
+        displayName
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-3 lg:grid-cols-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "mt-3 max-w-2xl text-2xl font-semibold leading-tight text-brand-dark", children: [
+        "Connect ",
+        displayName,
+        ", restart it once, then let Guard pause risky actions before they run."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground", children: firstRunIntro(props.harness) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3 sm:grid-cols-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "No terminal copy", value: "Dashboard action" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "Local only", value: "Daemon managed" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "First proof", value: "Appears here" })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      HarnessSetupPanel,
-      {
-        harness: props.harness,
-        install: props.install,
-        status: props.status,
-        onManagedInstallChanged: props.onManagedInstallChanged
-      }
-    ) })
-  ] }) });
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-0 border-t border-white/70 bg-white/72 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 sm:p-5 lg:border-r lg:border-white/70", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessSetupPanel,
+        {
+          harness: props.harness,
+          install: props.install,
+          status: props.status,
+          onManagedInstallChanged: props.onManagedInstallChanged
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-white/70 bg-brand-blue/[0.03] p-4 sm:p-5 lg:border-t-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue", children: step.index }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body })
+          ] })
+        ] }, step.title)) })
+      ] })
+    ] })
+  ] });
 }
 function GuidePill(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm", children: [
@@ -1071,198 +1473,6 @@ function AppSettingsTab(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessCoverageAside, { status: props.status, install: props.install })
   ] });
 }
-function HarnessSetupPanel(props) {
-  const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
-  const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
-  const active = props.install?.active === true;
-  const displayName = harnessDisplayName(props.harness);
-  const refreshAfterMutation = reactExports.useCallback(async () => {
-    await props.onManagedInstallChanged?.();
-  }, [props.onManagedInstallChanged]);
-  const loadPlan = reactExports.useCallback(async () => {
-    setSetupState({ kind: "loading", action: active ? "verify" : "install" });
-    try {
-      const result = active ? await runHarnessAction({ harness: props.harness, action: "verify" }) : await runHarnessAction({ harness: props.harness, action: "install", dryRun: true });
-      setSetupState({ kind: "ready", plan: result });
-    } catch (error) {
-      setSetupState({
-        kind: "error",
-        action: active ? "verify" : "install",
-        message: error instanceof Error ? error.message : "Unable to load setup plan."
-      });
-    }
-  }, [active, props.harness]);
-  reactExports.useEffect(() => {
-    void loadPlan();
-  }, [loadPlan]);
-  const runAction = reactExports.useCallback(
-    async (action, options = {}) => {
-      setSetupState({ kind: "loading", action });
-      try {
-        const result = await runHarnessAction({
-          harness: props.harness,
-          action,
-          dryRun: options.dryRun,
-          confirmationPhrase: options.confirmationPhrase
-        });
-        setDisconnectArmed(false);
-        setSetupState({ kind: "success", action, result });
-        if (action !== "verify" && options.dryRun !== true) {
-          await refreshAfterMutation();
-        }
-      } catch (error) {
-        if (error instanceof GuardHarnessActionError) {
-          setSetupState({
-            kind: "error",
-            action,
-            message: setupActionErrorMessage(error),
-            confirmationPhrase: error.payload?.confirmation_phrase,
-            confirmCommand: error.payload?.confirm_command
-          });
-        } else {
-          setSetupState({
-            kind: "error",
-            action,
-            message: error instanceof Error ? error.message : "Harness action failed."
-          });
-        }
-      }
-    },
-    [props.harness, refreshAfterMutation]
-  );
-  const handleConnect = reactExports.useCallback(() => {
-    void runAction("install", { dryRun: false });
-  }, [runAction]);
-  const handleVerify = reactExports.useCallback(() => {
-    void runAction("verify");
-  }, [runAction]);
-  const handleRepair = reactExports.useCallback(() => {
-    void runAction("repair", { dryRun: false });
-  }, [runAction]);
-  const handleRequestDisconnect = reactExports.useCallback(() => {
-    setDisconnectArmed(true);
-    void runAction("uninstall", { dryRun: true });
-  }, [runAction]);
-  const handleConfirmDisconnect = reactExports.useCallback(() => {
-    const phrase = setupState.kind === "error" && setupState.confirmationPhrase ? setupState.confirmationPhrase : setupState.kind === "success" && setupState.result.confirmation_phrase ? setupState.result.confirmation_phrase : `disconnect-${props.harness}`;
-    void runAction("uninstall", { dryRun: false, confirmationPhrase: phrase });
-  }, [props.harness, runAction, setupState]);
-  const handleCancelDisconnect = reactExports.useCallback(() => {
-    setDisconnectArmed(false);
-    void loadPlan();
-  }, [loadPlan]);
-  const busy = setupState.kind === "loading";
-  const currentPlan = setupState.kind === "ready" ? setupState.plan : setupState.kind === "success" ? setupState.result : null;
-  const steps = setupStepsFor(currentPlan, active);
-  const notes = setupNotesFor(currentPlan);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local harness install" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: active ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard." : "Guard will install the local managed hooks through the daemon. No copied shell command required." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
-        !active && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: busy, "data-primary": "true", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniRocketLaunch, { className: "h-4 w-4", "aria-hidden": "true" }),
-          busy && setupState.kind === "loading" && setupState.action === "install" ? "Connecting..." : "Connect app"
-        ] }),
-        active && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleVerify, disabled: busy, variant: "outline", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Test"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRepair, disabled: busy, variant: "outline", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Repair"
-          ] })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid gap-3 md:grid-cols-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: active ? "Installed" : props.status === "observed" ? "Observed" : "Not connected", active }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Config source", value: props.install?.workspace ?? "Local machine" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Last changed", value: props.install ? formatRelativeTime(props.install.updated_at) : "Not yet" })
-    ] }),
-    setupState.kind === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
-          "Could not finish ",
-          setupActionLabel(setupState.action)
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-words text-sm text-muted-foreground", children: setupState.message }),
-        setupState.confirmCommand && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-3 block overflow-x-auto rounded-lg bg-white/80 px-3 py-2 font-mono text-xs text-brand-dark", children: setupState.confirmCommand })
-      ] })
-    ] }) }),
-    setupState.kind === "success" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-green/20 bg-brand-green/[0.045] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: setupSuccessTitle(setupState.action, displayName) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: setupState.action === "verify" ? "Safe local check completed. No app config was changed." : "Dashboard action completed through the local Guard daemon." })
-      ] })
-    ] }) }),
-    steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-2", children: steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessSetupStepRow, { step }, step.step_id)) }),
-    notes.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-200/70 bg-white/80 p-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-widest text-slate-400", children: "What changed" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1.5", children: notes.slice(0, 4).map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "break-words text-xs leading-relaxed text-muted-foreground", children: note }, note)) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => void loadPlan(),
-          disabled: busy,
-          className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
-          children: "Refresh setup"
-        }
-      ),
-      active && !disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: handleRequestDisconnect,
-          disabled: busy,
-          className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Disconnect"
-          ]
-        }
-      ),
-      active && disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleConfirmDisconnect,
-            disabled: busy,
-            className: "inline-flex min-h-10 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50",
-            children: busy && setupState.kind === "loading" && setupState.action === "uninstall" ? "Disconnecting..." : "Confirm disconnect"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleCancelDisconnect,
-            disabled: busy,
-            className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
-            children: "Keep connected"
-          }
-        )
-      ] })
-    ] })
-  ] });
-}
-function HarnessSetupStepRow({ step }) {
-  const commandText = formatHarnessCommand(step.command);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-200/70 bg-white/80 p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue", children: step.writes_config ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body }),
-      commandText && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: commandText })
-    ] })
-  ] }) });
-}
 function HarnessCoverageAside(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
@@ -1294,43 +1504,6 @@ function ManifestPathList({ manifest }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: key.replace(/_/g, " ") }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 break-all font-mono text-xs text-brand-dark", children: String(value) })
   ] }, key)) });
-}
-function SetupMetric(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 rounded-xl border border-slate-200/70 bg-white/80 p-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: props.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 truncate text-sm font-semibold ${props.active ? "text-brand-green" : "text-brand-dark"}`, children: props.value })
-  ] });
-}
-function setupStepsFor(result, active) {
-  if (!result) return [];
-  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
-  if (result.verification?.steps) return result.verification.steps;
-  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
-  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
-  return [];
-}
-function setupNotesFor(result) {
-  const manifest = result?.managed_install?.manifest;
-  const notes = manifest?.["notes"];
-  return Array.isArray(notes) ? notes.filter((note) => typeof note === "string") : [];
-}
-function setupActionLabel(action) {
-  if (action === "install") return "connect";
-  if (action === "verify") return "test";
-  if (action === "repair") return "repair";
-  return "disconnect";
-}
-function setupActionErrorMessage(error) {
-  if (error.payload?.error === "confirmation_required") {
-    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
-  }
-  return error.payload?.error ?? error.message;
-}
-function setupSuccessTitle(action, displayName) {
-  if (action === "install") return `${displayName} connected`;
-  if (action === "verify") return `${displayName} test complete`;
-  if (action === "repair") return `${displayName} repaired`;
-  return `${displayName} disconnected`;
 }
 function ActivitySparkline({ receipts }) {
   const days = 7;

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -12,6 +12,11 @@ from enum import Enum
 from pathlib import Path
 
 from ..models import Finding, Severity, severity_from_value
+from ..path_support import read_text_file_within_root
+from .scanner_subprocess import MAX_SCANNER_OUTPUT_BYTES, run_bounded_scanner_process, scrubbed_scanner_env
+
+DEFAULT_CISCO_SKILL_TIMEOUT_SECONDS = 30.0
+MAX_CISCO_DIAGNOSTIC_BYTES = 65_536
 
 
 class CiscoIntegrationStatus(str, Enum):
@@ -83,10 +88,12 @@ def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) 
 
 def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, object]:
     _validate_skill_scanner_import()
-    from skill_scanner import SkillScanner
-    from skill_scanner.core.scan_policy import ScanPolicy
+    skill_module = importlib.import_module("skill_scanner")
+    policy_module = importlib.import_module("skill_scanner.core.scan_policy")
+    scanner_type = skill_module.SkillScanner
+    policy_type = policy_module.ScanPolicy
 
-    scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
+    scanner = scanner_type(policy=policy_type(preset_base=policy_name))
     report = scanner.scan_directory(skills_dir)
     payload = report.to_dict()
     return payload if isinstance(payload, dict) else {}
@@ -156,12 +163,16 @@ def _validate_skill_scanner_import() -> None:
         # in sys.modules (test mock), let __import__ handle it; otherwise raise.
         if "skill_scanner" not in sys.modules:
             raise ImportError("skill_scanner package not found") from None
+        if "skill_scanner.core.scan_policy" not in sys.modules:
+            raise ImportError("skill_scanner policy package not found") from None
         return
     if spec is None:
         # Not installed as a real package. If it's already in sys.modules
         # (e.g. test mock), let __import__ handle it. Otherwise raise.
         if "skill_scanner" not in sys.modules:
             raise ImportError("skill_scanner package not found")
+        if "skill_scanner.core.scan_policy" not in sys.modules:
+            raise ImportError("skill_scanner policy package not found")
         return
     if spec.origin is None:
         # Namespace package (no __init__.py) — origin is None but search
@@ -226,15 +237,13 @@ Path(sys.argv[3]).write_text(json.dumps(payload), encoding='utf-8')
 def _scan_directory_with_timeout(
     skills_dir: Path, policy_name: str, timeout_seconds: float | None
 ) -> dict[str, object]:
-    if timeout_seconds is None:
-        return _scan_directory_payload(skills_dir, policy_name)
-
+    effective_timeout = DEFAULT_CISCO_SKILL_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     file_descriptor, output_name = tempfile.mkstemp(prefix="cisco-skill-scan-", suffix=".json")
     output_path = Path(output_name)
     # Explicit close avoids leaking the temp file descriptor into the child.
     os.close(file_descriptor)
 
-    env = os.environ.copy()
+    env = scrubbed_scanner_env()
     # Filter sys.path to exclude CWD and relative paths that could shadow
     # the real skill_scanner package from an attacker-controlled checkout.
     safe_path_entries = [str(path) for path in sys.path if isinstance(path, str) and _is_safe_sys_path_entry(path)]
@@ -243,26 +252,29 @@ def _scan_directory_with_timeout(
     env["PYTHONSAFEPATH"] = "1"
     try:
         try:
-            result = subprocess.run(
+            result = run_bounded_scanner_process(
                 [
                     sys.executable,
+                    "-P",
                     "-c",
                     _SUBPROCESS_SCAN_SNIPPET,
                     str(skills_dir),
                     policy_name,
                     str(output_path),
                 ],
-                capture_output=True,
-                check=False,
-                text=True,
-                timeout=timeout_seconds,
                 env=env,
+                timeout_seconds=effective_timeout,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise TimeoutError("Cisco skill scanner timed out") from exc
+        except OSError as exc:
+            raise RuntimeError(f"Cisco skill scanner could not start: {exc}") from exc
+
+        if result.timed_out:
+            raise TimeoutError("Cisco skill scanner timed out")
 
         if result.returncode != 0:
-            error_output = result.stderr.strip() or result.stdout.strip()
+            error_output = (
+                result.stderr[:MAX_CISCO_DIAGNOSTIC_BYTES].strip() or result.stdout[:MAX_CISCO_DIAGNOSTIC_BYTES].strip()
+            )
             if not error_output:
                 error_output = f"Cisco skill scanner exited with code {result.returncode}"
             raise RuntimeError(error_output)
@@ -271,8 +283,14 @@ def _scan_directory_with_timeout(
             raise RuntimeError("Cisco skill scanner did not produce a result payload")
 
         try:
-            payload = json.loads(output_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+            payload = json.loads(
+                read_text_file_within_root(
+                    output_path.parent,
+                    output_path,
+                    max_bytes=MAX_SCANNER_OUTPUT_BYTES,
+                )
+            )
+        except (json.JSONDecodeError, OSError, UnicodeError) as exc:
             raise RuntimeError("Cisco skill scanner produced invalid JSON output") from exc
 
         return payload if isinstance(payload, dict) else {}
@@ -346,7 +364,7 @@ def run_cisco_skill_scan(
     skills_dir: Path,
     mode: str = "auto",
     policy_name: str = "balanced",
-    timeout_seconds: float | None = None,
+    timeout_seconds: float | None = DEFAULT_CISCO_SKILL_TIMEOUT_SECONDS,
 ) -> CiscoSkillScanSummary:
     """Run Cisco skill-scanner against a skills directory when available."""
 
@@ -363,7 +381,7 @@ def run_cisco_skill_scan(
         )
 
     try:
-        _safe_import_skill_scanner()
+        _validate_skill_scanner_import()
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(

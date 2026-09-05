@@ -17,10 +17,9 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
-from codex_plugin_scanner.guard.runtime.network_status import build_network_status
-
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .network_status_command import load_network_status_payload
 
 
 def _migrate_legacy_macos_secrets(store: GuardStore) -> None:
@@ -415,9 +414,7 @@ def _run_guard_network_command(
     command = getattr(args, "network_command", None) or "status"
     if command != "status":
         raise ValueError(f"unsupported network command: {command}")
-    payload = build_network_status(
-        legacy_domain_action=config.new_network_domain_action if config is not None else None
-    )
+    payload = load_network_status_payload(guard_home=guard_home, config=config)
     _emit("network", payload, getattr(args, "json", False))
     return 0
 

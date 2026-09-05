@@ -64,6 +64,7 @@ EXCLUDED_PARTS = frozenset(
         ".venv",
         "__pycache__",
         "node_modules",
+        "target",
         "venv",
     }
 )

@@ -67,12 +67,7 @@ def plugin_after_tool_replacement(stdout: str) -> dict[str, object] | None:
 
     payload = _json_object_from_output(stdout)
     if payload is None:
-        return {
-            "result": {
-                "output": "HOL Guard withheld this tool result because output review did not complete safely.",
-                "isError": True,
-            }
-        }
+        return None
     if not _payload_blocks(payload):
         replacement = _replacement_text(payload)
         if replacement is None:

@@ -2,13 +2,16 @@
 
 ## Architecture
 
-The hook review engine is a daemon-resident, typed decision core that avoids Python startup/import cost and CLI command layering for normal hook decisions.
+The typed request/response contract remains available for differential tests.
+Normal production hook decisions use the bundled Rust runtime; Python does not
+construct a semantic evaluator in the resident worker.
 
 ## Components
 
 ### `HookReviewRequest` / `HookReviewResponse`
 
-The typed API contract between adapters, the daemon worker, the CLI fallback, and the engine. Defined in `runtime/hook_review_types.py`.
+The typed API contract between adapters, the native edge, and explicit test
+oracles. Defined in `runtime/hook_review_types.py`.
 
 Key fields:
 - `model_output_action`: Controls what the adapter does with the output (`allow_original`, `replace_with_reviewed_excerpt`, `block`, `not_applicable`)
@@ -45,9 +48,9 @@ The source-read fast-path evaluator with:
 - Streaming scan
 - Cache check and save
 
-### `HookReviewEngine`
+### Python reference oracle
 
-The resident decision core:
+The retained differential-test implementation:
 1. Loads config
 2. Normalizes payload into `GuardActionEnvelope`
 3. Tries source-read fast path for PostToolUse with `guard_source_ref`
@@ -56,10 +59,9 @@ The resident decision core:
 
 ### `HookWorker`
 
-The daemon HTTP handler:
+The daemon HTTP transport:
 - Builds `HookReviewRequest` from HTTP payload
-- Calls `HookReviewEngine.review()`
-- Returns `HookReviewResponse.to_harness_json()`
+- Launches the native edge and returns its mechanically projected result
 - Never calls `run_guard_command()`
 
 ## Budgets
@@ -74,6 +76,9 @@ ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024  # Max arbitrary stdout for full 
 
 ## Integration Points
 
-- **Daemon**: `daemon/server.py` `_handle_runtime_hook()` dispatches to fast worker or legacy CLI
-- **CLI**: `cli/commands_hook_native_authority.py` sends auto/force command PreToolUse and PostToolUse to the native worker. Python `_try_source_ref_fast_path()` remains for off/shadow rollback and for file PreToolUse the native worker reports as unsupported.
+- **Daemon**: `daemon/server.py` `_handle_runtime_hook()` dispatches supported
+  events through the native worker or returns a fail-safe result.
+- **CLI**: `cli/commands_hook_native_authority.py` sends complete
+  PreToolUse/PostToolUse envelopes to the native worker. Source-ref evaluation
+  is available only through an explicit differential-test callback.
 - **Adapter**: Pi extension generates `guard_source_ref` and verifies `reviewed_output_sha256`

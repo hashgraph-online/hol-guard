@@ -1,6 +1,6 @@
 """Guard CLI runtime artifact hook evaluation."""
 
-# ruff: noqa: F403, F405
+# ruff: noqa: E402, F403, F405
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ import shlex
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 if TYPE_CHECKING:
     from ._commands_shared import _now

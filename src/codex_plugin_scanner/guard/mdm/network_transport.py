@@ -17,6 +17,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import ProxyManager
 
+from ...no_redirect import RejectRedirects
 from .contracts import ManagedNetworkPolicy
 from .network_credentials import read_proxy_credential_record
 from .network_trust import ManagedTrustError, build_managed_ssl_context
@@ -281,6 +282,12 @@ def managed_opener(
     )
 
 
+def _request_has_authentication(request: str | urllib.request.Request) -> bool:
+    if not isinstance(request, urllib.request.Request):
+        return False
+    return any(name.lower() in {"authorization", "dpop"} for name, _value in request.header_items())
+
+
 def managed_urlopen(
     request: str | urllib.request.Request,
     *,
@@ -289,14 +296,20 @@ def managed_urlopen(
 ) -> ManagedResponse:
     resolved, managed = resolved_network_policy(policy)
     validate_destination(request_url(request), resolved)
+    reject_redirects = _request_has_authentication(request)
     if (
         not managed
         and resolved.proxy_mode == "system"
         and resolved.ca_bundle_path is None
         and resolved.allow_public_registries
     ):
+        if reject_redirects:
+            return urllib.request.build_opener(RejectRedirects()).open(request, timeout=timeout)
         return urllib.request.urlopen(request, timeout=timeout)
-    return managed_opener(resolved).open(request, timeout=timeout)
+    return managed_opener(
+        resolved,
+        redirect_handler=RejectRedirects() if reject_redirects else None,
+    ).open(request, timeout=timeout)
 
 
 class _ManagedHTTPAdapter(HTTPAdapter):

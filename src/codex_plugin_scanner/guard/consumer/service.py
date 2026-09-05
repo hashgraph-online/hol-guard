@@ -772,10 +772,13 @@ def _consumer_saved_allow_validation_reason(
 ) -> ApprovalReuseValidationFailure | None:
     if decision.get("action") != "allow":
         return None
+    saved_hash = decision.get("artifact_hash")
+    if saved_hash is None and str(decision.get("scope") or "") in {"harness", "global"}:
+        return None
     return cast(
         ApprovalReuseValidationFailure,
         approval_context_tokens_validation_reason(
-            decision.get("artifact_hash"),
+            saved_hash,
             approval_context_hash,
         ),
     )

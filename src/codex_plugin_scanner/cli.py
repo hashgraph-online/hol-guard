@@ -294,6 +294,10 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
+    if requested_argv[:1] == ["__guard-cursor-hook"]:
+        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+
+        return run_frozen_cursor_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
     frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
@@ -308,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
+    if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
+        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+
+        return run_frozen_cursor_hook(effective_argv[1:])
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
     requested_argv = sys.argv[1:] if argv is None else argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)

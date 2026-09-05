@@ -297,7 +297,8 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Hermes is an early-access harness; some event surface coverage depends on the Hermes version installed."
+            "Hermes desktop and ACP entry paths may not register shell hooks; "
+            "CLI and gateway honor hooks.pre_tool_call."
         ),
         smoke_command="hol-guard install hermes --dry-run",
     ),
@@ -528,7 +529,6 @@ def harness_contracts_table() -> str:
         surfaces = ", ".join(c.event_surfaces) if c.event_surfaces else "—"
         rows.append(
             f"| `{c.harness}` | {aliases} | {'✅' if c.native_approval else '❌'} "
-            f"| {'✅' if c.browser_fallback else '❌'} "
-            f"| {'✅' if c.resume_support else '❌'} | {surfaces} |"
+            f"| {'✅' if c.browser_fallback else '❌'} | {'✅' if c.resume_support else '❌'} | {surfaces} |"
         )
     return header + "\n".join(rows) + "\n"

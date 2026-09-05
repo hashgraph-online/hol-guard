@@ -10,13 +10,26 @@ type ApprovalProofModalProps = {
   confirmLabel: string;
   approvalGate: GuardApprovalGatePublicConfig | null;
   busy?: boolean;
+  busyLabel?: string;
   error?: string | null;
+  requireFreshTotp?: boolean;
   onCancel: () => void;
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 };
 
 export function ApprovalProofModal(props: ApprovalProofModalProps) {
-  const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
+  const {
+    title,
+    detail,
+    confirmLabel,
+    approvalGate,
+    busy = false,
+    busyLabel = "Repairing…",
+    error = null,
+    requireFreshTotp = false,
+    onCancel,
+    onConfirm,
+  } = props;
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
 
@@ -29,13 +42,18 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
   }, []);
 
   const handleConfirm = useCallback(() => {
-    onConfirm(buildApprovalProofCredentials(approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
-  }, [approvalGate, onConfirm, password, totpCode]);
+    onConfirm(buildApprovalProofCredentials(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totpCode },
+      requireFreshTotp,
+    ));
+  }, [approvalGate, onConfirm, password, requireFreshTotp, totpCode]);
 
   const confirmDisabled = isApprovalProofSubmitDisabled(
     approvalGate,
     { approvalPassword: password, approvalTotpCode: totpCode },
     busy,
+    requireFreshTotp,
   );
 
   return (
@@ -54,6 +72,7 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
             approvalGate={approvalGate}
             approvalPassword={password}
             approvalTotpCode={totpCode}
+            requireFreshTotp={requireFreshTotp}
             onApprovalPasswordChange={handlePasswordChange}
             onApprovalTotpCodeChange={handleTotpChange}
           />
@@ -68,7 +87,7 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
             Cancel
           </ActionButton>
           <ActionButton onClick={handleConfirm} disabled={confirmDisabled}>
-            {busy ? "Repairing…" : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </ActionButton>
         </div>
       </div>

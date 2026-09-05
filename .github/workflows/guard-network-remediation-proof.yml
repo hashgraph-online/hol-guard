@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - release/3.0
+      - release/3.2
   workflow_dispatch:
 
 permissions:

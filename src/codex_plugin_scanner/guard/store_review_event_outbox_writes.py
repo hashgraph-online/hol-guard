@@ -156,8 +156,28 @@ def append_request_snapshot_event(
     return max(0, int(cursor.rowcount or 0))
 
 
-def requeue_pending_request_events(connection: sqlite3.Connection, *, source: str, changed_at: str) -> int:
+def requeue_pending_request_events(
+    connection: sqlite3.Connection,
+    *,
+    source: str,
+    changed_at: str,
+    require_binding: bool = False,
+) -> int:
     connection.execute("begin immediate")
+    current_binding = load_review_oauth_binding(connection, source)
+    if require_binding and current_binding is None:
+        return 0
+    current_identity = (
+        (
+            source,
+            current_binding["oauth_subject_hash"],
+            current_binding["workspace_id"],
+            current_binding["machine_id"],
+            current_binding["machine_installation_id"],
+        )
+        if current_binding is not None
+        else None
+    )
     rows = connection.execute(
         """
         select request_id from approval_requests
@@ -169,6 +189,34 @@ def requeue_pending_request_events(connection: sqlite3.Connection, *, source: st
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
+        existing_snapshot = connection.execute(
+            """
+            select oauth_source, oauth_subject_hash, workspace_id, machine_id,
+                   machine_installation_id, binding_status
+            from guard_review_outbox_events
+            where local_request_id = ?
+              and event_type = 'review.request.snapshot_requeued'
+              and acknowledged_at is null
+            limit 1
+            """,
+            (request_id,),
+        ).fetchone()
+        if (
+            existing_snapshot is not None
+            and current_identity is not None
+            and (
+                str(existing_snapshot["binding_status"]) == "ready"
+                and (
+                    str(existing_snapshot["oauth_source"]),
+                    existing_snapshot["oauth_subject_hash"],
+                    existing_snapshot["workspace_id"],
+                    existing_snapshot["machine_id"],
+                    existing_snapshot["machine_installation_id"],
+                )
+                == current_identity
+            )
+        ):
+            continue
         bind_review_events_for_request(connection, request_id=request_id, oauth_source=source)
         appended += append_request_snapshot_event(
             connection,

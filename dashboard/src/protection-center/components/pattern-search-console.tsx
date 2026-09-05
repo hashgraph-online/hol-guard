@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { HiMiniArrowPath, HiMiniCheckCircle, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniNoSymbol, HiMiniShieldCheck, HiMiniSparkles, HiMiniXMark } from "react-icons/hi2";
 
-import { extensionDisplayName } from "../../extension-control-center-model";
+import {
+  catalogRowSecondLine,
+  extensionDisplayName,
+  extensionStateLabel,
+} from "../../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission } from "../../extension-controls-api";
 import type { PermissionDraftState } from "../../extension-policy-draft";
 import {
@@ -54,6 +58,30 @@ export function quickApplyPermissionIds(
     .filter((permission) => permission.configurable)
     .filter((permission) => state !== "allow" || managedPermissionState(effective, permission.permission_id) !== "disabled")
     .map((permission) => permission.permission_id);
+}
+
+function CatalogSearchRow(props: {
+  extension: ExtensionCatalogItem;
+  effective: EffectiveExtensionControls;
+  onOpen: (extension: ExtensionCatalogItem) => void;
+}) {
+  const handleOpen = useCallback(() => {
+    props.onOpen(props.extension);
+  }, [props]);
+  return (
+    <ProtectionModuleRow
+      extensionId={props.extension.extension_id}
+      name={extensionDisplayName(props.extension.name)}
+      description={props.extension.description}
+      behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
+      required={props.extension.required}
+      mcp={props.extension.surface === "mcp"}
+      external={props.extension.trust_class === "external"}
+      executables={props.extension.executables}
+      ecosystemIds={props.extension.ecosystem_ids}
+      onOpen={handleOpen}
+    />
+  );
 }
 
 function QuickApplyToolbar(props: {
@@ -301,17 +329,14 @@ export function PatternSearchConsole(props: {
           {toolMatches.length ? (
             <section aria-label="Matching tools" className="guard-pattern-family">
               <h3 className="guard-pattern-family-heading"><span>Tools</span></h3>
-              {toolMatches.map((extension) => <ProtectionModuleRow
-                key={extension.extension_id}
-                extensionId={extension.extension_id}
-                name={extensionDisplayName(extension.name)}
-                description={extension.description}
-                behavior={extension.executables.join(" · ") || extension.description}
-                required={extension.required}
-                executables={extension.executables}
-                ecosystemIds={extension.ecosystem_ids}
-                onOpen={() => props.onOpenExtension(extension)}
-              />)}
+              {toolMatches.map((extension) => (
+                <CatalogSearchRow
+                  key={extension.extension_id}
+                  extension={extension}
+                  effective={props.effective}
+                  onOpen={props.onOpenExtension}
+                />
+              ))}
             </section>
           ) : null}
           {managedCount ? (

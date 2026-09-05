@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml as _yaml  # type: ignore[import-untyped]
 
+from ...safe_output import write_text_atomic_no_follow
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -22,6 +23,9 @@ from ..skill_directory_identity import (
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
+from . import hermes_runtime_hooks
+from .adapter_safe_output import write_text_at_authorized_path
+from .adapter_state_integrity import authenticate_adapter_state
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
@@ -32,6 +36,16 @@ from .hermes_file_inspection import (
     inspect_hermes_config,
     inspect_hermes_text_file,
     parse_hermes_yaml_mapping,
+)
+from .hermes_state_paths import (
+    hermes_cleanup_values,
+    hermes_install_config_path,
+    hermes_install_paths,
+    hermes_manifest,
+    hermes_previous_guard_for_install,
+    hermes_uninstall_state,
+    remove_hermes_managed_files,
+    validated_hermes_managed_paths,
 )
 
 # Subdirectories within a skill that may contain executable or injectable content.
@@ -180,9 +194,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         # Parse every source completely before making any installation change.
         shim_manifest = install_guard_shim(self.harness, context)
         managed_root = _managed_root(context)
-        manifest_path = managed_root / "manifest.json"
-        overlay_path = managed_root / "mcp-overlay.json"
-        pretool_path = managed_root / "pretool-hook.json"
+        manifest_path, overlay_path, pretool_path = hermes_install_paths(context, managed_root)
         managed_root.mkdir(parents=True, exist_ok=True)
         existing_manifest = _json_payload(manifest_path)
         install_state = _install_state(
@@ -192,12 +204,12 @@ class HermesHarnessAdapter(HarnessAdapter):
         )
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
-        overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
-        pretool_path.write_text(
+        write_text_atomic_no_follow(overlay_path, json.dumps(overlay_servers, indent=2) + "\n")
+        write_text_atomic_no_follow(
+            pretool_path,
             json.dumps(_pretool_payload(context=context), indent=2) + "\n",
-            encoding="utf-8",
         )
-        config_yaml_path = _hermes_home(context) / "config.yaml"
+        config_yaml_path = hermes_install_config_path(context, _hermes_home(context))
         previous_managed_names = _read_managed_server_names(context)
         new_managed_names, previous_guard_section, config_written = _write_guard_to_hermes_config_yaml(
             context=context,
@@ -205,33 +217,30 @@ class HermesHarnessAdapter(HarnessAdapter):
             overlay_servers=overlay_servers,
             managed_names=previous_managed_names,
         )
-        # Update manifests if config.yaml was actually written (not bailed out).
-        # We always write both manifests — even if new_managed_names is empty
-        # (no MCP servers to proxy) or previous_guard_section is None (no
-        # existing guard section), because the guard section was still written
-        # and uninstall needs to know to remove it.
         if config_written:
-            # Always write the manifest — even an empty list clears stale
-            # entries from a prior install that had more servers.
             _write_managed_server_names(context, new_managed_names)
-            # On reinstall, don't overwrite the saved previous guard section —
-            # the one from the first install captured the user's original. If
-            # we overwrote it with the Guard-managed section, uninstall would
-            # restore Guard's defaults instead of removing the section.
             existing_previous_guard = _previous_guard_section_path(context)
             if not existing_previous_guard.exists():
                 _write_previous_guard_section(context, previous_guard_section)
+        authenticated_previous_guard = hermes_previous_guard_for_install(
+            context,
+            existing_manifest,
+            previous_guard_section,
+        )
         manifest = {
             "harness": self.harness,
             "active": True,
             "config_path": str(overlay_path),
             "hermes_config_yaml_path": str(config_yaml_path),
+            "hermes_config_yaml_resolved_path": str(config_yaml_path.resolve()),
             **shim_manifest,
             "install_state": install_state,
             "managed_root": str(managed_root),
             "managed_manifest_path": str(manifest_path),
             "mcp_overlay_path": str(overlay_path),
             "pretool_hook_path": str(pretool_path),
+            "managed_server_names": new_managed_names if config_written else [],
+            "previous_guard_section": authenticated_previous_guard,
             "capabilities": {
                 "same_channel": True,
                 "pretool": True,
@@ -239,43 +248,30 @@ class HermesHarnessAdapter(HarnessAdapter):
             },
             "servers": _manifest_servers(source_configs),
             "notes": [
-                "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
-                "Guard wrote Guard-managed MCP proxy entries into the Hermes config.yaml.",
+                "Guard generated a Hermes MCP overlay, fail-closed hooks.pre_tool_call entry, and MCP proxy bundle.",
                 *_manifest_notes(shim_manifest),
             ],
         }
         if cloud_identity is not None:
             manifest["cloud_agent_identity"] = cloud_identity
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        manifest = authenticate_adapter_state(context.guard_home, harness=self.harness, payload=manifest)
+        write_text_atomic_no_follow(manifest_path, json.dumps(manifest, indent=2) + "\n")
         return manifest
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(self.harness, context)
         managed_root = _managed_root(context)
-        manifest_path = managed_root / "manifest.json"
-        manifest = _json_payload(manifest_path)
-        removed_paths: list[str] = []
-        for key in ("managed_manifest_path", "mcp_overlay_path", "pretool_hook_path"):
-            value = manifest.get(key)
-            if not isinstance(value, str) or not value:
-                continue
-            path = Path(value)
-            if path.exists():
-                path.unlink()
-                removed_paths.append(str(path))
-        config_yaml_path_str = manifest.get("hermes_config_yaml_path")
-        config_yaml_path = (
-            Path(config_yaml_path_str)
-            if isinstance(config_yaml_path_str, str) and config_yaml_path_str
-            else _hermes_home(context) / "config.yaml"
+        _manifest, config_yaml_path = hermes_uninstall_state(context, managed_root, _hermes_home(context))
+        removed_paths = remove_hermes_managed_files(context, managed_root)
+        managed_names, previous_guard = (
+            hermes_cleanup_values(context, _manifest, config_yaml_path) if config_yaml_path else ([], None)
         )
-        managed_names = _read_managed_server_names(context)
-        previous_guard = _read_previous_guard_section(context)
-        _remove_guard_from_hermes_config_yaml(
-            config_yaml_path=config_yaml_path,
-            managed_names=managed_names,
-            previous_guard=previous_guard,
-        )
+        if config_yaml_path is not None:
+            _remove_guard_from_hermes_config_yaml(
+                config_yaml_path=config_yaml_path,
+                managed_names=managed_names,
+                previous_guard=previous_guard,
+            )
         managed_servers_manifest = _managed_servers_manifest_path(context)
         if managed_servers_manifest.exists():
             managed_servers_manifest.unlink()
@@ -297,14 +293,15 @@ class HermesHarnessAdapter(HarnessAdapter):
         }
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        manifest = _json_payload(_managed_root(context) / "manifest.json")
-        overlay_path = manifest.get("mcp_overlay_path")
-        pretool_path = manifest.get("pretool_hook_path")
-        if not isinstance(overlay_path, str) or not isinstance(pretool_path, str):
+        managed_root = _managed_root(context)
+        manifest = hermes_manifest(context, managed_root)
+        managed_paths = validated_hermes_managed_paths(context, manifest, managed_root)
+        if managed_paths is None:
             return {}
+        overlay_path, pretool_path = managed_paths
         environment = {
-            "HERMES_GUARD_MCP_OVERLAY_PATH": overlay_path,
-            "HERMES_GUARD_PRETOOL_PATH": pretool_path,
+            "HERMES_GUARD_MCP_OVERLAY_PATH": str(overlay_path),
+            "HERMES_GUARD_PRETOOL_PATH": str(pretool_path),
         }
         environment.update(
             cloud_agent_identity_environment(
@@ -315,20 +312,36 @@ class HermesHarnessAdapter(HarnessAdapter):
         return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        manifest = _json_payload(_managed_root(context) / "manifest.json")
-        overlay_path = manifest.get("mcp_overlay_path")
-        pretool_path = manifest.get("pretool_hook_path")
+        managed_root = _managed_root(context)
+        manifest = hermes_manifest(context, managed_root)
+        managed_paths = validated_hermes_managed_paths(context, manifest, managed_root)
+        overlay_path, pretool_path = managed_paths or (None, None)
+        hook_registered = hermes_runtime_hooks.hermes_runtime_hook_registered(_hermes_home(context) / "config.yaml")
         return {
             "command": _run_command_probe([self.executable, "--help"]) if _command_available(self.executable) else None,
             "managed_install_present": bool(manifest),
+            "runtime_hook_registered": hook_registered,
             "managed_install_ready": (
-                isinstance(overlay_path, str)
-                and Path(overlay_path).exists()
-                and isinstance(pretool_path, str)
-                and Path(pretool_path).exists()
+                overlay_path is not None
+                and overlay_path.exists()
+                and pretool_path is not None
+                and pretool_path.exists()
+                and hook_registered
             ),
             "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
         }
+
+    def diagnostic_warnings(self, detection: HarnessDetection, runtime_probe: dict[str, object] | None) -> list[str]:
+        warnings = super().diagnostic_warnings(detection, runtime_probe)
+        warning = hermes_runtime_hooks.hermes_runtime_hook_warning(runtime_probe)
+        if warning is not None:
+            warnings.append(warning)
+        return warnings
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        payload = super().diagnostics(context)
+        hermes_runtime_hooks.apply_hermes_doctor_protection_label(payload)
+        return payload
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         manifest = managed_install.get("manifest") if isinstance(managed_install, dict) else None
@@ -1116,8 +1129,6 @@ def _pretool_payload(*, context: HarnessContext) -> dict[str, object]:
     ]
     if context.home_dir.resolve() != Path.home().resolve():
         cli_args.extend(["--home", str(context.home_dir)])
-    if context.workspace_dir is not None:
-        cli_args.extend(["--workspace", str(context.workspace_dir)])
     cli_args.append("--json")
     return {
         "command": list(
@@ -1265,25 +1276,17 @@ def _read_managed_server_names(context: HarnessContext) -> list[str]:
 def _write_managed_server_names(context: HarnessContext, names: list[str]) -> None:
     path = _managed_servers_manifest_path(context)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"servers": names}, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic_no_follow(path, json.dumps({"servers": names}, indent=2) + "\n")
 
 
 def _previous_guard_section_path(context: HarnessContext) -> Path:
     return _managed_root(context) / _GUARD_PREVIOUS_SECTION_MANIFEST
 
 
-def _read_previous_guard_section(context: HarnessContext) -> dict[str, object] | None:
-    data = _json_payload(_previous_guard_section_path(context))
-    section = data.get("guard")
-    if not isinstance(section, dict):
-        return None
-    return section
-
-
 def _write_previous_guard_section(context: HarnessContext, section: dict[str, object] | None) -> None:
     path = _previous_guard_section_path(context)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"guard": section}, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic_no_follow(path, json.dumps({"guard": section}, indent=2) + "\n")
 
 
 def _write_guard_to_hermes_config_yaml(
@@ -1293,19 +1296,7 @@ def _write_guard_to_hermes_config_yaml(
     overlay_servers: dict[str, dict[str, object]],
     managed_names: list[str],
 ) -> tuple[list[str], dict[str, object] | None, bool]:
-    """Write Guard-managed MCP proxy entries and guard section into Hermes config.yaml.
-
-    Replaces Guard-managed entries (identified by ``managed_names`` from the
-    manifest, not by prefix) with the current overlay servers.  User-configured
-    MCP servers — including any that happen to start with ``guard-`` — are
-    preserved.
-
-    Returns a tuple of ``(new_managed_names, previous_guard_section, config_written)``.
-    ``previous_guard_section`` is the user's existing ``guard`` section (or
-    ``None`` if there wasn't one) so that ``uninstall()`` can restore it.
-    ``config_written`` is ``True`` if config.yaml was written, ``False`` if the
-    existing configuration could not be inspected completely.
-    """
+    """Write Guard-managed MCP proxy entries, guard section, and runtime hooks."""
     config_yaml_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing config.
@@ -1351,10 +1342,14 @@ def _write_guard_to_hermes_config_yaml(
         "pain_signals_enabled": True,
     }
 
-    config_yaml_path.write_text(
-        _yaml.dump(existing, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
+    hermes_runtime_hooks.sync_guard_runtime_hooks(
+        existing,
+        command=_pretool_payload(context=context)["command"],
+        timeout_seconds=_GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
+        hermes_home=config_yaml_path.parent,
     )
+
+    write_text_at_authorized_path(config_yaml_path, _yaml.dump(existing, default_flow_style=False, sort_keys=False))
     return new_managed, previous_guard, True
 
 
@@ -1364,13 +1359,7 @@ def _remove_guard_from_hermes_config_yaml(
     managed_names: list[str],
     previous_guard: dict[str, object] | None = None,
 ) -> None:
-    """Remove Guard-managed entries from Hermes config.yaml.
-
-    Removes the MCP server entries listed in ``managed_names`` (from the
-    manifest) and restores the user's previous ``guard`` section if one was
-    saved during install.  User-configured servers — even those that happen
-    to start with ``guard-`` — are preserved.
-    """
+    """Remove Guard-managed MCP, guard section, and runtime hook entries."""
     if not config_yaml_path.exists():
         return
     inspection = inspect_hermes_config(config_yaml_path, syntax="yaml")
@@ -1384,16 +1373,15 @@ def _remove_guard_from_hermes_config_yaml(
         cleaned = {name: cfg for name, cfg in mcp_servers.items() if isinstance(name, str) and name not in managed_set}
         raw["mcp_servers"] = cleaned
 
+    hermes_runtime_hooks.unsync_guard_runtime_hooks(raw, hermes_home=config_yaml_path.parent)
+
     # Restore the user's previous guard section, or remove it if there wasn't one.
     if previous_guard is not None:
         raw[_GUARD_CONFIG_KEY] = previous_guard
     else:
         raw.pop(_GUARD_CONFIG_KEY, None)
 
-    config_yaml_path.write_text(
-        _yaml.dump(raw, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    write_text_at_authorized_path(config_yaml_path, _yaml.dump(raw, default_flow_style=False, sort_keys=False))
 
 
 def _install_state(

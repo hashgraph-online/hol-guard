@@ -90,6 +90,7 @@ import {
   getDemoReceipts,
   getDemoRequest,
   getDemoRequests,
+  demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
 
@@ -822,7 +823,7 @@ export function redirectToGuardDaemonOrigin(
   }
   fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(candidateOrigin)}`);
   url.hash = fragmentPairs.join("&");
-  window.location.replace(url.toString());
+  window.location.replace(url.toString()); // NOSONAR - re-canonicalized to exact loopback; caller authenticates it
 }
 
 export async function reconnectGuardDaemonAfterUpdate(
@@ -2136,7 +2137,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
     return {
       guard_home: "~/.hol-guard",
       config_path: "~/.hol-guard/config.toml",
-      settings: {
+      settings: { ...demoPresentationSettings,
         mode: "prompt",
         security_level: "balanced",
         default_action: "warn",

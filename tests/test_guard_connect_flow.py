@@ -270,7 +270,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200
-    assert connect_status == {"connect_required": False, "connect_flow": None}
+    assert connect_status["connect_required"] is False and connect_status["connect_flow"] is None and str(connect_status.get("dashboard_url") or "").endswith("/guard")
     assert runtime_status == 200
     assert runtime["sync_configured"] is True
     assert runtime["cloud_state"] in {"paired_active", "paired_waiting"}
@@ -325,6 +325,16 @@ def test_connect_status_surfaces_quarantined_review_event_recovery(
     assert payload["review_event_recovery_command"] == (
         "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
     )
+
+    binding["oauth_source"] = "default; touch /opt/guard-test/unsafe"
+    binding["workspace_id"] = "workspace-$(id)"
+    quoted_payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+    assert "review_event_recovery_command" not in quoted_payload
+    assert quoted_payload["review_event_recovery_command_unavailable"] == "binding_identifiers_invalid"
 
 
 def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:

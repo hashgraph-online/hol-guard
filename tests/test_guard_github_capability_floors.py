@@ -138,6 +138,8 @@ def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
         "gh pr merge 17 --squash",
         "gh pr merge 4751 --repo example/project --squash",
         "gh pr merge 4751 -R github.com/example/project --squash",
+        "gh pr merge 17 --squash --delete-branch=false",
+        "gh pr merge 4751 --repo example/project --squash --delete-branch=false",
     ),
 )
 def test_routine_squash_merge_is_prompt_free(command: str) -> None:
@@ -151,6 +153,20 @@ def test_routine_squash_merge_cleanup_followed_by_read_is_prompt_free() -> None:
             "command": (
                 "gh pr merge 5134 --repo example/project --squash --delete-branch && "
                 "gh pr view 5134 --repo example/project --json state,mergedAt,mergeCommit,url"
+            )
+        },
+    )
+
+    assert match is None
+
+
+def test_explicit_false_delete_branch_squash_merge_with_sleep_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "gh pr merge 252 --repo example/project --squash --delete-branch=false && "
+                "sleep 20 && gh run list --repo example/project --limit 1"
             )
         },
     )
@@ -252,6 +268,24 @@ def test_left_associative_and_or_does_not_skip_reachable_github_deletes(
     assert match is not None
 
 
+def test_unknown_and_grouped_and_or_chains_keep_reachable_github_deletes(tmp_path: Path) -> None:
+    commands = (
+        "true || unknown && gh repo delete o/r --yes",
+        "false && unknown || gh repo delete o/r --yes",
+        "(true || unknown) && gh repo delete o/r --yes",
+        "(false && unknown) || gh repo delete o/r --yes",
+        "true && (false || unknown) || gh repo delete o/r --yes",
+    )
+
+    for command in commands:
+        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+
+        assert assessment is not None
+        assert assessment.capabilities == ("delete_remote",)
+        match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+        assert match is not None
+
+
 @pytest.mark.parametrize(
     "command",
     (
@@ -264,6 +298,17 @@ def test_statically_dead_and_or_skips_github_deletes(tmp_path: Path, command: st
     assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
 
     assert assessment is None
+
+
+def test_unknown_and_or_chains_skip_only_provably_dead_github_deletes(tmp_path: Path) -> None:
+    commands = (
+        "unknown && false && gh repo delete o/r --yes",
+        "unknown || true || gh repo delete o/r --yes",
+    )
+
+    for command in commands:
+        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+        assert assessment is None
 
 
 def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:

@@ -156,6 +156,67 @@ def test_self_protected_contract_requires_an_owner(monkeypatch: pytest.MonkeyPat
         MODULE._changed_path_gate(head, "base")
 
 
+def _copy_pretool_graph_sources(root: Path) -> None:
+    for relative in (
+        "src/codex_plugin_scanner/guard/daemon/server.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",
+    ):
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text((ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def test_pretool_graph_gate_covers_server_entrypoint_and_cli() -> None:
+    assert MODULE._graph_failures(ROOT) == []
+
+
+def test_pretool_graph_gate_rejects_unguarded_server_legacy_escape(tmp_path: Path) -> None:
+    _copy_pretool_graph_sources(tmp_path)
+    server = tmp_path / "src/codex_plugin_scanner/guard/daemon/server.py"
+    source = server.read_text(encoding="utf-8")
+    marker = "            if _native_mode_requires_rust():\n                self._write_json(\n"
+    assert marker in source
+    server.write_text(
+        source.replace(marker, "            if False:\n                self._write_json(\n", 1),
+        encoding="utf-8",
+    )
+
+    failures = MODULE._graph_failures(tmp_path)
+
+    assert any("server execute path" in failure for failure in failures)
+
+
+def test_pretool_graph_gate_rejects_unknown_event_compatibility_escape(tmp_path: Path) -> None:
+    _copy_pretool_graph_sources(tmp_path)
+    entrypoint = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
+    source = entrypoint.read_text(encoding="utf-8")
+    marker = "        _native_mode_requires_rust()\n"
+    assert marker in source
+    entrypoint.write_text(
+        source.replace(marker, "        False\n", 1),
+        encoding="utf-8",
+    )
+
+    failures = MODULE._graph_failures(tmp_path)
+
+    assert any("unknown events" in failure for failure in failures)
+
+
+def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Path) -> None:
+    _copy_pretool_graph_sources(tmp_path)
+    cli = tmp_path / "src/codex_plugin_scanner/guard/cli/commands_hook.py"
+    source = cli.read_text(encoding="utf-8")
+    assert "normalize=False" in source
+    cli.write_text(source.replace("normalize=False", "normalize=True", 1), encoding="utf-8")
+
+    failures = MODULE._graph_failures(tmp_path)
+
+    assert any("normalizes payload before native authority" in failure for failure in failures)
+
+
 def test_authority_workflow_is_always_selected() -> None:
     source = (ROOT / ".github" / "workflows" / "rust-authority-ownership.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
@@ -171,7 +232,7 @@ def test_native_wheel_workflow_is_always_selected() -> None:
     source = (ROOT / ".github" / "workflows" / "native-wheel-ci.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
 
-    assert "pull_request:\n    branches: [main]" in trigger
+    assert "pull_request:\n    branches: [main, release/3.2]" in trigger
     assert "paths:" not in trigger
     assert "paths-ignore:" not in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source

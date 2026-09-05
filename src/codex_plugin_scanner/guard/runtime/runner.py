@@ -819,7 +819,7 @@ _NEGATED_SECRET_READ_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _FOLLOWING_SECRET_REFERENCE_PATTERN = re.compile(
-    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|token|tokens?|key|keys)\b",
+    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|tokens?|key|keys)\b",
     re.IGNORECASE,
 )
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
@@ -4430,7 +4430,7 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         raise GuardSyncEndpointUntrustedError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
-def _refresh_guard_oauth_access_token(
+def _refresh_guard_oauth_access_token_once(
     *,
     token_endpoint: str,
     client_id: str,
@@ -4534,7 +4534,65 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 
 
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
+_OAUTH_INVALID_GRANT_MAX_ATTEMPTS = 2
+_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS = 0.75
 _oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
+
+
+def _refresh_guard_oauth_access_token(
+    *,
+    token_endpoint: str,
+    client_id: str,
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    credential_reloader: Callable[[], tuple[str, GuardDpopKeyMaterial] | None] | None = None,
+) -> dict[str, object]:
+    """Refresh with bounded invalid_grant tolerance.
+
+    A single invalid_grant can be an edge 4xx or a rotation race resolved
+    server-side without grant revocation; failing once must not declare the
+    local sign-in invalid (which used to trigger credential wipes and stop
+    sync). Retry exactly once after a short delay. Before the retry, ask the
+    caller for the latest stored credentials — a peer process may have
+    rotated the refresh token between attempts. A second invalid_grant is
+    treated as genuine revocation and propagates.
+
+    The returned payload includes `_effective_refresh_token` and
+    `_effective_dpop_key_material` reflecting whichever credential snapshot
+    actually succeeded — so callers can persist and return *those*, not the
+    stale inputs.
+    """
+    last_error: GuardSyncAuthorizationExpiredError | None = None
+    attempt_refresh_token = refresh_token
+    attempt_dpop_key_material = dpop_key_material
+    for attempt in range(_OAUTH_INVALID_GRANT_MAX_ATTEMPTS):
+        try:
+            result = _refresh_guard_oauth_access_token_once(
+                token_endpoint=token_endpoint,
+                client_id=client_id,
+                refresh_token=attempt_refresh_token,
+                dpop_key_material=attempt_dpop_key_material,
+            )
+        except GuardSyncAuthorizationExpiredError as error:
+            if str(error) != _guard_oauth_reconnect_after_revoked_message():
+                raise
+            last_error = error
+            if attempt + 1 >= _OAUTH_INVALID_GRANT_MAX_ATTEMPTS:
+                break
+            time.sleep(_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS)
+            if credential_reloader is None:
+                continue
+            reloaded = credential_reloader()
+            if reloaded is None:
+                continue
+            attempt_refresh_token, attempt_dpop_key_material = reloaded
+            continue
+        result["_effective_refresh_token"] = attempt_refresh_token
+        result["_effective_dpop_key_material"] = attempt_dpop_key_material
+        return result
+    if last_error is None:  # pragma: no cover - unreachable when MAX_ATTEMPTS >= 1
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
+    raise last_error
 
 
 def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, object]) -> bool:
@@ -4706,11 +4764,70 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             "access_token": cached_access_token,
             "dpop_key_material": dpop_key_material,
         }
+
+    effective_credentials_ref: dict[str, dict[str, object]] = {"value": oauth_credentials}
+
+    def _reload_current_oauth_credentials() -> tuple[str, GuardDpopKeyMaterial] | None:
+        reloaded_credentials = store.get_oauth_local_credentials(allow_primary=True)
+        if not isinstance(reloaded_credentials, dict):
+            return None
+        reloaded_refresh_token = _optional_string(reloaded_credentials.get("refresh_token"))
+        if reloaded_refresh_token is None:
+            return None
+        effective_credentials_ref["value"] = reloaded_credentials
+        return reloaded_refresh_token, _oauth_dpop_key_material(reloaded_credentials)
+
     refreshed = _refresh_guard_oauth_access_token(
         token_endpoint=oauth_client.token_endpoint,
         client_id=client_id,
         refresh_token=refresh_token,
         dpop_key_material=dpop_key_material,
+        credential_reloader=_reload_current_oauth_credentials,
+    )
+    effective_credentials = effective_credentials_ref["value"]
+    effective_dpop_key_material = _apply_refreshed_oauth_credentials(
+        store=store,
+        effective_credentials=effective_credentials,
+        refreshed=refreshed,
+        refresh_token=refresh_token,
+        dpop_key_material=dpop_key_material,
+        persist_recovered_secret=persist_recovered_secret,
+        force_refresh=force_refresh,
+    )
+    sync_url = _validate_guard_sync_url(
+        _oauth_sync_url_from_issuer(oauth_client.issuer),
+        issuer=oauth_client.issuer,
+    )
+    return {
+        "sync_url": sync_url,
+        "access_token": str(refreshed["access_token"]),
+        "dpop_key_material": effective_dpop_key_material,
+    }
+
+
+def _apply_refreshed_oauth_credentials(
+    *,
+    store: GuardStore,
+    effective_credentials: dict[str, object],
+    refreshed: dict[str, object],
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    persist_recovered_secret: bool,
+    force_refresh: bool,
+) -> GuardDpopKeyMaterial:
+    """Project the refresh result onto the credential store and return context.
+
+    Removes the wrapper's internal `_effective_*` markers from `refreshed`,
+    persists the rotated credentials when state actually changed (using the
+    effective snapshot — the one the retry leg may have reloaded), and
+    returns the effective DPoP key material for the caller to sign with.
+    """
+    refreshed.pop("_effective_refresh_token", None)
+    effective_dpop_key_material_raw = refreshed.pop("_effective_dpop_key_material", None)
+    effective_dpop_key_material = (
+        effective_dpop_key_material_raw
+        if isinstance(effective_dpop_key_material_raw, GuardDpopKeyMaterial)
+        else dpop_key_material
     )
     rotated_refresh_token = str(refreshed["refresh_token"])
     refreshed_entitlement = refreshed.get("package_firewall_entitlement")
@@ -4724,14 +4841,17 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     # When the refresh response includes a guard_local_entitlement but no
     # user_profile, clear the stale profile rather than preserving it.
     # When there's no guard_local_entitlement at all (old server), keep existing.
+    # Sources: prefer the refresh response, then the effective (possibly
+    # reloaded-by-peer) credentials dict; compare against the same effective
+    # snapshot so a peer's newer profile is not treated as a change.
     effective_cloud_user_profile: dict[str, str] | None
     if had_entitlement:
         effective_cloud_user_profile = refreshed_cloud_user_profile
     else:
         effective_cloud_user_profile = refreshed_cloud_user_profile or _extract_dict_field(
-            oauth_credentials, "cloud_user_profile"
+            effective_credentials, "cloud_user_profile"
         )
-    stored_cloud_user_profile = _extract_dict_field(oauth_credentials, "cloud_user_profile")
+    stored_cloud_user_profile = _extract_dict_field(effective_credentials, "cloud_user_profile")
     profile_changed = effective_cloud_user_profile != stored_cloud_user_profile
     if (
         force_refresh
@@ -4742,7 +4862,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     ):
         _persist_rotated_oauth_refresh_token(
             store=store,
-            credentials=oauth_credentials,
+            credentials=effective_credentials,
             package_firewall_entitlement=package_firewall_entitlement,
             cloud_user_profile=effective_cloud_user_profile,
             refresh_token=rotated_refresh_token,
@@ -4750,15 +4870,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             access_token_expires_at=_optional_string(refreshed.get("access_token_expires_at")),
             force_primary_secret_rewrite=force_refresh,
         )
-    sync_url = _validate_guard_sync_url(
-        _oauth_sync_url_from_issuer(oauth_client.issuer),
-        issuer=oauth_client.issuer,
-    )
-    return {
-        "sync_url": sync_url,
-        "access_token": str(refreshed["access_token"]),
-        "dpop_key_material": dpop_key_material,
-    }
+    return effective_dpop_key_material
 
 
 # Test-only override: when set, _resolve_guard_sync_auth_context returns this dict

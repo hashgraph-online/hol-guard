@@ -221,6 +221,7 @@ def _remote_rule(
     risk_classes: tuple[str, ...] = ("destructive_shell", "network_egress"),
     safe_variants: tuple[CommandSafeVariant, ...] = (),
     example_command: str | None = None,
+    compatibility_fallback: bool = False,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -232,6 +233,7 @@ def _remote_rule(
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
         safe_variants=safe_variants,
+        compatibility_fallback=compatibility_fallback,
         example_command=example_command,
     )
 
@@ -320,6 +322,7 @@ REMOTE_COMMAND_RULES = (
         ),
         severity="critical",
         risk_classes=("execution", "network_egress"),
+        compatibility_fallback=True,
     ),
     _remote_rule(
         rule_id="command.remote.essh.cache-removal",
@@ -334,6 +337,7 @@ REMOTE_COMMAND_RULES = (
         ),
         severity="high",
         risk_classes=("destructive_shell",),
+        compatibility_fallback=True,
     ),
 )
 

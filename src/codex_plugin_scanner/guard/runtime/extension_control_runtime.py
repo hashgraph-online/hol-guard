@@ -155,12 +155,9 @@ class ExtensionControlRuntime:
     ) -> ExtensionControlRuntimeSnapshot:
         if not validated:
             self._validate_candidate_locked(candidate)
-        if candidate.health is not AuthorityHealth.PROTECTED:
-            self._snapshot = candidate
-            return candidate
-        candidate_revision = (candidate.revision, candidate.managed_revision)
-        self._highest_protected_digest = candidate.effective_digest
-        self._highest_protected_revision = candidate_revision
+        if candidate.health is AuthorityHealth.PROTECTED:
+            self._highest_protected_digest = candidate.effective_digest
+            self._highest_protected_revision = (candidate.revision, candidate.managed_revision)
         self._snapshot = candidate
         return candidate
 

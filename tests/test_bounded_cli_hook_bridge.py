@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, desktop_hook_proxy
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
 
@@ -58,13 +58,13 @@ def _config(tmp_path: Path, *, harness: str) -> dict[str, object]:
 @pytest.mark.parametrize(
     ("harness", "expected"),
     [
-        ("copilot", {"permissionDecision": "deny"}),
-        ("grok", {"decision": "deny"}),
-        ("hermes", {"decision": "deny"}),
-        ("openclaw", {"decision": "deny"}),
+        ("copilot", {"permissionDecision": "allow"}),
+        ("grok", {"decision": "allow"}),
+        ("hermes", {"decision": "allow"}),
+        ("openclaw", {"decision": "allow"}),
     ],
 )
-def test_timeout_emits_successful_native_deny(
+def test_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -88,8 +88,37 @@ def test_timeout_emits_successful_native_deny(
         assert payload[key] == value
 
 
+def test_timeout_allows_emergency_safe_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(None, "", False, True)),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="kimi"),
+            input_text=json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"file_path": "src/app.ts"},
+                }
+            ),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
+
+
 @pytest.mark.parametrize("harness", ["kimi", "zcode"])
-def test_claude_shaped_timeout_emits_deny_and_block_exit(
+def test_claude_shaped_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -107,10 +136,10 @@ def test_claude_shaped_timeout_emits_deny_and_block_exit(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 2
+    assert returncode == 0
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "deny"
+    assert hook_output["permissionDecision"] == "allow"
 
 
 def test_success_preserves_child_stdout_and_returncode(
@@ -154,7 +183,7 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", lambda path: "TEAMID")
+    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
 
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(core),
@@ -243,7 +272,7 @@ def test_desktop_proxy_requires_one_real_team_and_same_bundle(
         {proxy: "not set", core: "not set", proxy.parents[2]: "not set"},
         {proxy: "TEAM-A", core: "TEAM-B", proxy.parents[2]: "TEAM-A"},
     ):
-        monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", teams.get)
+        monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", teams.get)
         assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
 
 
@@ -257,7 +286,7 @@ def test_desktop_proxy_rejects_writable_or_cross_bundle_paths(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_codesign_team", lambda path: "TEAMID")
+    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
 
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(other_proxy))
     assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
@@ -328,7 +357,7 @@ def test_frozen_fallback_runs_supported_cli_subcommand_without_python_flags(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        "grok",
+        "grok", "--json",
     ]
 
 
@@ -382,7 +411,7 @@ def test_live_frozen_runtime_ignores_forged_config_mode_and_executable(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok",
+        "grok", "--json",
     ]
 
 
@@ -435,7 +464,7 @@ def test_frozen_fallback_accepts_equivalent_noncanonical_guard_home(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok",
+        "grok", "--json",
     ]
 
 
@@ -467,12 +496,11 @@ def test_frozen_fallback_accepts_normalized_json_hook_contract(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        harness,
-        "--json",
+        harness, "--json",
     ]
 
 
-def test_empty_failed_child_is_converted_to_native_deny(
+def test_empty_failed_child_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -489,10 +517,10 @@ def test_empty_failed_child_is_converted_to_native_deny(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
+    assert _json_object(output.getvalue())["permissionDecision"] == "allow"
 
 
-def test_malformed_success_is_converted_to_native_deny(
+def test_malformed_success_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -509,7 +537,7 @@ def test_malformed_success_is_converted_to_native_deny(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["decision"] == "deny"
+    assert _json_object(output.getvalue())["decision"] == "allow"
 
 
 def test_copilot_permission_timeout_uses_permission_request_contract(
@@ -537,7 +565,7 @@ def test_oversized_input_uses_configured_harness_native_deny(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path, harness="copilot")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_bounded_stdin", lambda: None)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda: (None, "{}"))
     output = io.StringIO()
 
     with redirect_stdout(output):

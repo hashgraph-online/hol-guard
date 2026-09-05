@@ -44,6 +44,28 @@ jobs:
             args+=(--base-ref "$OWNERSHIP_BASE_REF")
           fi
           uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
+      - name: Enforce native approval contract ownership
+        run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root .
+      - name: Reject production Python semantic hook reachability
+        run: uv run --no-sync python scripts/ci/python_hook_semantic_callgraph_gate.py --root .
+      - name: Enforce native receipt persistence contract at exact HEAD
+        run: uv run --no-sync python scripts/ci/native_receipt_persistence_gate.py --root . --json native-receipt-persistence.json
+      - name: Enforce Python capability cleanup ownership
+        run: |
+          uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
+            --root . --json python-capability-cleanup.json
+      - name: Prove excluded Python module is absent from the built wheel
+        run: |
+          PACKAGE_ARTIFACT_DIR=$(mktemp -d)
+          uv build --wheel --sdist --out-dir "$PACKAGE_ARTIFACT_DIR"
+          BUILT_WHEEL=$(find "$PACKAGE_ARTIFACT_DIR" -maxdepth 1 -name '*.whl' -print -quit)
+          BUILT_SDIST=$(find "$PACKAGE_ARTIFACT_DIR" -maxdepth 1 -name '*.tar.gz' -print -quit)
+          test -n "$BUILT_WHEEL"
+          test -n "$BUILT_SDIST"
+          uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
+            --root . --artifact "$BUILT_WHEEL" --json python-capability-cleanup-wheel.json
+           uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
+             --root . --artifact "$BUILT_SDIST" --json python-capability-cleanup-sdist.json
       - name: Compile and lint complete Rust workspace
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
@@ -101,5 +123,9 @@ jobs:
             rust-pretool-authority.json
             rust-posttool-authority.json
             rust-authority-performance.json
+            native-receipt-persistence.json
+            python-capability-cleanup.json
+            python-capability-cleanup-wheel.json
+            python-capability-cleanup-sdist.json
           if-no-files-found: error
           retention-days: 30

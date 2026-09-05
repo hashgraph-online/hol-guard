@@ -26,13 +26,15 @@ HARNESS_ROUTE_STATUSES: Final = frozenset(
         "installed_canonical",
         "installed_canonical_source_ref",
         "installed_cli_bridge",
-        "installed_command_only",
         "installed_observation_only",
         "normalizer_only_not_installed",
         "preflight_only",
         "unavailable",
     }
 )
+DECISION_IO_SCHEMA: Final = "hol-guard.decision-critical-io.v1"
+PRIVACY_IO_SCHEMA: Final = "hol-guard.native-hook-io-privacy.v1"
+DECISION_RECEIPT_SCHEMA: Final = "guard-native-hook-decision-receipt.v1"
 
 
 def _read(path: Path) -> str:
@@ -117,6 +119,94 @@ def _validate_defaults(value: dict[str, object]) -> None:
         raise RuntimeError("production runtime selection is not package-bound")
 
 
+def _validate_decision_critical_io(value: dict[str, object]) -> None:
+    contract = value.get("decision_critical_io")
+    if not isinstance(contract, dict) or contract.get("schema") != DECISION_IO_SCHEMA:
+        raise RuntimeError("decision-critical I/O ownership contract is missing")
+    if contract.get("native_authority") != "rust" or contract.get("failure") != "fail_closed":
+        raise RuntimeError("decision-critical I/O is not Rust-owned and fail closed")
+    if contract.get("native_modes") != ["auto", "force"] or contract.get("compatibility_modes") != ["off", "shadow"]:
+        raise RuntimeError("decision-critical I/O mode boundary is invalid")
+    capabilities = contract.get("capabilities")
+    expected = {
+        "post_tool_source_read",
+        "sensitive_path_and_symlink_classification",
+        "pre_post_identity_and_equivalence",
+        "archive_decode_package_inspection",
+        "policy_snapshot_admission",
+    }
+    if (
+        not isinstance(capabilities, list)
+        or len(capabilities) != len(expected)
+        or {item.get("id") for item in capabilities if isinstance(item, dict)} != expected
+    ):
+        raise RuntimeError("decision-critical I/O capability inventory is incomplete")
+    for capability in capabilities:
+        if not isinstance(capability, dict):
+            raise RuntimeError("decision-critical I/O capability is invalid")
+        if capability.get("authority") not in {"rust", "rust_when_hook_reachable"}:
+            raise RuntimeError(f"decision-critical I/O capability is not native-owned: {capability.get('id')}")
+        symbols = capability.get("rust_symbols")
+        if not isinstance(symbols, list) or not symbols or not all(isinstance(item, str) for item in symbols):
+            raise RuntimeError(
+                f"decision-critical I/O capability has no Rust implementation symbols: {capability.get('id')}"
+            )
+        if capability.get("failure") != "fail_closed" or capability.get("python_semantic_fallback") is not False:
+            raise RuntimeError(f"decision-critical I/O capability can fall back to Python: {capability.get('id')}")
+    if (
+        next(
+            (item for item in capabilities if isinstance(item, dict) and item.get("id") == "policy_snapshot_admission"),
+            {},
+        ).get("python_decision_time_disk_io")
+        is not False
+    ):
+        raise RuntimeError("policy snapshot admission performs Python decision-time disk I/O")
+
+
+def _validate_privacy_artifacts(value: dict[str, object]) -> None:
+    contract = value.get("privacy_artifacts")
+    if not isinstance(contract, dict) or contract.get("schema") != PRIVACY_IO_SCHEMA:
+        raise RuntimeError("hook route/evidence privacy contract is missing")
+    if contract.get("raw_source") is not False or contract.get("raw_commands") is not False:
+        raise RuntimeError("hook route/evidence artifacts may contain raw source or commands")
+    excluded = contract.get("excluded_fields")
+    required = {"raw_payload", "command", "prompt", "path", "source", "content", "secret", "token", "private_path"}
+    if not isinstance(excluded, list) or not required <= set(excluded):
+        raise RuntimeError("hook route/evidence privacy exclusions are incomplete")
+    serializers = contract.get("serializers")
+    if not isinstance(serializers, list) or not serializers or not all(isinstance(item, str) for item in serializers):
+        raise RuntimeError("hook route/evidence serializer inventory is missing")
+
+
+def _validate_decision_receipt(value: dict[str, object]) -> None:
+    contract = value.get("decision_receipt")
+    if not isinstance(contract, dict) or contract.get("schema") != DECISION_RECEIPT_SCHEMA:
+        raise RuntimeError("native hook decision receipt contract is missing")
+    if contract.get("version") != 1 or contract.get("authority") != "rust":
+        raise RuntimeError("native hook decision receipt version or authority is invalid")
+    if contract.get("idempotency_key") != "decision_id":
+        raise RuntimeError("native hook decision receipt idempotency key is invalid")
+    if contract.get("persistence") != "python_control_plane_async_non_authoritative":
+        raise RuntimeError("native hook decision receipt persistence is authoritative")
+    if contract.get("decision_critical_path") is not False:
+        raise RuntimeError("native hook decision receipt persistence is on the decision path")
+    queue = contract.get("queue")
+    if (
+        not isinstance(queue, dict)
+        or queue.get("max_records") != 2_000
+        or queue.get("max_bytes") != 16 * 1024 * 1024
+        or queue.get("drop_policy") != "drop_and_degrade_metrics"
+        or queue.get("wait_for_persistence") is not False
+    ):
+        raise RuntimeError("native hook decision receipt queue contract is invalid")
+    if contract.get("retry_restart_safe") is not True:
+        raise RuntimeError("native hook decision receipt retries are not restart-safe")
+    excluded = contract.get("privacy_excluded_fields")
+    required = {"raw_payload", "command", "prompt", "path", "url", "secret", "private_path", "content"}
+    if not isinstance(excluded, list) or not required <= set(excluded):
+        raise RuntimeError("native hook decision receipt privacy exclusions are incomplete")
+
+
 def _validate_nodes(value: dict[str, object]) -> None:
     nodes = value.get("nodes")
     if not isinstance(nodes, list) or not nodes:
@@ -148,5 +238,8 @@ def load_manifest(path: Path) -> dict[str, object]:
     _validate_harnesses(value)
     _validate_routes(value)
     _validate_defaults(value)
+    _validate_decision_critical_io(value)
+    _validate_privacy_artifacts(value)
+    _validate_decision_receipt(value)
     _validate_nodes(value)
     return value

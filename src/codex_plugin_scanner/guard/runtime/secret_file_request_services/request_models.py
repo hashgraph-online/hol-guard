@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..actions import GuardActionEnvelope, apply_patch_target_paths
 from ..command_model import CanonicalCommand
+from ..home_path_text import expand_home, normalize_path
 from ..secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from ..secret_sensitivity import classify_secret_path
 from .constants_core import _FILE_READ_TOOL_NAMES, _PATH_KEYS, _PATH_LIST_KEYS
@@ -233,7 +233,7 @@ def _normalized_candidate_path(
     stripped = value.strip().strip("'").strip('"')
     if not stripped:
         return None
-    return _normalize_path(_expand_home(stripped, home_dir), cwd)
+    return normalize_path(expand_home(stripped, home_dir), cwd)
 
 
 def _is_lossy_redacted_path(path: str) -> bool:
@@ -273,23 +273,6 @@ def _collect_candidate_paths(value: object, results: list[str], *, depth: int) -
         return
 
 
-def _expand_home(value: str, home_dir: Path | None) -> str:
-    if value == "~":
-        return str(home_dir or Path.home())
-    if value.startswith("~/") or value.startswith("~\\"):
-        base = home_dir or Path.home()
-        return str(base / value[2:])
-    return value
-
-
-def _normalize_path(value: str, cwd: Path | None) -> str:
-    if os.path.isabs(value):
-        return os.path.normpath(value)
-    if cwd is not None:
-        return os.path.normpath(os.path.join(str(cwd), value))
-    return os.path.normpath(value)
-
-
 def _normalize_tool_name(tool_name: object) -> str | None:
     if not isinstance(tool_name, str) or not tool_name.strip():
         return None
@@ -313,14 +296,14 @@ __all__ = [
     "ToolActionRequestMatch",
     "_candidate_paths",
     "_collect_candidate_paths",
-    "_expand_home",
     "_is_lossy_redacted_path",
-    "_normalize_path",
     "_normalize_tool_name",
     "_normalized_candidate_path",
     "classify_sensitive_path",
+    "expand_home",
     "extract_sensitive_file_read_request",
     "extract_sensitive_file_read_request_from_action",
     "is_file_read_tool_name",
+    "normalize_path",
     "tool_action_risk_summary",
 ]

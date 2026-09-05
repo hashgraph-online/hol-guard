@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
@@ -13,6 +14,15 @@ from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_structured_matchers import (
     LeadingOperandCountMatcher,
     OptionValueKeyMatcher,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
@@ -171,7 +181,65 @@ REMOTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 
 def test_remote_rules_feed_runtime_hooks(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(REMOTE_REVIEW_CASES, tmp_path)
+    assert_reviewed_command_cases(
+        tuple(case for case in REMOTE_REVIEW_CASES if not case[2].startswith("command.remote.essh.")),
+        tmp_path,
+    )
+
+
+def _essh_control_layer(state: ControlState) -> ExtensionControlLayer:
+    return ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.EXTENSION, "command.remote.essh"),
+                state=state,
+            ),
+        ),
+    )
+
+
+def test_essh_rules_are_inert_until_local_admin_enable(tmp_path: Path) -> None:
+    essh_cases = tuple(case for case in REMOTE_REVIEW_CASES if case[2].startswith("command.remote.essh."))
+    for command, action_class, rule_id in essh_cases:
+        inert = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            compatibility_action_class=action_class,
+            extension_control_layers=(),
+        )
+        assert all(item.extension.extension_id != "command.remote.essh" for item in inert.extension_observations)
+        assert all(item.extension.extension_id != "command.remote.essh" for item in inert.matches)
+        assert inert.controlling_action_class is None
+        assert inert.controlling_rule_id is None
+
+        enabled = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            compatibility_action_class=action_class,
+            extension_control_layers=(_essh_control_layer(ControlState.ENABLED),),
+        )
+        assert any(item.extension.extension_id == "command.remote.essh" for item in enabled.extension_observations)
+        assert any(item.extension.extension_id == "command.remote.essh" for item in enabled.matches)
+        assert enabled.controlling_action_class == action_class
+        assert enabled.controlling_rule_id == rule_id
+
+        disabled = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            compatibility_action_class=action_class,
+            extension_control_layers=(_essh_control_layer(ControlState.DISABLED),),
+        )
+        assert all(item.extension.extension_id != "command.remote.essh" for item in disabled.extension_observations)
+        assert all(item.extension.extension_id != "command.remote.essh" for item in disabled.matches)
+        assert disabled.controlling_action_class is None
+        assert disabled.controlling_rule_id is None
 
 
 REMOTE_SAFE_COMMANDS: tuple[str, ...] = (

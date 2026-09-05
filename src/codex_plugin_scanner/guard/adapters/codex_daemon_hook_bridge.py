@@ -13,6 +13,7 @@ if __package__:
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    from ..daemon.hook_availability_policy import hook_event_is_permission_request
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -40,6 +41,9 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         bridge_config_from_argv as _parse_bridge_config,
     )
     from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+        hook_event_is_permission_request,
+    )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -115,26 +119,37 @@ def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str
                 "permissionDecisionReason": reason,
             }
         }
-    if event_name == "PostToolUse":
-        return {
-            "continue": False,
-            "stopReason": reason,
-            "systemMessage": reason,
-        }
     return {
-        "continue": False,
-        "stopReason": reason,
+        "continue": True,
         "systemMessage": reason,
     }
 
 
-def _unavailable_response(event_name: str, reason: str) -> dict[str, object]:
-    if event_name == "UserPromptSubmit":
+def _unavailable_response(
+    event_name: str,
+    reason: str,
+    data: str | None = None,
+) -> dict[str, object]:
+    del data
+    if hook_event_is_permission_request(event_name):
         return {
             "continue": True,
             "systemMessage": reason,
+            "hookSpecificOutput": {"hookEventName": event_name},
         }
-    return _fail_closed(event_name, reason)
+    if event_name == "PreToolUse":
+        return {
+            "continue": True,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "permissionDecision": "allow",
+                "permissionDecisionReason": reason,
+            },
+        }
+    return {
+        "continue": True,
+        "systemMessage": reason,
+    }
 
 
 def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> dict[str, object]:
@@ -185,37 +200,34 @@ def main(
     hook_input = _bound_hook_input(hook_timeouts)
     if hook_input is None:
         sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
-        return 0
-    event_name, data, timeout_seconds = hook_input
-    deadline = time.monotonic() + timeout_seconds
-    response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
-        state_path=state_path,
-        fallback_command=fallback_command,
-        start_command=start_command,
-        query=query,
-        data=data,
-        deadline=deadline,
-        manifest_path=manifest_path,
-        config_json=config_json,
-    )
-    if response is None:
-        failure_reason = (
-            _OVERLOAD_REASON
-            if daemon_overloaded
-            else _LAUNCH_INTEGRITY_REASON
-            if launch_integrity_failed
-            else _FAIL_CLOSED_REASON
-        )
-        response = _unavailable_response(event_name, failure_reason)
-    sys.stdout.write(
-        _bridge_output(
-            response,
-            event_name=event_name,
-            hook_input=data,
+    else:
+        event_name, data, timeout_seconds = hook_input
+        deadline = time.monotonic() + timeout_seconds
+        response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,
+            fallback_command=fallback_command,
+            start_command=start_command,
+            query=query,
+            data=data,
             deadline=deadline,
+            manifest_path=manifest_path,
+            config_json=config_json,
         )
-    )
+        if response is None:
+            if launch_integrity_failed:
+                response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+            else:
+                failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
+                response = _unavailable_response(event_name, failure_reason, data)
+        sys.stdout.write(
+            _bridge_output(
+                response,
+                event_name=event_name,
+                hook_input=data,
+                state_path=state_path,
+                deadline=deadline,
+            )
+        )
     return 0
 
 

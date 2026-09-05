@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from .markdown_support import escape_markdown_text
 from .models import GRADE_LABELS, Finding, ScanResult, max_severity
 
 REQUEST_TIMEOUT_SECONDS = 30
@@ -144,7 +145,10 @@ def build_verify_pr_comment_body(
             name = str(case.get("name") or "unnamed")
             message = str(case.get("message") or "")
             icon = "✅" if bool(case.get("passed")) else "⚠️"
-            lines.append(f"- {icon} `{component}` {name}: {message}")
+            lines.append(
+                f"- {icon} `{escape_markdown_text(component)}` {escape_markdown_text(name)}: "
+                f"{escape_markdown_text(message)}"
+            )
     return "\n".join(lines)
 
 
@@ -209,8 +213,8 @@ def _render_findings_section(
         location = ""
         if finding.file_path is not None:
             line_suffix = f":{finding.line_number}" if finding.line_number is not None else ""
-            location = f" in `{finding.file_path}{line_suffix}`"
-        lines.append(f"- `{finding.severity.value}` {finding.title}{location}")
+            location = f" in `{escape_markdown_text(finding.file_path)}{line_suffix}`"
+        lines.append(f"- `{finding.severity.value}` {escape_markdown_text(finding.title)}{location}")
     if total_findings > max_findings_to_render:
         lines.append(f"- …and {total_findings - max_findings_to_render} more.")
     return lines

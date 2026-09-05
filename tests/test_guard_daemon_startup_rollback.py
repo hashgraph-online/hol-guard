@@ -35,8 +35,35 @@ def test_daemon_start_preserves_deferred_hook_worker_backfill(
     try:
         daemon.start()
         assert calls == [{}]
+        assert runner.stats()["ready"] == 1
     finally:
         daemon.stop()
+
+
+def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    monkeypatch.setattr(
+        daemon._server.hook_process_runner,
+        "require_initial_capacity",
+        lambda: (_ for _ in ()).throw(RuntimeError("injected initial worker failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="injected initial worker failure"):
+        daemon.start()
+
+    def reject_shutdown() -> None:
+        raise AssertionError("shutdown must not wait on an unstarted serve loop")
+
+    monkeypatch.setattr(daemon._server, "shutdown", reject_shutdown)
+    daemon.stop()
+
+    assert daemon._thread is None
+    assert daemon._owner_lock is None
+    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_daemon_start_waits_for_serve_loop_entry(
@@ -75,6 +102,91 @@ def test_daemon_start_waits_for_serve_loop_entry(
         starter.join(timeout=10)
         assert not starter.is_alive()
         assert start_errors == []
+    finally:
+        release_serve_thread.set()
+        daemon.stop()
+
+
+def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    original_serve_forever = daemon._serve_forever
+    original_request_stop = daemon._server.request_serve_stop
+    original_finish_service = daemon._finish_service_locked
+    serve_thread_entered = threading.Event()
+    stop_requested = threading.Event()
+    release_serve_thread = threading.Event()
+    start_errors: list[BaseException] = []
+    stop_errors: list[BaseException] = []
+    finish_service_calls = 0
+    listener_closed_before_loop_entry = False
+
+    def delayed_serve_forever() -> None:
+        serve_thread_entered.set()
+        assert release_serve_thread.wait(timeout=5)
+        original_serve_forever()
+
+    def recording_request_stop() -> None:
+        stop_requested.set()
+        original_request_stop()
+
+    def recording_finish_service() -> bool:
+        nonlocal finish_service_calls
+        finish_service_calls += 1
+        return original_finish_service()
+
+    original_server_close = daemon._server.server_close
+
+    def recording_server_close() -> None:
+        nonlocal listener_closed_before_loop_entry
+        if not release_serve_thread.is_set():
+            listener_closed_before_loop_entry = True
+        original_server_close()
+
+    def start_daemon() -> None:
+        try:
+            daemon.start()
+        except BaseException as error:
+            start_errors.append(error)
+
+    def stop_daemon() -> None:
+        try:
+            daemon.stop()
+        except BaseException as error:
+            stop_errors.append(error)
+
+    monkeypatch.setattr(daemon, "_serve_forever", delayed_serve_forever)
+    monkeypatch.setattr(daemon._server, "request_serve_stop", recording_request_stop)
+    monkeypatch.setattr(daemon._server, "server_close", recording_server_close)
+    monkeypatch.setattr(daemon, "_finish_service_locked", recording_finish_service)
+    starter = threading.Thread(target=start_daemon)
+    stopper = threading.Thread(target=stop_daemon)
+    try:
+        starter.start()
+        assert serve_thread_entered.wait(timeout=10)
+        stopper.start()
+        assert stop_requested.wait(timeout=10)
+        release_serve_thread.set()
+        starter.join(timeout=30)
+        stopper.join(timeout=30)
+
+        assert not starter.is_alive()
+        assert not stopper.is_alive()
+        assert stop_errors == []
+        assert len(start_errors) == 1
+        assert str(start_errors[0]) == "Guard daemon stopped during startup"
+        assert daemon._thread is None
+        assert daemon._owner_lock is None
+        assert finish_service_calls == 1
+        assert listener_closed_before_loop_entry is False
+        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve_thread.set()
         daemon.stop()

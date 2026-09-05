@@ -15,7 +15,7 @@ from ..runtime.shell_command_wrappers import is_trusted_absolute_command_path
 
 _MIN_WORKERS = 2
 _MAX_WORKERS = 16
-_MAX_INITIAL_WORKERS = 8
+_MAX_INITIAL_WORKERS = 2
 _PRESSURE_SECONDS = 10.0
 _IDLE_SECONDS = 300.0
 _SPAWN_INTERVAL_SECONDS = 1.0
@@ -31,6 +31,23 @@ _CGROUP_V1_CPU_QUOTA = Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
 _CGROUP_V1_CPU_PERIOD = Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
 _CGROUP_V2_MEMORY_MAX = Path("/sys/fs/cgroup/memory.max")
 _CGROUP_V1_MEMORY_MAX = Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+
+
+def backfill_window_after_capacity_enable(
+    *,
+    now: float,
+    delay_seconds: float,
+    active_deferral_seconds: float,
+    current_not_before: float,
+    current_force_after: float,
+) -> tuple[float, float]:
+    """Apply a capacity-enable delay without extending an explicit immediate wake."""
+
+    requested_not_before = now + max(0.0, delay_seconds)
+    if delay_seconds <= 0:
+        return current_not_before, max(current_force_after, now + active_deferral_seconds)
+    not_before = max(current_not_before, requested_not_before)
+    return not_before, max(current_force_after, not_before + active_deferral_seconds)
 
 
 def _read_text(path: Path) -> str | None:
@@ -160,6 +177,9 @@ def process_tree_rss_bytes(process_ids: tuple[int, ...]) -> int | None:
             process_rows.append((int(fields[0]), int(fields[1]), int(fields[2])))
         except ValueError:
             continue
+    observed_process_ids = {process_id for process_id, _parent_process_id, _rss_kib in process_rows}
+    if not root_process_ids.issubset(observed_process_ids):
+        return None
     included_process_ids = set(root_process_ids)
     while True:
         descendants = {

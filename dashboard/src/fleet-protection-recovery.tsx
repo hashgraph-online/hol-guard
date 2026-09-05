@@ -8,6 +8,7 @@ import {
 import { ActionButton } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
 import {
+  safeCloudConnectUrl,
   startOrRecoverCloudConnect,
   waitForAuthorizeUrl,
   waitForCloudConnection,
@@ -38,6 +39,7 @@ export type CloudPolicyRecoveryInput = {
   cloudSyncState: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale";
   cloudPolicySyncError?: string | null;
   connectUrl: string;
+  dashboardUrl?: string;
 };
 
 type CloudPolicyRecoveryHint = {
@@ -99,16 +101,13 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
 };
 
 export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
-  const cloudProofUnavailable =
-    input.cloudState !== "paired_active"
-    || input.cloudSyncState !== "healthy"
-    || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
+  const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
+  if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail:
       "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.connectUrl,
+    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl!,
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof",
   };
@@ -205,21 +204,6 @@ function cloudConnectButtonLabel(
   return defaultLabel;
 }
 
-function safeCloudConnectUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const [repairState, setRepairState] = useState<RepairState | null>(null);
   const [cloudConnectState, setCloudConnectState] = useState<CloudConnectState | null>(null);
@@ -300,19 +284,16 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
       }
       const flow = status.connect_flow;
       const authorizeUrl = safeCloudConnectUrl(flow?.authorize_url);
-      const signInUrl = authorizeUrl ?? safeCloudConnectUrl(flow?.connect_url);
-      if (!flow || !signInUrl) {
+      if (!flow || !authorizeUrl) {
         throw new Error(
           flow?.detail || "Guard could not generate a secure sign-in link. Try again.",
         );
       }
-      const opened = authorizeUrl
-        ? openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened)
-        : false;
+      const opened = openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened);
       if (!isActiveCloudConnect(controller)) return;
       setCloudConnectState({
-        authorizeUrl: signInUrl,
-        message: cloudConnectPendingMessage(Boolean(authorizeUrl), opened),
+        authorizeUrl,
+        message: cloudConnectPendingMessage(true, opened),
         status: "pending",
       });
       const connectedStatus = await waitForCloudConnection(status, {
@@ -328,11 +309,9 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         return;
       }
       const detail = connectedStatus.connect_flow?.detail;
+      const nextAuthorizeUrl = safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url);
       setCloudConnectState({
-        authorizeUrl:
-          safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url)
-          ?? safeCloudConnectUrl(connectedStatus.connect_flow?.connect_url)
-          ?? signInUrl,
+        authorizeUrl: nextAuthorizeUrl ?? authorizeUrl,
         message:
           connectedStatus.connect_flow?.state === "failed"
             ? detail || "Guard Cloud sign-in could not finish. Try again."
@@ -394,7 +373,14 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {recoverySummary(failCount, unknownCount, needsConnectedApp)}
+            {recoverySummary(
+              failCount,
+              unknownCount,
+              needsConnectedApp,
+              gaps
+                .filter((check) => check.status === "fail")
+                .map((check) => actionForCheck(check, props.repairHarness).label),
+            )}
           </p>
         </div>
         <ActionButton onClick={handleRepairClick} disabled={working}>
@@ -402,7 +388,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         </ActionButton>
       </div>
       {cloudPolicyHint ? (
-        <div className="mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600">
+        <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
           <p className="font-medium text-brand-dark">{cloudPolicyHint.title}</p>
           <p className="mt-1">{cloudPolicyHint.detail}</p>
           {cloudPolicyHint.startsOAuth ? (

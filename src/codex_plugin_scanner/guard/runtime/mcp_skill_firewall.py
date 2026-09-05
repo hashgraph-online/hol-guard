@@ -233,7 +233,7 @@ def build_runtime_action_record(
         if action_envelope.command:
             subprocesses.append(action_envelope.command.split()[0])
     claimed = _claimed_capabilities(artifact)
-    observed = _observed_capabilities(risk_categories, artifact)
+    observed = list(risk_categories)
     sensitive = [
         category for category in (*risk_categories, *claimed, *observed) if _SENSITIVE_CLASS_PATTERN.search(category)
     ]
@@ -507,13 +507,6 @@ def _claimed_capabilities(artifact: GuardArtifact) -> list[str]:
     if isinstance(description, str) and description.strip():
         return ["tool_description"]
     return []
-
-
-def _observed_capabilities(risk_categories: tuple[str, ...], artifact: GuardArtifact) -> list[str]:
-    observed = list(risk_categories)
-    if artifact.artifact_type == "tool_call" and observed:
-        return observed
-    return observed
 
 
 def _unique_strings(values: list[str]) -> list[str]:

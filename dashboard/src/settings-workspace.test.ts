@@ -115,6 +115,9 @@ assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", 
 assert(settingsWorkspaceSource.includes('label="Cloud receipt privacy"'), "receipt privacy: redaction control is visible in settings");
 assert(settingsWorkspaceSource.includes("<SettingsSelectRow"), "receipt privacy: redaction control uses the accessible select primitive");
 assert(settingsWorkspaceSource.includes('handleStringChange("receipt_redaction_level")'), "receipt privacy: redaction changes persist through settings save");
+assert(settingsWorkspaceSource.includes('label="Presentation mode"'), "presentation: mode control is visible in settings");
+assert(settingsWorkspaceSource.includes("handlePresentationModeChange"), "presentation: mode changes use the dedicated save handler");
+assert(settingsWorkspaceSource.includes("resolveSettingsPresentation"), "presentation: settings use the authoritative resolved mode");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(

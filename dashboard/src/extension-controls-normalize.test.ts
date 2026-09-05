@@ -69,6 +69,10 @@ function catalog() {
       description: "Protects Git command workflows.",
       enabled: true,
       required: false,
+      trust_class: "first-party",
+      activation: "default-on",
+      publisher: { id: "hol", displayName: "Hashgraph Online" },
+      icon: { kind: "none" },
       source: "built-in",
       aliases: ["command.scm"],
       dependencies: [],
@@ -121,11 +125,51 @@ function effective() {
 }
 
 const normalizedCatalog = normalizeExtensionCatalog(catalog());
+assert.equal(normalizedCatalog.extensions[0]?.trust_class, "first-party");
+assert.equal(normalizedCatalog.extensions[0]?.activation, "default-on");
 assert.equal(normalizedCatalog.extensions[0]?.rules[0]?.rule_id, "command.git.reset-hard");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.safer_guidance[0], "Create a checkpoint first.");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.example_command, "git reset --hard");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.family, "git-destructive");
 assert.deepEqual(normalizedCatalog.extensions[0]?.reference_urls, ["https://git-scm.com/docs"]);
+assert.equal(normalizedCatalog.extensions[0]?.surface, undefined);
+const mcpCatalog = normalizeExtensionCatalog({
+  ...catalog(),
+  extensions: [{
+    ...catalog().extensions[0],
+    extension_id: "command.mcp-filesystem",
+    name: "Filesystem MCP",
+    aliases: [],
+    surface: "mcp",
+    mcp_launch: { kind: "package-launcher", command: "npx", package: "@modelcontextprotocol/server-filesystem" },
+    mcp_tools: [
+      { name: "read_file", state: "inherit" },
+      { name: "write_file", state: "block" },
+    ],
+    rules: [],
+    rule_count: 0,
+    permissions: [{
+      ...permission(),
+      permission_id: "command.mcp-filesystem.permission.mcp-filesystem-tool",
+      extension_id: "command.mcp-filesystem",
+      rule_ids: [],
+    }],
+  }],
+});
+assert.equal(mcpCatalog.extensions[0]?.surface, "mcp");
+assert.equal(mcpCatalog.extensions[0]?.mcp_launch?.package, "@modelcontextprotocol/server-filesystem");
+assert.equal(mcpCatalog.extensions[0]?.mcp_tools?.[1]?.state, "block");
+const droppedLaunch = normalizeExtensionCatalog({
+  ...catalog(),
+  extensions: [{
+    ...catalog().extensions[0],
+    mcp_launch: { kind: "package-launcher", command: "npx", package: "@modelcontextprotocol/server-filesystem" },
+    mcp_tools: [{ name: "write_file", state: "block" }],
+  }],
+});
+assert.equal(droppedLaunch.extensions[0]?.surface, undefined);
+assert.equal(droppedLaunch.extensions[0]?.mcp_launch, undefined);
+assert.equal(droppedLaunch.extensions[0]?.mcp_tools, undefined);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
 const managedEffective = normalizeEffectiveExtensionControls({
@@ -172,6 +216,18 @@ function rejects(mutator: (payload: ReturnType<typeof catalog>) => void, pattern
 }
 
 rejects((payload) => { payload.extensions[0]!.extension_id = "../../secret"; }, /not canonical/);
+{
+  const payload = catalog();
+  delete (payload.extensions[0] as { trust_class?: string }).trust_class;
+  delete (payload.extensions[0] as { activation?: string }).activation;
+  delete (payload.extensions[0] as { publisher?: unknown }).publisher;
+  delete (payload.extensions[0] as { icon?: unknown }).icon;
+  const normalized = normalizeExtensionCatalog(payload);
+  assert.equal(normalized.extensions[0]?.trust_class, "first-party");
+  assert.equal(normalized.extensions[0]?.activation, "default-on");
+  assert.equal(normalized.extensions[0]?.publisher.id, "hol");
+  assert.equal(normalized.extensions[0]?.icon.kind, "none");
+}
 rejects((payload) => { payload.extensions[0]!.rules[0]!.severity = "super-critical"; }, /unsupported value/);
 rejects((payload) => { payload.extensions[0]!.rules.push(rule()); payload.extensions[0]!.rule_count = 2; }, /duplicate rule IDs/);
 rejects((payload) => { payload.extensions[0]!.permissions.push(permission()); payload.extensions[0]!.permission_count = 2; }, /duplicate permission IDs/);

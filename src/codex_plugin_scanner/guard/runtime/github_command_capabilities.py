@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Literal
 
 from .github_auth_capabilities import classify_github_auth
 from .github_capability_contract import (
@@ -14,7 +13,7 @@ from .github_capability_contract import (
     github_cli_invocation_is_help,
 )
 from .github_rest_capabilities import classify_github_api
-from .github_routine_merge import ROUTINE_SQUASH_MERGE_DETAIL, is_routine_squash_merge
+from .github_routine_merge import classify_pr_merge
 
 _READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
     "issue": frozenset({"list", "status", "view"}),
@@ -213,33 +212,7 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "The command deletes GitHub-hosted state.",
             )
         if top_level == "pr" and subcommand == "merge":
-            if is_routine_squash_merge(tail):
-                return _assessment(
-                    "routine_merge_remote",
-                    "github.command.pr-routine-squash-merge",
-                    ROUTINE_SQUASH_MERGE_DETAIL,
-                )
-            admin_state = _boolean_option_state(tail, "--admin")
-            if admin_state == "invalid":
-                return _assessment(
-                    "unknown",
-                    "github.command.invalid-admin-option",
-                    "The administrator merge option has an invalid Boolean value.",
-                )
-            admin_merge = admin_state == "true"
-            merge_capability: GitHubCommandCapability = "admin_merge_remote" if admin_merge else "merge_remote"
-            capabilities: tuple[GitHubCommandCapability, ...] = (merge_capability,)
-            if _has_option(tail, "--delete-branch"):
-                capabilities = (*capabilities, "delete_remote")
-            return _assessment(
-                capabilities,
-                "github.command.pr-admin-merge" if admin_merge else "github.command.pr-merge",
-                (
-                    "The command uses administrator privileges to merge a pull request."
-                    if admin_merge
-                    else "The command merges a pull request and may also delete its branch."
-                ),
-            )
+            return classify_pr_merge(tail)
         if top_level == "release" and subcommand in _PUBLISH_SUBCOMMANDS:
             return _assessment(
                 "publish_remote",
@@ -573,30 +546,6 @@ def _strip_global_options(args: list[str]) -> list[str]:
             return []
         index += 2
     return args[index:]
-
-
-def _boolean_option_state(
-    args: Sequence[str],
-    option: str,
-) -> Literal["absent", "true", "false", "invalid"]:
-    state: Literal["absent", "true", "false", "invalid"] = "absent"
-    for token in args:
-        if token == "--":
-            break
-        if token == option:
-            state = "true"
-            continue
-        prefix = f"{option}="
-        if not token.startswith(prefix):
-            continue
-        value = token.removeprefix(prefix)
-        if value in {"1", "t", "T", "TRUE", "true", "True"}:
-            state = "true"
-        elif value in {"0", "f", "F", "FALSE", "false", "False"}:
-            state = "false"
-        else:
-            return "invalid"
-    return state
 
 
 def _group_subcommand(args: Sequence[str]) -> str | None:

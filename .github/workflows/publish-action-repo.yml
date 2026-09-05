@@ -92,7 +92,7 @@ jobs:
         env:
           SCANNER_VERSION: ${{ steps.scanner_version.outputs.version }}
         run: |
-          python3 -m pip install --disable-pip-version-check --no-input "pypi-attestations==$(tr -d '[:space:]' < action/pypi-attestations-version.txt)"
+          python3 -m pip install --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r action/pypi-attestations-requirements.txt
           DIST_DIR="${RUNNER_TEMP}/scanner-wheel"
           mkdir -p "$DIST_DIR"
           WHEEL_PATH=""
@@ -132,6 +132,10 @@ jobs:
             TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
           fi
 
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Computed release tag does not match the expected format: $TAG" >&2
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Clone action repository
@@ -157,13 +161,35 @@ jobs:
           printf '%s\n' "${{ steps.scanner_sha256.outputs.sha256 }}" > scanner-sha256.txt
           cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
           cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
+          cp "${GITHUB_WORKSPACE}/action/pypi-attestations-requirements.txt" pypi-attestations-requirements.txt
+          cp "${GITHUB_WORKSPACE}/action/scanner-runtime-requirements.txt" scanner-runtime-requirements.txt
+          cp "${GITHUB_WORKSPACE}/action/scanner-cisco-runtime-requirements.txt" scanner-cisco-runtime-requirements.txt
           cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
 
       - name: Detect sync changes
         id: diff
         working-directory: action-repo
         run: |
-          if [ -n "$(git status --short -- action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE)" ]; then
+          # Compare the README in canonical form (action tags normalized to the
+          # floating form) so a rerun without source changes does not look
+          # different merely because the published copy already carries the
+          # previous release tag.
+          readme_changed=true
+          if git cat-file -e HEAD:README.md 2>/dev/null; then
+            sed -E 's|(hashgraph-online/ai-plugin-scanner-action@)v[0-9]+\.[0-9]+\.[0-9]+$|\1v1|' README.md \
+              > "$RUNNER_TEMP/readme-incoming-canonical"
+            git show HEAD:README.md \
+              | sed -E 's|(hashgraph-online/ai-plugin-scanner-action@)v[0-9]+\.[0-9]+\.[0-9]+$|\1v1|' \
+              > "$RUNNER_TEMP/readme-published-canonical"
+            if cmp -s "$RUNNER_TEMP/readme-published-canonical" "$RUNNER_TEMP/readme-incoming-canonical"; then
+              readme_changed=false
+            fi
+          fi
+          bundle_changed=false
+          if [ -n "$(git status --short -- action.yml CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt pypi-attestations-requirements.txt scanner-runtime-requirements.txt scanner-cisco-runtime-requirements.txt LICENSE)" ]; then
+            bundle_changed=true
+          fi
+          if [ "$bundle_changed" = true ] || [ "$readme_changed" = true ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -172,10 +198,26 @@ jobs:
       - name: Commit synced bundle
         if: steps.diff.outputs.changed == 'true'
         working-directory: action-repo
+        env:
+          ACTION_TAG: ${{ steps.version.outputs.tag }}
         run: |
+          # Published examples must not teach consumers to track the floating
+          # v1 tag: rewrite usage examples to this release's immutable tag. The
+          # end-of-line anchor keeps illustrative pins like @v1.0.0 intact.
+          floating_refs=$(grep -c 'hashgraph-online/ai-plugin-scanner-action@v1$' README.md || true)
+          if [ "${floating_refs:-0}" -eq 0 ]; then
+            echo "Expected at least one floating action usage example in README.md." >&2
+            exit 1
+          fi
+          sed -i "s|hashgraph-online/ai-plugin-scanner-action@v1$|hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}|" README.md
+          pinned_refs=$(grep -c "hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}$" README.md || true)
+          if [ "${pinned_refs:-0}" -lt "$floating_refs" ]; then
+            echo "README usage examples were not rewritten to ${ACTION_TAG}." >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE
+          git add action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt pypi-attestations-requirements.txt scanner-runtime-requirements.txt scanner-cisco-runtime-requirements.txt LICENSE
           git commit -m "chore: publish action bundle ${{ steps.version.outputs.tag }} (plugin-scanner ${{ steps.scanner_version.outputs.version }})"
 
       - name: Push action repository branch and tags
