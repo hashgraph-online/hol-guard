@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
-from .command_model import CanonicalCommand
+from .command_model import CanonicalCommand, CommandSegment
 from .command_structured_matchers import (
     _normalize_option_token,
     _operands_without_options,
@@ -52,8 +52,10 @@ class _TrailingOperandMatcher:
         object.__setattr__(self, "required_flags", normalized_required)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden)
 
-    def _trailing_operand_candidates(self, command: CanonicalCommand):
-        evidence_segments = []
+    def _trailing_operand_candidates(
+        self, command: CanonicalCommand
+    ) -> list[tuple[int, CommandSegment, tuple[str, ...]]]:
+        evidence_segments: list[tuple[int, CommandSegment, tuple[str, ...]]] = []
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
