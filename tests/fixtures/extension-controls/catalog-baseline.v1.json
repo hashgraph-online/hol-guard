@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7d638c85568ffa2e900726be8b5e555794fd424aa16dbf7e9989e371485e6e6b",
+  "catalog_digest": "1b8ee541ee102bb5af6dd5467d1505a6edcb005928bb58e7e058726429ef7cb4",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 67,
+  "extension_count": 68,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -95,7 +95,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 181,
+  "permission_count": 183,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -111,6 +111,8 @@
     "command.cicd.github.permission.run-administration": "gh run cancel",
     "command.cicd.github.permission.workflow-disable": "gh workflow disable",
     "command.cicd.gitlab.permission.pipeline-cancel": "glab ci cancel pipeline",
+    "command.claude-tmux.permission.process-prune": "ctc --all --force --prune",
+    "command.claude-tmux.permission.session-teardown": "ctc --all --force",
     "command.cloud.aws.permission.resource-deletion": "aws ec2 terminate-instances",
     "command.cloud.azure.permission.resource-deletion": "az vm delete",
     "command.cloud.gcp.permission.resource-deletion": "gcloud compute instances delete",
@@ -366,6 +368,8 @@
     "command.cicd.github.permission.run-administration",
     "command.cicd.github.permission.workflow-disable",
     "command.cicd.gitlab.permission.pipeline-cancel",
+    "command.claude-tmux.permission.process-prune",
+    "command.claude-tmux.permission.session-teardown",
     "command.cloud.aws.permission.resource-deletion",
     "command.cloud.azure.permission.resource-deletion",
     "command.cloud.gcp.permission.resource-deletion",
@@ -544,7 +548,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 168,
+  "rule_count": 170,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -560,6 +564,8 @@
     "command.cicd.github.run-administration",
     "command.cicd.github.workflow-disable",
     "command.cicd.gitlab.pipeline-cancel",
+    "command.claude-tmux.session-teardown",
+    "command.claude-tmux.process-prune",
     "command.cloud.aws.resource-deletion",
     "command.cloud.azure.resource-deletion",
     "command.cloud.gcp.resource-deletion",
