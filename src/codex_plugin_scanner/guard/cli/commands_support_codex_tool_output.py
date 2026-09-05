@@ -10,10 +10,7 @@ from functools import partial
 from ..runtime.env_wrapper import parse_env_wrapper
 from ..runtime.shell_execution_context import model_shell_execution_context, validate_shell_execution_segment
 from ._commands_shared import *
-from .codex_output_safety import (
-    output_uses_placeholder_private_key_fixture,
-    source_name_stem_has_compound_secret_segment,
-)
+from .codex_output_safety import output_uses_placeholder_private_key_fixture
 from .commands_parser_helpers import *
 from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN
 from .commands_support_codex_reads import (
@@ -27,21 +24,6 @@ _CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
 
 _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN = re.compile(
     r"(?i)\b(?:secret-key-material|fixture|fake|example|sample|dummy|test-key|placeholder)\b"
-)
-
-_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
-    {
-        "auth",
-        "credential",
-        "credentials",
-        "passwd",
-        "password",
-        "private-key",
-        "private_key",
-        "secret",
-        "secrets",
-        "token",
-    }
 )
 
 _CODEX_PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-x", "-v", "-vv", "-vvv", "-ra", "--lf", "--ff"})
@@ -135,12 +117,6 @@ _codex_output_uses_placeholder_private_key_fixture = partial(
     output_uses_placeholder_private_key_fixture,
     fixture_pattern=_CODEX_PRIVATE_KEY_FIXTURE_PATTERN,
     fixture_body_pattern=_CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN,
-)
-
-
-_codex_source_name_stem_has_compound_secret_segment = partial(
-    source_name_stem_has_compound_secret_segment,
-    secret_like_stems=_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS,
 )
 
 
