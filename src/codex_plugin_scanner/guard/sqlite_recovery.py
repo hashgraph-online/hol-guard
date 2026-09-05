@@ -89,6 +89,25 @@ def sqlite_store_is_proven_unusable(
     return second_state == "fatal" and confirmed_identity == final_identity
 
 
+def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, str, float]:
+    """Order quarantine events by the timestamp encoded in their id.
+
+    ``Path.replace`` preserves the moved file's mtime, which is the source
+    database's last write — not the moment of quarantine — so a newly
+    quarantined long-idle database must not sort as older than an earlier
+    event. The ``...-<stamp>Z-<uuid>`` suffix encodes the event time; names
+    without a parseable stamp fall back to mtime and sort oldest.
+    """
+
+    name = base
+    stamp = ""
+    if name.startswith("guard.db.corrupt-"):
+        stamp = name[len("guard.db.corrupt-") :]
+    if stamp and stamp[:1].isdigit():
+        return ("1", stamp, fallback_mtime)
+    return ("0", "", fallback_mtime)
+
+
 def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int:
     """Delete the oldest quarantined store snapshots beyond ``keep`` events.
 
@@ -98,7 +117,8 @@ def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int
     it. The newest ``keep`` events stay available for support diagnostics.
     """
 
-    groups: dict[str, float] = {}
+    keep = max(0, int(keep))
+    groups: dict[str, tuple[str, str, float]] = {}
     with suppress(OSError):
         for entry in guard_home.glob("guard.db.corrupt-*"):
             if entry.is_symlink() or not entry.is_file():
@@ -115,10 +135,12 @@ def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int
                 modified = entry.stat().st_mtime
             except OSError:
                 continue
-            groups[base] = max(groups.get(base, modified), modified)
+            key = _quarantine_event_sort_key(base, modified)
+            previous = groups.get(base)
+            groups[base] = key if previous is None else max(previous, key)
     if keep >= len(groups):
         return 0
-    stale_prefixes = sorted(groups, key=lambda base: groups[base], reverse=True)[keep:]
+    stale_prefixes = sorted(groups, key=groups.__getitem__, reverse=True)[keep:]
     removed = 0
     for base in stale_prefixes:
         for ending in ("", "-wal", "-shm"):

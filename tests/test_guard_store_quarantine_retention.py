@@ -66,28 +66,69 @@ def _age(path: Path, *, age_seconds: int) -> None:
     os.utime(path, (stamp, stamp))
 
 
+def test_prune_orders_events_by_quarantine_stamp_not_file_mtime(tmp_path: Path) -> None:
+    # Path.replace preserves the source database's mtime, so a freshly
+    # quarantined long-idle database must not sort older than an earlier
+    # event whose database was written until it died.
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260101T000000000000Z-old-event", age_seconds=0)
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260905T132908303335Z-new-event", age_seconds=30 * 24 * 60 * 60)
+
+    prune_quarantined_store_snapshots(tmp_path, keep=1)
+
+    assert (tmp_path / "guard.db.corrupt-20260905T132908303335Z-new-event").exists()
+    assert not (tmp_path / "guard.db.corrupt-20260101T000000000000Z-old-event").exists()
+
+
+def test_prune_keeps_unstamped_snapshots_furthest_back(tmp_path: Path) -> None:
+    _write_snapshot(tmp_path, "guard.db.corrupt-20260905T132908303335Z-stamped", age_seconds=100 * 24 * 60 * 60)
+    _write_snapshot(tmp_path, "guard.db.corrupt-legacy-unstamped", age_seconds=60)
+
+    prune_quarantined_store_snapshots(tmp_path, keep=1)
+
+    # A parseable quarantine stamp always outranks a legacy name, whatever
+    # the moved files' mtimes say.
+    assert (tmp_path / "guard.db.corrupt-20260905T132908303335Z-stamped").exists()
+    assert not (tmp_path / "guard.db.corrupt-legacy-unstamped").exists()
+
+
 def test_stale_update_staging_is_pruned_but_recent_staging_stays(tmp_path: Path) -> None:
     runtime = tmp_path / "guard-home" / "update-runtime"
-    stale_home = runtime / "home" / "Library"
-    fresh_tmp = runtime / "tmp" / "in-flight"
-    stale_wheels = runtime / "wheels" / "artifact-stale"
-    fresh_wheels = runtime / "wheels" / "artifact-fresh"
-    for directory in (stale_home, fresh_tmp, stale_wheels, fresh_wheels):
+    stale_home = runtime / "home"
+    fresh_tmp = runtime / "tmp"
+    for directory in (stale_home, fresh_tmp):
         directory.mkdir(parents=True)
-    stale_home.joinpath("cache.db").write_bytes(b"stale")
-    stale_wheels.joinpath("hol_guard.whl").write_bytes(b"stale")
-    fresh_tmp.joinpath("partial.tmp").write_bytes(b"fresh")
-    fresh_wheels.joinpath("hol_guard.whl").write_bytes(b"fresh")
-    for stale in (stale_home, stale_wheels):
-        _age(stale, age_seconds=8 * 24 * 60 * 60)
+    stale_home.joinpath("Library").mkdir()
+    stale_home.joinpath("Library").joinpath("cache.db").write_bytes(b"stale")
+    fresh_tmp.joinpath("in-flight.tmp").write_bytes(b"fresh")
+    _age(stale_home, age_seconds=8 * 24 * 60 * 60)
 
     prune_stale_update_staging(tmp_path / "guard-home")
 
     assert not stale_home.exists()
-    assert not stale_wheels.exists()
     # Recent staging — an update that is still running — is never touched.
-    assert fresh_tmp.joinpath("partial.tmp").read_bytes() == b"fresh"
-    assert fresh_wheels.joinpath("hol_guard.whl").read_bytes() == b"fresh"
+    assert fresh_tmp.joinpath("in-flight.tmp").read_bytes() == b"fresh"
+
+
+def test_fresh_update_activity_marker_blocks_the_staging_sweep(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    runtime = guard_home / "update-runtime"
+    stale_home = runtime / "home"
+    stale_home.mkdir(parents=True)
+    _age(stale_home, age_seconds=8 * 24 * 60 * 60)
+    marker = runtime / "active.json"
+    marker.write_text('{"staging": "active"}\n', encoding="utf-8")
+
+    prune_stale_update_staging(guard_home)
+
+    # Reused staging roots keep old mtimes while an update writes deep inside
+    # them; the fresh marker is what protects the tree.
+    assert stale_home.exists()
+
+    _age(marker, age_seconds=2 * 24 * 60 * 60)
+    prune_stale_update_staging(guard_home)
+
+    assert not stale_home.exists()
+    assert marker.exists()
 
 
 def test_stale_update_staging_prune_tolerates_missing_directories(tmp_path: Path) -> None:

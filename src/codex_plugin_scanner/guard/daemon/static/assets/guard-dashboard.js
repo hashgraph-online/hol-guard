@@ -19901,17 +19901,26 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+let memoForHref = null;
+let memoResult = false;
 function dashboardEmbedsInDesktop() {
+  let href;
   try {
-    const params = new URLSearchParams(window.location.search);
-    const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-    for (const [key, value] of new URLSearchParams(fragment)) {
-      params.set(key, value);
-    }
-    return params.get("desktop_embed") === "1";
+    href = window.location.href;
   } catch {
     return false;
   }
+  if (memoForHref === href) {
+    return memoResult;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  for (const [key, value] of new URLSearchParams(fragment)) {
+    params.set(key, value);
+  }
+  memoForHref = href;
+  memoResult = params.get("desktop_embed") === "1";
+  return memoResult;
 }
 var reactDomExports = requireReactDom();
 const GUARD_OVERLAY_ROOT_ID = "guard-overlay-root";
@@ -20149,7 +20158,7 @@ function recoveryReinstallHelpCopy(status) {
   }
   return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
 }
-function updateHelpCopy(status, phase, errorMessage) {
+function updateHelpCopy(status, phase, errorMessage, embeddedInDesktop = false) {
   if (phase === "updating") {
     return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
   }
@@ -20157,6 +20166,9 @@ function updateHelpCopy(status, phase, errorMessage) {
     return "Reconnecting to Guard after the update…";
   }
   if (phase === "error") {
+    if (embeddedInDesktop) {
+      return errorMessage?.trim() || "The update did not finish. Use Check for Updates in the HOL Guard menu bar and watch its progress there.";
+    }
     return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
   }
   if (status?.update_suppressed) {
@@ -20169,6 +20181,9 @@ function updateHelpCopy(status, phase, errorMessage) {
     return "Automatic update already ran but this install is still behind the latest release.";
   }
   if (status?.update_available) {
+    if (embeddedInDesktop) {
+      return "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen.";
+    }
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
   if (status && !status.auto_updatable && status.recovery_reinstall_available) {
@@ -20183,7 +20198,7 @@ function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
   const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
   const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
   const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
@@ -20255,7 +20270,7 @@ function GuardUpdatePanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
     updateChannelSummary,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
-    embeddedInDesktop && props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen." }) : helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
+    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {

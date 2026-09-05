@@ -76,6 +76,7 @@ function updateHelpCopy(
   status: GuardUpdateStatus | null | undefined,
   phase: GuardUpdatePhase,
   errorMessage?: string | null,
+  embeddedInDesktop = false,
 ): string | null {
   if (phase === "updating") {
     return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
@@ -84,6 +85,12 @@ function updateHelpCopy(
     return "Reconnecting to Guard after the update…";
   }
   if (phase === "error") {
+    if (embeddedInDesktop) {
+      return (
+        errorMessage?.trim() ||
+        "The update did not finish. Use Check for Updates in the HOL Guard menu bar and watch its progress there."
+      );
+    }
     return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
   }
   if (status?.update_suppressed) {
@@ -96,6 +103,9 @@ function updateHelpCopy(
     return "Automatic update already ran but this install is still behind the latest release.";
   }
   if (status?.update_available) {
+    if (embeddedInDesktop) {
+      return "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen.";
+    }
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
   if (status && !status.auto_updatable && status.recovery_reinstall_available) {
@@ -111,7 +121,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
   const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
   // Inside the Desktop window, updates belong to the app's own updater;
   // a second button here would race it against the same runtime.
   const showUpdateButton =
@@ -205,12 +215,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       {props.updateStatus?.update_available ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/75">{updateStatusLabel(props.updateStatus)}</p>
       ) : null}
-      {embeddedInDesktop && props.updateStatus?.update_available ? (
-        <p className="text-[11px] leading-relaxed text-brand-dark/70">
-          Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar
-          icon, and the app installs this version with its own progress screen.
-        </p>
-      ) : helpCopy ? (
+      {helpCopy ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
       ) : null}
       {showUpdateButton && props.onUpdateGuard ? (

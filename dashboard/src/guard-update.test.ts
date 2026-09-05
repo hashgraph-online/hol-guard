@@ -374,6 +374,7 @@ assert(
 
 // Embedded in the HOL Guard Desktop window, the panel must defer updates to
 // the app's own updater instead of offering a second, competing action.
+const priorWindow = (globalThis as { window?: unknown }).window;
 Object.assign(globalThis, {
   window: {
     location: { search: "?desktop_embed=1", hash: "" },
@@ -401,5 +402,7 @@ assert(
   "embedded dashboard should point at the app's updater",
 );
 assert(embeddedMarkup.includes("v3.0.0a239"), "embedded dashboard should still show the running version");
+
+(globalThis as { window?: unknown }).window = priorWindow;
 
 console.log("guard-update.test.ts: all tests passed");

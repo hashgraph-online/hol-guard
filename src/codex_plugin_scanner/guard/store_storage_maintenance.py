@@ -141,7 +141,8 @@ class StoreStorageMaintenanceMixin:
             # of the install.
             with suppress(OSError):
                 prune_quarantined_store_snapshots(self.guard_home)
-            prune_stale_update_staging(self.guard_home)
+            with suppress(OSError):
+                prune_stale_update_staging(self.guard_home)
         return StorageMaintenanceResult(
             ran=True,
             completed=completed,
