@@ -15,19 +15,16 @@ from .command_structured_matchers import (
 )
 
 
-@final
 @dataclass(frozen=True, slots=True)
-class TrailingOperandPrefixMatcher:
-    """Match commands whose final operand carries one of the given prefixes.
+class _TrailingOperandMatcher:
+    """Shared normalization and candidate scan for trailing-operand matchers.
 
-    Direction is part of the grammar for copy-style tools: the last operand is
-    the destination, so a prefixed *final* operand means data leaving the host,
-    while the same prefix in an earlier position is a read. Matching any operand
-    would treat a restore exactly like an upload.
+    Direction for copy-style tools is grammatical: only the final operand is a
+    destination. Subclasses decide what qualifies as a destination; this base
+    normalizes configuration identically and yields the candidate segments.
     """
 
     executables: frozenset[str]
-    operand_prefixes: frozenset[str]
     options_with_values: frozenset[str] = frozenset()
     required_flags: frozenset[str] = frozenset()
     forbidden_flags: frozenset[str] = frozenset()
@@ -35,8 +32,8 @@ class TrailingOperandPrefixMatcher:
     excluded_first_arguments: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
+        matcher_name = type(self).__name__
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_prefixes = frozenset(value for value in self.operand_prefixes if value)
         normalized_options = frozenset(
             _normalize_option_token(value) for value in self.options_with_values if value.strip()
         )
@@ -46,18 +43,17 @@ class TrailingOperandPrefixMatcher:
         normalized_forbidden = frozenset(
             _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
         )
-        if not normalized_executables or not normalized_prefixes:
-            raise ValueError("TrailingOperandPrefixMatcher requires executables and operand prefixes")
+        if not normalized_executables:
+            raise ValueError(f"{matcher_name} requires executables")
         if self.minimum_operands < 1:
-            raise ValueError("TrailingOperandPrefixMatcher requires at least one operand")
+            raise ValueError(f"{matcher_name} requires at least one operand")
         object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "operand_prefixes", normalized_prefixes)
         object.__setattr__(self, "options_with_values", normalized_options)
         object.__setattr__(self, "required_flags", normalized_required)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden)
 
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
+    def _trailing_operand_candidates(self, command: CanonicalCommand):
+        evidence_segments = []
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
@@ -77,6 +73,33 @@ class TrailingOperandPrefixMatcher:
             )
             if len(operands) < self.minimum_operands:
                 continue
+            evidence_segments.append((index, segment, operands))
+        return evidence_segments
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class TrailingOperandPrefixMatcher(_TrailingOperandMatcher):
+    """Match commands whose final operand carries one of the given prefixes.
+
+    Direction is part of the grammar for copy-style tools: the last operand is
+    the destination, so a prefixed *final* operand means data leaving the host,
+    while the same prefix in an earlier position is a read. Matching any operand
+    would treat a restore exactly like an upload.
+    """
+
+    operand_prefixes: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_prefixes = frozenset(value for value in self.operand_prefixes if value)
+        if not self.executables or not normalized_prefixes:
+            raise ValueError("TrailingOperandPrefixMatcher requires executables and operand prefixes")
+        _TrailingOperandMatcher.__post_init__(self)
+        object.__setattr__(self, "operand_prefixes", normalized_prefixes)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment, operands in self._trailing_operand_candidates(command):
             destination = operands[-1]
             if not any(
                 len(destination) > len(prefix) and destination.startswith(prefix) for prefix in self.operand_prefixes
@@ -117,7 +140,7 @@ def _is_remote_host_target(operand: str) -> bool:
 
 @final
 @dataclass(frozen=True, slots=True)
-class TrailingOperandHostTargetMatcher:
+class TrailingOperandHostTargetMatcher(_TrailingOperandMatcher):
     """Match commands whose final operand is an scp-style remote host target.
 
     The companion to :class:`TrailingOperandPrefixMatcher` for tools that accept
@@ -126,51 +149,9 @@ class TrailingOperandHostTargetMatcher:
     a download from the same host does not.
     """
 
-    executables: frozenset[str]
-    options_with_values: frozenset[str] = frozenset()
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    minimum_operands: int = 2
-    excluded_first_arguments: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_options = frozenset(
-            _normalize_option_token(value) for value in self.options_with_values if value.strip()
-        )
-        normalized_required = frozenset(
-            _normalize_option_token(value) for value in self.required_flags if value.strip()
-        )
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        if not normalized_executables:
-            raise ValueError("TrailingOperandHostTargetMatcher requires executables")
-        if self.minimum_operands < 1:
-            raise ValueError("TrailingOperandHostTargetMatcher requires at least one operand")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "required_flags", normalized_required)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
-
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            if _first_argument_is_excluded(segment.arguments, self.excluded_first_arguments):
-                continue
-            flags = present_flags(segment.arguments, options_with_values=self.options_with_values)
-            if self.required_flags - flags:
-                continue
-            if self.forbidden_flags & flags:
-                continue
-            operands = _operands_without_options(
-                segment.arguments,
-                options_with_values=self.options_with_values,
-            )
-            if len(operands) < self.minimum_operands:
-                continue
+        for index, segment, operands in self._trailing_operand_candidates(command):
             if not _is_remote_host_target(operands[-1]):
                 continue
             evidence.append(
@@ -236,7 +217,7 @@ def _is_remote_alias_target(operand: str, *, allow_bare_names: bool, bare_names_
 
 @final
 @dataclass(frozen=True, slots=True)
-class TrailingOperandRemoteAliasMatcher:
+class TrailingOperandRemoteAliasMatcher(_TrailingOperandMatcher):
     """Match commands whose final operand names a saved remote connection.
 
     The third destination syntax for copy-style tools, next to
@@ -247,53 +228,12 @@ class TrailingOperandRemoteAliasMatcher:
     a destination, so a restore from the same alias does not match.
     """
 
-    executables: frozenset[str]
-    options_with_values: frozenset[str] = frozenset()
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    minimum_operands: int = 2
     allow_bare_names: bool = False
     bare_names_only: bool = False
-    excluded_first_arguments: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_options = frozenset(
-            _normalize_option_token(value) for value in self.options_with_values if value.strip()
-        )
-        normalized_required = frozenset(
-            _normalize_option_token(value) for value in self.required_flags if value.strip()
-        )
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        if not normalized_executables:
-            raise ValueError("TrailingOperandRemoteAliasMatcher requires executables")
-        if self.minimum_operands < 1:
-            raise ValueError("TrailingOperandRemoteAliasMatcher requires at least one operand")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "required_flags", normalized_required)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            if _first_argument_is_excluded(segment.arguments, self.excluded_first_arguments):
-                continue
-            flags = present_flags(segment.arguments, options_with_values=self.options_with_values)
-            if self.required_flags - flags:
-                continue
-            if self.forbidden_flags & flags:
-                continue
-            operands = _operands_without_options(
-                segment.arguments,
-                options_with_values=self.options_with_values,
-            )
-            if len(operands) < self.minimum_operands:
-                continue
+        for index, segment, operands in self._trailing_operand_candidates(command):
             if not _is_remote_alias_target(
                 operands[-1],
                 allow_bare_names=self.allow_bare_names,
