@@ -17,6 +17,7 @@ from .extension_control_contract import (
     ControlTargetKind,
     ExtensionControlLayer,
 )
+from .mcp_server_contribution import mcp_payload_for_catalog_id, reset_mcp_contribution_cache
 
 
 class _ExtensionLike(Protocol):
@@ -133,8 +134,16 @@ def catalog_trust_fields(extension_id: str, *, required: bool) -> dict[str, obje
         "icon": {"kind": "none"},
     }
     overlay = contribution_catalog_overlay(extension_id)
+    mcp_payload = mcp_payload_for_catalog_id(extension_id)
+    if overlay is not None and mcp_payload is not None:
+        raise ValueError(f"catalog overlay collision for {extension_id}")
     if overlay is not None:
         fields.update(overlay)
+    elif mcp_payload is not None:
+        publisher = mcp_payload.get("publisher")
+        icon = mcp_payload.get("icon")
+        if isinstance(publisher, dict) and isinstance(icon, dict):
+            fields.update({"publisher": dict(publisher), "icon": dict(icon)})
     return fields
 
 
@@ -191,3 +200,4 @@ def reset_trust_map_cache() -> None:
 
     _trust_map.cache_clear()
     reset_contribution_cache()
+    reset_mcp_contribution_cache()

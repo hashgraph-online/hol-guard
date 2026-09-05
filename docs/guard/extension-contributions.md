@@ -19,6 +19,8 @@ Turning off a first-party or trusted-library extension blocks that capability. T
 
 The schema is `contracts/extensions/contribution.v1.schema.json`. Required metadata: id, name, description, publisher, icon, executables, risk classes, action classes, and an in-tree `python-module` detector.
 
+MCP servers use a parallel format under `contributions/mcp-servers/`. See [`mcp-server-contributions.md`](mcp-server-contributions.md).
+
 Icons must use an allowlisted `react-icon` name or `kind: none`. Remote icon URLs are rejected.
 
 ## Review bar

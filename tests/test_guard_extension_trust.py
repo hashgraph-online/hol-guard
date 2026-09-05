@@ -90,6 +90,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
         "command.blitcp",
+        "command.mcp-filesystem",
         "command.noodle",
         "command.probe",
         "command.repo2nb",
@@ -178,6 +179,11 @@ def test_cloud_catalog_wire_omits_local_trust_fields() -> None:
         "replacementId",
         "permissions",
     }
+    mcp = next(item for item in wire["extensions"] if item["id"] == "command.mcp-filesystem")
+    assert set(mcp) == set(extension)
+    assert "trustClass" not in mcp
+    assert "surface" not in mcp
+    assert "mcp_launch" not in mcp
 
 
 def test_signed_cloud_enable_does_not_activate_external(tmp_path: Path) -> None:

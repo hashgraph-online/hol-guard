@@ -6,6 +6,8 @@ import type {
   ExtensionPermission,
   ExtensionRule,
   ExtensionRuleSafeVariant,
+  McpLaunch,
+  McpToolDefault,
 } from "./extension-controls-api";
 import { normalizeEffectiveExtensionControlProjection } from "./extension-control-projection-normalize";
 
@@ -196,6 +198,40 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
   };
 }
 
+function mcpLaunch(value: unknown, label: string): McpLaunch {
+  const item = record(value, label);
+  return {
+    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"] as const),
+    command: string(item.command, `${label}.command`),
+    package: string(item.package, `${label}.package`),
+  };
+}
+
+function mcpTool(value: unknown, label: string): McpToolDefault {
+  const item = record(value, label);
+  return {
+    name: string(item.name, `${label}.name`),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"] as const),
+  };
+}
+
+function mcpCatalogFields(
+  item: RecordValue,
+  label: string,
+): Pick<ExtensionCatalogItem, "surface" | "mcp_launch" | "mcp_tools"> {
+  if (item.surface === undefined) return {};
+  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"] as const);
+  const launch = item.mcp_launch === undefined ? undefined : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
+  const tools = item.mcp_tools === undefined
+    ? undefined
+    : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
+  return {
+    surface,
+    ...(launch ? { mcp_launch: launch } : {}),
+    ...(tools ? { mcp_tools: tools } : {}),
+  };
+}
+
 function extension(value: unknown, label: string): ExtensionCatalogItem {
   const item = record(value, label);
   const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
@@ -250,6 +286,7 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     rules,
     permission_count: permissionCount,
     permissions,
+    ...mcpCatalogFields(item, label),
   };
 }
 

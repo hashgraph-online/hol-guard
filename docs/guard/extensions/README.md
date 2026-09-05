@@ -120,17 +120,18 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
-| `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | Built in |
+| `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
+| `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |
 
 ### Other extensions
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
-| `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | Built in |
+| `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
-| `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | Built in |
-| `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | Built in |
-| `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | Built in |
+| `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
+| `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
+| `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
