@@ -1032,6 +1032,73 @@ def _saved_approval_claim_evidence(
     }
 
 
+def _compose_runtime_policy_decision(
+    *,
+    approval_reuse: ApprovalReuseDecision,
+    has_saved_state: bool,
+    trusted_request_override: bool,
+    claimed_saved_approval: bool,
+    skill_directory_identity_reusable: bool | None,
+    runtime_risk_signals_v2: tuple[RiskSignalV2, ...],
+    runtime_context_action: GuardAction | None,
+    runtime_detector_block_reason: str | None,
+    approval_context_hash: str,
+) -> tuple[GuardAction, bool, tuple[dict[str, object], ...], str]:
+    """Compose the runtime-adjusted policy action, authority, evidence, and reason code."""
+    policy_action: GuardAction = "allow" if trusted_request_override else approval_reuse.action
+    runtime_review_approved = bool(
+        trusted_request_override
+        or (
+            approval_reuse.accepted
+            and approval_reuse.current_action == "review"
+            and approval_reuse.saved_action == "allow"
+        )
+    )
+    if runtime_context_action == "warn":
+        policy_action = most_restrictive_guard_action(policy_action, "warn")
+    if runtime_context_action == "review" and not runtime_review_approved:
+        policy_action = most_restrictive_guard_action(policy_action, "review")
+    if runtime_context_action == "block" or runtime_detector_block_reason:
+        policy_action = "block"
+    approval_authority_finalized = not approval_reuse.should_claim or claimed_saved_approval or trusted_request_override
+    approval_reuse_evidence = _approval_reuse_scanner_evidence(
+        approval_reuse,
+        has_saved_state=has_saved_state,
+    )
+    scanner_evidence: tuple[dict[str, object], ...] = (
+        *_skill_directory_identity_evidence(skill_directory_identity_reusable),
+        *approval_reuse_evidence,
+        *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
+        *(
+            (
+                {
+                    "source": "trusted_request_override",
+                    "status": "accepted",
+                    "reason_code": _TRUSTED_REQUEST_OVERRIDE_REASON,
+                    "artifact_hash": approval_context_hash,
+                },
+            )
+            if trusted_request_override
+            else ()
+        ),
+        *_runtime_detector_scanner_evidence(runtime_detector_block_reason),
+    )
+    decision_reason = (
+        _RUNTIME_DETECTOR_BLOCK_REASON
+        if runtime_detector_block_reason
+        else _RUNTIME_DETECTOR_WARN_REASON
+        if runtime_context_action == "warn" and policy_action == "warn"
+        else _RUNTIME_DETECTOR_REVIEW_REASON
+        if runtime_context_action == "review" and policy_action == "review"
+        else _TRUSTED_REQUEST_OVERRIDE_REASON
+        if trusted_request_override
+        else approval_reuse.reason_code
+        if has_saved_state
+        else policy_action
+    )
+    return policy_action, approval_authority_finalized, scanner_evidence, decision_reason
+
+
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
@@ -1181,58 +1248,18 @@ def evaluate_detection(
             approval_context_hash=approval_context_hash,
             approval_reuse=approval_reuse,
         )
-        policy_action: GuardAction = "allow" if trusted_request_override else approval_reuse.action
-        runtime_review_approved = bool(
-            trusted_request_override
-            or (
-                approval_reuse.accepted
-                and approval_reuse.current_action == "review"
-                and approval_reuse.saved_action == "allow"
+        policy_action, approval_authority_finalized, scanner_evidence, decision_reason = (
+            _compose_runtime_policy_decision(
+                approval_reuse=approval_reuse,
+                has_saved_state=has_saved_state,
+                trusted_request_override=trusted_request_override,
+                claimed_saved_approval=claimed_saved_approval,
+                skill_directory_identity_reusable=skill_directory_identity_reusable,
+                runtime_risk_signals_v2=runtime_risk_signals_v2,
+                runtime_context_action=runtime_context_action,
+                runtime_detector_block_reason=runtime_detector_block_reason,
+                approval_context_hash=approval_context_hash,
             )
-        )
-        if runtime_context_action == "warn":
-            policy_action = most_restrictive_guard_action(policy_action, "warn")
-        if runtime_context_action == "review" and not runtime_review_approved:
-            policy_action = most_restrictive_guard_action(policy_action, "review")
-        if runtime_context_action == "block" or runtime_detector_block_reason:
-            policy_action = "block"
-        approval_authority_finalized = (
-            not approval_reuse.should_claim or claimed_saved_approval or trusted_request_override
-        )
-        approval_reuse_evidence = _approval_reuse_scanner_evidence(
-            approval_reuse,
-            has_saved_state=has_saved_state,
-        )
-        scanner_evidence = (
-            *_skill_directory_identity_evidence(skill_directory_identity_reusable),
-            *approval_reuse_evidence,
-            *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
-            *(
-                (
-                    {
-                        "source": "trusted_request_override",
-                        "status": "accepted",
-                        "reason_code": _TRUSTED_REQUEST_OVERRIDE_REASON,
-                        "artifact_hash": approval_context_hash,
-                    },
-                )
-                if trusted_request_override
-                else ()
-            ),
-            *_runtime_detector_scanner_evidence(runtime_detector_block_reason),
-        )
-        decision_reason = (
-            _RUNTIME_DETECTOR_BLOCK_REASON
-            if runtime_detector_block_reason
-            else _RUNTIME_DETECTOR_WARN_REASON
-            if runtime_context_action == "warn" and policy_action == "warn"
-            else _RUNTIME_DETECTOR_REVIEW_REASON
-            if runtime_context_action == "review" and policy_action == "review"
-            else _TRUSTED_REQUEST_OVERRIDE_REASON
-            if trusted_request_override
-            else approval_reuse.reason_code
-            if has_saved_state
-            else policy_action
         )
         policy_composition = {
             "configured_action": configured_action,
@@ -1523,58 +1550,18 @@ def evaluate_detection(
             approval_context_hash=approval_context_hash,
             approval_reuse=approval_reuse,
         )
-        policy_action = "allow" if trusted_request_override else approval_reuse.action
-        runtime_review_approved = bool(
-            trusted_request_override
-            or (
-                approval_reuse.accepted
-                and approval_reuse.current_action == "review"
-                and approval_reuse.saved_action == "allow"
+        policy_action, approval_authority_finalized, scanner_evidence, decision_reason = (
+            _compose_runtime_policy_decision(
+                approval_reuse=approval_reuse,
+                has_saved_state=has_saved_state,
+                trusted_request_override=trusted_request_override,
+                claimed_saved_approval=claimed_saved_approval,
+                skill_directory_identity_reusable=skill_directory_identity_reusable,
+                runtime_risk_signals_v2=runtime_risk_signals_v2,
+                runtime_context_action=runtime_context_action,
+                runtime_detector_block_reason=runtime_detector_block_reason,
+                approval_context_hash=approval_context_hash,
             )
-        )
-        if runtime_context_action == "warn":
-            policy_action = most_restrictive_guard_action(policy_action, "warn")
-        if runtime_context_action == "review" and not runtime_review_approved:
-            policy_action = most_restrictive_guard_action(policy_action, "review")
-        if runtime_context_action == "block" or runtime_detector_block_reason:
-            policy_action = "block"
-        approval_authority_finalized = (
-            not approval_reuse.should_claim or claimed_saved_approval or trusted_request_override
-        )
-        approval_reuse_evidence = _approval_reuse_scanner_evidence(
-            approval_reuse,
-            has_saved_state=has_saved_state,
-        )
-        scanner_evidence = (
-            *_skill_directory_identity_evidence(skill_directory_identity_reusable),
-            *approval_reuse_evidence,
-            *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
-            *(
-                (
-                    {
-                        "source": "trusted_request_override",
-                        "status": "accepted",
-                        "reason_code": _TRUSTED_REQUEST_OVERRIDE_REASON,
-                        "artifact_hash": approval_context_hash,
-                    },
-                )
-                if trusted_request_override
-                else ()
-            ),
-            *_runtime_detector_scanner_evidence(runtime_detector_block_reason),
-        )
-        decision_reason = (
-            _RUNTIME_DETECTOR_BLOCK_REASON
-            if runtime_detector_block_reason
-            else _RUNTIME_DETECTOR_WARN_REASON
-            if runtime_context_action == "warn" and policy_action == "warn"
-            else _RUNTIME_DETECTOR_REVIEW_REASON
-            if runtime_context_action == "review" and policy_action == "review"
-            else _TRUSTED_REQUEST_OVERRIDE_REASON
-            if trusted_request_override
-            else approval_reuse.reason_code
-            if has_saved_state
-            else policy_action
         )
         policy_composition = {
             "configured_action": configured_action,

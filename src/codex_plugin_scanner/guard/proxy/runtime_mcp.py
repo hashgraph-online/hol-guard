@@ -379,6 +379,45 @@ def _mcp_arguments_digest(arguments: object) -> str:
     return sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _browser_intent_payload(
+    artifact: Any,
+    arguments: object,
+    *,
+    default_launch_target: str,
+) -> tuple[str, dict[str, object] | None]:
+    """Project the launch target label and safe browser intent payload for a tool call."""
+    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+    if browser_intent is None:
+        return default_launch_target, None
+    # Build a safer browser-specific launch target label
+    target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+    launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
+    browser_intent_dict = cast(
+        dict[str, object],
+        _safe_mcp_arguments(
+            {
+                "version": browser_intent.version,
+                "intent": browser_intent.intent,
+                "operation": browser_intent.operation,
+                "target_url": browser_intent.target_url,
+                "target_origin": browser_intent.target_origin,
+                "target_domain": browser_intent.target_domain,
+                "target_path_prefix": browser_intent.target_path_prefix,
+                "method": browser_intent.method,
+                "profile_mode": browser_intent.profile_mode,
+                "mcp_server_name": browser_intent.mcp_server_name,
+                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
+                "mcp_tool_name": browser_intent.mcp_tool_name,
+                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
+                "mcp_schema_hash": browser_intent.mcp_schema_hash,
+                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
+                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+            }
+        ),
+    )
+    return launch_target, browser_intent_dict
+
+
 _ToolCatalogState = Literal["unobserved", "pending", "complete", "invalidated", "error"]
 _APPROVAL_REUSE_TOOL_CATALOG_INCOMPLETE = "approval_reuse_tool_catalog_incomplete"
 _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED = "tool_catalog_changed_at_execution_boundary"
@@ -1044,6 +1083,45 @@ class RuntimeMcpGuardProxy:
             approval_callback=approval_callback,
         )
 
+    def _deny_inline_tool_call(
+        self,
+        *,
+        decision_source: str,
+        event_decision: str,
+        reason: str,
+        message: dict[str, Any],
+        tool_name: str,
+        event: dict[str, Any],
+        artifact: GuardArtifact,
+        artifact_hash: str,
+        decision: ToolCallDecision,
+        scanner_evidence: tuple[dict[str, object], ...],
+        arguments: object,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        block_tool_call(
+            store=self.store,
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            decision_source=decision_source,
+            now=_now(),
+            signals=decision.signals,
+            risk_categories=decision.risk_categories,
+            arguments=_safe_mcp_arguments(arguments),
+            additional_scanner_evidence=scanner_evidence,
+            policy_action="block",
+        )
+        return _blocked_tool_response(
+            message.get("id"),
+            tool_name,
+            reason,
+            {"approvalRequests": [], "guardPolicyAction": "block"},
+        ), {
+            **event,
+            "decision": event_decision,
+            "policy_action": "block",
+            "approval_requests": [],
+        }
+
     def _handle_message_serialized(
         self,
         *,
@@ -1286,56 +1364,36 @@ class RuntimeMcpGuardProxy:
                     )
                     return response, package_event
                 if _approval_denies(approval_result):
-                    block_tool_call(
-                        store=self.store,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
+                    return self._deny_inline_tool_call(
                         decision_source="inline-denied",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        arguments=_safe_mcp_arguments(arguments),
-                        additional_scanner_evidence=decision_scanner_evidence,
-                        policy_action="block",
-                    )
-                    return _blocked_tool_response(
-                        message.get("id"),
-                        tool_name,
-                        f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                        {"approvalRequests": [], "guardPolicyAction": "block"},
-                    ), {
-                        **event,
-                        "decision": "deny-inline",
-                        "policy_action": "block",
-                        "approval_requests": [],
-                    }
-                if _approval_invalid(approval_result):
-                    block_tool_call(
-                        store=self.store,
+                        event_decision="deny-inline",
+                        reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+                        message=message,
+                        tool_name=tool_name,
+                        event=event,
                         artifact=artifact,
                         artifact_hash=tool_artifact_hash,
-                        decision_source="inline-invalid",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        arguments=_safe_mcp_arguments(arguments),
-                        additional_scanner_evidence=decision_scanner_evidence,
-                        policy_action="block",
+                        decision=decision,
+                        scanner_evidence=decision_scanner_evidence,
+                        arguments=arguments,
                     )
-                    return _blocked_tool_response(
-                        message.get("id"),
-                        tool_name,
-                        (
+                if _approval_invalid(approval_result):
+                    return self._deny_inline_tool_call(
+                        decision_source="inline-invalid",
+                        event_decision="deny-inline-invalid",
+                        reason=(
                             f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
                             "approval returned an invalid response."
                         ),
-                        {"approvalRequests": [], "guardPolicyAction": "block"},
-                    ), {
-                        **event,
-                        "decision": "deny-inline-invalid",
-                        "policy_action": "block",
-                        "approval_requests": [],
-                    }
+                        message=message,
+                        tool_name=tool_name,
+                        event=event,
+                        artifact=artifact,
+                        artifact_hash=tool_artifact_hash,
+                        decision=decision,
+                        scanner_evidence=decision_scanner_evidence,
+                        arguments=arguments,
+                    )
             if self.config.mode == "observe":
                 response, package_event = self._handle_package_request(
                     message=message,
@@ -1432,56 +1490,36 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
             if _approval_denies(approval_result):
-                block_tool_call(
-                    store=self.store,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
+                return self._deny_inline_tool_call(
                     decision_source="inline-denied",
-                    now=_now(),
-                    signals=decision.signals,
-                    risk_categories=decision.risk_categories,
-                    arguments=_safe_mcp_arguments(arguments),
-                    additional_scanner_evidence=decision_scanner_evidence,
-                    policy_action="block",
-                )
-                return _blocked_tool_response(
-                    message.get("id"),
-                    tool_name,
-                    f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                    {"approvalRequests": [], "guardPolicyAction": "block"},
-                ), {
-                    **event,
-                    "decision": "deny-inline",
-                    "policy_action": "block",
-                    "approval_requests": [],
-                }
-            if _approval_invalid(approval_result):
-                block_tool_call(
-                    store=self.store,
+                    event_decision="deny-inline",
+                    reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+                    message=message,
+                    tool_name=tool_name,
+                    event=event,
                     artifact=artifact,
                     artifact_hash=tool_artifact_hash,
-                    decision_source="inline-invalid",
-                    now=_now(),
-                    signals=decision.signals,
-                    risk_categories=decision.risk_categories,
-                    arguments=_safe_mcp_arguments(arguments),
-                    additional_scanner_evidence=decision_scanner_evidence,
-                    policy_action="block",
+                    decision=decision,
+                    scanner_evidence=decision_scanner_evidence,
+                    arguments=arguments,
                 )
-                return _blocked_tool_response(
-                    message.get("id"),
-                    tool_name,
-                    (
+            if _approval_invalid(approval_result):
+                return self._deny_inline_tool_call(
+                    decision_source="inline-invalid",
+                    event_decision="deny-inline-invalid",
+                    reason=(
                         f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
                         "approval returned an invalid response."
                     ),
-                    {"approvalRequests": [], "guardPolicyAction": "block"},
-                ), {
-                    **event,
-                    "decision": "deny-inline-invalid",
-                    "policy_action": "block",
-                    "approval_requests": [],
-                }
+                    message=message,
+                    tool_name=tool_name,
+                    event=event,
+                    artifact=artifact,
+                    artifact_hash=tool_artifact_hash,
+                    decision=decision,
+                    scanner_evidence=decision_scanner_evidence,
+                    arguments=arguments,
+                )
         if self.config.mode == "observe":
             try:
                 catalog_current = self._drain_and_validate_catalog_authority(
@@ -2512,18 +2550,16 @@ class RuntimeMcpGuardProxy:
             event["scanner_evidence"] = list(scanner_evidence)
         return response, event
 
-    def _terminal_package_response(
+    def _record_package_block(
         self,
         *,
-        message_id: Any,
         artifact: Any,
         artifact_hash: str,
-        tool_name: str,
         params: dict[str, Any],
         package_evaluation: Any,
-        policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        policy_action: GuardAction,
+    ) -> None:
         reason_signals = tuple(
             str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
         )
@@ -2536,6 +2572,27 @@ class RuntimeMcpGuardProxy:
             signals=reason_signals,
             arguments=_safe_mcp_arguments(params.get("arguments")),
             additional_scanner_evidence=scanner_evidence,
+            policy_action=policy_action,
+        )
+
+    def _terminal_package_response(
+        self,
+        *,
+        message_id: Any,
+        artifact: Any,
+        artifact_hash: str,
+        tool_name: str,
+        params: dict[str, Any],
+        package_evaluation: Any,
+        policy_action: GuardAction,
+        scanner_evidence: tuple[dict[str, object], ...],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        self._record_package_block(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            params=params,
+            package_evaluation=package_evaluation,
+            scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
         reason = (
@@ -2627,18 +2684,12 @@ class RuntimeMcpGuardProxy:
         package_evaluation: Any,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        reason_signals = tuple(
-            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-        )
-        block_tool_call(
-            store=self.store,
+        self._record_package_block(
             artifact=artifact,
             artifact_hash=artifact_hash,
-            decision_source="policy-block",
-            now=_now(),
-            signals=reason_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
-            additional_scanner_evidence=scanner_evidence,
+            params=params,
+            package_evaluation=package_evaluation,
+            scanner_evidence=scanner_evidence,
             policy_action="block",
         )
         response = _blocked_tool_response(
@@ -3325,40 +3376,15 @@ class RuntimeMcpGuardProxy:
         automation call (HGBM063-HGBM065).
         """
         arguments = params.get("arguments")
-        browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+        launch_target, browser_intent_dict = _browser_intent_payload(
+            artifact,
+            arguments,
+            default_launch_target=self._launch_target(tool_name, arguments),
+        )
         changed_fields: list[str] = ["runtime_tool_call"]
-        launch_target = self._launch_target(tool_name, arguments)
 
-        if browser_intent is not None:
+        if browser_intent_dict is not None:
             changed_fields.append("runtime_browser_tool_call")
-            # Build a safer browser-specific launch target label
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-            launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-            browser_intent_dict = cast(
-                dict[str, object],
-                _safe_mcp_arguments(
-                    {
-                        "version": browser_intent.version,
-                        "intent": browser_intent.intent,
-                        "operation": browser_intent.operation,
-                        "target_url": browser_intent.target_url,
-                        "target_origin": browser_intent.target_origin,
-                        "target_domain": browser_intent.target_domain,
-                        "target_path_prefix": browser_intent.target_path_prefix,
-                        "method": browser_intent.method,
-                        "profile_mode": browser_intent.profile_mode,
-                        "mcp_server_name": browser_intent.mcp_server_name,
-                        "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                        "mcp_tool_name": browser_intent.mcp_tool_name,
-                        "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                        "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                        "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                        "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-                    }
-                ),
-            )
-        else:
-            browser_intent_dict = None
 
         payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
@@ -3482,6 +3508,11 @@ class RuntimeMcpGuardProxy:
         if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
             return []
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
+        launch_target, browser_intent_dict = _browser_intent_payload(
+            artifact,
+            params.get("arguments"),
+            default_launch_target=self._launch_target(tool_name, params.get("arguments")),
+        )
         artifact_payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
@@ -3491,36 +3522,14 @@ class RuntimeMcpGuardProxy:
             "config_path": artifact.config_path,
             "changed_fields": ["runtime_tool_call"],
             "policy_action": policy_action,
-            "launch_target": self._launch_target(tool_name, params.get("arguments")),
+            "launch_target": launch_target,
             "risk_summary": risk_summary,
             "risk_signals": risk_signals,
         }
         # Include browser intent metadata when present
-        browser_intent = normalize_browser_mcp_intent(artifact, params.get("arguments"))
-        if browser_intent is not None:
+        if browser_intent_dict is not None:
             artifact_payload["changed_fields"].append("runtime_browser_tool_call")
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-            artifact_payload["launch_target"] = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-            artifact_payload["browser_intent"] = _safe_mcp_arguments(
-                {
-                    "version": browser_intent.version,
-                    "intent": browser_intent.intent,
-                    "operation": browser_intent.operation,
-                    "target_url": browser_intent.target_url,
-                    "target_origin": browser_intent.target_origin,
-                    "target_domain": browser_intent.target_domain,
-                    "target_path_prefix": browser_intent.target_path_prefix,
-                    "method": browser_intent.method,
-                    "profile_mode": browser_intent.profile_mode,
-                    "mcp_server_name": browser_intent.mcp_server_name,
-                    "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                    "mcp_tool_name": browser_intent.mcp_tool_name,
-                    "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                    "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                    "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                    "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-                }
-            )
+            artifact_payload["browser_intent"] = browser_intent_dict
         if decision_v2_payload is not None:
             artifact_payload["decision_v2_json"] = decision_v2_payload
         if extra_fields:
