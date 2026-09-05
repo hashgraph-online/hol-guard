@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
 )
+from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY_PATH = REPO_ROOT / "docs" / "guard" / "extensions" / "README.md"
@@ -80,8 +81,6 @@ def _escape_cell(value: str) -> str:
 
 
 def _protection_model(extension: CommandSafetyExtension) -> str:
-    from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
-
     if extension.required:
         return "Required core"
     if extension.delegated_protection == "package-firewall":

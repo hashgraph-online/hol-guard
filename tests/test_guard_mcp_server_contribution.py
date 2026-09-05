@@ -47,6 +47,37 @@ def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:
         validate_mcp_contribution(payload, filename="evil.json")
 
 
+def test_mcp_contribution_rejects_svg_ref_icons() -> None:
+    payload = _filesystem_payload()
+    payload["icon"] = {"kind": "svg-ref", "name": "untrusted-symbol"}
+    with pytest.raises(ValueError, match="schema"):
+        validate_mcp_contribution(payload, filename="svg.json")
+
+
+def test_mcp_contribution_requires_safer_alternatives() -> None:
+    payload = _filesystem_payload()
+    del payload["saferAlternatives"]
+    with pytest.raises(ValueError, match="schema"):
+        validate_mcp_contribution(payload, filename="safer.json")
+
+
+def test_mcp_contribution_rejects_whitespace_aliased_tool_names() -> None:
+    payload = _filesystem_payload()
+    payload["tools"] = [
+        {"name": " read_file", "state": "allow"},
+        {"name": "read_file ", "state": "block"},
+        {"name": "other", "state": "inherit"},
+    ]
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_mcp_contribution(payload, filename="dup.json")
+
+
+def test_action_classes_preserve_id_separators() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _action_class_for
+
+    assert _action_class_for("mcp.foo.bar") != _action_class_for("mcp.foo-bar")
+
+
 def test_mcp_contribution_rejects_unknown_icon() -> None:
     payload = _filesystem_payload()
     payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon"}

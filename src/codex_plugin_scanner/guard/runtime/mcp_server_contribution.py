@@ -37,6 +37,11 @@ def catalog_id_for_mcp_id(mcp_id: str) -> str:
     return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
 
 
+def _normalized_tool_name(name: object) -> str:
+    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(name).strip()).strip("-")
+    return "-".join(part for part in compact.split("-") if part)
+
+
 def load_mcp_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:
     if root is not None:
         return _load_from_directory(root)
@@ -75,8 +80,12 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     tools = payload.get("tools")
     if not isinstance(tools, list) or not tools:
         raise ValueError(f"{filename} must declare tools")
-    names = [item.get("name") for item in tools if isinstance(item, dict)]
-    if len(names) != len(set(names)):
+    names = [
+        _normalized_tool_name(item.get("name"))
+        for item in tools
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    if not names or len(names) != len(set(names)):
         raise ValueError(f"{filename} declares duplicate tool names")
 
 
@@ -105,15 +114,8 @@ def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
     return fallback
 
 
-def mcp_contribution_catalog_overlay(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    publisher = payload.get("publisher")
-    icon = payload.get("icon")
-    if not isinstance(publisher, dict) or not isinstance(icon, dict):
-        return None
-    return {"publisher": dict(publisher), "icon": dict(icon)}
+def mcp_payload_for_catalog_id(extension_id: str) -> dict[str, object] | None:
+    return _contribution_index().get(extension_id)
 
 
 def catalog_mcp_fields(extension_id: str) -> dict[str, object] | None:

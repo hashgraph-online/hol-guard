@@ -30,16 +30,21 @@ def apply_contributed_mcp_decision(
     if not isinstance(mcp_id, str):
         return None
     catalog_id = catalog_id_for_mcp_id(mcp_id)
-    if not extension_is_active(catalog_id, _authority_layers(store)):
+    layers = _authority_layers(store)
+    if not extension_is_active(catalog_id, layers):
         return None
-    state = mcp_tool_state(payload, _tool_name(artifact))
+    tool_name = _mcp_identity_tool_name(artifact)
+    if tool_name is None:
+        return None
+    state = mcp_tool_state(payload, tool_name)
+    lockdown = any(layer.global_lockdown for layer in layers or ())
     if state == "block":
         return (
             "block",
             "catalog-mcp-extension",
             "This MCP tool is blocked by a catalog MCP server on this device.",
         )
-    if state == "allow":
+    if state == "allow" and not lockdown:
         return (
             "allow",
             "catalog-mcp-extension",
@@ -88,18 +93,14 @@ def _package_name(artifact: GuardArtifact) -> str | None:
     return package.strip().lower()
 
 
-def _tool_name(artifact: GuardArtifact) -> str:
+def _mcp_identity_tool_name(artifact: GuardArtifact) -> str | None:
     metadata = artifact.metadata
-    if isinstance(metadata, Mapping):
-        tool_identity = metadata.get("mcp_tool_identity")
-        if isinstance(tool_identity, Mapping):
-            name = tool_identity.get("tool_name")
-            if isinstance(name, str) and name.strip():
-                return name.strip()
-    command = artifact.command
-    if isinstance(command, str) and command.strip():
-        return command.strip()
-    name = artifact.name
-    if isinstance(name, str) and ":" in name:
-        return name.rsplit(":", 1)[-1].strip()
-    return name.strip() if isinstance(name, str) else ""
+    if not isinstance(metadata, Mapping):
+        return None
+    tool_identity = metadata.get("mcp_tool_identity")
+    if not isinstance(tool_identity, Mapping):
+        return None
+    name = tool_identity.get("tool_name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return name.strip()

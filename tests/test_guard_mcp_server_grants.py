@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -59,12 +60,18 @@ def _config(tmp_path: Path) -> GuardConfig:
     return GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace", mode="prompt")
 
 
-def _layer(kind: ControlLayerKind, extension_id: str, state: ControlState) -> ExtensionControlLayer:
+def _layer(
+    kind: ControlLayerKind,
+    extension_id: str,
+    state: ControlState,
+    *,
+    lockdown: bool = False,
+) -> ExtensionControlLayer:
     return ExtensionControlLayer(
         schema_version=CONTROL_SCHEMA_VERSION,
         kind=kind,
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=False,
+        global_lockdown=lockdown,
         controls=(
             ExtensionControl(
                 target=ControlTarget(ControlTargetKind.EXTENSION, extension_id),
@@ -112,6 +119,33 @@ def test_signed_cloud_enable_does_not_activate_mcp_contribution() -> None:
     artifact = _artifact(_identity(), "write_file")
     cloud = _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, "command.mcp-filesystem", ControlState.ENABLED),))
     assert apply_contributed_mcp_decision(cloud, artifact, "review") is None
+
+
+def test_global_lockdown_suppresses_allow(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.mcp_server_grants.mcp_tool_state",
+        lambda *_args, **_kwargs: "allow",
+    )
+    artifact = _artifact(_identity(), "read_file")
+    locked = _AuthorityStore(
+        (
+            _layer(
+                ControlLayerKind.LOCAL_ADMIN,
+                "command.mcp-filesystem",
+                ControlState.ENABLED,
+                lockdown=True,
+            ),
+        )
+    )
+    assert apply_contributed_mcp_decision(locked, artifact, "review") is None
+
+
+def test_missing_tool_identity_does_not_apply_other_defaults() -> None:
+    artifact = _artifact(_identity(), "write_file")
+    metadata = {key: value for key, value in artifact.metadata.items() if key != "mcp_tool_identity"}
+    artifact = replace(artifact, metadata=metadata)
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(enabled, artifact, "review") is None
 
 
 def test_allow_does_not_override_block_floor() -> None:

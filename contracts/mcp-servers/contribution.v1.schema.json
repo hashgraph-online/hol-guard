@@ -16,7 +16,8 @@
     "icon",
     "launch",
     "riskClasses",
-    "tools"
+    "tools",
+    "saferAlternatives"
   ],
   "properties": {
     "schemaVersion": { "const": "guard.mcp-server-contribution.v1" },
@@ -49,7 +50,7 @@
       "additionalProperties": false,
       "required": ["kind"],
       "properties": {
-        "kind": { "enum": ["react-icon", "svg-ref", "none"] },
+        "kind": { "enum": ["react-icon", "none"] },
         "name": { "type": "string", "minLength": 1, "maxLength": 64 },
         "background": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
       }
@@ -95,6 +96,7 @@
     },
     "saferAlternatives": {
       "type": "array",
+      "minItems": 1,
       "maxItems": 8,
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 256 }

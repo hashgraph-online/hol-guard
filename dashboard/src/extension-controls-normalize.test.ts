@@ -159,6 +159,17 @@ const mcpCatalog = normalizeExtensionCatalog({
 assert.equal(mcpCatalog.extensions[0]?.surface, "mcp");
 assert.equal(mcpCatalog.extensions[0]?.mcp_launch?.package, "@modelcontextprotocol/server-filesystem");
 assert.equal(mcpCatalog.extensions[0]?.mcp_tools?.[1]?.state, "block");
+const droppedLaunch = normalizeExtensionCatalog({
+  ...catalog(),
+  extensions: [{
+    ...catalog().extensions[0],
+    mcp_launch: { kind: "package-launcher", command: "npx", package: "@modelcontextprotocol/server-filesystem" },
+    mcp_tools: [{ name: "write_file", state: "block" }],
+  }],
+});
+assert.equal(droppedLaunch.extensions[0]?.surface, undefined);
+assert.equal(droppedLaunch.extensions[0]?.mcp_launch, undefined);
+assert.equal(droppedLaunch.extensions[0]?.mcp_tools, undefined);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
 const managedEffective = normalizeEffectiveExtensionControls({

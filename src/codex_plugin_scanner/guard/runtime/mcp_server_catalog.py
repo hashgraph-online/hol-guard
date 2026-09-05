@@ -17,7 +17,7 @@ def _string_tuple(value: object) -> tuple[str, ...]:
 
 
 def _action_class_for(mcp_id: str) -> str:
-    suffix = mcp_id.removeprefix("mcp.").replace(".", " ").replace("-", " ").strip()
+    suffix = mcp_id.removeprefix("mcp.").strip()
     return f"mcp {suffix} tool"
 
 
