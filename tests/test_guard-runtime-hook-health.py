@@ -213,6 +213,32 @@ def test_live_codex_hooks_pass_for_frozen_cli_bridge_command(
     assert _live_hook_verification(store.list_managed_installs(), store) == {"codex": True}
 
 
+def test_live_codex_hooks_pass_for_frozen_private_bridge_flag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    _write_codex_runtime_hooks(
+        ctx.home_dir,
+        include_permission=True,
+        guard_command=(
+            "current-hol-guard --_hol-guard-codex-bridge "
+            '\'{"fallback_command":["current-hol-guard","hook","--harness","codex"]}\''
+        ),
+        extra_foreign=True,
+        matcher="Bash|Read|Write|Edit",
+    )
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    store.set_managed_install("codex", True, None, {"harness": "codex", "active": True}, "2026-08-17T12:00:00+00:00")
+
+    assert live_guard_codex_hooks_intercept(
+        json.loads((ctx.home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    )
+    assert codex_runtime_hooks_verified(ctx) is True
+    assert _live_hook_verification(store.list_managed_installs(), store) == {"codex": True}
+
+
 def test_live_codex_hooks_reject_noop_bridge_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -225,9 +251,12 @@ def test_live_codex_hooks_reject_noop_bridge_payload(
         guard_command="true -I ./codex_daemon_hook_bridge.py '{}'",
         extra_foreign=False,
     )
-    assert live_guard_codex_hooks_intercept(
-        json.loads((ctx.home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
-    ) is False
+    assert (
+        live_guard_codex_hooks_intercept(
+            json.loads((ctx.home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        )
+        is False
+    )
     assert codex_runtime_hooks_verified(ctx) is False
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .stable_guard_cli import resolve_frozen_guard_cli
 
+FROZEN_CODEX_BRIDGE_ARG = "--_hol-guard-codex-bridge"
 FROZEN_DAEMON_RECOVER_ARG = "--_hol-guard-codex-daemon-recover"
 FROZEN_DAEMON_RECOVERY_WORKER_ARG = "--_hol-guard-codex-daemon-recovery-worker"
 
@@ -69,6 +70,7 @@ def frozen_daemon_recovery_worker_command(
 
 
 __all__ = [
+    "FROZEN_CODEX_BRIDGE_ARG",
     "FROZEN_DAEMON_RECOVERY_WORKER_ARG",
     "FROZEN_DAEMON_RECOVER_ARG",
     "frozen_daemon_recovery_command",

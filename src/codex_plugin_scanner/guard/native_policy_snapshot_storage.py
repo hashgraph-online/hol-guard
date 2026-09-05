@@ -17,6 +17,7 @@ from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _strict_json_loads_v3,
     _valid_digest_v3,
+    derive_native_policy_verifier_key,
 )
 from .native_policy_snapshot_constants import (
     _MAX_GENERATION,
@@ -26,6 +27,7 @@ from .native_policy_snapshot_constants import (
     _V3_GENERATION_SCHEMA,
     _V3_GENERATION_STATE_NAME,
     NATIVE_POLICY_SNAPSHOT_CACHE_NAME,
+    NATIVE_RUNTIME_STATE_DIRECTORY,
     POLICY_SNAPSHOT_MAX_BYTES,
     NativePolicySnapshotError,
 )
@@ -438,3 +440,47 @@ def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_dige
     finally:
         with suppress(FileNotFoundError):
             temporary.unlink()
+
+
+def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
+    """Return the compact hook binding from a still-valid ACKed snapshot cache.
+
+    A CLI hook process cannot ACK a second publisher while the resident already
+    holds the daemon's snapshot. The cache is written only after a successful
+    ACK, so an unexpired signed generation is a valid request binding.
+    """
+
+    guard_home = getattr(store, "guard_home", None)
+    material_getter = getattr(store, "_policy_integrity_secret_material", None)
+    if guard_home is None or not callable(material_getter):
+        return None
+    material = material_getter(create=False)
+    if not isinstance(material, tuple) or len(material) != 2 or not isinstance(material[0], bytes):
+        return None
+    try:
+        cached = _read_v3_snapshot_file(
+            Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_SNAPSHOT_CACHE_NAME,
+            verifier_key=derive_native_policy_verifier_key(material[0]),
+        )
+    except NativePolicySnapshotError:
+        return None
+    if cached is None:
+        return None
+    snapshot, _payload = cached
+    generation = snapshot.get("generation")
+    expires_at_ms = snapshot.get("expires_at_ms")
+    digest = snapshot.get("policy_digest")
+    identity = snapshot.get("runtime_identity")
+    mode = snapshot.get("mode")
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
+        return None
+    if not isinstance(expires_at_ms, int) or expires_at_ms <= int(time.time() * 1_000):
+        return None
+    if not isinstance(digest, str) or not isinstance(identity, str) or not isinstance(mode, str):
+        return None
+    return {
+        "generation": generation,
+        "policy_digest": digest,
+        "runtime_identity": identity,
+        "mode": mode,
+    }

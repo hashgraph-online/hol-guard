@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
+from .frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
 
 _STATE_PATH_RE = re.compile(r'"state_path"\s*:\s*"([^"]+)"')
 _GUARD_HOME_QUERY_RE = re.compile(r"guard-home=([^&\"'\s]+)")
@@ -141,6 +142,8 @@ def _has_codex_harness(blob: str) -> bool:
 def _looks_like_guard_codex_hook(blob: str) -> bool:
     if "codex_daemon_hook_bridge.py" in blob:
         return True
+    if FROZEN_CODEX_BRIDGE_ARG in blob:
+        return True
     if not _has_codex_harness(blob):
         return False
     if "hol-guard hook" in blob:
@@ -203,6 +206,8 @@ def _is_live_guard_codex_hook_command(command: str) -> bool:
         return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
     if first in _FROZEN_GUARD_CLI_NAMES:
         if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
+            return True
+        if any(token == FROZEN_CODEX_BRIDGE_ARG or token.startswith(f"{FROZEN_CODEX_BRIDGE_ARG}=") for token in rest):
             return True
         return "hook" in rest and _has_codex_harness(" ".join(rest))
     return False

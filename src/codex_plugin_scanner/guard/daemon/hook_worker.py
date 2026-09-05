@@ -38,6 +38,7 @@ from ..native_hook_edge import review_raw_hook_native
 from ..native_mode import python_oracle_enabled, python_oracle_surface_enabled
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from ..native_policy_snapshot_storage import acked_snapshot_binding_for_store
 from ..native_pretool import review_pre_tool_native
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus, native_mode, native_runtime_status, review_post_tool_native
@@ -212,8 +213,9 @@ class HookWorker(HookWorkerNativeMixin):
 
         Workspace overlays are published asynchronously, so the first hook
         for a workspace must complete this same barrier used by normal hook
-        evaluation.         The barrier is always capped at the native readiness
-        budget; a timeout returns ``None``. Callers then admit emergency-safe
+        evaluation. The barrier is always capped at the native readiness
+        budget. A timeout or a competing publisher still reuses a durable
+        ACKed cache when one exists; otherwise callers admit emergency-safe
         inspection or pause high-impact actions.
         """
 
@@ -230,14 +232,18 @@ class HookWorker(HookWorkerNativeMixin):
                 readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
                 if deadline is not None:
                     readiness_deadline = min(readiness_deadline, deadline)
-                if not wait_until_ready(readiness_deadline):
-                    return None
+                _ = wait_until_ready(readiness_deadline)
         current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
         if callable(current_snapshot_binding):
             snapshot = current_snapshot_binding()
-            return snapshot if isinstance(snapshot, dict) else None
-        snapshot = self.policy_snapshot_publisher.current_snapshot()
-        return snapshot if isinstance(snapshot, dict) else None
+            if isinstance(snapshot, dict):
+                return snapshot
+        current_snapshot = getattr(self.policy_snapshot_publisher, "current_snapshot", None)
+        if callable(current_snapshot):
+            snapshot = current_snapshot()
+            if isinstance(snapshot, dict):
+                return snapshot
+        return acked_snapshot_binding_for_store(self.store)
 
     def _native_policy_snapshot(
         self,
