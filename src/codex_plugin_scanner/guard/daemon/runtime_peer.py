@@ -169,12 +169,7 @@ def load_guard_daemon_endpoint(guard_home: Path) -> tuple[str, str] | None:
 
     daemon_url = load_guard_daemon_url(guard_home)
     auth_token = load_guard_daemon_auth_token(guard_home)
-    if (
-        isinstance(daemon_url, str)
-        and daemon_url.strip()
-        and isinstance(auth_token, str)
-        and auth_token.strip()
-    ):
+    if isinstance(daemon_url, str) and daemon_url.strip() and isinstance(auth_token, str) and auth_token.strip():
         return daemon_url, auth_token
 
     identity = live_desktop_owned_daemon(guard_home)
