@@ -17,6 +17,7 @@ from .extension_control_contract import (
     ControlTargetKind,
     ExtensionControlLayer,
 )
+from .mcp_server_contribution import mcp_contribution_catalog_overlay, reset_mcp_contribution_cache
 
 
 class _ExtensionLike(Protocol):
@@ -133,6 +134,8 @@ def catalog_trust_fields(extension_id: str, *, required: bool) -> dict[str, obje
         "icon": {"kind": "none"},
     }
     overlay = contribution_catalog_overlay(extension_id)
+    if overlay is None:
+        overlay = mcp_contribution_catalog_overlay(extension_id)
     if overlay is not None:
         fields.update(overlay)
     return fields
@@ -191,3 +194,4 @@ def reset_trust_map_cache() -> None:
 
     _trust_map.cache_clear()
     reset_contribution_cache()
+    reset_mcp_contribution_cache()

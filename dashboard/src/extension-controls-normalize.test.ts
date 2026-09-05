@@ -132,6 +132,33 @@ assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.safer_guidance[0],
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.example_command, "git reset --hard");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.family, "git-destructive");
 assert.deepEqual(normalizedCatalog.extensions[0]?.reference_urls, ["https://git-scm.com/docs"]);
+assert.equal(normalizedCatalog.extensions[0]?.surface, undefined);
+const mcpCatalog = normalizeExtensionCatalog({
+  ...catalog(),
+  extensions: [{
+    ...catalog().extensions[0],
+    extension_id: "command.mcp-filesystem",
+    name: "Filesystem MCP",
+    aliases: [],
+    surface: "mcp",
+    mcp_launch: { kind: "package-launcher", command: "npx", package: "@modelcontextprotocol/server-filesystem" },
+    mcp_tools: [
+      { name: "read_file", state: "inherit" },
+      { name: "write_file", state: "block" },
+    ],
+    rules: [],
+    rule_count: 0,
+    permissions: [{
+      ...permission(),
+      permission_id: "command.mcp-filesystem.permission.mcp-filesystem-tool",
+      extension_id: "command.mcp-filesystem",
+      rule_ids: [],
+    }],
+  }],
+});
+assert.equal(mcpCatalog.extensions[0]?.surface, "mcp");
+assert.equal(mcpCatalog.extensions[0]?.mcp_launch?.package, "@modelcontextprotocol/server-filesystem");
+assert.equal(mcpCatalog.extensions[0]?.mcp_tools?.[1]?.state, "block");
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
 const managedEffective = normalizeEffectiveExtensionControls({

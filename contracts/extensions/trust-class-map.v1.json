@@ -77,6 +77,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.mcp-filesystem",
       "command.noodle",
       "command.probe",
       "command.repo2nb",

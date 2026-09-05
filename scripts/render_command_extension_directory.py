@@ -70,7 +70,7 @@ def _category(extension_id: str) -> str:
         return "Managed services"
     if extension_id.startswith("command.package."):
         return "Package supply chain"
-    if extension_id == "command.skill-sunset":
+    if extension_id == "command.skill-sunset" or extension_id.startswith("command.mcp-"):
         return "Specialized tools"
     return "Other extensions"
 
@@ -80,10 +80,14 @@ def _escape_cell(value: str) -> str:
 
 
 def _protection_model(extension: CommandSafetyExtension) -> str:
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
+
     if extension.required:
         return "Required core"
     if extension.delegated_protection == "package-firewall":
         return "Package Firewall"
+    if trust_class_for(extension.extension_id) == "external":
+        return "External opt-in"
     return "Built in"
 
 
