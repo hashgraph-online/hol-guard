@@ -16,7 +16,7 @@ def _install_state_binding_fakes(
     monkeypatch: pytest.MonkeyPatch,
     *,
     closed: list[tuple[object, object]],
-) -> tuple[types.SimpleNamespace, tuple[object, object], tuple[object, object]]:
+) -> tuple[types.SimpleNamespace, tuple[object, object], tuple[object, object], set[object]]:
     guard_handle = (object(), object())
     state_handle = (object(), object())
     live_handles = {guard_handle[1], state_handle[1]}
@@ -46,32 +46,22 @@ def _install_state_binding_fakes(
         "_windows_bind_directory_component",
         lambda *_args, **_kwargs: (False, state_handle),
     )
-    return api, guard_handle, state_handle
+    return api, guard_handle, state_handle, live_handles
 
 
 def test_windows_private_state_binding_closes_refreshed_barrier_handle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     closed: list[tuple[object, object]] = []
-    api, guard_handle, original_state_handle = _install_state_binding_fakes(monkeypatch, closed=closed)
+    api, guard_handle, original_state_handle, live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
     restored_state_handle = (object(), object())
 
     with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
         released = binding.handles.pop()
         assert released == original_state_handle
         api._windows_close_handle(*released)
+        live_handles.add(restored_state_handle[1])
         binding.handles.append(restored_state_handle)
-        # Model the atomic rename barrier's reopened handle as live.
-        close_handle = api._windows_close_handle
-        original_close = close_handle
-
-        def close_with_restored(kernel32: object, handle: object) -> None:
-            if handle == restored_state_handle[1]:
-                closed.append((kernel32, handle))
-                return
-            original_close(kernel32, handle)
-
-        api._windows_close_handle = close_with_restored
 
     assert closed == [original_state_handle, restored_state_handle, guard_handle]
 
@@ -80,7 +70,7 @@ def test_windows_private_state_binding_does_not_reclose_released_barrier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     closed: list[tuple[object, object]] = []
-    api, guard_handle, original_state_handle = _install_state_binding_fakes(monkeypatch, closed=closed)
+    api, guard_handle, original_state_handle, _live_handles = _install_state_binding_fakes(monkeypatch, closed=closed)
 
     with windows_state._windows_private_state_binding(Path("C:/Guard")) as binding:
         released = binding.handles.pop()
