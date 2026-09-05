@@ -24,7 +24,8 @@ def build_cloud_workspace_audit_request(
     sync = urlsplit(validate_guard_sync_endpoint(sync_url))
     issuer = urlunsplit((sync.scheme, sync.netloc, "", "", ""))
     request_url = validate_guard_sync_endpoint(request_url, issuer=issuer)
-    headers = build_headers(auth_context, request_url=request_url, method=method)
+    # Local development origins never receive reusable credentials.
+    headers = build_headers(auth_context, request_url=request_url, method=method) if sync.scheme == "https" else {}
     if payload is not None:
         headers["Content-Type"] = "application/json"
     return Request(

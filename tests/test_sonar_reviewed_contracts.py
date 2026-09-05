@@ -23,7 +23,9 @@ from codex_plugin_scanner.guard.store_workflow_capability_secret_control import 
 )
 
 
-@pytest.mark.parametrize("value,expected", [(None, ()), ("one", ("one",)), (["one", "two", 3, "three"], ("one", "two", "three"))])
+@pytest.mark.parametrize(
+    "value,expected", [(None, ()), ("one", ("one",)), (["one", "two", 3, "three"], ("one", "two", "three"))]
+)
 def test_manifest_paths_are_a_variadic_collection(value, expected) -> None:
     assert _path_values(value) == expected
 
@@ -39,7 +41,17 @@ def test_handler_identity_is_a_hashable_tagged_key_not_an_unpacking_record() -> 
     assert {len(identity) for identity in identities} == {2, 3, 5}
 
 
-@pytest.mark.parametrize("selector,version,expected", [("*", "10.0.0", True), ("^*", "10.0.0", True), ("~*", "10.0.0", True), ("^1.2.3", "1.9.0", True), ("^1.2.3", "2.0.0", False), ("~1.2.3", "1.3.0", False)])
+@pytest.mark.parametrize(
+    "selector,version,expected",
+    [
+        ("*", "10.0.0", True),
+        ("^*", "10.0.0", True),
+        ("~*", "10.0.0", True),
+        ("^1.2.3", "1.9.0", True),
+        ("^1.2.3", "2.0.0", False),
+        ("~1.2.3", "1.3.0", False),
+    ],
+)
 def test_variable_comparator_counts_preserve_range_semantics(selector: str, version: str, expected: bool) -> None:
     assert js_semver.version_matches_js_selector(version, selector) is expected
 
@@ -84,7 +96,9 @@ class _SecretControl(StoreWorkflowCapabilitySecretControlMixin):
         return "authenticated-control"
 
 
-@pytest.mark.parametrize("available,skip,expected", [(False, False, None), (True, True, None), (True, False, "authenticated-control")])
+@pytest.mark.parametrize(
+    "available,skip,expected", [(False, False, None), (True, True, None), (True, False, "authenticated-control")]
+)
 def test_secret_control_overrides_reach_the_real_credential_store(available: bool, skip: bool, expected) -> None:
     store = _SecretControl(available, skip)
     assert store._load_workflow_capability_control() == expected
@@ -101,8 +115,10 @@ def test_action_lattice_import_guard_is_false_for_consistent_declarations() -> N
 @pytest.mark.parametrize("artifact_hash", [None, "", "  ", "unknown", "a" * 64])
 def test_optional_package_hash_guard_rejects_only_invalid_hashes(artifact_hash: str | None) -> None:
     scope = package_request_portable_workspace_scope(
-        artifact_id="guard-cli:project:package-request:fixture", artifact_type="package_request",
-        artifact_hash=artifact_hash, execution_context=PackageExecutionContext("b" * 64, True, ()),
+        artifact_id="guard-cli:project:package-request:fixture",
+        artifact_type="package_request",
+        artifact_hash=artifact_hash,
+        execution_context=PackageExecutionContext("b" * 64, True, ()),
     )
     if artifact_hash == "a" * 64:
         assert scope is not None and scope.startswith("package-request-workspace:v2:")
@@ -110,7 +126,10 @@ def test_optional_package_hash_guard_rejects_only_invalid_hashes(artifact_hash: 
         assert scope is None
 
 
-@pytest.mark.parametrize("timeout,is_default", [(1.0, True), (math.nextafter(1.0, 0.0), False), (math.nextafter(1.0, 2.0), False), (0.25, False)])
+@pytest.mark.parametrize(
+    "timeout,is_default",
+    [(1.0, True), (math.nextafter(1.0, 0.0), False), (math.nextafter(1.0, 2.0), False), (0.25, False)],
+)
 def test_identity_timeout_default_is_exact_not_approximate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timeout: float, is_default: bool
 ) -> None:

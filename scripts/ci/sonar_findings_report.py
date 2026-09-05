@@ -82,43 +82,94 @@ def sonar_snapshot(pull_request: int | None) -> dict:
     return snapshot
 
 
-def main() -> None:
-    output = Path("sonar-findings-report")
-    output.mkdir(exist_ok=True)
-    report = {"retrieved_at": datetime.now(timezone.utc).isoformat(), "errors": [], "pull_requests": {}}
-    report["branches"] = read_json("sonar", "/api/project_branches/list", project=PROJECT)
-    report["analyses"] = read_json("sonar", "/api/project_pull_requests/list", project=PROJECT)
-    pulls = read_json("github", f"/repos/{REPOSITORY}/pulls", state="open", per_page=100)
+def github_pages(path: str, field: str | None = None) -> list:
+    """Fetch the full bounded result or report explicit truncation."""
+    items = []
+    for page in range(1, 21):
+        parameters = {"per_page": 100, "page": page}
+        parameters.update({"state": "open"} if field is None else {"filter": "latest"})
+        payload = read_json("github", path, **parameters)
+        batch = payload if field is None else payload[field]
+        if not isinstance(batch, list):
+            raise ValueError("invalid paginated response")
+        items.extend(batch)
+        if field is None:
+            if len(batch) < 100:
+                return items
+        elif len(items) >= payload["total_count"]:
+            return items
+        elif not batch:
+            raise ValueError("incomplete paginated response")
+    raise ValueError("GitHub report exceeds the pagination limit; results are incomplete")
+
+
+def _record_error(report: dict, scope: str, error: Exception) -> None:
+    report["errors"].append({"scope": scope, "error": str(error)})
+    print(scope, "report error", type(error).__name__, str(error))
+
+
+def _collect_report(output: Path, report: dict) -> None:
+    errors = (OSError, ValueError, KeyError, TypeError)
+    for name, path in (("branches", "/api/project_branches/list"), ("analyses", "/api/project_pull_requests/list")):
+        try:
+            report[name] = read_json("sonar", path, project=PROJECT)
+        except errors as error:
+            _record_error(report, name, error)
+    try:
+        pulls = github_pages(f"/repos/{REPOSITORY}/pulls")
+    except errors as error:
+        _record_error(report, "pull-request-discovery", error)
+        pulls = []
     current = os.environ.get("PULL_REQUEST_NUMBER", "")
+    if current:
+        try:
+            if not current.isascii() or not current.isdecimal() or int(current) <= 0:
+                raise ValueError("invalid triggering pull request number")
+            trigger = read_json("github", f"/repos/{REPOSITORY}/pulls/{int(current)}")
+            pulls = [pull for pull in pulls if pull["number"] != trigger["number"]]
+            pulls.append(trigger)
+        except errors as error:
+            _record_error(report, "triggering-pull-request", error)
     scopes = [None]
     for pull in pulls:
-        if "sonar" not in pull["head"]["ref"] and str(pull["number"]) != current:
-            continue
-        scopes.append(pull["number"])
-        checks = []
-        for page in range(1, 6):
-            payload = read_json(
-                "github", f"/repos/{REPOSITORY}/commits/{pull['head']['sha']}/check-runs",
-                filter="latest", per_page=100, page=page,
-            )
-            checks.extend({key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")}
-                          for item in payload.get("check_runs", []))
-            if len(checks) >= payload["total_count"]:
-                break
-        report["pull_requests"][str(pull["number"])] = {"head": pull["head"]["sha"], "checks": checks}
-        print("PR", pull["number"], "head", pull["head"]["sha"], "nonpassing checks",
-              [(c["id"], c["name"], c["status"], c["conclusion"]) for c in checks
-               if c["conclusion"] not in {"success", "skipped", "neutral"}])
+        name = "pull-request-checks"
+        try:
+            if "sonar" not in pull["head"]["ref"] and str(pull["number"]) != current:
+                continue
+            number = pull["number"]
+            name = f"pr-{number}-checks"
+            scopes.append(number)
+            head = pull["head"]["sha"]
+            report["pull_requests"][str(number)] = {"head": head, "checks": [], "checks_complete": False}
+            checks = github_pages(f"/repos/{REPOSITORY}/commits/{head}/check-runs", "check_runs")
+            checks = [{key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")}
+                      for item in checks]
+            report["pull_requests"][str(number)].update(checks=checks, checks_complete=True)
+            print("PR", number, "head", head, "nonpassing checks",
+                  [(c["id"], c["name"], c["status"], c["conclusion"]) for c in checks
+                   if c["conclusion"] not in {"success", "skipped", "neutral"}])
+        except errors as error:
+            _record_error(report, name, error)
     for number in scopes:
         name = "main" if number is None else f"pr-{number}"
         try:
             snapshot = sonar_snapshot(number)
             (output / f"{name}.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
             print(name, "open issues", snapshot["issues"]["total"], "gate", snapshot["gate"])
-        except (OSError, ValueError, KeyError, TypeError) as error:
-            report["errors"].append({"scope": name, "error": str(error)})
-            print(name, "report error", type(error).__name__, str(error))
-    (output / "metadata.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        except errors as error:
+            _record_error(report, name, error)
+
+
+def main() -> None:
+    output = Path("sonar-findings-report")
+    output.mkdir(exist_ok=True)
+    report = {"retrieved_at": datetime.now(timezone.utc).isoformat(), "errors": [], "pull_requests": {}}
+    try:
+        _collect_report(output, report)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        _record_error(report, "report", error)
+    finally:
+        (output / "metadata.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

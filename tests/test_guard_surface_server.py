@@ -39,6 +39,7 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifac
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime, _browser_url_for_review
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import urlopen_json
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -1052,16 +1053,14 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=15) as response:
-                hook_payload = json.loads(response.read().decode("utf-8"))
+            hook_payload = urlopen_json(hook_request, timeout=15)
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
                     minimum_workers=1, timeout_seconds=15
                 )
-                with urllib.request.urlopen(hook_request, timeout=15) as response:
-                    hook_payload = json.loads(response.read().decode("utf-8"))
+                hook_payload = urlopen_json(hook_request, timeout=15)
         finally:
             daemon.stop()
 

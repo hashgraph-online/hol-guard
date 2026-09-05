@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .models import GuardAction, GuardArtifact
+from .redaction import redact_text
 
 _HARNESS_LABELS = {
     "codex": "Codex",
@@ -27,8 +28,14 @@ _ARTIFACT_LABELS = {
     "package_request": "Package request",
     "prompt_request": "Prompt request",
     "file_read_request": "File read request",
+    "skill": "Skill",
+    "skill_file": "Skill file",
+    "extension": "Extension",
+    "instruction": "Instruction",
     "artifact": "Artifact",
 }
+
+_DIRECT_INTERACTION_ARTIFACT_TYPES = frozenset({"tool_call", "file_read_request", "prompt_request"})
 
 
 def build_incident_context(
@@ -82,7 +89,12 @@ def build_incident_context(
             f"`{short_config_path}` for {harness_label}."
         )
     why_now = _why_now_text(changed_fields, presentation_action, harness_label, artifact_type)
-    launch_summary = _launch_summary(artifact=artifact, launch_target=launch_target)
+    launch_summary = _launch_summary(
+        artifact=artifact,
+        launch_target=launch_target,
+        artifact_type=artifact_type,
+        config_path=config_path,
+    )
     risk_headline = risk_summary or _fallback_risk_headline(policy_action)
     return {
         "artifact_label": artifact_label,
@@ -210,8 +222,29 @@ def _trigger_verb(*, policy_action: GuardAction, changed_fields: list[str]) -> s
     return "paused"
 
 
-def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None) -> str:
+def _launch_summary(
+    *,
+    artifact: GuardArtifact | None,
+    launch_target: str | None,
+    artifact_type: str | None,
+    config_path: str | None,
+) -> str:
+    if artifact_type in _DIRECT_INTERACTION_ARTIFACT_TYPES:
+        if artifact is not None:
+            request_summary = artifact.metadata.get("request_summary")
+            if isinstance(request_summary, str) and request_summary:
+                return request_summary
+            prompt_summary = artifact.metadata.get("prompt_summary")
+            if isinstance(prompt_summary, str) and prompt_summary:
+                return prompt_summary
+        if artifact_type != "tool_call" or artifact is None or "mcp_tool_identity" in artifact.metadata:
+            return "Guard reviewed this interaction directly. No shell launch command was recorded."
+    if artifact_type == "tool_action_request" and artifact is not None and artifact.command:
+        command_parts = [artifact.command, *artifact.args]
+        return f"Launches with `{_redacted_command(command_parts)}`."
     if launch_target:
+        if artifact_type == "tool_action_request":
+            return f"Launches with `{redact_text(launch_target).text}`."
         return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
         request_summary = artifact.metadata.get("request_summary")
@@ -224,8 +257,13 @@ def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None
             return f"Connects to `{artifact.url}`."
         if artifact.command:
             command_parts = [artifact.command, *artifact.args]
-            return f"Launches with `{_truncate(' '.join(command_parts))}`."
-    return "Launch details were not available."
+            return f"Launches with `{_truncate(_redacted_command(command_parts))}`."
+    if config_path:
+        return (
+            f"Guard reviewed the definition at {_short_config_path(config_path)}. "
+            "No separate shell launch command was recorded for this item."
+        )
+    return "Guard reviewed this item directly. No shell launch command was recorded."
 
 
 def _short_config_path(config_path: str | None) -> str:
@@ -253,3 +291,7 @@ def _truncate(value: str, limit: int = 140) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 1]}…"
+
+
+def _redacted_command(parts: list[str]) -> str:
+    return redact_text(" ".join(parts)).text
