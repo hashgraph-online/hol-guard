@@ -16,7 +16,7 @@ from .runtime.command_model import CommandSegment, parse_shell_command
 from .runtime.command_tokens import executable_name
 from .runtime.routine_local_node import routine_local_node_approval_profile
 from .trusted_local_tool_jq import safe_jq_arguments
-from .trusted_package_tools import trusted_package_tool_profile
+from .trusted_package_tools import _stable_identity_mapping, trusted_package_tool_profile
 
 LocalToolGrantTarget = Literal["capability", "version"]
 LocalToolGrantDuration = Literal["15m", "1h", "5h", "version", "always"]
@@ -379,22 +379,6 @@ def _reusable_launch_binding(segment: CommandSegment, *, cwd: Path) -> dict[str,
         "executable": _stable_identity_mapping(normalized_executable),
         "entrypoint": _stable_identity_mapping(normalized_entrypoint),
     }
-
-
-def _stable_identity_mapping(value: Mapping[str, object]) -> dict[str, object]:
-    return {
-        str(key): _stable_identity_value(item)
-        for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        if key not in {"argument_sha256", "reuse_nonce", "script_args_sha256"}
-    }
-
-
-def _stable_identity_value(value: object) -> object:
-    if isinstance(value, Mapping):
-        return _stable_identity_mapping(dict(cast(Mapping[str, object], value)))
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return [_stable_identity_value(item) for item in value]
-    return value
 
 
 def _local_tool_operation(segment: CommandSegment) -> str | None:

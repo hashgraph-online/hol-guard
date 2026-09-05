@@ -8,6 +8,40 @@ from __future__ import annotations
 from .store_base import *
 
 
+def _guard_session_row(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "session_id": str(row["session_id"]),
+        "harness": str(row["harness"]),
+        "surface": str(row["surface"]),
+        "status": str(row["status"]),
+        "client_name": str(row["client_name"]),
+        "client_title": str(row["client_title"]) if row["client_title"] is not None else None,
+        "client_version": str(row["client_version"]) if row["client_version"] is not None else None,
+        "workspace": str(row["workspace"]) if row["workspace"] is not None else None,
+        "capabilities": json.loads(str(row["capabilities_json"])),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+def _guard_operation_row(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "operation_id": str(row["operation_id"]),
+        "session_id": str(row["session_id"]),
+        "harness": str(row["harness"]),
+        "operation_type": str(row["operation_type"]),
+        "status": str(row["status"]),
+        "approval_request_ids": json.loads(str(row["approval_request_ids_json"])),
+        "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
+        "metadata": json.loads(str(row["metadata_json"])),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+
+
+
 class StoreSessionsMixin:
     def upsert_guard_session(
         self,
@@ -83,19 +117,7 @@ class StoreSessionsMixin:
             ).fetchone()
         if row is None:
             return None
-        return {
-            "session_id": str(row["session_id"]),
-            "harness": str(row["harness"]),
-            "surface": str(row["surface"]),
-            "status": str(row["status"]),
-            "client_name": str(row["client_name"]),
-            "client_title": str(row["client_title"]) if row["client_title"] is not None else None,
-            "client_version": str(row["client_version"]) if row["client_version"] is not None else None,
-            "workspace": str(row["workspace"]) if row["workspace"] is not None else None,
-            "capabilities": json.loads(str(row["capabilities_json"])),
-            "created_at": str(row["created_at"]),
-            "updated_at": str(row["updated_at"]),
-        }
+        return _guard_session_row(row)
 
     def list_guard_sessions(self, status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
         query = """
@@ -111,22 +133,7 @@ class StoreSessionsMixin:
         params.append(limit)
         with self._connect() as connection:
             rows = connection.execute(query, tuple(params)).fetchall()
-        return [
-            {
-                "session_id": str(row["session_id"]),
-                "harness": str(row["harness"]),
-                "surface": str(row["surface"]),
-                "status": str(row["status"]),
-                "client_name": str(row["client_name"]),
-                "client_title": str(row["client_title"]) if row["client_title"] is not None else None,
-                "client_version": str(row["client_version"]) if row["client_version"] is not None else None,
-                "workspace": str(row["workspace"]) if row["workspace"] is not None else None,
-                "capabilities": json.loads(str(row["capabilities_json"])),
-                "created_at": str(row["created_at"]),
-                "updated_at": str(row["updated_at"]),
-            }
-            for row in rows
-        ]
+        return [_guard_session_row(row) for row in rows]
 
     def upsert_guard_operation(
         self,
@@ -198,18 +205,7 @@ class StoreSessionsMixin:
             ).fetchone()
         if row is None:
             return None
-        return {
-            "operation_id": str(row["operation_id"]),
-            "session_id": str(row["session_id"]),
-            "harness": str(row["harness"]),
-            "operation_type": str(row["operation_type"]),
-            "status": str(row["status"]),
-            "approval_request_ids": json.loads(str(row["approval_request_ids_json"])),
-            "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
-            "metadata": json.loads(str(row["metadata_json"])),
-            "created_at": str(row["created_at"]),
-            "updated_at": str(row["updated_at"]),
-        }
+        return _guard_operation_row(row)
 
     def list_guard_operations(self, session_id: str | None = None, limit: int = 100) -> list[dict[str, object]]:
         query = """
@@ -225,21 +221,7 @@ class StoreSessionsMixin:
         params.append(limit)
         with self._connect() as connection:
             rows = connection.execute(query, tuple(params)).fetchall()
-        return [
-            {
-                "operation_id": str(row["operation_id"]),
-                "session_id": str(row["session_id"]),
-                "harness": str(row["harness"]),
-                "operation_type": str(row["operation_type"]),
-                "status": str(row["status"]),
-                "approval_request_ids": json.loads(str(row["approval_request_ids_json"])),
-                "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
-                "metadata": json.loads(str(row["metadata_json"])),
-                "created_at": str(row["created_at"]),
-                "updated_at": str(row["updated_at"]),
-            }
-            for row in rows
-        ]
+        return [_guard_operation_row(row) for row in rows]
 
     def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:

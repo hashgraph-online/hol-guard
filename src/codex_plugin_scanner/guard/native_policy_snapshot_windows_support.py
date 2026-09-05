@@ -18,6 +18,44 @@ from .native_policy_snapshot_constants import (
 )
 
 
+def _windows_write_chunks_and_flush(kernel32: Any, handle: Any, payload: bytes) -> None:
+    """Write bounded chunks through one private handle and flush it durably."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    write_file = kernel32.WriteFile
+    write_file.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
+    write_file.restype = wintypes.BOOL
+    buffer = (ctypes.c_ubyte * len(payload)).from_buffer_copy(payload)
+    written = 0
+    while written < len(payload):
+        request_size = min(64 * 1024, len(payload) - written)
+        count = wintypes.DWORD()
+        if not write_file(
+            handle,
+            ctypes.byref(buffer, written),
+            request_size,
+            ctypes.byref(count),
+            None,
+        ):
+            raise NativePolicySnapshotError("native_policy_windows_write_failed")
+        chunk_size = int(count.value)
+        if chunk_size <= 0 or chunk_size > request_size:
+            raise NativePolicySnapshotError("native_policy_windows_write_failed")
+        written += chunk_size
+    flush = kernel32.FlushFileBuffers
+    flush.argtypes = [wintypes.HANDLE]
+    flush.restype = wintypes.BOOL
+    if not flush(handle):
+        raise NativePolicySnapshotError("native_policy_windows_sync_failed")
+
 def _snapshot_api() -> Any:
     """Resolve the compatibility façade only after package initialization."""
 

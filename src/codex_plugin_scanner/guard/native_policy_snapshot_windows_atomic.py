@@ -12,6 +12,7 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_ERROR_FILE_EXISTS,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_windows_support import _windows_write_chunks_and_flush
 
 _WINDOWS_FILE_RENAME_INFORMATION = 10
 _WINDOWS_FILE_DISPOSITION_INFO = 4
@@ -276,8 +277,6 @@ def _windows_write_private_file_atomic(
 ) -> None:
     """Create, write, and commit a private file while parent handles remain held."""
 
-    import ctypes
-    from ctypes import wintypes
 
     if not payload or len(payload) > maximum_bytes:
         raise NativePolicySnapshotError("native_policy_windows_write_too_large")
@@ -296,37 +295,7 @@ def _windows_write_private_file_atomic(
         renamed = [False]
         try:
             api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-            write_file = kernel32.WriteFile
-            write_file.argtypes = [
-                wintypes.HANDLE,
-                ctypes.c_void_p,
-                wintypes.DWORD,
-                ctypes.POINTER(wintypes.DWORD),
-                ctypes.c_void_p,
-            ]
-            write_file.restype = wintypes.BOOL
-            buffer = (ctypes.c_ubyte * len(payload)).from_buffer_copy(payload)
-            written = 0
-            while written < len(payload):
-                request_size = min(64 * 1024, len(payload) - written)
-                count = wintypes.DWORD()
-                if not write_file(
-                    handle,
-                    ctypes.byref(buffer, written),
-                    request_size,
-                    ctypes.byref(count),
-                    None,
-                ):
-                    raise NativePolicySnapshotError("native_policy_windows_write_failed")
-                chunk_size = int(count.value)
-                if chunk_size <= 0 or chunk_size > request_size:
-                    raise NativePolicySnapshotError("native_policy_windows_write_failed")
-                written += chunk_size
-            flush = kernel32.FlushFileBuffers
-            flush.argtypes = [wintypes.HANDLE]
-            flush.restype = wintypes.BOOL
-            if not flush(handle):
-                raise NativePolicySnapshotError("native_policy_windows_sync_failed")
+            _windows_write_chunks_and_flush(kernel32, handle, payload)
             _windows_commit_private_file_handle(
                 api=api,
                 kernel32=kernel32,

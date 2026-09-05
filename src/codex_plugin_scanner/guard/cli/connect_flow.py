@@ -1448,6 +1448,23 @@ def connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
     return isinstance(reason, str) and "already consumed" in reason.lower()
 
 
+def connect_retry_required_from_state(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None:
+        return False
+    status = latest_state.get("status")
+    milestone = latest_state.get("milestone")
+    status_text = status if isinstance(status, str) and status else None
+    milestone_text = milestone if isinstance(milestone, str) and milestone else None
+    return status_text == "retry_required" or milestone_text == "first_sync_failed"
+
+
+def connect_retry_refresh_race_from_state(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None or not connect_retry_required_from_state(latest_state):
+        return False
+    reason = latest_state.get("reason")
+    return connect_retry_refresh_race_from_reason(reason if isinstance(reason, str) and reason else None)
+
+
 def resolve_guard_cloud_state(
     *,
     sync_configured: bool,
