@@ -98,7 +98,7 @@ assert.match(approvalSetupMarkup, /Set up approval/);
 assert.match(approvalSetupMarkup, /Guard Cloud sign-in and account MFA are separate and do not enable this gate/);
 assert.match(approvalSetupMarkup, /Settings &gt; Approval gate/);
 assert.match(approvalSetupMarkup, /Ask for proof on allow decisions/);
-assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app for high-risk approvals/);
+assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown/);
 assert.doesNotMatch(approvalSetupMarkup, /Authy/);
 assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
 assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);

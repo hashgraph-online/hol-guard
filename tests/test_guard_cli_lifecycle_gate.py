@@ -91,7 +91,7 @@ def test_lifecycle_gate_warns_and_allows_when_protection_is_disabled(
     assert "Guard Cloud sign-in and account MFA are separate from this local gate." in warning
     assert "Settings > Approval gate" in warning
     assert "Ask for proof on allow decisions" in warning
-    assert "Optionally connect an `Authenticator app` for high-risk approvals." in warning
+    assert "Optionally connect an `Authenticator app`; once enabled, its code replaces the `Approval password` for every protected action and disables cooldown." in warning
     assert "Authy" not in warning
     assert "This notice is advisory and does not block the current command." in warning
 
