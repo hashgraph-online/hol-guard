@@ -31,7 +31,9 @@ def test_timed_out_capacity_wave_aborts_before_next_wave(monkeypatch: pytest.Mon
             benchmark._run_concurrent(session, (("codex", "PreToolUse"),), 1, executor)
 
 
-def test_measure_slo_primes_before_baseline_and_reuses_executor(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_measure_slo_isolates_c16_then_primes_c64_before_rss_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[tuple[str, int | None]] = []
 
     class FakeSession:
@@ -103,12 +105,13 @@ def test_measure_slo_primes_before_baseline_and_reuses_executor(monkeypatch: pyt
     )
 
     assert [name for name, _ in calls] == [
+        "c16",
         "prime",
         "baseline-start",
         "baseline-warmup",
         "baseline-end",
-        "c16",
         "c64",
     ]
-    executor_ids = [executor_id for _, executor_id in calls if executor_id is not None]
-    assert len(set(executor_ids)) == 1
+    executor_by_call = {name: executor_id for name, executor_id in calls if executor_id is not None}
+    assert executor_by_call["c16"] != executor_by_call["c64"]
+    assert executor_by_call["prime"] == executor_by_call["baseline-warmup"] == executor_by_call["c64"]
