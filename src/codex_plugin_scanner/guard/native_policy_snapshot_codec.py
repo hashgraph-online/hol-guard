@@ -10,6 +10,7 @@ from collections.abc import Mapping
 
 from .native_policy_snapshot_constants import (
     _VERIFIER_KEY_BYTES,
+    POLICY_SNAPSHOT_FLOOR_DOMAIN,
     POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS,
     POLICY_SNAPSHOT_MAX_JSON_DEPTH,
     POLICY_SNAPSHOT_MAX_JSON_STRING_BYTES,
@@ -146,6 +147,17 @@ def derive_native_policy_verifier_key(policy_integrity_key: bytes) -> bytes:
         POLICY_SNAPSHOT_VERIFIER_DERIVATION_DOMAIN,
         hashlib.sha256,
     ).digest()
+
+
+def _generation_floor_mac_v3(generation: int, policy_digest: str, verifier_key: bytes) -> str:
+    """Authenticate the resident generation floor the same way Rust does."""
+
+    message = generation.to_bytes(8, "big") + b"\0" + policy_digest.encode("utf-8")
+    return hmac.new(
+        verifier_key,
+        POLICY_SNAPSHOT_FLOOR_DOMAIN + message,
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def native_policy_verifier_key_id(verifier_key: bytes) -> str:

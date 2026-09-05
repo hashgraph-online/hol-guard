@@ -15,9 +15,9 @@ from typing import Any, cast
 from . import native_policy_snapshot_storage_windows as _windows_storage
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
+    _generation_floor_mac_v3,
     _strict_json_loads_v3,
     _valid_digest_v3,
-    derive_native_policy_verifier_key,
 )
 from .native_policy_snapshot_constants import (
     _MAX_GENERATION,
@@ -27,7 +27,8 @@ from .native_policy_snapshot_constants import (
     _V3_GENERATION_SCHEMA,
     _V3_GENERATION_STATE_NAME,
     NATIVE_POLICY_SNAPSHOT_CACHE_NAME,
-    NATIVE_RUNTIME_STATE_DIRECTORY,
+    POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
+    POLICY_SNAPSHOT_AUTHORITY_SCHEMA,
     POLICY_SNAPSHOT_MAX_BYTES,
     NativePolicySnapshotError,
 )
@@ -62,6 +63,45 @@ def _snapshot_cache_path_v3(guard_home: Path) -> Path:
     return _runtime_state_directory(guard_home) / NATIVE_POLICY_SNAPSHOT_CACHE_NAME
 
 
+def _authority_snapshot_v3(
+    value: Mapping[str, object],
+    payload: bytes,
+    verifier_key: bytes,
+) -> dict[str, object]:
+    """Return the nested snapshot from a rust-accepted authority record."""
+
+    api = _snapshot_api()
+    generation_floor = value.get("generation_floor")
+    policy_digest = value.get("policy_digest")
+    floor_mac = value.get("floor_mac")
+    snapshot = value.get("snapshot")
+    if (
+        set(value) != {"schema", "generation_floor", "policy_digest", "snapshot", "floor_mac"}
+        or _canonical_json_bytes_v3(value) != payload
+        or isinstance(generation_floor, bool)
+        or not isinstance(generation_floor, int)
+        or generation_floor <= 0
+        or not _valid_digest_v3(policy_digest)
+        or not _valid_digest_v3(floor_mac)
+        or not isinstance(snapshot, dict)
+        or snapshot.get("generation") != generation_floor
+        or snapshot.get("policy_digest") != policy_digest
+        or not hmac.compare_digest(
+            cast(str, floor_mac),
+            _generation_floor_mac_v3(generation_floor, cast(str, policy_digest), verifier_key),
+        )
+    ):
+        raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
+    api._validate_snapshot_v3(snapshot)
+    integrity = snapshot.get("integrity")
+    if not isinstance(integrity, Mapping) or not hmac.compare_digest(
+        cast(str, integrity.get("mac")),
+        api._snapshot_integrity_mac_v3(snapshot, verifier_key),
+    ):
+        raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
+    return cast(dict[str, object], snapshot)
+
+
 def _read_v3_snapshot_file(
     path: Path,
     *,
@@ -89,17 +129,20 @@ def _read_v3_snapshot_file(
             if (
                 not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_size <= 0
-                or metadata.st_size > POLICY_SNAPSHOT_MAX_BYTES
+                or metadata.st_size > POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
                 or (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077)
             ):
                 raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
             payload = bytearray()
-            while len(payload) <= POLICY_SNAPSHOT_MAX_BYTES:
-                chunk = os.read(descriptor, min(64 * 1024, POLICY_SNAPSHOT_MAX_BYTES + 1 - len(payload)))
+            while len(payload) <= POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES:
+                chunk = os.read(
+                    descriptor,
+                    min(64 * 1024, POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES + 1 - len(payload)),
+                )
                 if not chunk:
                     break
                 payload.extend(chunk)
-            if len(payload) != metadata.st_size or len(payload) > POLICY_SNAPSHOT_MAX_BYTES:
+            if len(payload) != metadata.st_size or len(payload) > POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES:
                 raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
         except OSError as error:
             raise NativePolicySnapshotError("native_policy_snapshot_cache_read_failed") from error
@@ -109,6 +152,10 @@ def _read_v3_snapshot_file(
     value = api._strict_json_loads_v3(payload)
     if not isinstance(value, dict):
         raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
+    if value.get("schema") == POLICY_SNAPSHOT_AUTHORITY_SCHEMA:
+        if verifier_key is None:
+            raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
+        return _authority_snapshot_v3(value, payload, verifier_key), payload
     api._validate_snapshot_v3(value)
     canonical = api.snapshot_bytes_v3(value)
     if canonical != payload:
@@ -440,53 +487,3 @@ def _write_v3_generation_state(guard_home: Path, *, generation: int, policy_dige
     finally:
         with suppress(FileNotFoundError):
             temporary.unlink()
-
-
-def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
-    """Return the compact hook binding from a still-valid ACKed snapshot cache.
-
-    The cache is written before resident IPC. Reuse it only when an unexpired
-    signed snapshot is backed by a matching resident generation file.
-    """
-
-    guard_home = getattr(store, "guard_home", None)
-    material_getter = getattr(store, "_policy_integrity_secret_material", None)
-    if guard_home is None or not callable(material_getter):
-        return None
-    material = material_getter(create=False)
-    if not isinstance(material, tuple) or len(material) != 2 or not isinstance(material[0], bytes):
-        return None
-    try:
-        cached = _read_v3_snapshot_file(
-            Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_SNAPSHOT_CACHE_NAME,
-            verifier_key=derive_native_policy_verifier_key(material[0]),
-        )
-    except NativePolicySnapshotError:
-        return None
-    if cached is None:
-        return None
-    snapshot, _payload = cached
-    generation = snapshot.get("generation")
-    expires_at_ms = snapshot.get("expires_at_ms")
-    digest = snapshot.get("policy_digest")
-    identity = snapshot.get("runtime_identity")
-    mode = snapshot.get("mode")
-    if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
-        return None
-    if not isinstance(expires_at_ms, int) or expires_at_ms <= int(time.time() * 1_000):
-        return None
-    if not isinstance(digest, str) or not isinstance(identity, str) or not isinstance(mode, str):
-        return None
-    expected = f"generation-{generation:020d}.json"
-    try:
-        present = any((Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY).glob(f"resident-v3-*/{expected}"))
-    except OSError:
-        return None
-    if not present:
-        return None
-    return {
-        "generation": generation,
-        "policy_digest": digest,
-        "runtime_identity": identity,
-        "mode": mode,
-    }
