@@ -102,9 +102,7 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
 
 export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
   const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
-  if (input.cloudState !== "local_only" && !cloudFailed) {
-    return null;
-  }
+  if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail:

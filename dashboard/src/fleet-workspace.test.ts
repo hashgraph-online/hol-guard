@@ -178,6 +178,13 @@ assert(
   failedCloudProof.href !== urls.connect_url,
   "already-connected Cloud recovery must not open the connect page",
 );
+const missingDashboardCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+});
+assert(missingDashboardCloudProof === null, "connected Cloud recovery requires a dashboard URL");
 assert(
   recoverySummary(1, 0, false, ["App hooks"]) ===
     "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",

@@ -173,7 +173,7 @@ export function repairHarnessesFor(
     installs
       .filter((install) => install.active !== true || health.apps.find(
         (app) => app.harness === install.harness
-      )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true)
+      )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass")
       .map((install) => install.harness)
   ));
 }

@@ -66,13 +66,11 @@ const PROTECTION_CHECK_ACTIONS = {
 };
 function cloudPolicyRecoveryHint(input) {
   const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
-  if (input.cloudState !== "local_only" && !cloudFailed) {
-    return null;
-  }
+  if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl || input.connectUrl,
+    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl,
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof"
   };
@@ -445,7 +443,7 @@ function repairHarnessesFor(installs, health) {
   return Array.from(new Set(
     installs.filter((install) => install.active !== true || health.apps.find(
       (app) => app.harness === install.harness
-    )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true).map((install) => install.harness)
+    )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass").map((install) => install.harness)
   ));
 }
 function toInstallStatus(status) {
