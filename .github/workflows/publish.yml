@@ -892,18 +892,11 @@ jobs:
             if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry testpypi --version "$VERSION" --dist-dir dist \
               --download-dir verified-testpypi); then
-              if [[ "$attempt" == "60" ]]; then
-                echo "TestPyPI did not expose the exact release artifacts" >&2
-                exit 1
-              fi
-              sleep 5
-              continue
+              exit 1
             fi
             status=$(jq -r '.status' <<< "$result")
             if [[ "$status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
-                verify-published --registry testpypi --version "$VERSION" \
-                --source-sha "$SOURCE_SHA" --dist-dir dist; then
+              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry testpypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist; then
               break
             fi
             if [[ "$status" != "absent" && "$status" != "exact" ]] || [[ "$attempt" == "60" ]]; then
@@ -1038,29 +1031,17 @@ jobs:
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               inspect-release --registry pypi --project hol-guard --version "$VERSION"); then
-              if [[ "$attempt" == "60" ]]; then
-                echo "PyPI did not expose the exact release artifacts" >&2
-                exit 1
-              fi
-              sleep 5
-              continue
+              exit 1
             fi
             if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
               --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
-              if [[ "$attempt" == "60" ]]; then
-                echo "PyPI did not expose the exact release artifacts" >&2
-                exit 1
-              fi
-              sleep 5
-              continue
+              exit 1
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
             if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
-                verify-published --registry pypi --version "$VERSION" \
-                --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure; then
+              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure; then
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
@@ -1376,29 +1357,17 @@ jobs:
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --project hol-guard --version "$VERSION" \
               --dist-dir dist-hol-guard --download-dir verified-pypi-hol-guard); then
-              if [[ "$attempt" == "60" ]]; then
-                echo "PyPI did not expose the exact release artifacts" >&2
-                exit 1
-              fi
-              sleep 5
-              continue
+              exit 1
             fi
             if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
               --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
-              if [[ "$attempt" == "60" ]]; then
-                echo "PyPI did not expose the exact release artifacts" >&2
-                exit 1
-              fi
-              sleep 5
-              continue
+              exit 1
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
             if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]] && \
-              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
-                verify-published --registry pypi --version "$VERSION" \
-                --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full; then
+              uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py verify-published --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full; then
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
