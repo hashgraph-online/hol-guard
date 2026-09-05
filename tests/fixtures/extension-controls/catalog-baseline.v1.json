@@ -33,6 +33,7 @@
     "command.cicd.circleci",
     "command.cicd.github",
     "command.cicd.gitlab",
+    "command.claude-tmux",
     "command.cloud.aws",
     "command.cloud.azure",
     "command.cloud.gcp",
