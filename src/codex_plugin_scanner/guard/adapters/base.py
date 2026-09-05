@@ -470,6 +470,7 @@ def _warnings_include_setup_failure(warnings: list[str]) -> bool:
         "command is not available",
         "native hooks are disabled",
         "managed codex hooks are missing",
+        "do not match this guard cli",
     )
     return any(any(marker in warning.lower() for marker in setup_markers) for warning in warnings)
 
