@@ -191,7 +191,7 @@ def test_generic_result_decoder_accepts_complete_policy_action_lattice(
     assert _decode_pre_tool(result, command="ignored") == result
 
 
-def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
+def test_native_review_queues_approval_without_escaping_to_cli(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -204,7 +204,15 @@ def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: edge,
     )
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    store = GuardStore(tmp_path / "guard-home")
+    store.upsert_runtime_state(
+        session_id="native-review",
+        daemon_host="127.0.0.1",
+        daemon_port=4781,
+        started_at="2026-09-05T00:00:00+00:00",
+        last_heartbeat_at="2026-09-05T00:00:00+00:00",
+    )
+    worker = HookWorker(store=store)
     response = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
         params={},
@@ -217,6 +225,12 @@ def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "deny"
     assert response["reason_code"] == "native_pre_tool_unknown_review"
+    assert response["policy_action"] == "review"
+    assert isinstance(response.get("approval_request_id"), str)
+    assert str(response.get("approval_url", "")).startswith("http://127.0.0.1:4781/requests/")
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["request_id"] == response["approval_request_id"]
 
 
 def test_result_helper_has_no_untyped_result_payload() -> None:
