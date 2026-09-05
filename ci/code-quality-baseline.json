@@ -720,7 +720,7 @@
     "tests/test_guard_supply_chain_daemon.py": 613,
     "tests/test_guard_supply_chain_evaluator.py": 3384,
     "tests/test_guard_supply_chain_sync.py": 886,
-    "tests/test_guard_surface_server.py": 4664,
+    "tests/test_guard_surface_server.py": 4685,
     "tests/test_guard_temporary_mcp_approvals.py": 620,
     "tests/test_guard_threat_intel.py": 577,
     "tests/test_guard_update_artifact.py": 1088,
