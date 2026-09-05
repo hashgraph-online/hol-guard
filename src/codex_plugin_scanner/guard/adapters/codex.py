@@ -82,8 +82,7 @@ from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
     managed_stdio_servers,
-    proxy_cli_args,
-    proxy_process_env,
+    proxy_launcher_entry,
     skipped_stdio_server_names,
 )
 from .workspace_overrides import should_skip_workspace_override
@@ -1386,21 +1385,11 @@ class CodexHarnessAdapter(HarnessAdapter):
         return context.guard_home / "managed" / "codex" / f"{digest}.backup.toml"
 
     def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-        args = proxy_cli_args(
+        return proxy_launcher_entry(
             proxy_command="codex-mcp-proxy",
-            guard_home=str(context.guard_home),
+            context=context,
             server=server,
-            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         )
-        entry: dict[str, object] = {
-            "command": sys.executable,
-            "args": args,
-        }
-        env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-        if env:
-            entry["env"] = env
-        return entry
 
     @staticmethod
     def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:

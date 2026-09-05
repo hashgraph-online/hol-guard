@@ -15,6 +15,8 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
+from .hook_payloads import normalize_session_and_workspace_aliases
+
 # ZCode surfaces tools using Claude Code names (Bash, Read, Write, Edit, ...) and
 # MCP tools as ``mcp__<server>__<tool>``. No alias table is needed because the
 # canonical tool name already matches the Guard runtime contract.
@@ -84,16 +86,7 @@ def prepare_zcode_hook_payload(payload: Mapping[str, object]) -> dict[str, objec
     if tool_input is not None:
         normalized["tool_input"] = tool_input
 
-    session_id = normalized.get("session_id")
-    if session_id is None and isinstance(normalized.get("sessionId"), str):
-        normalized["session_id"] = normalized["sessionId"]
-
-    workspace_root = normalized.get("workspace_root")
-    if workspace_root is None and isinstance(normalized.get("workspaceRoot"), str):
-        workspace_root = normalized["workspaceRoot"]
-        normalized["workspace_root"] = workspace_root
-    if workspace_root is None and isinstance(normalized.get("cwd"), str):
-        normalized["workspace_root"] = normalized["cwd"]
+    normalize_session_and_workspace_aliases(normalized)
 
     prompt = normalized.get("prompt")
     if prompt is None and isinstance(normalized.get("userPrompt"), str):

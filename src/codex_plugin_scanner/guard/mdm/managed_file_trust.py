@@ -18,6 +18,30 @@ from .acl import (
 )
 
 
+def posix_path_is_root_owned_and_restricted(path: Path) -> bool:
+    """Walk from path to root requiring regular file at path, directories above,
+    no symlinks, root ownership, and no group/world write bits anywhere."""
+
+    current = path
+    while True:
+        try:
+            metadata = current.lstat()
+        except OSError:
+            return False
+        if stat.S_ISLNK(metadata.st_mode):
+            return False
+        if current == path:
+            if not stat.S_ISREG(metadata.st_mode):
+                return False
+        elif not stat.S_ISDIR(metadata.st_mode):
+            return False
+        if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+            return False
+        if current.parent == current:
+            return True
+        current = current.parent
+
+
 def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = None) -> bool:
     """Verify a machine-owned regular file and every ancestor without following links."""
     resolved_system = system_name or platform.system()
@@ -47,21 +71,4 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
             return False
     if os.name != "posix":
         return False
-    current = path
-    while True:
-        try:
-            metadata = current.lstat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(metadata.st_mode):
-            return False
-        if current == path:
-            if not stat.S_ISREG(metadata.st_mode):
-                return False
-        elif not stat.S_ISDIR(metadata.st_mode):
-            return False
-        if metadata.st_uid != 0 or metadata.st_mode & 0o022:
-            return False
-        if current.parent == current:
-            return True
-        current = current.parent
+    return posix_path_is_root_owned_and_restricted(path)
