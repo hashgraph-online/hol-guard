@@ -101,3 +101,18 @@ def test_capacity_proof_prestarts_isolated_c16_then_primes_c64_before_rss_baseli
     assert executor_by_call["prime-16"] == executor_by_call["c16"]
     assert executor_by_call["c16"] != executor_by_call["c64"]
     assert executor_by_call["prime-64"] == executor_by_call["baseline-warmup"] == executor_by_call["c64"]
+
+
+def test_capacity_proof_supports_skip_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = cast(AdapterSession, object())
+    monkeypatch.setattr(capacity, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(capacity, "_measure_rss_and_c64", lambda *_args, **_kwargs: (100, 100, [], 0))
+
+    measured = capacity.measure_capacity(session, (("codex", "PreToolUse"),), include_capacity=False)
+
+    assert measured.concurrent_16 == []
+    assert measured.concurrent_64 == []
+    assert measured.errors_16 == 0
+    assert measured.errors_64 == 0
+    assert measured.rss_baseline == 100
+    assert measured.rss_peak == 100
