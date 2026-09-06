@@ -185,6 +185,65 @@ They complement the full checkout suite; they run inside the release, where earl
 already have published. `dispat run <script>` executes the named script, not the surrounding release
 hooks, so it does not implicitly run these additional gates.
 
+## Let pnpm manage its workspace dependencies
+
+For a monorepo already using pnpm workspaces, prefer its existing workspace mechanism: keep internal
+dependency ranges such as `"@acme/core": "workspace:*"` in the repository throughout development and
+release. pnpm resolves them locally and substitutes publishable versions when packing or publishing.
+These persistent declarations are not temporary redirects to unlink. See the
+[pnpm workspace documentation][pnpm-workspaces] and [Dispat's pnpm example][dispat-pnpm].
+
+Dispat's derived `autowriter --link-local` edits skip `package.json`; they do not set up pnpm's
+workspace protocol. A pnpm repository that already declares `workspace:*` needs no Dispat
+link/unlink cycle or dependency-range rewrite for local testing. Run its existing pnpm build and
+test scripts, directly or through `dispat run`, with the full-suite coverage described above.
+
+If the user explicitly requests a dependency-range edit, [writer] can set the literal:
+
+```sh
+dispat writer packages/web/package.json --set '@acme/core=workspace:*'
+```
+
+Use `--set` for a dependency declaration; `--set-version` changes the containing package's own
+version and must not receive `workspace:*`. This command edits a manifest; it is not a prerequisite
+for using pnpm or permission to change the repository's dependency policy.
+
+Keep dependency linking separate from release versioning. pnpm handles workspace resolution and
+packing, while the repository still needs its chosen mechanism to assign package versions. Do not
+add Dispat auto-versioning merely to link local dependencies. If the repository already uses it,
+Dispat's pnpm example preserves the protocol with `autoVersion.range: "workspace:*"` while updating
+package versions, synchronizing `pnpm-lock.yaml`, and including that root lockfile in the release
+commit. Inspect the existing policy; do not disable it or change configuration without a direct
+instruction. Check packed artifacts according to that policy instead of applying a blanket
+`--forbid-range 'workspace:*'` gate to source manifests that intentionally retain the protocol.
+
+## Use configurable webhooks for release observations
+
+Dispat supports [webhooks] for release, stage, and package events, plus script events raised with
+[`dispat trigger`][trigger]. Agents can read these events to follow progress without scraping
+console output. The default body is JSON; `format` supplies a custom payload template for a
+receiver's expected shape. For example, an existing configuration might contain:
+
+```yaml
+webhooks:
+  - url: https://ci.example.com/dispat-events
+    events: [package.published, package.failed]
+    format: '{"text": "{package} {version}: {event} {error}"}'
+```
+
+Supported scalar placeholders are substituted with escaping for JSON string positions. Use the
+documented field names; unknown placeholders fail configuration loading. Options also control event
+subscriptions, HTTP method, headers, timeout, environment conditions, and signing through
+`secretEnv`. Package and space webhook lists replace inherited lists rather than append to them.
+Read the existing configuration; adding or changing endpoints, payloads, or credentials requires the
+same direct instruction as other configuration edits.
+
+Webhooks are asynchronous observers and never gate a release. Delivery failures warn with `W239`
+without changing the release exit status; put required checks in a gating script or CI job.
+Receivers should account for retries using `X-Dispat-Delivery`. Release events start only once the
+run proceeds to execution, so an early refusal may emit none. A successful notification is not proof
+that every release operation succeeded; inspect the relevant event and command outcome.
+
 ## Respect an active release lock
 
 > **Important: defer unrelated pushes while the release lock exists.** Avoid pushing to the branch
@@ -320,6 +379,7 @@ Consult installed-version help and the corresponding source when these descripti
 [diagnostics]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/plan-errors.md
 [dispat-package-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/dispat.yaml
 [dispat-pkg-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/pkg/dispat.yaml
+[dispat-pnpm]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/examples/pnpm.md
 [dispat-services-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat.yaml
 [dispat-test-dockerfile]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/Dockerfile.gotest
 [dotenv]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dotenv.md
@@ -329,6 +389,7 @@ Consult installed-version help and the corresponding source when these descripti
 [packages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/packages.md
 [parser]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/parser.md
 [partial]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/partial-releases.md
+[pnpm-workspaces]: https://pnpm.io/workspaces
 [post-publish]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/internals/architecture.md#after-the-point-of-no-return
 [preview]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/preview.md
 [records]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/records.md
@@ -343,4 +404,7 @@ Consult installed-version help and the corresponding source when these descripti
 [status]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/status.md
 [steps]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/steps.md
 [test-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/tests.yml
+[trigger]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/trigger.md
 [versions]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/versions.md
+[webhooks]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/webhooks.md
+[writer]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/writer.md
