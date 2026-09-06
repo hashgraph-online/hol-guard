@@ -214,8 +214,11 @@ export function ProtectionCenterWorkspace(props: {
 
   const retryLocalClis = useCallback(() => { void localClis.load(); }, [localClis.load]);
   const retryLoad = useCallback(() => { void load(); }, [load]);
-  const refreshProtection = useCallback(async () => {
-    await load();
+  const refreshProtection = useCallback(async (): Promise<void> => {
+    const refreshed = await load();
+    if (refreshed === null) {
+      throw new Error("Protection status could not be refreshed.");
+    }
   }, [load]);
   const handleCancelPending = useCallback(() => {
     if (!busy) setPending(null);
@@ -298,13 +301,13 @@ export function ProtectionCenterWorkspace(props: {
     void runAuthorityAction(kind, credentials);
   }, [runAuthorityAction]);
 
-  const handleCheckAgain = useCallback(() => {
-    void load();
+  const handleCheckAgain = useCallback(async (): Promise<void> => {
     setRecoveryError(null);
-    void refreshApprovalGate({ failClosed: true }).catch(() => {
-      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
-    });
-  }, [load, refreshApprovalGate]);
+    await Promise.all([
+      refreshProtection(),
+      refreshApprovalGate({ failClosed: true }),
+    ]);
+  }, [refreshApprovalGate, refreshProtection]);
 
   const handleOpenApprovalSettings = useCallback(() => {
     props.onNavigate("/settings?section=approval");

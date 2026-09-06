@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { HiMiniArrowTopRightOnSquare, HiMiniCloud, HiMiniExclamationTriangle } from "react-icons/hi2";
 
 import { startGuardCloudConnect } from "../guard-api";
@@ -25,6 +25,7 @@ function safeCloudSignInHref(value: string | null | undefined): string | null {
 function ManagedControlsPrimaryAction(props: {
   action: LocalProtectionView["primaryAction"];
   connecting: boolean;
+  checking: boolean;
   connectHref: string | null;
   onConnect: () => void;
   onRefresh: () => void;
@@ -40,8 +41,14 @@ function ManagedControlsPrimaryAction(props: {
   }
   if (props.action.action === "refresh") {
     return (
-      <button type="button" onClick={props.onRefresh} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">
-        {props.action.label}
+      <button
+        type="button"
+        onClick={props.onRefresh}
+        disabled={props.checking}
+        aria-busy={props.checking}
+        className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-60"
+      >
+        {props.checking ? "Checking…" : props.action.label}
       </button>
     );
   }
@@ -171,7 +178,39 @@ function recoveryNotice(recovery: LocalProtectionInput["recovery"]): string {
   if (recovery === "degraded") {
     return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
   }
-  return "Cloud sync is stale. Guard keeps the last verified authority fail-safe until a fresh acknowledgement succeeds.";
+  return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
+}
+
+type RefreshState = "idle" | "checking" | "complete" | "error";
+
+function effectiveStatusKey(effective: EffectiveExtensionControls): string {
+  const managed = effective.managed_controls;
+  return JSON.stringify({
+    schema_version: effective.schema_version,
+    health: effective.health,
+    revision: effective.revision,
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: effective.global_lockdown,
+    failure_codes: effective.failures
+      .map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`)
+      .sort(),
+    managed_controls: managed
+      ? {
+        control_set_id: managed.control_set_id,
+        control_set_name: managed.control_set_name,
+        bundle_version: managed.bundle_version,
+        workspace_id: managed.workspace_id,
+        authority_mode: managed.authority_mode,
+        catalog_digest: managed.catalog_digest,
+        acknowledgement: {
+          extension_authority_revision: managed.acknowledgement.extension_authority_revision,
+          policy_revision: managed.acknowledgement.policy_revision,
+          effective_projection_digest: managed.acknowledgement.effective_projection_digest,
+          status: managed.acknowledgement.status,
+        },
+      }
+      : null,
+  });
 }
 
 export function extensionLocalProtectionInput(
@@ -216,11 +255,26 @@ export function ExtensionManagedControlsPanel(props: {
   const [connecting, setConnecting] = useState(false);
   const [connectHref, setConnectHref] = useState<string | null>(null);
   const [connectMessage, setConnectMessage] = useState<string | null>(null);
+  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const refreshBaselineRef = useRef<string | null>(null);
   const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
   const view = buildLocalProtectionView(input);
   const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
-  const refresh = () => { void props.onRefresh(); };
+  const refresh = useCallback(async () => {
+    if (refreshState === "checking") return;
+    refreshBaselineRef.current = effectiveStatusKey(props.effective);
+    setRefreshState("checking");
+    setRefreshError(null);
+    try {
+      await props.onRefresh();
+      setRefreshState("complete");
+    } catch {
+      setRefreshState("error");
+      setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
+    }
+  }, [props.effective, props.onRefresh, refreshState]);
   const connect = useCallback(() => {
     setConnecting(true);
     setConnectMessage(null);
@@ -273,12 +327,22 @@ export function ExtensionManagedControlsPanel(props: {
           <ManagedControlsPrimaryAction
             action={view.primaryAction}
             connecting={connecting}
+            checking={refreshState === "checking"}
             connectHref={connectHref}
             onConnect={connect}
             onRefresh={refresh}
           />
         </div>
         {connectMessage ? <p role="status" className="mt-3 text-sm text-brand-dark/75">{connectMessage}</p> : null}
+        {refreshState === "checking" ? <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">Checking current protection status…</p> : null}
+        {refreshState === "complete" ? (
+          <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">
+            {effectiveStatusKey(props.effective) === refreshBaselineRef.current
+              ? "Check complete. No change detected; the current verified authority is still in use."
+              : "Check complete. Protection status updated."}
+          </p>
+        ) : null}
+        {refreshState === "error" && refreshError ? <p role="alert" className="mt-3 text-sm text-rose-800">{refreshError}</p> : null}
       </div>
       {!connected ? (
         <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75">

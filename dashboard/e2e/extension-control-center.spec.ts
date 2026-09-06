@@ -105,7 +105,14 @@ function effective(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function mount(page: Page, options: { malformedCatalog?: boolean; effective?: Record<string, unknown>; runtime?: unknown } = {}) {
+async function mount(page: Page, options: {
+  malformedCatalog?: boolean;
+  effective?: Record<string, unknown>;
+  runtime?: unknown;
+  failEffectiveRefresh?: boolean;
+  refreshEffectiveDelayMs?: number;
+} = {}) {
+  let effectiveCalls = 0;
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
@@ -118,7 +125,17 @@ async function mount(page: Page, options: { malformedCatalog?: boolean; effectiv
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
     else if (path.endsWith("/extension-controls/catalog")) {
       body = options.malformedCatalog ? { ...catalog(), extensions: [{ extension_id: "../../bad" }] } : catalog();
-    } else if (path.endsWith("/extension-controls/effective")) body = options.effective ?? effective();
+    } else if (path.endsWith("/extension-controls/effective")) {
+      effectiveCalls += 1;
+      if (effectiveCalls > 1 && options.failEffectiveRefresh) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable" }) });
+        return;
+      }
+      if (effectiveCalls > 1 && options.refreshEffectiveDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.refreshEffectiveDelayMs));
+      }
+      body = options.effective ?? effective();
+    }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
 }
@@ -268,6 +285,45 @@ test("canonical Extension detail exposes managed authority without gating local 
   await expect(page.getByText("Managed Git safety")).toBeVisible();
   await expect(page.getByText(/cannot weaken this workspace restriction/)).toBeVisible();
   await expect(page.getByText(/Local protection and local tightening remain available/)).toBeVisible();
+});
+
+test("managed controls reports loading and unchanged refresh results", async ({ page }) => {
+  await mount(page, {
+    refreshEffectiveDelayMs: 50,
+    effective: effective({
+      failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+      layers: [{
+        schema_version: "1.0.0",
+        kind: "signed-cloud",
+        catalog_digest: DIGEST,
+        global_lockdown: false,
+        controls: [{ target_kind: "extension", target_id: "command.git", state: "enabled" }],
+      }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
+  const checkAgain = page.getByRole("button", { name: "Check again", exact: true });
+  await checkAgain.click();
+  await expect(page.getByRole("button", { name: "Checking…", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "No change detected" })).toBeVisible();
+});
+
+test("managed controls reports a failed refresh without hiding the last state", async ({ page }) => {
+  await mount(page, {
+    failEffectiveRefresh: true,
+    effective: effective({
+      failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "last verified local authority remains in force" })).toBeVisible();
+  await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
 });
 
 test("dirty permission drafts require confirmation before click or keyboard tab changes", async ({ page }) => {

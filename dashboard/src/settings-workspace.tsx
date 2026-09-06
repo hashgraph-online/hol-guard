@@ -180,7 +180,7 @@ export function resolveApprovalPasswordSectionCopy(wasConfigured: boolean): stri
   if (wasConfigured) {
     return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
   }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
+  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -1069,6 +1069,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     openProofModal("change-password", { kind: "save" });
   }, [openProofModal]);
 
+  const handleOpenPasswordSetup = useCallback(() => {
+    openProofModal("setup-gate", { kind: "save" });
+  }, [openProofModal]);
+
   const handleRequestRevokeCooldown = useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
   }, [openProofModal]);
@@ -1588,6 +1592,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               totpActionError={totpActionError}
               onToggle={handleApprovalGateToggle}
               onOpenPasswordChangeModal={handleOpenPasswordChangeModal}
+              onOpenPasswordSetup={handleOpenPasswordSetup}
               onTotpCodeChange={handleApprovalGateTotpCode}
               onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
               onTotpActionPasswordChange={handleTotpActionPasswordChange}
@@ -2112,6 +2117,7 @@ type ApprovalGateCardProps = {
   totpActionError: string | null;
   onToggle: (event: ChangeEvent<HTMLInputElement>) => void;
   onOpenPasswordChangeModal: () => void;
+  onOpenPasswordSetup: () => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -2181,6 +2187,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 >
                   Change password
                 </button>
+              </div>
+            ) : props.enabled ? (
+              <div className="mt-3">
+                <ActionButton onClick={props.onOpenPasswordSetup} variant="outline">
+                  Set up approval password
+                </ActionButton>
               </div>
             ) : null}
           </div>

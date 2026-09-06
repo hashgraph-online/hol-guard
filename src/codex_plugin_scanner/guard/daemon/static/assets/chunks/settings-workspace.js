@@ -2711,7 +2711,7 @@ function resolveApprovalPasswordSectionCopy(wasConfigured) {
   if (wasConfigured) {
     return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
   }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
+  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
 function resolveTotpSetupModalTitle(isConfirmStep) {
   if (isConfirmStep) {
@@ -3482,6 +3482,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const handleOpenPasswordChangeModal = reactExports.useCallback(() => {
     openProofModal("change-password", { kind: "save" });
   }, [openProofModal]);
+  const handleOpenPasswordSetup = reactExports.useCallback(() => {
+    openProofModal("setup-gate", { kind: "save" });
+  }, [openProofModal]);
   const handleRequestRevokeCooldown = reactExports.useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
   }, [openProofModal]);
@@ -3965,6 +3968,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 totpActionError,
                 onToggle: handleApprovalGateToggle,
                 onOpenPasswordChangeModal: handleOpenPasswordChangeModal,
+                onOpenPasswordSetup: handleOpenPasswordSetup,
                 onTotpCodeChange: handleApprovalGateTotpCode,
                 onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
                 onTotpActionPasswordChange: handleTotpActionPasswordChange,
@@ -4361,7 +4365,7 @@ function ApprovalGateCard(props) {
             className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
             children: "Change password"
           }
-        ) }) : null
+        ) }) : props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenPasswordSetup, variant: "outline", children: "Set up approval password" }) }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Extra checks" }),

@@ -140,8 +140,16 @@ assert(
   "approval-password: configured copy points to save flow",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(false).includes("save settings"),
-  "approval-password: first-time copy points to save flow",
+  resolveApprovalPasswordSectionCopy(false).includes("setup action"),
+  "approval-password: first-time copy points to the explicit setup action",
+);
+assert(
+  settingsWorkspaceSource.includes("Set up approval password"),
+  "approval-password: first-time setup has an explicit action",
+);
+assert(
+  settingsWorkspaceSource.includes('openProofModal("setup-gate"'),
+  "approval-password: explicit setup reuses the setup-gate proof flow",
 );
 assert(
   resolveTotpSetupModalTitle(true) === "Confirm your approval password",
