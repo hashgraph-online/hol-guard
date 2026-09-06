@@ -1,6 +1,5 @@
 use super::glob_class::glob_class_matches as class_matches;
 
-
 fn constrained_token(pattern: &[u8], index: usize, value: u8) -> (usize, bool, bool) {
     if matches!(pattern[index], b'*' | b'?') {
         return (index + 1, false, false);
