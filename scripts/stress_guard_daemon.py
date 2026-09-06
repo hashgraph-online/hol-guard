@@ -251,9 +251,9 @@ def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
                 current_configured, target, workers, ready, busy = current
                 if (
                     current_configured == configured
-                    and target >= initial_target
-                    and workers == target
-                    and ready == target
+                    and target == configured
+                    and workers == configured
+                    and ready == configured
                     and busy == 0
                 ):
                     return
