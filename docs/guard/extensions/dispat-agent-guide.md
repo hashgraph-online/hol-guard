@@ -193,6 +193,144 @@ They complement the full checkout suite; they run inside the release, where earl
 already have published. `dispat run <script>` executes the named script, not the surrounding release
 hooks, so it does not implicitly run these additional gates.
 
+## Test the release-time changes and the built artifacts
+
+**A passing full suite before release does not replace package checks inside the release.** The
+suite tested the checkout as it existed then. When configured, version reconciliation can later
+change dependency ranges, package versions, replacement-rule text, and lockfiles. Build scripts can
+generate code or embed versions and channels. Those are new inputs that can break imports,
+dependency resolution, generated files, runtime behavior, or packaging even when the original
+checkout passed. Version work is optional, but its edits must be treated as code changes when it
+runs.
+
+Recommend three complementary layers, using the project's existing tools and required checks:
+
+| Layer                                       | Placement                                                                                               | What it checks                                                                                                                                          |
+| :------------------------------------------ | :------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Full workspace suite                        | CI gate before the release starts                                                                       | Cross-module behavior against the checkout, with the intended local workspace dependencies.                                                             |
+| Related package checks after reconciliation | `flow.beforeBuild`, or the beginning of the package's `flow.build` script                               | The releasing package and relevant integrations against the manifests, lockfiles, dependency versions, and generated inputs this release actually uses. |
+| Artifact smoke/acceptance checks            | After artifact creation inside `flow.build`, or in gating `flow.postBuild` / `flow.beforePublish` hooks | The actual binaries or packages about to be published, including startup and at least one representative operation.                                     |
+
+### Put package checks after the inputs they validate
+
+Prefer `flow.beforeBuild` for checks that require completed version and lockfile reconciliation: it
+runs after `autoVersion.syncLock`. `flow.postVersion` is earlier than that lockfile step, so it
+cannot prove the final dependency installation is usable. When tests require generated code or
+compiled artifacts, put them after that work inside the build script or in `flow.postBuild`.
+
+Dispat's [Go package configuration][dispat-pkg-config] and
+[service configuration][dispat-services-config] use `flow.beforeBuild: [tests:release]`. Their
+[`release-test` Docker target][dispat-test-dockerfile] runs Go tests with `GOWORK=off` against the
+rewritten module and provider tags. This checks the module a consumer resolves, while the earlier
+locally linked suite checks the current checkout. Adapt this distinction to the ecosystem: for pnpm,
+retain source `workspace:*` declarations and also inspect/install the packed package when its
+transformed dependency metadata is what consumers receive.
+
+Select tests that exercise the changed dependency boundary, not only the version-number field.
+Include required lint, type checks, unit tests, or integration checks for the package as
+appropriate. Use provider publication ordering when those checks fetch dependencies released in the
+same run; see `isBuildWaitingPublish` above. A package gate protects that package's publication.
+Earlier providers or independent packages may already have published when it fails, so it is not a
+repository-wide rollback mechanism.
+
+### Smoke-test the binaries that will ship
+
+For binary releases, recommend at least a smoke test after the build and before publication. Invoke
+the newly built binary by its explicit artifact path, not a same-named executable on `PATH` and not
+a test harness's independently rebuilt copy. Use the project's version/help flags and a small
+representative operation against temporary fixtures. For Dispat itself, bare invocation starts a
+release; discovery checks must use `--version` or `--help` explicitly. Check expected output, exit
+status, and a bounded runtime. An executable that only compiles or prints help has not yet
+demonstrated its core operation.
+
+Check the artifact's intended platform/architecture, executable permissions, runtime dependencies,
+and embedded release version/channel where applicable. Unpack archives or install into a temporary
+environment to catch missing resources and incorrect package layout. Exercise every supported target
+on an appropriate runner or supported emulator when possible. Inspecting cross-compiled binary
+metadata is useful but is not a runtime test; record which targets actually executed and which
+remain untested.
+
+The upstream [Dispat binary Dockerfile][dispat-binary-build] makes its export depend on the test
+stage. It validates binary metadata, executes Linux targets, and runs an end-to-end smoke suite
+against the built CLI. At the referenced revision, macOS and Windows execution happens in the
+post-release installation matrix, so that matrix is additional detection after publication, not a
+pre-publication gate for those platforms. An agent should report that coverage limit rather than
+claim all binaries were executed before release.
+
+### Keep the gate attached to the publish inputs
+
+For an explicitly requested pipeline change, this schematic configuration shows the ordering; the
+script names must resolve to the project's real commands:
+
+```yaml
+flow:
+  beforeBuild: [test-release-inputs]
+  build: [build-artifacts]
+  postBuild: [smoke-release-artifacts]
+  publish: [publish-tested-artifacts]
+```
+
+Pass the artifact from build to smoke and publish through [script outputs][output-env]. At the end
+of the build script, after the repository's real build has produced the file:
+
+```sh
+binary="$PWD/dist/my-cli"
+test -f "$binary" || exit 1
+printf 'BINARY=%s\n' "$binary" >> "${DISPAT_OUTPUT:?Missing Dispat output file}"
+```
+
+Dispat provides `$DISPAT_OUTPUT` as a temporary file for that stage/hook sequence. When the sequence
+finishes, it reads the `NAME=value` lines, stores them with the package, and injects
+`DISPAT_OUTPUT_<NAME>` into the environment of later sequences. Thus `BINARY=...` becomes
+`DISPAT_OUTPUT_BINARY`; appending `DISPAT_OUTPUT_BINARY=...` is an equivalent spelling. The
+`postBuild` smoke script receives it automatically:
+
+```sh
+binary=${DISPAT_OUTPUT_BINARY:?Build did not export BINARY}
+test -x "$binary" || exit 1
+"$binary" --version
+```
+
+This snippet demonstrates the handoff and startup check; add the repository's representative smoke
+assertions, including expected version output, to make it an acceptance gate. The later publish
+script reads the same `DISPAT_OUTPUT_BINARY` rather than guessing a path or rebuilding. Export
+archives, checksums, or other artifacts under additional names when needed. The value is a path, not
+transported file contents: the file must remain available to later scripts, including through any
+container mounts they use.
+
+This handoff is file capture followed by environment injection, not a shell pipe. Printing
+`BINARY=...` to stdout or using `export BINARY=...` in one script does not populate the next
+script's Dispat outputs. Values are captured after the whole stage/hook sequence: appending to the
+file does not immediately update `$DISPAT_OUTPUT_BINARY` in the current shell or the next command of
+the same sequence. Keep same-sequence values in ordinary shell variables within one script, or
+consume the exported value in a later hook/stage such as `postBuild`.
+
+See the [output-capture implementation][output-capture] for the sequence boundary. Outputs
+accumulate; re-exporting a name replaces its earlier value. `DISPAT_OUTPUTS` lists the names, and
+`DISPAT_OUTPUT_SOURCE_BINARY` identifies the exporting package and stage. During a release they
+remain package-scoped, except space login outputs as described in the environment table below. A
+captured output can survive a failing sequence for use by `onFail`, so its presence does not prove
+that the build passed. Preserve the sequence's failure and require the smoke gate to succeed before
+publishing.
+
+`beforeBuild` and `postBuild` failures are gating. A `postPublish` or `announce` check only warns
+after the publish has succeeded and cannot serve this purpose. Alternatively, put the smoke check at
+the end of `build-artifacts` itself: `dispat run build-artifacts` then exercises it too, whereas
+that script sweep does not invoke the release's surrounding hooks. This is why Dispat includes its
+binary smoke gate inside the build/export path.
+
+Publish the same artifact files that passed. If signing, bundling, or another transform changes the
+delivered artifact, validate the resulting package before exposing it; a rebuild inside `publish`
+can invalidate earlier smoke results. Carry artifact paths and, where useful, digests through the
+existing script-output mechanism. Cache checks only when the cache accounts for the reconciled
+manifests, lockfiles, source, generated inputs, toolchain, and build flags. Never turn a missing
+artifact, failed check, or unexpectedly skipped smoke test into success with a catch-all error
+suppression.
+
+Report the pre-release suite result, the release-time package checks, and the artifact/target smoke
+results separately. Keep the configuration permission boundary: recommend missing gates and identify
+the relevant existing scripts; add or change release hooks only on a direct instruction.
+
 ## Run lint, build, or tests for a selected change window
 
 `dispat run <script>` applies the same graph selection to any configured script, including lint,
@@ -644,6 +782,7 @@ Consult installed-version help and the corresponding source when these descripti
 [configuration]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/README.md
 [dependencies]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dependencies.md
 [diagnostics]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/plan-errors.md
+[dispat-binary-build]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/Dockerfile
 [dispat-docs-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/dispat.yaml
 [dispat-package-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/dispat.yaml
 [dispat-pkg-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/pkg/dispat.yaml
@@ -660,6 +799,7 @@ Consult installed-version help and the corresponding source when these descripti
 [login]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#flowlogin
 [manifest-formats]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/editing/manifests.md#supported-formats
 [outcome-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#run-outcome-data
+[output-capture]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/internal/release/outputs.go
 [output-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#script-outputs
 [packages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/packages.md
 [parser]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/parser.md
