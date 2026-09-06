@@ -105,6 +105,77 @@ Do not use a catch-all `|| true` or treat every nonzero exit as "nothing changed
 start a release or grant Guard approval. These exit-code meanings are command-specific; script
 helpers can return their scripts' own codes.
 
+## Gate on the full suite before starting a release
+
+The status gate answers whether release work is pending. A separate full-suite gate checks whether
+the proposed change breaks other modules, including modules that did not change. Use Dispat's own
+[release workflow][release-ci] as the reference: its `Full suite` job runs before the release job,
+and the release job declares `needs: [tests, ping]`. A failed suite or failed cleanup prevents that
+job from starting; the checks are not deferred to warning-only release hooks.
+
+The workflow temporarily links workspace dependencies to the checkout so consumers exercise the new
+provider code rather than an older published version. It then runs every package's configured
+`tests` script and always removes and verifies the links:
+
+```yaml
+# Excerpt from Dispat's release workflow; these script and package names are repository-specific.
+- name: Link the workspace dependencies
+  run: dispat run link --since all -p dispat
+
+- name: Run every package's tests
+  run: dispat run tests --since all
+
+- name: Unlink the workspace dependencies
+  if: always()
+  run: |
+    dispat run unlink --since all -p dispat
+    dispat run verify-unlinked --since all -p dispat
+```
+
+These steps run from the repository root. In another repository, inspect existing scripts and
+selection first; `link`, `unlink`, `verify-unlinked`, and `tests` are configured script names, not
+built-in commands. `--since all` widens the window to every package, but folder or explicit
+selection still narrows it. Use `--package '*'` when an explicit all-package selection is needed,
+including standalone packages. A package without the named script can do nothing: verify that every
+relevant module has test coverage, and run repository-wide integration checks with the repository's
+own tools when they are not represented by a package script. See [run].
+
+The [Dispat package configuration][dispat-package-config] defines `link` as
+`dispat autowriter --package dispat --since all --sync-lock=false --link-local`, and `unlink` as the
+same command with `--unlink-local`. This rewrites local dependency redirects; it does not publish
+new dependency versions. The verification script checks for surviving redirects with
+`dispat scanner --root-only --verify-unlinked` and checks the required Go checksum entries with a
+repository script. See [autowriter] for the supported manifest formats and flags.
+
+Use a disposable CI checkout for temporary manifest edits and preserve cleanup even when tests fail.
+A release does not automatically remove local links. For Go, avoid `go work sync` or `go mod tidy`
+while links exist: they can drop checksum entries needed after unlinking. Derived `--link-local`
+edits skip `package.json`; use the repository's existing ecosystem workspace/linking tools where
+appropriate. Do not invent replacement scripts or change Dispat configuration without the direct
+user instruction required above.
+
+Dispat orchestrates the dependency order; the ecosystem tools perform the checks. In its own
+repository, the [package scripts][dispat-pkg-config] call Docker Buildx targets in
+[`Dockerfile.gotest`][dispat-test-dockerfile], which run Go tests and vet with the repository's test
+reporting tools. Adapt the pattern to the target repository's existing build, lint, type-check,
+unit, and integration suites. Preserve failures through every wrapper and require the gate to pass
+for the revision being released. Do not treat `--on-error continue` as success: it lets dependent
+work proceed, but `dispat run` still exits `1` if any script fails.
+
+For faster PR feedback, Dispat's [test workflow][test-ci] instead uses
+`dispat run tests --since "$(sh scripts/ci-base.sh)" --consumers`, with a repository-specific base
+selection helper. This includes transitive consumers of changed packages but is not the all-package
+pre-release suite. Successful full-suite results provide evidence against cross-module regressions
+within the tests' coverage; they cannot guarantee that every possible regression is absent.
+
+Keep checks for the published form as well. Dispat's [package][dispat-pkg-config] and
+[service][dispat-services-config] configurations run `tests:release` in the gating
+`flow.beforeBuild` hook, after version reconciliation and lockfile synchronization. These tests
+resolve published provider tags without workspace redirects, checking what consumers will fetch.
+They complement the full checkout suite; they run inside the release, where earlier providers may
+already have published. `dispat run <script>` executes the named script, not the surrounding release
+hooks, so it does not implicitly run these additional gates.
+
 ## Respect an active release lock
 
 > **Important: defer unrelated pushes while the release lock exists.** Avoid pushing to the branch
@@ -228,6 +299,7 @@ including with `--require-release`, as described in the dedicated lock documenta
 pages describes a pre-lock empty-plan check and should not be used as a release-preview guarantee.
 Consult installed-version help and the corresponding source when these descriptions differ.
 
+[autowriter]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/autowriter.md
 [ccme]: https://github.com/yohimik/dispat/blob/main/specs/ccme-spec/SPEC.md
 [ccme-api]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/go/ccme.md
 [change-scope]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/change-scope.md
@@ -237,6 +309,10 @@ Consult installed-version help and the corresponding source when these descripti
 [configuration]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/README.md
 [dependencies]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dependencies.md
 [diagnostics]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/plan-errors.md
+[dispat-package-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/dispat.yaml
+[dispat-pkg-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/pkg/dispat.yaml
+[dispat-services-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat.yaml
+[dispat-test-dockerfile]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/Dockerfile.gotest
 [dotenv]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dotenv.md
 [environment]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/env.md
 [hooks]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/run-hooks.md
@@ -249,6 +325,7 @@ Consult installed-version help and the corresponding source when these descripti
 [records]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/records.md
 [recovery]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/recovery.md
 [refs]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/refs.md
+[release-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/release.yml
 [run]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/run.md
 [scanner]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/scanner.md
 [scripts]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/scripts.md
@@ -256,4 +333,5 @@ Consult installed-version help and the corresponding source when these descripti
 [stages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md#stages-and-hooks
 [status]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/status.md
 [steps]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/steps.md
+[test-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/tests.yml
 [versions]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/versions.md
