@@ -479,6 +479,50 @@ a space cannot override `flow.login`. A [standalone package][standalone-packages
 single-package space. Its authentication belongs in `flow.beforePublish`, which runs per package.
 See the [login contract][login].
 
+### Choose native parsing or literal replacement before custom scripts
+
+When the task calls for version reconciliation, prefer the existing `autoVersion` policy for
+[supported manifests][manifest-formats], such as `package.json`, `go.mod`, and `Cargo.toml`. The
+parsing strategy understands dependency declarations and changes version text while preserving
+surrounding formatting. `manifests: root` is the default; use `all` only when nested manifests
+intentionally belong to the reconciliation scope. Check `match`, `only`, `kinds`, `range`, and
+`writeVersion` so the edits preserve the project's dependency and own-version policies, including
+pnpm's persistent `workspace:*` ranges. A separate `flow.version` script is unnecessary when native
+configuration already expresses the work.
+
+For unsupported file syntax or version strings outside parsed manifest fields, use
+[`autoVersion.replace`][replacement-rules] where a literal rule can express the change. It performs
+literal byte-for-byte string substitution after expanding placeholders, with no file parsing or
+regular-expression matching. For example, this configuration fragment reconciles a custom text file
+containing dependency coordinates:
+
+```yaml
+# Example for an explicitly requested configuration change; adapt to the actual package.
+autoVersion:
+  manifests: none
+  replace:
+    - files: [dependency-pins.txt]
+      find: 'com.acme:{provider}:{providerPrevious}'
+      write: 'com.acme:{provider}:{providerVersion}'
+```
+
+Use `manifests: none` only when parsing should be disabled. If a package has both supported
+manifests and extra text to update, keep `root` or `all` and add `replace`: native parsing runs
+first, then replacement rules, then any `flow.version` script. `syncLock` follows version work where
+configured and applicable. Unsupported syntax alone is not a reason to invent a shell replacer or
+add a custom version stage.
+
+Provider placeholders expand once per declared provider; keep the corresponding `dependencies` edges
+accurate because a text rule cannot discover the graph. `{name}`, `{previous}`, and `{version}`
+refer to the package itself; `{provider}`, `{providerPrevious}`, and `{providerVersion}` refer to
+its dependency. File globs are relative to the package folder. Match a distinctive full coordinate,
+not a bare version that could appear elsewhere: every occurrence is replaced, and rules run in order
+over the preceding result. Inspect the diff and run the file's ecosystem checks; literal
+substitution cannot validate its syntax or meaning. Review `W222` for unmatched text, and check glob
+coverage separately because a glob reaching no files does not warn. An already-applied replacement
+is recognized on a retry. Adding or changing these rules still requires the direct configuration
+instruction described above.
+
 ### Which environment each stage receives
 
 The [script environment reference][script-env] defines the variables. The base layers are the parent
@@ -614,6 +658,7 @@ Consult installed-version help and the corresponding source when these descripti
 [infra-rebuild]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/rebuild.sh
 [lock]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/release-lock.md
 [login]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#flowlogin
+[manifest-formats]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/editing/manifests.md#supported-formats
 [outcome-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#run-outcome-data
 [output-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#script-outputs
 [packages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/packages.md
@@ -626,6 +671,7 @@ Consult installed-version help and the corresponding source when these descripti
 [recovery]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/recovery.md
 [refs]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/refs.md
 [release-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/release.yml
+[replacement-rules]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/editing/replacer.md#replacing-during-a-release
 [run]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/run.md
 [scanner]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/scanner.md
 [script-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md
