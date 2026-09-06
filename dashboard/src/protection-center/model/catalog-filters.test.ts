@@ -11,11 +11,14 @@ import {
   catalogItemMatchesFilters,
   catalogKindLabel,
   catalogTrustLabel,
+  catalogFiltersEqual,
+  customItemMatchesFilters,
   customItemMatchesKind,
   EMPTY_CATALOG_FILTERS,
   filterCatalogExtensions,
   populatedCatalogAreaOptions,
   populatedCatalogAreas,
+  pruneCatalogFilters,
   toggleCatalogFilterValue,
 } from "./catalog-filters";
 
@@ -99,6 +102,27 @@ assert.equal(customItemMatchesKind({ surface: "mcp" }, []), true);
 assert.equal(customItemMatchesKind({ surface: "mcp" }, ["mcp"]), true);
 assert.equal(customItemMatchesKind({ surface: "cli" }, ["mcp"]), false);
 assert.equal(customItemMatchesKind({ surface: "package-scripts" }, ["commands"]), true);
+assert.equal(customItemMatchesFilters({ surface: "mcp" }, EMPTY_CATALOG_FILTERS), true);
+assert.equal(customItemMatchesFilters({ surface: "mcp" }, { ...EMPTY_CATALOG_FILTERS, kinds: ["mcp"] }), true);
+assert.equal(customItemMatchesFilters({ surface: "cli" }, { ...EMPTY_CATALOG_FILTERS, kinds: ["mcp"] }), false);
+assert.equal(customItemMatchesFilters({ surface: "mcp" }, { ...EMPTY_CATALOG_FILTERS, trusts: ["external"] }), false);
+assert.equal(customItemMatchesFilters({ surface: "cli" }, { ...EMPTY_CATALOG_FILTERS, areas: ["cloud-infrastructure"] }), false);
+
+const stale = {
+  trusts: ["external", "first-party"] as const,
+  kinds: ["mcp", "commands"] as const,
+  areas: ["cloud-infrastructure", "ai-workflows"] as const,
+};
+const pruned = pruneCatalogFilters({
+  trusts: [...stale.trusts],
+  kinds: [...stale.kinds],
+  areas: [...stale.areas],
+}, [git, aws]);
+assert.deepEqual(pruned.trusts, ["first-party"]);
+assert.deepEqual(pruned.kinds, ["commands"]);
+assert.deepEqual(pruned.areas, ["cloud-infrastructure"]);
+assert.equal(catalogFiltersEqual(pruned, pruned), true);
+assert.equal(catalogFiltersEqual(pruned, EMPTY_CATALOG_FILTERS), false);
 
 assert.equal(catalogFilterCountCopy(66, 66, false), "66 tools");
 assert.equal(catalogFilterCountCopy(1, 1, false), "1 tool");

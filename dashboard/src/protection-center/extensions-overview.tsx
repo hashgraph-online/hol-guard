@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   catalogRowSecondLine,
@@ -23,9 +23,11 @@ import { PROTECTION_TERMS } from "./copy/protection-copy";
 import {
   catalogFilterCountCopy,
   catalogFiltersActive,
-  customItemMatchesKind,
+  catalogFiltersEqual,
+  customItemMatchesFilters,
   EMPTY_CATALOG_FILTERS,
   filterCatalogExtensions,
+  pruneCatalogFilters,
   type CatalogFilterState,
 } from "./model/catalog-filters";
 import type { ProtectionStatusView } from "./model/protection-presentation";
@@ -72,7 +74,7 @@ function CatalogFilterEmpty(props: { onClear: () => void }) {
     <div className="mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6">
       <p className="text-sm font-semibold text-brand-dark">No extensions match these filters.</p>
       <p className="mt-1 text-sm leading-6 text-brand-dark/70">Clear a chip or start over to see the full catalog again.</p>
-      <button type="button" className="guard-catalog-filter-clear mt-3" onClick={props.onClear}>
+      <button type="button" className="guard-extensions-chip mt-3" onClick={props.onClear}>
         Clear filters
       </button>
     </div>
@@ -97,6 +99,13 @@ export function ExtensionsOverview(props: {
 }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
+  useEffect(() => {
+    setFilters((current) => {
+      const next = pruneCatalogFilters(current, props.catalogExtensions);
+      if (catalogFiltersEqual(current, next)) return current;
+      return next;
+    });
+  }, [props.catalogExtensions]);
   // An active search replaces the catalogs below it: results, then the Tools
   // match group. Rendering the full list under the results would force the
   // operator to visually skip fifty-nine unchanged rows.
@@ -113,7 +122,7 @@ export function ExtensionsOverview(props: {
   // added) render no custom section: the section lists added extensions, and
   // its Add button would otherwise be the section's only content.
   const addedCustomItems = addedCustomExtensions(props.localCliItems).filter((item) =>
-    customItemMatchesKind(item, filters.kinds),
+    customItemMatchesFilters(item, filters),
   );
   const addedCustomCount = addedCustomItems.length;
   return (

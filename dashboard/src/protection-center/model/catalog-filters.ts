@@ -83,6 +83,41 @@ export function customItemMatchesKind(
   return kinds.includes("commands");
 }
 
+export function customItemMatchesFilters(
+  item: Pick<LocalCliItem, "surface">,
+  filters: CatalogFilterState,
+): boolean {
+  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
+  return customItemMatchesKind(item, filters.kinds);
+}
+
+function sameFilterValues<T extends string>(left: readonly T[], right: readonly T[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+
+export function catalogFiltersEqual(left: CatalogFilterState, right: CatalogFilterState): boolean {
+  return (
+    sameFilterValues(left.trusts, right.trusts)
+    && sameFilterValues(left.kinds, right.kinds)
+    && sameFilterValues(left.areas, right.areas)
+  );
+}
+
+export function pruneCatalogFilters(
+  filters: CatalogFilterState,
+  extensions: readonly ExtensionCatalogItem[],
+): CatalogFilterState {
+  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
+  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentAreas = new Set(populatedCatalogAreas(extensions));
+  return {
+    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
+    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
+    areas: filters.areas.filter((area) => presentAreas.has(area)),
+  };
+}
+
 export function catalogToolUnit(count: number): string {
   if (count === 1) return "tool";
   return "tools";

@@ -4374,6 +4374,27 @@ function customItemMatchesKind(item, kinds) {
   if (item.surface === "mcp") return kinds.includes("mcp");
   return kinds.includes("commands");
 }
+function customItemMatchesFilters(item, filters) {
+  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
+  return customItemMatchesKind(item, filters.kinds);
+}
+function sameFilterValues(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+function catalogFiltersEqual(left, right) {
+  return sameFilterValues(left.trusts, right.trusts) && sameFilterValues(left.kinds, right.kinds) && sameFilterValues(left.areas, right.areas);
+}
+function pruneCatalogFilters(filters, extensions) {
+  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
+  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentAreas = new Set(populatedCatalogAreas(extensions));
+  return {
+    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
+    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
+    areas: filters.areas.filter((area) => presentAreas.has(area))
+  };
+}
 function catalogToolUnit(count) {
   if (count === 1) return "tool";
   return "tools";
@@ -4408,10 +4429,10 @@ function CatalogFilterChip(props) {
       "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
       disabled: props.disabled,
       onClick: props.onToggle,
-      className: "guard-catalog-filter",
+      className: "group inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[rgba(63,65,116,0.16)] bg-white px-3.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: props.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-catalog-filter-count tabular-nums", children: props.count })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
       ]
     }
   );
@@ -4525,7 +4546,7 @@ function CatalogFilterBar(props) {
         area.id
       )) })
     ] }),
-    filtering ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-catalog-filter-clear", onClick: handleClear, children: [
+    filtering ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
       "Clear filters"
     ] }) }) : null
@@ -5145,12 +5166,19 @@ function CatalogFilterEmpty(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Clear a chip or start over to see the full catalog again." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-catalog-filter-clear mt-3", onClick: props.onClear, children: "Clear filters" })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
   ] });
 }
 function ExtensionsOverview(props) {
   const [query, setQuery] = reactExports.useState("");
   const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
+  reactExports.useEffect(() => {
+    setFilters((current) => {
+      const next = pruneCatalogFilters(current, props.catalogExtensions);
+      if (catalogFiltersEqual(current, next)) return current;
+      return next;
+    });
+  }, [props.catalogExtensions]);
   const searching = query.trim().length > 0;
   const filtering = catalogFiltersActive(filters);
   const visibleCatalog = reactExports.useMemo(
@@ -5161,7 +5189,7 @@ function ExtensionsOverview(props) {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
   const addedCustomItems = addedCustomExtensions(props.localCliItems).filter(
-    (item) => customItemMatchesKind(item, filters.kinds)
+    (item) => customItemMatchesFilters(item, filters)
   );
   const addedCustomCount = addedCustomItems.length;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [

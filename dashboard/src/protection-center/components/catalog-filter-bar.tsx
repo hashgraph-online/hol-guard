@@ -32,10 +32,10 @@ function CatalogFilterChip(props: {
       aria-label={catalogFilterChipAriaLabel(props.label, props.count)}
       disabled={props.disabled}
       onClick={props.onToggle}
-      className="guard-catalog-filter"
+      className="group inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[rgba(63,65,116,0.16)] bg-white px-3.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none"
     >
       <span>{props.label}</span>
-      <span className="guard-catalog-filter-count tabular-nums">{props.count}</span>
+      <span className="tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65">{props.count}</span>
     </button>
   );
 }
@@ -186,7 +186,7 @@ export function CatalogFilterBar(props: {
       </div>
       {filtering ? (
         <div className="mt-3">
-          <button type="button" className="guard-catalog-filter-clear" onClick={handleClear}>
+          <button type="button" className="guard-extensions-chip" onClick={handleClear}>
             <HiMiniXMark className="size-4" aria-hidden="true" />
             Clear filters
           </button>
