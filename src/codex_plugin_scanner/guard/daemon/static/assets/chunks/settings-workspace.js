@@ -2476,11 +2476,11 @@ function SettingsSelectRow({
   ] });
 }
 function resolveApprovalPasswordSectionCopy(wasConfigured, enabled = true) {
-  if (!enabled) {
-    return "Enable the approval gate above before setting an approval password.";
-  }
   if (wasConfigured) {
     return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
+  }
+  if (!enabled) {
+    return "Enable the approval gate above before setting an approval password.";
   }
   return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }

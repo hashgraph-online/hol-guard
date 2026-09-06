@@ -141,6 +141,10 @@ assert(
   "approval-password: configured copy points to save flow",
 );
 assert(
+  resolveApprovalPasswordSectionCopy(true, false).includes("Save settings"),
+  "approval-password: configured copy wins when the gate is disabled",
+);
+assert(
   resolveApprovalPasswordSectionCopy(false).includes("setup action"),
   "approval-password: first-time copy points to the explicit setup action",
 );
