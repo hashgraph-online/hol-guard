@@ -54,4 +54,20 @@ def _resolve_targets(
     raise ValueError(f"No supported Guard harnesses detected for {action}; pass one explicitly or configure one first.")
 
 
-__all__ = ["_resolve_targets"]
+def sole_harness_name(value: object) -> str | None:
+    """Collapse the install parser's one-or-many harness argument.
+
+    `install` accepts several harnesses per invocation; helpers that reason
+    about a single requested harness read a single-element list as that name
+    and anything larger as unspecified.
+    """
+    if isinstance(value, str):
+        name = value.strip()
+        return name or None
+    if isinstance(value, (list, tuple)) and len(value) == 1 and isinstance(value[0], str):
+        name = value[0].strip()
+        return name or None
+    return None
+
+
+__all__ = ["_resolve_targets", "sole_harness_name"]
