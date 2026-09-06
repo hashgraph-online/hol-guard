@@ -1,4 +1,4 @@
-import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aU as HiMiniNoSymbol, aV as startGuardCloudConnect, aW as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aX as guardAwareHref } from "../guard-dashboard.js";
+import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ad as HiMiniAdjustmentsHorizontal, aU as HiMiniCheck, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aV as HiMiniNoSymbol, aW as startGuardCloudConnect, aX as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aY as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -4420,7 +4420,7 @@ function populatedCatalogAreaOptions(extensions) {
 function catalogFilterChipCount(extensions, filters, patch) {
   return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
 }
-function CatalogFilterChip(props) {
+function CatalogFilterOption(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
     {
@@ -4429,26 +4429,48 @@ function CatalogFilterChip(props) {
       "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
       disabled: props.disabled,
       onClick: props.onToggle,
-      className: "group inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[rgba(63,65,116,0.16)] bg-white px-3.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
+      className: "group flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-[rgba(63,65,116,0.16)] bg-white px-2.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: props.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-4 shrink-0 place-items-center text-brand-blue", children: props.pressed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4", "aria-hidden": "true" }) : null }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.label })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
       ]
     }
   );
 }
+function ActiveFilterToken(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-label": `Remove ${props.valueLabel} ${props.groupLabel.toLowerCase()} filter`,
+      onClick: props.onRemove,
+      className: "group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-blue/45 bg-brand-blue/10 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-dark transition-colors hover:border-brand-blue hover:bg-brand-blue/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-dark/65", children: [
+          props.groupLabel,
+          ":"
+        ] }),
+        props.valueLabel,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3.5 shrink-0 text-brand-dark/55 group-hover:text-brand-dark", "aria-hidden": "true" })
+      ]
+    }
+  );
+}
 function CatalogFilterGroup(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "min-w-0", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: `min-w-0 ${props.className ?? ""}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold text-brand-dark/55", children: props.legend }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-wrap gap-2", children: props.children })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-col gap-1.5", children: props.children })
   ] });
 }
-function TrustFilterChip(props) {
+function TrustFilterOption(props) {
   const handleToggle = reactExports.useCallback(() => {
     props.onToggle(props.value);
   }, [props]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterChip,
+    CatalogFilterOption,
     {
       label: catalogTrustLabel(props.value),
       count: props.count,
@@ -4458,12 +4480,12 @@ function TrustFilterChip(props) {
     }
   );
 }
-function KindFilterChip(props) {
+function KindFilterOption(props) {
   const handleToggle = reactExports.useCallback(() => {
     props.onToggle(props.value);
   }, [props]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterChip,
+    CatalogFilterOption,
     {
       label: catalogKindLabel(props.value),
       count: props.count,
@@ -4473,12 +4495,12 @@ function KindFilterChip(props) {
     }
   );
 }
-function AreaFilterChip(props) {
+function AreaFilterOption(props) {
   const handleToggle = reactExports.useCallback(() => {
     props.onToggle(props.value);
   }, [props]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterChip,
+    CatalogFilterOption,
     {
       label: props.label,
       count: props.count,
@@ -4489,8 +4511,12 @@ function AreaFilterChip(props) {
   );
 }
 function CatalogFilterBar(props) {
+  const [panelOpen, setPanelOpen] = reactExports.useState(false);
+  const panelId = reactExports.useId();
+  const triggerRef = reactExports.useRef(null);
   const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
   const filtering = catalogFiltersActive(props.filters);
+  const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
   const handleToggleTrust = reactExports.useCallback((value) => {
     props.onChange({
       ...props.filters,
@@ -4512,44 +4538,113 @@ function CatalogFilterBar(props) {
   const handleClear = reactExports.useCallback(() => {
     props.onChange(EMPTY_CATALOG_FILTERS);
   }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 scroll-mt-28", "data-testid": "catalog-filters", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        TrustFilterChip,
+  const handleKeyDown = reactExports.useCallback((event) => {
+    if (event.key !== "Escape" || !panelOpen) return;
+    event.stopPropagation();
+    setPanelOpen(false);
+    triggerRef.current?.focus();
+  }, [panelOpen]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 scroll-mt-28", "data-testid": "catalog-filters", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
         {
-          value: trust,
-          count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
-          pressed: props.filters.trusts.includes(trust),
-          onToggle: handleToggleTrust
-        },
-        trust
-      )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        KindFilterChip,
+          type: "button",
+          ref: triggerRef,
+          "aria-expanded": panelOpen,
+          "aria-controls": panelId,
+          onClick: () => setPanelOpen((open) => !open),
+          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+            "Filters",
+            activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: activeCount }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniChevronDown,
+              {
+                className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`,
+                "aria-hidden": "true"
+              }
+            )
+          ]
+        }
+      ),
+      props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
         {
-          value: kind,
-          count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
-          pressed: props.filters.kinds.includes(kind),
-          onToggle: handleToggleKind
+          groupLabel: "Trust",
+          valueLabel: catalogTrustLabel(trust),
+          onRemove: () => handleToggleTrust(trust)
         },
-        kind
-      )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        AreaFilterChip,
+        `trust-${trust}`
+      )),
+      props.filters.kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
         {
-          value: area.id,
-          label: area.label,
-          count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
-          pressed: props.filters.areas.includes(area.id),
-          onToggle: handleToggleArea
+          groupLabel: "Kind",
+          valueLabel: catalogKindLabel(kind),
+          onRemove: () => handleToggleKind(kind)
         },
-        area.id
-      )) })
+        `kind-${kind}`
+      )),
+      props.filters.areas.map((areaId) => {
+        const area = areas.find((option) => option.id === areaId);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveFilterToken,
+          {
+            groupLabel: "Area",
+            valueLabel: area?.label ?? areaId,
+            onRemove: () => handleToggleArea(areaId)
+          },
+          `area-${areaId}`
+        );
+      }),
+      filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+        "Clear filters"
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden text-xs text-brand-dark/70 sm:inline", children: "Narrow by trust, kind, or area." })
     ] }),
-    filtering ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
-      "Clear filters"
-    ] }) }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: panelId,
+        hidden: !panelOpen,
+        className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TrustFilterOption,
+            {
+              value: trust,
+              count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
+              pressed: props.filters.trusts.includes(trust),
+              onToggle: handleToggleTrust
+            },
+            trust
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            KindFilterOption,
+            {
+              value: kind,
+              count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
+              pressed: props.filters.kinds.includes(kind),
+              onToggle: handleToggleKind
+            },
+            kind
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            AreaFilterOption,
+            {
+              value: area.id,
+              label: area.label,
+              count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
+              pressed: props.filters.areas.includes(area.id),
+              onToggle: handleToggleArea
+            },
+            area.id
+          )) }) })
+        ] })
+      }
+    )
   ] });
 }
 const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
@@ -5165,7 +5260,7 @@ function CatalogExtensionRow(props) {
 function CatalogFilterEmpty(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Clear a chip or start over to see the full catalog again." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Remove a filter or start over to see the full catalog again." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
   ] });
 }
