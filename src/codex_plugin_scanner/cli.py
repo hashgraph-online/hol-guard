@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
@@ -46,7 +47,7 @@ def _run_lint(args: argparse.Namespace) -> int:
     return run_lint(args, get_rule_spec_fn=cli_module.get_rule_spec)
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "get_rule_spec":
         from .rules import get_rule_spec
 
