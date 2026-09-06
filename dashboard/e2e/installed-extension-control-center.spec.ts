@@ -122,6 +122,17 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await expect(page.getByText(`${expectedExtensionCount} tools`)).toBeVisible();
   await expect(page.getByRole("button", { name: /Git/ }).first()).toBeVisible();
   await expect(page.getByPlaceholder(/Search any command Guard watches/)).toBeVisible();
+  await expect(page.getByTestId("catalog-filters")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Trust" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Kind" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Area" })).toBeVisible();
+  const externalFilter = page.getByTestId("catalog-filters").getByRole("button", { name: /^External,/ });
+  await expect(externalFilter).toBeVisible();
+  await externalFilter.click();
+  await expect(externalFilter).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/of \d+ tools/)).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(externalFilter).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("heading", { name: /^(Protected|Finish setup|Needs repair|Protection limited|Emergency Lockdown active)$/ })).toBeVisible();
   // The landing is a catalog: no activity feed, no cloud status box, no health
   // check, and no second search surface.
