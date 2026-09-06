@@ -129,6 +129,7 @@ provider code rather than an older published version. It then runs every package
   if: always()
   run: |
     dispat run unlink --since all -p dispat
+    # Dispat-specific verification; optional when adapting this pattern to another project.
     dispat run verify-unlinked --since all -p dispat
 ```
 
@@ -146,6 +147,14 @@ same command with `--unlink-local`. This rewrites local dependency redirects; it
 new dependency versions. The verification script checks for surviving redirects with
 `dispat scanner --root-only --verify-unlinked` and checks the required Go checksum entries with a
 repository script. See [autowriter] for the supported manifest formats and flags.
+
+A separate `verify-unlinked` script is optional when adopting this pattern; choose verification
+appropriate to the project's ecosystem and existing checks. Dispat's own CI requires its script to
+protect consumers from leftover local redirects and missing Go checksums. It can catch writer
+regressions, but also incomplete cleanup or checksum changes made by other toolchain commands. This
+is not a requirement to add the same script to every project or permission to remove an existing
+required check. Removing temporary links before publishing remains necessary even when there is no
+separate verification script.
 
 Use a disposable CI checkout for temporary manifest edits and preserve cleanup even when tests fail.
 A release does not automatically remove local links. For Go, avoid `go work sync` or `go mod tidy`
