@@ -8,8 +8,11 @@ export type GuardUpdateChannelSummaryProps = {
   onManage: () => void;
 };
 
+export const GUARD_UPDATE_ACTION_BUTTON_CLASS =
+  "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+
 export function GuardUpdateChannelSummary(props: GuardUpdateChannelSummaryProps) {
-  let versionContent: ReactNode = <span className="min-w-0 flex-1" aria-hidden="true" />;
+  let versionContent: ReactNode = null;
   if (props.version) {
     versionContent = (
       <p
@@ -24,20 +27,23 @@ export function GuardUpdateChannelSummary(props: GuardUpdateChannelSummaryProps)
   let channelAction: ReactNode;
   if (props.useAlpha) {
     channelAction = (
-      <div
-        className="inline-flex min-w-0 shrink-0 items-center gap-1.5"
-        role="status"
-        aria-label="Alpha updates enabled"
-      >
-        <HiMiniBeaker className="h-3 w-3 shrink-0 text-brand-blue" aria-hidden="true" />
-        <span className="text-[11px] font-semibold leading-4 text-brand-blue">Alpha updates</span>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div
+          className="inline-flex min-w-0 items-center gap-1.5"
+          role="status"
+          aria-label="Alpha updates enabled"
+        >
+          <HiMiniBeaker className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+          <span className="text-sm font-semibold leading-5 text-brand-blue">Alpha updates</span>
+        </div>
         <button
           type="button"
           onClick={props.onManage}
           disabled={props.busy}
           aria-label="Manage alpha updates"
           title="Manage alpha updates"
-          className="rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
+          data-testid="guard-alpha-updates-control"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Manage
         </button>
@@ -49,12 +55,19 @@ export function GuardUpdateChannelSummary(props: GuardUpdateChannelSummaryProps)
         type="button"
         onClick={props.onManage}
         disabled={props.busy}
-        className="shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
+        data-testid="guard-alpha-updates-control"
+        className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
       >
+        <HiMiniBeaker className="h-4 w-4 shrink-0" aria-hidden="true" />
         Try alpha updates
       </button>
     );
   }
 
-  return <div className="flex items-center justify-between gap-2">{versionContent}{channelAction}</div>;
+  return (
+    <div className="space-y-1.5">
+      {versionContent}
+      {channelAction}
+    </div>
+  );
 }

@@ -20104,11 +20104,12 @@ function GuardModalLayer({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onCloseRef.current();
       }
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [mounted]);
   const handleBackdropClick = (event) => {
     if (event.target === event.currentTarget) {
@@ -20141,8 +20142,9 @@ function GuardModalLayer({
     overlayRoot
   );
 }
+const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
-  let versionContent = /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" });
+  let versionContent = null;
   if (props.version) {
     versionContent = /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "p",
@@ -20158,43 +20160,50 @@ function GuardUpdateChannelSummary(props) {
   }
   let channelAction;
   if (props.useAlpha) {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
-        role: "status",
-        "aria-label": "Alpha updates enabled",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onManage,
-              disabled: props.busy,
-              "aria-label": "Manage alpha updates",
-              title: "Manage alpha updates",
-              className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-              children: "Manage"
-            }
-          )
-        ]
-      }
-    );
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "inline-flex min-w-0 items-center gap-1.5",
+          role: "status",
+          "aria-label": "Alpha updates enabled",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold leading-5 text-brand-blue", children: "Alpha updates" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onManage,
+          disabled: props.busy,
+          "aria-label": "Manage alpha updates",
+          title: "Manage alpha updates",
+          "data-testid": "guard-alpha-updates-control",
+          className: "inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+          children: "Manage"
+        }
+      )
+    ] });
   } else {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsx(
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         type: "button",
         onClick: props.onManage,
         disabled: props.busy,
-        className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-        children: "Try alpha updates"
+        "data-testid": "guard-alpha-updates-control",
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+          "Try alpha updates"
+        ]
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
     versionContent,
     channelAction
   ] });
@@ -20284,7 +20293,7 @@ function GuardUpdatePanel(props) {
       {
         type: "button",
         onClick: props.onUpdateGuard,
-        className: "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
           "Update Guard"
@@ -20296,7 +20305,7 @@ function GuardUpdatePanel(props) {
       {
         type: "button",
         onClick: props.onReinstallGuard,
-        className: "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
           "Reinstall from PyPI"
@@ -20731,6 +20740,9 @@ function useNavigationDrawerFocus(open, dialogRef, closeButtonRef, onClose) {
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (Number(document.documentElement.dataset.guardModalOpen ?? 0) > 0) {
+          return;
+        }
         event.preventDefault();
         onClose();
         return;
@@ -20887,6 +20899,7 @@ function NavigationDrawer(props) {
                       updateError: props.updateError,
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
+                      onSetUpdateChannel: props.onSetUpdateChannel,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -21099,6 +21112,7 @@ function PersistentSidebar(props) {
                   updateError: props.updateError,
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
+                  onSetUpdateChannel: props.onSetUpdateChannel,
                   approvalGate: props.approvalGate
                 }
               )
@@ -31049,7 +31063,8 @@ function ApprovalCenterLayout(props) {
     updatePhase,
     updateError,
     onUpdateGuard,
-    onReinstallGuard
+    onReinstallGuard,
+    onSetUpdateChannel
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -31066,6 +31081,7 @@ function ApprovalCenterLayout(props) {
         updateError,
         onUpdateGuard,
         onReinstallGuard,
+        onSetUpdateChannel,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
@@ -32088,7 +32104,7 @@ export {
   waitForCloudConnection as Z,
   activeFailedHarnesses as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniTrash as a$,
+  HiMiniRocketLaunch as a$,
   HiMiniExclamationCircle as a0,
   ProofStrip as a1,
   HiMiniEye as a2,
@@ -32119,13 +32135,13 @@ export {
   approvalProofRecentlySatisfied as aR,
   HiMiniArrowLeft as aS,
   HiMiniPlus as aT,
-  HiMiniNoSymbol as aU,
-  startGuardCloudConnect as aV,
-  HiMiniArrowTopRightOnSquare as aW,
-  guardAwareHref as aX,
-  runHarnessAction as aY,
-  GuardHarnessActionError as aZ,
-  HiMiniRocketLaunch as a_,
+  HiMiniCheck as aU,
+  HiMiniNoSymbol as aV,
+  startGuardCloudConnect as aW,
+  HiMiniArrowTopRightOnSquare as aX,
+  guardAwareHref as aY,
+  runHarnessAction as aZ,
+  GuardHarnessActionError as a_,
   HiMiniKey as aa,
   HiMiniLockClosed as ab,
   HiMiniBellAlert as ac,
@@ -32154,31 +32170,31 @@ export {
   deriveProtectionPosture as az,
   HiMiniCommandLine as b,
   PaginationControls as b$,
-  isGuardDemoMode as b0,
-  fetchGuardApi as b1,
-  formatHarnessCommand as b2,
-  fetchApprovalPage as b3,
-  fetchPolicy as b4,
-  HiMiniHome as b5,
-  guardActionPresentation as b6,
-  DEFAULT_FILTER_STATE as b7,
-  filterEvidence as b8,
-  sortEvidence as b9,
-  runPackageSync as bA,
-  startPackageFirewallConnect as bB,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bC,
-  repairSupplyChainProtection as bD,
-  runPackageFirewallAction as bE,
-  parseInterceptProofSnapshot as bF,
-  activatePackageFirewallRuntime as bG,
-  EntitlementNotice as bH,
-  fetchReceipts as bI,
-  lazyWorkspace as bJ,
-  __vitePreload as bK,
-  scopeLabel as bL,
-  HiMiniDocumentText as bM,
-  HiMiniCloudArrowUp as bN,
-  HiMiniCheck as bO,
+  HiMiniTrash as b0,
+  isGuardDemoMode as b1,
+  fetchGuardApi as b2,
+  formatHarnessCommand as b3,
+  fetchApprovalPage as b4,
+  fetchPolicy as b5,
+  HiMiniHome as b6,
+  guardActionPresentation as b7,
+  DEFAULT_FILTER_STATE as b8,
+  filterEvidence as b9,
+  resolveSupplyChainAuditFailure as bA,
+  runPackageSync as bB,
+  startPackageFirewallConnect as bC,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bD,
+  repairSupplyChainProtection as bE,
+  runPackageFirewallAction as bF,
+  parseInterceptProofSnapshot as bG,
+  activatePackageFirewallRuntime as bH,
+  EntitlementNotice as bI,
+  fetchReceipts as bJ,
+  lazyWorkspace as bK,
+  __vitePreload as bL,
+  scopeLabel as bM,
+  HiMiniDocumentText as bN,
+  HiMiniCloudArrowUp as bO,
   HiMiniCodeBracket as bP,
   HiMiniClipboardDocument as bQ,
   HiMiniUsers as bR,
@@ -32191,32 +32207,32 @@ export {
   fetchCloudExceptionRequests as bY,
   downloadBlob as bZ,
   PolicyStatField as b_,
-  computeMetrics as ba,
-  CommandActivityWorkspace as bb,
-  EvidenceFilterBar as bc,
-  EvidenceInsightStrip as bd,
-  EvidenceActionList as be,
-  EvidenceActionDetail as bf,
-  policyIdentityKey as bg,
-  clearLabelForScope as bh,
-  HiMiniChartBar as bi,
-  isSupplyChainAuditIncomplete as bj,
-  isSupplyChainAuditEvidence as bk,
-  readString$1 as bl,
-  isRecord$3 as bm,
-  HiMiniClock as bn,
-  IconActionButton as bo,
-  HiMiniBeaker as bp,
-  ActivationSummary as bq,
-  ActionResultPanel as br,
-  HiMiniBugAnt as bs,
-  GuardModalLayer as bt,
-  ConnectFlowCard as bu,
-  ApprovalProofInline as bv,
-  HiMiniCloudArrowDown as bw,
-  fetchPackageFirewallStatus as bx,
-  runPackageAudit as by,
-  resolveSupplyChainAuditFailure as bz,
+  sortEvidence as ba,
+  computeMetrics as bb,
+  CommandActivityWorkspace as bc,
+  EvidenceFilterBar as bd,
+  EvidenceInsightStrip as be,
+  EvidenceActionList as bf,
+  EvidenceActionDetail as bg,
+  policyIdentityKey as bh,
+  clearLabelForScope as bi,
+  HiMiniChartBar as bj,
+  isSupplyChainAuditIncomplete as bk,
+  isSupplyChainAuditEvidence as bl,
+  readString$1 as bm,
+  isRecord$3 as bn,
+  HiMiniClock as bo,
+  IconActionButton as bp,
+  HiMiniBeaker as bq,
+  ActivationSummary as br,
+  ActionResultPanel as bs,
+  HiMiniBugAnt as bt,
+  GuardModalLayer as bu,
+  ConnectFlowCard as bv,
+  ApprovalProofInline as bw,
+  HiMiniCloudArrowDown as bx,
+  fetchPackageFirewallStatus as by,
+  runPackageAudit as bz,
   HiMiniChevronRight as c,
   HiMiniArrowDownTray as c0,
   HiMiniQueueList as c1,

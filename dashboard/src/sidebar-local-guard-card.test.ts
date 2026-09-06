@@ -45,6 +45,11 @@ assert(
   "sidebar and drawer share the compact Local Guard status copy",
 );
 assert(
+  sidebarSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}") &&
+    drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
+  "sidebar and drawer pass the update-channel handler into Local Guard",
+);
+assert(
   mainSource.includes('import "./shell-navigation-status.css"'),
   "status typography loads with the shell",
 );

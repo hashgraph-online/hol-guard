@@ -1,4 +1,4 @@
-import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aU as HiMiniNoSymbol, aV as startGuardCloudConnect, aW as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aX as guardAwareHref } from "../guard-dashboard.js";
+import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ad as HiMiniAdjustmentsHorizontal, aU as HiMiniCheck, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aV as HiMiniNoSymbol, aW as startGuardCloudConnect, aX as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aY as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -4288,6 +4288,365 @@ function ProtectionAuthorityNotice(props) {
     ) : null
   ] });
 }
+const PROTECTION_CATEGORIES = [
+  { id: "source-control", label: "Source control", description: "Protect repository history, branches, and source-control operations.", searchAliases: ["git", "github", "repository", "source"] },
+  { id: "packages", label: "Packages and dependencies", description: "Protect dependency installs, package managers, and supply-chain changes.", searchAliases: ["npm", "pnpm", "yarn", "pip", "package", "dependency"] },
+  { id: "files-secrets", label: "Files and secrets", description: "Protect sensitive files, credentials, and secret-bearing operations.", searchAliases: ["file", "secret", "credential", "environment"] },
+  { id: "cloud-infrastructure", label: "Cloud and infrastructure", description: "Protect infrastructure, cloud resources, and administrative actions.", searchAliases: ["aws", "gcp", "azure", "terraform", "cloud", "infrastructure"] },
+  { id: "network-downloads", label: "Network and downloads", description: "Protect downloads, remote access, and network-facing operations.", searchAliases: ["curl", "wget", "ssh", "network", "download", "remote"] },
+  { id: "data-databases", label: "Data and databases", description: "Protect databases, storage, backups, and destructive data operations.", searchAliases: ["database", "sql", "postgres", "mysql", "redis", "data", "backup"] },
+  { id: "deployments-ci", label: "Deployments and CI", description: "Protect deployment, build, release, and CI/CD operations.", searchAliases: ["deploy", "release", "ci", "cd", "workflow", "pipeline"] },
+  { id: "messaging-collaboration", label: "Messaging and collaboration", description: "Protect actions in messaging, search, and collaboration tools.", searchAliases: ["slack", "message", "collaboration", "search"] },
+  { id: "system-shell", label: "System and shell actions", description: "Protect high-impact local shell, process, and system operations.", searchAliases: ["shell", "system", "bash", "terminal", "process"] },
+  { id: "ai-workflows", label: "AI tools and agent workflows", description: "Protect AI-agent, tool, and automated workflow actions.", searchAliases: ["ai", "agent", "mcp", "tool", "workflow"] }
+];
+new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
+function searchableExtensionText(extension2) {
+  return [
+    extension2.extension_id,
+    extension2.name,
+    extension2.description,
+    ...extension2.ecosystem_ids,
+    ...extension2.executables,
+    ...extension2.action_classes,
+    ...extension2.risk_classes
+  ].join(" ").toLowerCase();
+}
+function protectionCategoryIdForExtension(extension2) {
+  const text2 = searchableExtensionText(extension2);
+  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text2)) return "source-control";
+  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text2)) return "packages";
+  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text2)) return "files-secrets";
+  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text2)) return "cloud-infrastructure";
+  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text2)) return "network-downloads";
+  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text2)) return "data-databases";
+  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text2)) return "deployments-ci";
+  if (/slack|discord|message|collaboration|search|email/.test(text2)) return "messaging-collaboration";
+  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text2)) return "ai-workflows";
+  return "system-shell";
+}
+const EMPTY_CATALOG_FILTERS = {
+  trusts: [],
+  kinds: [],
+  areas: []
+};
+const CATALOG_TRUST_FILTERS = [
+  "first-party",
+  "trusted-library",
+  "external"
+];
+const CATALOG_KIND_FILTERS = ["commands", "mcp"];
+function catalogFiltersActive(filters) {
+  return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
+}
+function catalogTrustLabel(trust) {
+  if (trust === "first-party") return "Built in";
+  if (trust === "trusted-library") return "Trusted";
+  return "External";
+}
+function catalogKindLabel(kind) {
+  if (kind === "mcp") return "MCP";
+  return "Commands";
+}
+function catalogItemKind(extension2) {
+  if (extension2.surface === "mcp") return "mcp";
+  return "commands";
+}
+function toggleCatalogFilterValue(selected, value) {
+  if (selected.includes(value)) return selected.filter((item) => item !== value);
+  return [...selected, value];
+}
+function catalogItemMatchesFilters(extension2, filters) {
+  if (filters.trusts.length > 0 && !filters.trusts.includes(extension2.trust_class)) return false;
+  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension2))) return false;
+  if (filters.areas.length > 0) {
+    const area = protectionCategoryIdForExtension(extension2);
+    if (!filters.areas.includes(area)) return false;
+  }
+  return true;
+}
+function filterCatalogExtensions(extensions, filters) {
+  if (!catalogFiltersActive(filters)) return [...extensions];
+  return extensions.filter((extension2) => catalogItemMatchesFilters(extension2, filters));
+}
+function customItemMatchesKind(item, kinds) {
+  if (kinds.length === 0) return true;
+  if (item.surface === "mcp") return kinds.includes("mcp");
+  return kinds.includes("commands");
+}
+function customItemMatchesFilters(item, filters) {
+  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
+  return customItemMatchesKind(item, filters.kinds);
+}
+function sameFilterValues(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+function catalogFiltersEqual(left, right) {
+  return sameFilterValues(left.trusts, right.trusts) && sameFilterValues(left.kinds, right.kinds) && sameFilterValues(left.areas, right.areas);
+}
+function pruneCatalogFilters(filters, extensions) {
+  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
+  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentAreas = new Set(populatedCatalogAreas(extensions));
+  return {
+    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
+    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
+    areas: filters.areas.filter((area) => presentAreas.has(area))
+  };
+}
+function catalogToolUnit(count) {
+  if (count === 1) return "tool";
+  return "tools";
+}
+function catalogFilterCountCopy(visible, total, filtering) {
+  if (!filtering) return `${total} ${catalogToolUnit(total)}`;
+  return `${visible} of ${total} ${catalogToolUnit(total)}`;
+}
+function catalogFilterChipAriaLabel(label, count) {
+  return `${label}, ${count} ${catalogToolUnit(count)}`;
+}
+function populatedCatalogAreas(extensions) {
+  const present = /* @__PURE__ */ new Set();
+  for (const extension2 of extensions) {
+    present.add(protectionCategoryIdForExtension(extension2));
+  }
+  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id2) => present.has(id2));
+}
+function populatedCatalogAreaOptions(extensions) {
+  const present = new Set(populatedCatalogAreas(extensions));
+  return PROTECTION_CATEGORIES.filter((category) => present.has(category.id)).map((category) => ({ id: category.id, label: category.label }));
+}
+function catalogFilterChipCount(extensions, filters, patch) {
+  return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
+}
+function CatalogFilterOption(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-pressed": props.pressed,
+      "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
+      disabled: props.disabled,
+      onClick: props.onToggle,
+      className: "group flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-[rgba(63,65,116,0.16)] bg-white px-2.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-4 shrink-0 place-items-center text-brand-blue", children: props.pressed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4", "aria-hidden": "true" }) : null }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.label })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
+      ]
+    }
+  );
+}
+function ActiveFilterToken(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-label": `Remove ${props.valueLabel} ${props.groupLabel.toLowerCase()} filter`,
+      onClick: props.onRemove,
+      className: "group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-blue/45 bg-brand-blue/10 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-dark transition-colors hover:border-brand-blue hover:bg-brand-blue/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-dark/65", children: [
+          props.groupLabel,
+          ":"
+        ] }),
+        props.valueLabel,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3.5 shrink-0 text-brand-dark/55 group-hover:text-brand-dark", "aria-hidden": "true" })
+      ]
+    }
+  );
+}
+function CatalogFilterGroup(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: `min-w-0 ${props.className ?? ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold text-brand-dark/55", children: props.legend }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-col gap-1.5", children: props.children })
+  ] });
+}
+function TrustFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogTrustLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function KindFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogKindLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function AreaFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: props.label,
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function CatalogFilterBar(props) {
+  const [panelOpen, setPanelOpen] = reactExports.useState(false);
+  const panelId = reactExports.useId();
+  const triggerRef = reactExports.useRef(null);
+  const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
+  const filtering = catalogFiltersActive(props.filters);
+  const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
+  const handleToggleTrust = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      trusts: toggleCatalogFilterValue(props.filters.trusts, value)
+    });
+  }, [props]);
+  const handleToggleKind = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      kinds: toggleCatalogFilterValue(props.filters.kinds, value)
+    });
+  }, [props]);
+  const handleToggleArea = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      areas: toggleCatalogFilterValue(props.filters.areas, value)
+    });
+  }, [props]);
+  const handleClear = reactExports.useCallback(() => {
+    props.onChange(EMPTY_CATALOG_FILTERS);
+  }, [props]);
+  const handleKeyDown = reactExports.useCallback((event) => {
+    if (event.key !== "Escape" || !panelOpen) return;
+    event.stopPropagation();
+    setPanelOpen(false);
+    triggerRef.current?.focus();
+  }, [panelOpen]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 scroll-mt-28", "data-testid": "catalog-filters", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          ref: triggerRef,
+          "aria-expanded": panelOpen,
+          "aria-controls": panelId,
+          onClick: () => setPanelOpen((open) => !open),
+          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+            "Filters",
+            activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: activeCount }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniChevronDown,
+              {
+                className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`,
+                "aria-hidden": "true"
+              }
+            )
+          ]
+        }
+      ),
+      props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Trust",
+          valueLabel: catalogTrustLabel(trust),
+          onRemove: () => handleToggleTrust(trust)
+        },
+        `trust-${trust}`
+      )),
+      props.filters.kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Kind",
+          valueLabel: catalogKindLabel(kind),
+          onRemove: () => handleToggleKind(kind)
+        },
+        `kind-${kind}`
+      )),
+      props.filters.areas.map((areaId) => {
+        const area = areas.find((option) => option.id === areaId);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveFilterToken,
+          {
+            groupLabel: "Area",
+            valueLabel: area?.label ?? areaId,
+            onRemove: () => handleToggleArea(areaId)
+          },
+          `area-${areaId}`
+        );
+      }),
+      filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+        "Clear filters"
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden text-xs text-brand-dark/70 sm:inline", children: "Narrow by trust, kind, or area." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: panelId,
+        hidden: !panelOpen,
+        className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TrustFilterOption,
+            {
+              value: trust,
+              count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
+              pressed: props.filters.trusts.includes(trust),
+              onToggle: handleToggleTrust
+            },
+            trust
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            KindFilterOption,
+            {
+              value: kind,
+              count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
+              pressed: props.filters.kinds.includes(kind),
+              onToggle: handleToggleKind
+            },
+            kind
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            AreaFilterOption,
+            {
+              value: area.id,
+              label: area.label,
+              count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
+              pressed: props.filters.areas.includes(area.id),
+              onToggle: handleToggleArea
+            },
+            area.id
+          )) }) })
+        ] })
+      }
+    )
+  ] });
+}
 const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
   simpleRuleRenderCap: 500,
   recentDecisionCap: 20,
@@ -4898,10 +5257,36 @@ function CatalogExtensionRow(props) {
     }
   );
 }
+function CatalogFilterEmpty(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Remove a filter or start over to see the full catalog again." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
+  ] });
+}
 function ExtensionsOverview(props) {
   const [query, setQuery] = reactExports.useState("");
+  const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
+  reactExports.useEffect(() => {
+    setFilters((current) => {
+      const next = pruneCatalogFilters(current, props.catalogExtensions);
+      if (catalogFiltersEqual(current, next)) return current;
+      return next;
+    });
+  }, [props.catalogExtensions]);
   const searching = query.trim().length > 0;
-  const addedCustomCount = addedCustomExtensions(props.localCliItems).length;
+  const filtering = catalogFiltersActive(filters);
+  const visibleCatalog = reactExports.useMemo(
+    () => filterCatalogExtensions(props.catalogExtensions, filters),
+    [filters, props.catalogExtensions]
+  );
+  const handleClearFilters = reactExports.useCallback(() => {
+    setFilters(EMPTY_CATALOG_FILTERS);
+  }, []);
+  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter(
+    (item) => customItemMatchesFilters(item, filters)
+  );
+  const addedCustomCount = addedCustomItems.length;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -4926,7 +5311,7 @@ function ExtensionsOverview(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PatternSearchConsole,
       {
-        catalog: props.catalogExtensions,
+        catalog: visibleCatalog,
         effective: props.effective,
         active: props.active,
         query,
@@ -4936,11 +5321,19 @@ function ExtensionsOverview(props) {
         actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }) : null
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CatalogFilterBar,
+      {
+        catalog: props.catalogExtensions,
+        filters,
+        onChange: setFilters
+      }
+    ),
     searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       addedCustomCount ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionsSection,
         {
-          items: props.localCliItems,
+          items: addedCustomItems,
           onOpen: props.onOpenLocalCli,
           onAdd: props.onAddCustom
         }
@@ -4949,17 +5342,14 @@ function ExtensionsOverview(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
             addedCustomCount ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/70", children: [
-              props.catalogExtensions.length,
-              " tools"
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: props.catalogExtensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           CatalogExtensionRow,
           {
             extension: extension2,
@@ -4967,7 +5357,7 @@ function ExtensionsOverview(props) {
             onOpen: props.onOpenExtension
           },
           extension2.extension_id
-        )) })
+        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
       ] })
     ] })
   ] });
