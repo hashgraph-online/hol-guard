@@ -93,8 +93,6 @@ fn persistence_fault(boundary: PersistBoundary) -> Result<(), String> {
     Ok(())
 }
 
-/// One atomically replaced record durably binds the accepted generation floor and snapshot.
-/// Legacy files are read only during migration; push never writes either independently.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PolicyAuthorityRecordV3 {
@@ -118,8 +116,6 @@ struct PolicyState {
     pub(super) snapshot: Option<Arc<PolicySnapshotV3>>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
-    /// Digest authenticated with `generation_floor`; it survives floor-only restart recovery.
-    /// Typed, bounded recovery ACKs never trust incoming snapshots as authority.
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
 }
@@ -134,14 +130,11 @@ struct LoadedAuthority {
 }
 
 pub(crate) struct PolicySnapshotStore {
-    /// The authority record lives at the historical snapshot path so older
-    /// launchers still recognize that native policy state exists.
     authority_path: PathBuf,
     expected_runtime_identity: String,
     expected_rule_digest: String,
     expected_guard_home: String,
     expected_scope_digest: String,
-    // Managed resident startup generation; zero for direct store tests.
     resident_generation: u64,
     verifier_key: [u8; VERIFIER_KEY_BYTES],
     approval_authority: Option<ApprovalAuthority>,
