@@ -82,6 +82,10 @@ impl crate::ResidentStream for TestStream {
         Ok(())
     }
 
+    fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+        Ok(())
+    }
+
     fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
         Ok(0)
     }
@@ -188,6 +192,10 @@ fn response_teardown_after_flushed_request_is_never_retryable() {
             Ok(())
         }
 
+        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+            Ok(())
+        }
+
         fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
             Ok(0)
         }
@@ -241,6 +249,10 @@ fn closed_socket_during_auth_nonce_write_carries_teardown_evidence() {
             Ok(())
         }
 
+        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+            Ok(())
+        }
+
         fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
             Ok(0)
         }
@@ -286,6 +298,10 @@ fn truncated_server_proof_is_never_retryable() {
         }
 
         fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
             Ok(())
         }
 

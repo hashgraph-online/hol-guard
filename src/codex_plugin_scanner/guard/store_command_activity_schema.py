@@ -325,22 +325,23 @@ def _validate_command_activity_schema(
     for name, expected in expected_indexes.items():
         if actual_indexes.get(name) != expected:
             raise RuntimeError(f"incompatible command activity index: {name}")
-    _validate_schema_object_sql(connection, statements)
+    _validate_schema_object_sql(connection, statements, allow_unique=True)
 
 
 def _validate_schema_object_sql(
     connection: sqlite3.Connection,
     statements: tuple[str, ...],
+    *,
+    family_label: str = "",
+    allow_unique: bool = False,
 ) -> None:
+    unique_prefix = "(?:unique )?" if allow_unique else ""
     expected: dict[str, str] = {}
     for statement in statements:
         canonical = _canonical_sql(statement)
-        match = re.match(
-            r"create (?:unique )?(?:table|index|trigger) if not exists ([a-z0-9_]+)",
-            canonical,
-        )
+        match = re.match(rf"create {unique_prefix}(?:table|index|trigger) if not exists ([a-z0-9_]+)", canonical)
         if match is None:
-            raise RuntimeError("unrecognized command activity schema statement")
+            raise RuntimeError(f"unrecognized command activity {family_label}schema statement")
         expected[match.group(1)] = canonical.replace(" if not exists", "", 1)
     placeholders = ", ".join("?" for _ in expected)
     rows = cast(
@@ -353,7 +354,7 @@ def _validate_schema_object_sql(
     actual = {name: _canonical_sql(sql) for name, sql in rows}
     for name, expected_sql in expected.items():
         if actual.get(name) != expected_sql:
-            raise RuntimeError(f"incompatible command activity schema object: {name}")
+            raise RuntimeError(f"incompatible command activity {family_label}schema object: {name}")
 
 
 def _canonical_sql(value: str) -> str:
