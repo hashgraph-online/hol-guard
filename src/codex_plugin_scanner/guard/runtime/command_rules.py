@@ -449,8 +449,11 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             keywords=matcher.required_arguments,
         )
     from .command_database_matchers import database_matcher_index_hints
+    from .command_dispat_extensions import DispatReleaseMatcher
     from .command_structured_matchers import structured_matcher_index_hints
 
+    if isinstance(matcher, DispatReleaseMatcher):
+        return MatcherIndexHints(executables=matcher.executables)
     database_hints = database_matcher_index_hints(matcher)
     if database_hints is not None:
         executables, keywords = database_hints

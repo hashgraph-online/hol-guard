@@ -6,6 +6,7 @@ from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
+    "dispat release command": ("execution", "network_egress"),
     "credential exfiltration shell command": (
         "data_flow_exfiltration",
         "credential_exfiltration",
