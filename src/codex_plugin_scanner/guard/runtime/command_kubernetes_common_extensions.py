@@ -37,6 +37,8 @@ _KUBECTL_GLOBAL_OPTIONS = frozenset(
         "--token",
         "--user",
         "--username",
+        "-v",
+        "--v",
     }
 )
 _KUBECTL_GLOBAL_FLAGS = frozenset(
@@ -55,6 +57,7 @@ _HELM_GLOBAL_OPTIONS = frozenset(
         "--kube-as-user",
         "--kube-ca-file",
         "--kube-context",
+        "--kube-tls-server-name",
         "--kube-token",
         "--kubeconfig",
         "--namespace",
