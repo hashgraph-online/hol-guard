@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_storage import _read_v3_snapshot_file
+
+logger = logging.getLogger(__name__)
 
 
 def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
@@ -29,6 +32,7 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
     try:
         material = material_getter(create=False)
     except Exception:
+        logger.debug("Native policy integrity material is unavailable", exc_info=True)
         return None
     if not isinstance(material, tuple) or len(material) != 2 or not isinstance(material[0], bytes):
         return None
