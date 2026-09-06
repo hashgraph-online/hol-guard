@@ -6,15 +6,67 @@ import argparse
 import sys
 from pathlib import Path
 
-from ._scanner_commands import run_doctor, run_lint, run_scan, run_submit, run_verify
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
-from .ecosystems.registry import list_supported_ecosystems
 from .guard.cli import add_guard_parser, add_guard_root_parser, run_guard_command
-from .guard.product_model import SUPPORTED_HARNESS_VALUES
 from .reporting import format_json as format_json
-from .rules import get_rule_spec
 from .version import __version__
+
+
+def _supported_harness_values() -> tuple[str, ...]:
+    # Deferred: product_model transitively imports the whole Guard command
+    # surface, which short-lived invocations must not pay for.
+    from .guard.product_model import SUPPORTED_HARNESS_VALUES
+
+    return SUPPORTED_HARNESS_VALUES
+
+
+def _run_scan(args: argparse.Namespace) -> int:
+    from ._scanner_commands import run_scan
+
+    return run_scan(args)
+
+
+def _run_lint(args: argparse.Namespace) -> int:
+    # Self-module lookup so the `cli.get_rule_spec` patch seam keeps working
+    # while the rules module stays deferred for every non-lint invocation.
+    import codex_plugin_scanner.cli as cli_module
+
+    from ._scanner_commands import run_lint
+
+    return run_lint(args, get_rule_spec_fn=cli_module.get_rule_spec)
+
+
+def __getattr__(name: str):
+    if name == "get_rule_spec":
+        from .rules import get_rule_spec
+
+        return get_rule_spec
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _run_verify(args: argparse.Namespace) -> int:
+    from ._scanner_commands import run_verify
+
+    return run_verify(args)
+
+
+def _run_submit(args: argparse.Namespace) -> int:
+    from ._scanner_commands import run_submit
+
+    return run_submit(args)
+
+
+def _run_doctor(args: argparse.Namespace) -> int:
+    from ._scanner_commands import run_doctor
+
+    return run_doctor(args)
+
+
+def _list_supported_ecosystems() -> list[str]:
+    from .ecosystems.registry import list_supported_ecosystems
+
+    return list_supported_ecosystems()
 
 
 def format_text(result) -> str:
@@ -103,7 +155,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
     scan_parser.add_argument(
         "--ecosystem",
-        choices=("auto", *list_supported_ecosystems(), "dsh", "deepseek_harness"),
+        choices=("auto", *_list_supported_ecosystems(), "dsh", "deepseek_harness"),
         default="auto",
         help="Target one ecosystem explicitly or auto-detect all supported ecosystems.",
     )
@@ -207,7 +259,7 @@ def _resolve_legacy_args(
         is_hol_guard_default_doctor = _is_hol_guard_program(program_name) and (
             len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
         )
-        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in SUPPORTED_HARNESS_VALUES
+        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in _supported_harness_values()
         if has_guard_doctor_flag or is_hol_guard_default_doctor or has_harness_arg:
             return ["guard", *argv]
     known_commands = {
@@ -336,6 +388,12 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
+    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["--version"]:
+        # Fast path: answering a version probe must not build the full Guard
+        # command surface. Update flows spawn `--version` on every check, and
+        # hook wrappers probe it while a tool waits.
+        print(f"{program_name} {__version__}")
+        return 0
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
         requested_argv,
@@ -356,21 +414,28 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 1
     if getattr(args, "list_ecosystems", False):
-        for ecosystem in list_supported_ecosystems():
+        for ecosystem in _list_supported_ecosystems():
             print(ecosystem)
         return 0
     if getattr(args, "diff_base", None):
         parser.error("--diff-base is not implemented yet. Remove the flag and rerun without diff-aware gating.")
+    return _dispatch_scanner_command(args, parser)
+
+
+def _dispatch_scanner_command(
+    args: argparse.Namespace,
+    parser: FriendlyArgumentParser,
+) -> int:
     if args.command in {None, "scan"}:
-        return run_scan(args)
+        return _run_scan(args)
     if args.command == "lint":
-        return run_lint(args, get_rule_spec_fn=get_rule_spec)
+        return _run_lint(args)
     if args.command == "verify":
-        return run_verify(args)
+        return _run_verify(args)
     if args.command == "submit":
-        return run_submit(args)
+        return _run_submit(args)
     if args.command == "doctor":
-        return run_doctor(args)
+        return _run_doctor(args)
     if args.command == "guard":
         try:
             return run_guard_command(args)
