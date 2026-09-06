@@ -2973,6 +2973,34 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _package_target_result(
+    target: dict[str, object],
+    *,
+    decision: str,
+    reasons: tuple[dict[str, object], ...],
+    rule_id: str | None = None,
+) -> dict[str, object]:
+    result = {
+        "decision": decision,
+        "ecosystem": target["ecosystem"],
+        "name": target["name"],
+        "namespace": target["namespace"],
+        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
+        "resolvedVersion": _optional_string(target.get("version")),
+        "recommendedFixVersion": None,
+        "riskScore": None,
+        "direct": True,
+        "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
+        "alias": _optional_string(target.get("alias")),
+    }
+    if rule_id is not None:
+        result["ruleId"] = rule_id
+    result["reasons"] = reasons
+    return result
+
+
 def _unknown_package_result(
     target: dict[str, object],
     *,
@@ -3015,22 +3043,7 @@ def _unknown_package_result(
                 "source": "guard-local",
             }
         )
-    return {
-        "decision": decision,
-        "ecosystem": target["ecosystem"],
-        "name": target["name"],
-        "namespace": target["namespace"],
-        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
-        "resolvedVersion": _optional_string(target.get("version")),
-        "recommendedFixVersion": None,
-        "riskScore": None,
-        "direct": True,
-        "dependencyPath": None,
-        "packageManager": _optional_string(target.get("package_manager")) or "npm",
-        "redactedCommand": _optional_string(target.get("redacted_command")),
-        "alias": _optional_string(target.get("alias")),
-        "reasons": tuple(reasons),
-    }
+    return _package_target_result(target, decision=decision, reasons=tuple(reasons))
 
 
 def _fallback_package_results(
@@ -3343,22 +3356,10 @@ def _dependency_confusion_policy_package_result(
         decision = _normalize_bundle_action(rule.action)
         if decision not in {"block", "ask", "warn"}:
             decision = "warn"
-        return {
-            "decision": decision,
-            "ecosystem": target["ecosystem"],
-            "name": target["name"],
-            "namespace": target["namespace"],
-            "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
-            "resolvedVersion": _optional_string(target.get("version")),
-            "recommendedFixVersion": None,
-            "riskScore": None,
-            "direct": True,
-            "dependencyPath": None,
-            "packageManager": _optional_string(target.get("package_manager")) or "npm",
-            "redactedCommand": _optional_string(target.get("redacted_command")),
-            "alias": _optional_string(target.get("alias")),
-            "ruleId": rule.rule_id,
-            "reasons": (
+        return _package_target_result(
+            target,
+            decision=decision,
+            reasons=(
                 {
                     "code": "dependency_confusion_risk",
                     "message": (
@@ -3369,7 +3370,8 @@ def _dependency_confusion_policy_package_result(
                     "source": "policy",
                 },
             ),
-        }
+            rule_id=rule.rule_id,
+        )
     return None
 
 
