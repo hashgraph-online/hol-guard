@@ -82,6 +82,7 @@
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
+      "command.rungs",
       "command.skill-sunset"
     ]
   }

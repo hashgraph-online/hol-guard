@@ -101,6 +101,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",
+        "command.rungs",
         "command.skill-sunset",
     }
     assert trust_class_for("command.git") == "first-party"
