@@ -132,7 +132,14 @@ _PRIVILEGED_EXEC = AnyMatcher(
     )
 )
 _SWARM_REMOVE = AnyMatcher(
-    matchers=tuple(_docker(resource, "rm") for resource in ("config", "node", "secret", "service", "stack"))
+    matchers=(
+        *(
+            _docker(resource, subcommand)
+            for resource in ("config", "node", "secret", "service", "stack")
+            for subcommand in ("rm", "remove")
+        ),
+        _docker("stack", "down"),
+    )
 )
 
 
