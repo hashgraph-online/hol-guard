@@ -36,7 +36,10 @@ jobs:
               raise SystemExit("domain extension spec marker missing")
           prefix, specs = text.split(marker, 1)
           old_import = "from .command_extension_specs import CommandExtensionSpec\n"
-          new_import = "from .command_domain_extension_specs import DOMAIN_COMMAND_EXTENSION_SPECS\n"
+          new_import = (
+              "from .command_domain_extension_specs import "
+              "DOMAIN_COMMAND_EXTENSION_SPECS as DOMAIN_COMMAND_EXTENSION_SPECS\n"
+          )
           if old_import not in prefix:
               raise SystemExit("CommandExtensionSpec import missing")
           prefix = prefix.replace(old_import, new_import, 1)
@@ -52,6 +55,9 @@ jobs:
               encoding="utf-8",
           )
           PY
+          uv run --no-sync ruff check --fix \
+            src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py \
+            src/codex_plugin_scanner/guard/runtime/command_domain_extension_specs.py
           uv run --no-sync ruff format \
             src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py \
             src/codex_plugin_scanner/guard/runtime/command_domain_extension_specs.py
