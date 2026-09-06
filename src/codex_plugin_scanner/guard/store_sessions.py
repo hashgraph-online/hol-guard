@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
+from inspect import signature
 from typing import Concatenate, ParamSpec
 
 # ruff: noqa: F403,F405
@@ -25,6 +26,8 @@ def _with_resume_connection(
         with self._connect() as connection:
             update(connection, *args, **kwargs)
 
+    wrapped_signature = signature(update)
+    _method.__signature__ = wrapped_signature.replace(parameters=list(wrapped_signature.parameters.values())[1:])
     return _method
 
 

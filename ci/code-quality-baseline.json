@@ -506,7 +506,7 @@
     "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py": 583,
     "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py": 924,
     "src/codex_plugin_scanner/guard/cli/commands_support_connect.py": 542,
-    "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py": 559,
+    "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py": 513,
     "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py": 1149,
     "src/codex_plugin_scanner/guard/cli/commands_support_interaction.py": 762,
     "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py": 635,
