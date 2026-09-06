@@ -314,6 +314,96 @@ diagnostics; the Guard command Extension does not parse commit messages or imple
 Read [Stages and hooks][stages] and [run-level hooks][hooks] before changing or relying on a
 pipeline. Package `flow` hooks and top-level `run` hooks have different scopes and failure rules.
 
+### What each stage does
+
+Planning computes release versions from commits, tags, and the dependency graph before the task
+graph executes. The `version` stage then synchronizes files with that plan, particularly the
+consumer's dependency declarations. It is not the stage that decides the next release version.
+
+**Version work is optional and conditional.** Neither a `flow.version` script nor an `autoVersion`
+block is required for every project. Scripts and hooks are optional throughout the pipeline; an
+omitted script executes no shell command. Version work follows the scheduling rules below, while
+build and publish still preserve the release graph's ordering and recording behavior.
+
+| Stage or native operation           | Purpose                                                                                                                                                                                                 |
+| :---------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native `autoVersion` reconciliation | Match declared workspace dependencies to their providers and reconcile their ranges under the configured policy. Runs before any `flow.version` script.                                                 |
+| `flow.version`                      | Optional custom manifest/dependency synchronization, such as updating dependency coordinates that native reconciliation does not cover. It sees files already reconciled by `autoVersion` when enabled. |
+| `autoVersion.syncLock`              | Regenerate lockfiles after version work so they reflect the reconciled manifests before building. It does not choose the release versions.                                                              |
+| `flow.build`                        | Build and validate the package against its reconciled dependencies, producing the artifacts the publish step needs. Actual work comes from the configured scripts.                                      |
+| `flow.login`                        | Authenticate once per space before that space publishes.                                                                                                                                                |
+| `flow.publish`                      | Perform the configured publication work. Its successful exit is the boundary after which script observers only warn.                                                                                    |
+| Native release records              | Record successful publication through the configured tags, changelog, GitHub release, commits, and pushes. These operations are distinct from the publish script.                                       |
+| `flow.announce`                     | Notify update channels about a package that has already published.                                                                                                                                      |
+
+For example, if `web` consumes `core`, version reconciliation updates `web`'s declaration of `core`
+to the provider version selected by the plan and range policy. It can also catch up to a provider
+released in an earlier run. In a pnpm repository whose policy retains `workspace:*`, that literal
+stays intact and pnpm supplies the concrete dependency version when packing.
+
+**Dependency reconciliation and writing the package's own version are separate concerns.** Native
+[`autoVersion`][autoversion-config] also supports `writeVersion` (default `true`), which writes the
+package's own new version to its root manifests. That additional behavior does not make
+`flow.version` a required "bump my version" hook. A custom version script alone is scheduled when
+the package picks up a provider update; an enabled `autoVersion` block schedules version work for
+every releasing package even when its providers are unchanged. Do not assume every release runs a
+custom version script, or add one solely from the stage's name. Inspect the existing policy and the
+[stage scheduling rules][stages].
+
+**Login is once per space per release run, when configured.** The first publish in that space
+triggers it and the others wait. It runs in the space's primary folder, not in whichever package
+happens to publish first. Two spaces using the same login script each run it once. A package inside
+a space cannot override `flow.login`. A [standalone package][standalone-packages] declared with
+`packages.<name>.path` has no `flow.login`, even though some other behavior treats it as its own
+single-package space. Its authentication belongs in `flow.beforePublish`, which runs per package.
+See the [login contract][login].
+
+### Which environment each stage receives
+
+The [script environment reference][script-env] defines the variables. The base layers are the parent
+environment (with missing values filled by `.env`), resolved configuration `env`, and then computed
+`DISPAT_*` values, which win name collisions. Do not assume every stage has package variables: login
+and run-level hooks have different scopes.
+
+The **package environment** below includes:
+
+- Identity and release versions: `DISPAT_PACKAGE`, `DISPAT_SPACE`, optional `DISPAT_GROUP`,
+  `DISPAT_OLD_VERSION`, `DISPAT_NEW_VERSION` (including prerelease), `DISPAT_VERSION` (core
+  version), channel, baseline, bump, and tag variables.
+- Dependency inputs: `DISPAT_WORKSPACE_PACKAGES` and `DISPAT_WORKSPACE_<KEY>_*` describe the whole
+  workspace; `DISPAT_UPDATED_PACKAGES` and `DISPAT_UPDATED_<KEY>_*` describe the providers this
+  package picks up. See [workspace data][workspace-env] for exact fields and key encoding.
+- Release notes: `DISPAT_BREAKING_CHANGES`, `DISPAT_FEATURES`, `DISPAT_FIXES`, and
+  `DISPAT_DEPENDENCIES`. These reach every package stage, not just announce.
+- Script outputs: `DISPAT_OUTPUT` names the file to append exports to; accumulated values arrive as
+  `DISPAT_OUTPUT_<NAME>`, with `DISPAT_OUTPUTS` and `DISPAT_OUTPUT_SOURCE_<NAME>`. See
+  [output propagation][output-env].
+
+| Stage or hook                                                                                                                                                            | Working directory and supplied environment                                                                                                                                                                                             |
+| :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flow.version`                                                                                                                                                           | Package folder; package environment with `DISPAT_STAGE=version`. Use workspace/provider variables for dependency reconciliation, not the consumer's `DISPAT_NEW_VERSION` as every dependency's version.                                |
+| `autoVersion.syncLock`                                                                                                                                                   | Package folder; package environment with `DISPAT_STAGE=syncLock`, after version work.                                                                                                                                                  |
+| `flow.build`                                                                                                                                                             | Package folder; package environment with `DISPAT_STAGE=build`, including outputs from earlier package scripts.                                                                                                                         |
+| `flow.login`                                                                                                                                                             | Space's primary folder; parent/resolved space environment, `DISPAT_SPACE`, `DISPAT_STAGE=login`, workspace listing, and `DISPAT_OUTPUT`. No computed package identity, package version, or package-specific provider listing.          |
+| `flow.publish`                                                                                                                                                           | Package folder; package environment with `DISPAT_STAGE=publish`, including earlier package outputs and that space's login outputs.                                                                                                     |
+| `flow.announce`                                                                                                                                                          | Package folder; package environment with `DISPAT_STAGE=announce`, including accumulated outputs and release notes.                                                                                                                     |
+| Package hooks such as `beforeVersion`, `postVersion`, `beforeBuild`, `postBuild`, `beforePublish`, `postPublish`, `beforeAnnounce`, `postAnnounce`, and `flow.beforeAll` | Package folder; the same package environment, with `DISPAT_STAGE` set to the hook name. Login outputs become available from the publish stage onward, including `beforePublish`.                                                       |
+| `flow.onFail` / `flow.onSkip`                                                                                                                                            | Package folder in its final state; package environment with `DISPAT_STAGE=onFail` or `onSkip`, plus `DISPAT_FAILED_STAGE` / `DISPAT_ERROR` for failure or `DISPAT_BLOCKED_BY` for a dependency skip.                                   |
+| `run.beforeAll`                                                                                                                                                          | Repository root; run-scoped environment, `DISPAT_STAGE=beforeAll`, and workspace listing. No package-specific environment or completed outcome listing.                                                                                |
+| `run.postAll` and commit/push run hooks                                                                                                                                  | Repository root; run-scoped environment with the hook name in `DISPAT_STAGE`, workspace listing, and [run outcomes][outcome-env] (`DISPAT_PUBLISHED_PACKAGES`, failed/skipped/cancelled/unplanned lists, and `DISPAT_RESULT_<KEY>_*`). |
+| `dispat run <name>` scripts                                                                                                                                              | Selected package folder; package environment with `DISPAT_STAGE=run:<name>`. Script outputs can also propagate from providers to consumers in this sweep. Release hooks and space login are not implicitly run.                        |
+| Native reconciliation and native recording                                                                                                                               | Internal operations, not shell scripts receiving a separate stage environment. Use the surrounding scripts/hooks when inspecting their inputs or results.                                                                              |
+
+Provider updates are resolved for the current stage and exclude failed or skipped providers; the
+list can change between build and publish. For full reconciliation, read the workspace listing as
+well, including providers released in earlier runs. Do not infer dependency versions from a
+package's own version. In release scripts, outputs remain within the package except space login
+exports, which reach that space's packages from publish onward. They are not a replacement for the
+provider listings. Check the reference for variables that are unset rather than empty, and do not
+print the complete environment because it may contain credentials.
+
+### Which failures stop progress
+
 | Stage or hook                                                                                                                          | Failure behavior                                                                                                                                                                             |
 | :------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `run.beforeAll`                                                                                                                        | The only gating run-level hook; failure stops the run before the task graph starts. The release lock has already been acquired.                                                              |
@@ -378,6 +468,7 @@ including with `--require-release`, as described in the dedicated lock documenta
 pages describes a pre-lock empty-plan check and should not be used as a release-preview guarantee.
 Consult installed-version help and the corresponding source when these descriptions differ.
 
+[autoversion-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/autoversion.md
 [autowriter]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/autowriter.md
 [ccme]: https://github.com/yohimik/dispat/blob/main/specs/ccme-spec/SPEC.md
 [ccme-api]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/go/ccme.md
@@ -397,6 +488,9 @@ Consult installed-version help and the corresponding source when these descripti
 [environment]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/env.md
 [hooks]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/run-hooks.md
 [lock]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/release-lock.md
+[login]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#flowlogin
+[outcome-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#run-outcome-data
+[output-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#script-outputs
 [packages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/packages.md
 [parser]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/parser.md
 [partial]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/partial-releases.md
@@ -409,13 +503,16 @@ Consult installed-version help and the corresponding source when these descripti
 [release-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/release.yml
 [run]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/run.md
 [scanner]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/scanner.md
+[script-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md
 [scripts]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/scripts.md
 [spaces]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md
 [stages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md#stages-and-hooks
+[standalone-packages]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/packages.md#standalone-packages-path
 [status]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/status.md
 [steps]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/steps.md
 [test-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/tests.yml
 [trigger]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/trigger.md
 [versions]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/versions.md
 [webhooks]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/webhooks.md
+[workspace-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#workspace-data
 [writer]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/writer.md
