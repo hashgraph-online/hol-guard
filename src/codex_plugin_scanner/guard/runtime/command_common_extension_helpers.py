@@ -85,7 +85,7 @@ def _option_value_variant_leaf(
         inverse_flag_pairs=matcher.inverse_flag_pairs,
         required_option_values=required_option_values,
         required_flags_in_all_arguments=True,
-        fail_secure_unknown_options=matcher.fail_secure_unknown_options,
+        fail_secure_unknown_options=True,
     )
 
 

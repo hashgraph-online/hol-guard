@@ -53,7 +53,7 @@ Protection model meanings:
 | `command.cloud.gcp` | Reviews a validated gcloud operation matrix for permanent resource deletion across stable and supported release tracks. | 1 | Built in |
 | `command.dns` | Reviews hosted-zone deletion through supported cloud CLIs. | 1 | Built in |
 | `command.infrastructure-as-code` | Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi. | 1 | Built in |
-| `command.kubernetes-operations` | Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, and Helm lifecycle operations. | 29 | Built in |
+| `command.kubernetes-operations` | Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, and Helm lifecycle operations. | 28 | Built in |
 | `command.load-balancer` | Reviews load-balancer and forwarding-rule deletion through supported cloud CLIs. | 1 | Built in |
 
 ### Data and resilience

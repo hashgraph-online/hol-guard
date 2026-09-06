@@ -55,3 +55,18 @@ def test_option_value_safe_variants_use_effective_full_argument_value(command: s
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "no_match"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "kubectl apply -f --dry-run=client",
+        "kubectl apply --filename --dry-run=server",
+        "kubectl delete -f --dry-run=client",
+        "helm uninstall api --description --dry-run",
+    ],
+)
+def test_flag_shaped_option_values_cannot_fake_safe_preview(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"

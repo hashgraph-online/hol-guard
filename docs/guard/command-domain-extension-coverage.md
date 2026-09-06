@@ -10,7 +10,7 @@ and sync behavior used by existing command protection.
 | --- | --- | --- |
 | `command.container-runtime` | System/container/image/volume/network/build-cache prune, container/image/volume/network/Buildx/Swarm removal, container stop/kill, privileged run, container exec, privileged exec, native `docker compose` volume/image cleanup | Command help where argument boundaries are unambiguous; ordinary local `docker compose` teardown without explicit volume/image deletion remains unchanged |
 | `command.kubernetes-secrets` | Secret reads through supported cluster clients | Existing metadata-only and non-secret reads |
-| `command.kubernetes-operations` | Delete, drain, apply, create, replace/force-replace, patch, edit, scale/autoscale, expose, run, annotate, label, taint, cordon/uncordon, set, rollout restart/undo, exec, debug, port-forward, file copy, certificate approve/deny, Helm install/upgrade/rollback/uninstall aliases | Help, documented client/server dry-run forms, local-only rendering where supported, and Helm dry-run forms |
+| `command.kubernetes-operations` | Delete, drain, apply, create, replace/force-replace, patch, edit, scale/autoscale, expose, run, annotate, label, taint, cordon/uncordon, set, rollout restart/undo, exec, debug, port-forward, file copy, certificate approve/deny, Helm install/upgrade/rollback/uninstall | Help, documented client/server dry-run forms, local-only rendering where supported, and Helm dry-run forms |
 | `command.infrastructure-as-code` | Terraform/OpenTofu destroy and destroy-mode apply, Pulumi destroy | Plan and preview commands |
 
 Global command options such as Docker contexts, hosts, TLS certificate paths, Compose project/file selectors, cluster

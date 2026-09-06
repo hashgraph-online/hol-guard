@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7503bc23f62602aab027f03aeda6505ddde197e8870afd00318e9d55cde47c40",
+  "catalog_digest": "14dfe51da62093fc36240bd1deed75626c5931179b89b4e157c0530afb939b09",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -94,7 +94,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 223,
+  "permission_count": 222,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -229,7 +229,6 @@
     "command.kubernetes-operations.permission.helm-install": "helm install api ./chart --namespace prod",
     "command.kubernetes-operations.permission.helm-rollback": "helm rollback api 2 --namespace prod",
     "command.kubernetes-operations.permission.helm-uninstall": "helm uninstall",
-    "command.kubernetes-operations.permission.helm-uninstall-alias": "helm delete api --namespace prod",
     "command.kubernetes-operations.permission.helm-upgrade": "helm upgrade api ./chart --namespace prod",
     "command.kubernetes-operations.permission.label-resources": "kubectl label namespace prod environment=restricted --overwrite",
     "command.kubernetes-operations.permission.node-scheduling": "kubectl cordon node-a",
@@ -526,7 +525,6 @@
     "command.kubernetes-operations.permission.helm-install",
     "command.kubernetes-operations.permission.helm-rollback",
     "command.kubernetes-operations.permission.helm-uninstall",
-    "command.kubernetes-operations.permission.helm-uninstall-alias",
     "command.kubernetes-operations.permission.helm-upgrade",
     "command.kubernetes-operations.permission.label-resources",
     "command.kubernetes-operations.permission.node-scheduling",
@@ -627,7 +625,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 210,
+  "rule_count": 209,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -770,7 +768,6 @@
     "command.kubernetes-operations.helm-install",
     "command.kubernetes-operations.helm-upgrade",
     "command.kubernetes-operations.helm-rollback",
-    "command.kubernetes-operations.helm-uninstall-alias",
     "command.kubernetes-secrets.secret-read",
     "command.load-balancer.delete",
     "command.messaging.kafka.delete",

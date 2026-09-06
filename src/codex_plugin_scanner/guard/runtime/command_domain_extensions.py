@@ -101,6 +101,7 @@ def _executable_matcher(
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,
     required_flags_in_all_arguments: bool = False,
+    fail_secure_unknown_options: bool = False,
 ) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=executables,
@@ -112,6 +113,7 @@ def _executable_matcher(
         options_with_values=options_with_values,
         required_option_values=required_option_values,
         required_flags_in_all_arguments=required_flags_in_all_arguments,
+        fail_secure_unknown_options=fail_secure_unknown_options,
     )
 
 
@@ -187,35 +189,23 @@ def _kubernetes_dry_run_variant(subcommand: str) -> CommandSafeVariant:
             options_with_values=frozenset({"--dry-run"}),
             required_option_values=(("--dry-run", frozenset({"client", "server"})),),
             required_flags_in_all_arguments=True,
+            fail_secure_unknown_options=True,
         ),
     )
 
 
-def _helm_dry_run_variants(subcommand: str, title: str) -> tuple[CommandSafeVariant, ...]:
-    return (
-        CommandSafeVariant(
-            variant_id="dry-run",
-            title=title,
-            matcher=_executable_matcher(
-                _HELM_EXECUTABLES,
-                subcommand,
-                required_flags=frozenset({"--dry-run"}),
-                leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-                interspersed_flags=_HELM_GLOBAL_FLAGS,
-            ),
-        ),
-        CommandSafeVariant(
-            variant_id="dry-run-mode",
-            title=title,
-            matcher=_executable_matcher(
-                _HELM_EXECUTABLES,
-                subcommand,
-                leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-                interspersed_flags=_HELM_GLOBAL_FLAGS,
-                options_with_values=frozenset({"--dry-run"}),
-                required_option_values=(("--dry-run", frozenset({"client", "server"})),),
-                required_flags_in_all_arguments=True,
-            ),
+def _helm_dry_run_variant(subcommand: str, title: str) -> CommandSafeVariant:
+    return CommandSafeVariant(
+        variant_id="dry-run",
+        title=title,
+        matcher=_executable_matcher(
+            _HELM_EXECUTABLES,
+            subcommand,
+            required_flags=frozenset({"--dry-run"}),
+            leading_options_with_values=_HELM_GLOBAL_OPTIONS,
+            interspersed_flags=_HELM_GLOBAL_FLAGS,
+            required_flags_in_all_arguments=True,
+            fail_secure_unknown_options=True,
         ),
     )
 
@@ -396,7 +386,7 @@ DOMAIN_COMMAND_RULES = (
         safer_alternative="Run Helm uninstall with dry-run and confirm the release and namespace first.",
         safe_variants=(
             _help_variant(_HELM_UNINSTALL),
-            *_helm_dry_run_variants("uninstall", "Helm uninstall preview"),
+            _helm_dry_run_variant("uninstall", "Helm uninstall preview"),
         ),
     ),
     _rule(

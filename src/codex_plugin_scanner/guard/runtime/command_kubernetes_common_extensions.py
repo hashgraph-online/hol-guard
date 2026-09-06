@@ -161,7 +161,6 @@ _CERTIFICATE_DECISION = AnyMatcher(matchers=(_kubectl("certificate", "approve"),
 _HELM_INSTALL = _helm("install")
 _HELM_UPGRADE = _helm("upgrade")
 _HELM_ROLLBACK = _helm("rollback")
-_HELM_REMOVE_ALIASES = AnyMatcher(matchers=(_helm("delete"), _helm("del"), _helm("un")))
 
 
 KUBERNETES_COMMON_COMMAND_RULES = (
@@ -465,20 +464,6 @@ KUBERNETES_COMMON_COMMAND_RULES = (
         safe_variants=(
             help_variant(_HELM_ROLLBACK),
             *_helm_dry_run_variants(_HELM_ROLLBACK, "Helm rollback preview"),
-        ),
-    ),
-    rule(
-        rule_id="command.kubernetes-operations.helm-uninstall-alias",
-        title="Helm release removal alias",
-        description="Identifies common Helm aliases that uninstall a release and its managed resources.",
-        matcher=_HELM_REMOVE_ALIASES,
-        action_class="Kubernetes destructive command",
-        risk_classes=("network_egress", "destructive_shell"),
-        safer_alternative="Dry-run the uninstall where supported and confirm the exact release and namespace first.",
-        example_command="helm delete api --namespace prod",
-        safe_variants=(
-            help_variant(_HELM_REMOVE_ALIASES),
-            *_helm_dry_run_variants(_HELM_REMOVE_ALIASES, "Helm uninstall preview"),
         ),
     ),
 )

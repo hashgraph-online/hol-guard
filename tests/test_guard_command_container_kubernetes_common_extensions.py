@@ -56,7 +56,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.kubernetes-operations.force-replace-resources",
         ),
         (
-            "kubectl patch deployment api -p '{\"spec\":{\"replicas\":2}}'",
+            'kubectl patch deployment api -p \'{"spec":{"replicas":2}}\'',
             "command.kubernetes-operations.patch-resources",
         ),
         ("kubectl edit deployment api", "command.kubernetes-operations.edit-resources"),
@@ -112,7 +112,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("helm install api ./chart --namespace prod", "command.kubernetes-operations.helm-install"),
         ("helm upgrade api ./chart --namespace prod", "command.kubernetes-operations.helm-upgrade"),
         ("helm rollback api 2 --namespace prod", "command.kubernetes-operations.helm-rollback"),
-        ("helm delete api --namespace prod", "command.kubernetes-operations.helm-uninstall-alias"),
         ("kubectl.exe --context prod apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),
         ("kubectl.exe delete pod api", "command.kubernetes-operations.delete-resources"),
         ("kubectl.exe drain node-a", "command.kubernetes-operations.drain-node"),
@@ -184,8 +183,6 @@ def test_common_container_and_kubernetes_operations_emit_structured_rules(
         "helm upgrade api ./chart --dry-run",
         "helm upgrade api ./chart --dry-run server",
         "helm rollback api 2 --dry-run",
-        "helm delete api --dry-run",
-        "helm.exe uninstall api --dry-run=client",
         "kubectl get pods -A",
         "kubectl describe deployment api",
         "kubectl logs deployment/api",
@@ -221,6 +218,7 @@ def test_safe_and_read_only_forms_remain_unreviewed(command: str, tmp_path: Path
         "helm upgrade api ./chart --dry-run=false",
         "helm upgrade api ./chart --dry-run=client --dry-run=false",
         "helm install api ./chart --dry-run=none",
+        "helm.exe uninstall api --dry-run=client",
         "docker compose down --volumes --help=false",
         "docker exec api sh -- --help",
         "kubectl exec deployment/api -- sh -lc 'echo --dry-run=client'",
@@ -260,6 +258,11 @@ def test_legacy_compose_compatibility_is_not_registered(tmp_path: Path) -> None:
     payload = inspect_command("docker-compose down --volumes", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "no_match"
+
+
+@pytest.mark.parametrize("command", ["helm delete api", "helm del api", "helm un api"])
+def test_legacy_helm_removal_aliases_are_not_registered(command: str, tmp_path: Path) -> None:
+    assert inspect_command(command, cwd=tmp_path, home_dir=tmp_path)["status"] == "no_match"
 
 
 def test_safe_segment_cannot_hide_later_destructive_segment(tmp_path: Path) -> None:
