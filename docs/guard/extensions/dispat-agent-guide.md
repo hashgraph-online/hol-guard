@@ -193,6 +193,127 @@ They complement the full checkout suite; they run inside the release, where earl
 already have published. `dispat run <script>` executes the named script, not the surrounding release
 hooks, so it does not implicitly run these additional gates.
 
+## Run lint, build, or tests for a selected change window
+
+`dispat run <script>` applies the same graph selection to any configured script, including lint,
+type checks, builds, and tests. The names below are examples; use the names the repository actually
+declares. Run from the repository root to avoid implicit folder narrowing, or use an explicit
+package selection appropriate to the task. See the [run reference][run].
+
+| Intended scope                                                            | Example                                                                                      |
+| :------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------- |
+| Changed packages in the current release window, plus transitive consumers | `dispat run tests --consumers`                                                               |
+| Packages addressed by the latest commit, plus transitive consumers        | `dispat run tests --since HEAD~1 --consumers`                                                |
+| The same latest-commit selection for lint or build                        | `dispat run lint --since HEAD~1 --consumers` / `dispat run build --since HEAD~1 --consumers` |
+| Every package, regardless of changes                                      | `dispat run tests --since all`                                                               |
+
+The Git spelling is `HEAD~1`. It selects commits in `HEAD~1..HEAD`; it does not mean the current
+release window or necessarily the whole latest push. For a push containing multiple commits, use the
+CI workflow's appropriate base revision to cover the whole push. Dispat's own [CI workflow][test-ci]
+uses `scripts/ci-base.sh` for this. Ensure the checkout contains the required history and base
+revision. Without `--since`, the script sweep uses the default release window; successful script
+runs do not advance release tags or remove packages from that window.
+
+### Use commit scopes to select a follow-up sweep
+
+Explicit [CCME scopes][commits] select packages for the commit window even when the commit type does
+not request a version bump. A final commit such as `test(*): validate the workspace` selects every
+package for a `--since HEAD~1` sweep. The type `test` has no version bump by default, but check the
+repository's parser policy. The commit type does not choose the script: the same commit can drive
+`dispat run lint`, `dispat run build`, and `dispat run tests` with that window.
+
+After a failure, inspect all failed and skipped packages, including failures in independent graph
+branches. A follow-up commit scoped to the affected packages can select just those branches and
+their consumers for the next sweep. For example, suppose `core` failed, its consumer `web` was
+skipped, and unrelated `docs` passed:
+
+1. Fix the failure and use an accurate scope, such as `fix(core): handle the failing input` for a
+   production fix or `test(core): repair the test fixture` for test work.
+1. Run the required scripts with `--since HEAD~1 --consumers` again. The selection starts at `core`,
+   adds `web` and any other transitive consumers, and leaves unrelated `docs` out.
+1. If an independent package also failed, include its scope too, such as
+   `test(core,tools): repair failing fixtures`, when that accurately describes the changes.
+   Otherwise that branch will not be selected by this latest-commit window.
+
+This is a new run selected by commit scopes, not a persistent "resume failed tasks" checkpoint.
+Selected consumers can run again even if they passed previously. By default, a script failure skips
+its dependent packages while independent work can continue; any failure makes the command exit `1`.
+A broader base window that still includes the earlier `test(*)` commit selects everything again. Use
+complete, accurate scopes for all changes: explicit scopes take precedence over changed file paths,
+so narrow scopes must not hide unrelated edits. Do not relabel a production fix as `test` to
+suppress its release intent. A scoped follow-up sweep also does not replace a required full-suite
+pre-release gate.
+
+## Consider Dispat's infrastructure release pattern
+
+If a Terraform project uses a bucket for remote state, offer Dispat's own
+[`infra` release flow][infra-guide] as a reference when the owner wants an alternative without a
+dedicated **state bucket**. Dispat still has a Cloud Storage bucket for the website itself. The
+pattern reconstructs temporary Terraform state on each runner; it does not eliminate Terraform's
+need for state. It is Dispat's project-specific approach, not a general Terraform recommendation to
+discard an existing backend. HashiCorp recommends shared remote state for teams; see
+[why Terraform needs state][terraform-state].
+
+The [infra package configuration][infra-config] connects the operations to release stages:
+
+| Release step             | Dispat's infra implementation                                                                                                                                                                                   |
+| :----------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selection                | Register `infra` as a standalone package. Commits and release intent determine when it releases.                                                                                                                |
+| `flow.build: tf-plan`    | Run [`rebuild.sh`][infra-rebuild] to import known cloud resources into temporary local state, then save `terraform plan -input=false -out=tfplan`. This reads infrastructure and writes local state/plan files. |
+| `flow.publish: tf-apply` | Apply the exact saved `tfplan`. The repository script refuses when `CI` is not `true`; that environment check is a workflow convention, not an authorization boundary.                                          |
+| Successful publication   | Record an `infra/v*` tag. A failed apply prevents that package's success tag, though Terraform may already have changed some resources.                                                                         |
+| Runner cleanup           | Discard local state and plan files with the job. Never commit them; release tags identify source revisions, not complete Terraform state snapshots.                                                             |
+
+The repository's inspection command is `dispat exec tf-plan --for pkg:infra --in pkg:infra`, which
+still requires its tools, credentials, and environment. Inspect
+[infra's environment and initial identity setup][infra-guide] and the
+[release workflow][release-ci]. Do not run its apply commands or set `CI=true` to bypass a local
+refusal merely because the script is outside Guard's Dispat release-start rule.
+
+Adopt reconstruction only with an explicit infrastructure/state-management instruction and a
+reviewed resource-to-import mapping. Every managed resource must be recoverable from its known
+identity; omitted resources and resources removed from configuration need a deliberate cleanup
+strategy. Rebuilding only current declarations loses the historical mappings Terraform uses for
+deletions. Dispat's sample treats any failed import as skipped, so an adaptation must distinguish
+missing resources from permission or network failures before trusting the plan. Serialize all
+writers: the Dispat release lock and CI concurrency do not coordinate arbitrary Terraform runs
+against a separate state copy. See [Terraform import][terraform-import] and
+[state locking][terraform-locking]. Keep an existing backend until an authorized migration addresses
+these requirements.
+
+### Release infrastructure and its consumers together
+
+Model the application or deployment as a consumer of `infra`, as Dispat's
+[docs package][dispat-docs-config] does. The following is an example for an approved change to a
+consumer's existing package configuration:
+
+```yaml
+dependencies:
+  - provider: infra
+    keep: true
+```
+
+`keep: true` protects this deliberate, non-manifest edge from `dispat compute` removal suggestions.
+It does not itself request a consumer release. To update both in the same run, use accurate
+multi-package release intent, such as `fix(infra,docs): update the site deployment`, or explicitly
+requested propagation such as `fix(infra)^: update the site footprint` for direct consumers (`^^`
+for transitive consumers). Check configured propagation and version-group rules and preview with
+`dispat status --strict`; a CLI selection cannot invent missing release intent. Include both
+provider and consumer in any narrowed release selection. See [dependencies] and [CCME][commits].
+
+The dependency edge orders the consumer's publish after the provider's publish. If the consumer must
+also wait to build until infrastructure is applied, and must not proceed after its failure, the
+provider's effective configuration needs `isBuildWaitingPublish: true`. That is an additional policy
+choice to request explicitly when absent, not a property implied by `keep: true`. The default
+permits consumer builds after the provider builds, and a consumer with its own release reason can
+survive a provider failure. See [space scheduling options][space-options].
+
+The intended gated flow is then: infra plan, apply the saved plan, consumer build/validation, and
+consumer deploy, with tags recording successful packages. Independent graph branches can still
+proceed. If infra applied but the deployment failed, inspect the actual infrastructure and release
+records before retrying the consumer; a multi-package release is not an atomic rollback across cloud
+resources and deployments.
+
 ## Let pnpm manage its workspace dependencies
 
 For a monorepo already using pnpm workspaces, prefer its existing workspace mechanism: keep internal
@@ -479,6 +600,7 @@ Consult installed-version help and the corresponding source when these descripti
 [configuration]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/README.md
 [dependencies]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dependencies.md
 [diagnostics]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/plan-errors.md
+[dispat-docs-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/dispat.yaml
 [dispat-package-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/dispat.yaml
 [dispat-pkg-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/pkg/dispat.yaml
 [dispat-pnpm]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/examples/pnpm.md
@@ -487,6 +609,9 @@ Consult installed-version help and the corresponding source when these descripti
 [dotenv]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dotenv.md
 [environment]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/env.md
 [hooks]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/run-hooks.md
+[infra-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/dispat.yaml
+[infra-guide]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/README.md
+[infra-rebuild]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/rebuild.sh
 [lock]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/release-lock.md
 [login]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#flowlogin
 [outcome-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#run-outcome-data
@@ -505,11 +630,15 @@ Consult installed-version help and the corresponding source when these descripti
 [scanner]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/scanner.md
 [script-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md
 [scripts]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/scripts.md
+[space-options]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#space-options
 [spaces]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md
 [stages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md#stages-and-hooks
 [standalone-packages]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/packages.md#standalone-packages-path
 [status]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/status.md
 [steps]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/steps.md
+[terraform-import]: https://developer.hashicorp.com/terraform/cli/import
+[terraform-locking]: https://developer.hashicorp.com/terraform/language/state/locking
+[terraform-state]: https://developer.hashicorp.com/terraform/language/state/purpose
 [test-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/tests.yml
 [trigger]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/trigger.md
 [versions]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/versions.md
