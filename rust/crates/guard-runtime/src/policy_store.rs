@@ -326,6 +326,17 @@ impl PolicySnapshotStore {
             // generation rather than silently reusing the floor.
             return encode_requires_new_generation(&state, self.resident_generation);
         }
+        let mut observed = match self.authority_observed.lock() {
+            Ok(observed) => observed,
+            Err(_) => {
+                self.authority_changed.store(true, Ordering::SeqCst);
+                return Err("native_policy_snapshot_context_mismatch".to_owned());
+            }
+        };
+        // The watcher samples the authority while holding this same lock. Keep
+        // it across the atomic replacement and expected-fingerprint publication
+        // so a legitimate push never presents a new file with an old expected
+        // identity to the watcher.
         persist_authority(
             &self.authority_path,
             request.snapshot.generation,
@@ -338,11 +349,8 @@ impl PolicySnapshotStore {
         state.snapshot = Some(Arc::new(request.snapshot.clone()));
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
-        if let Ok(mut observed) = self.authority_observed.lock() {
-            *observed = authority_fingerprint(&self.authority_path);
-        } else {
-            self.authority_changed.store(true, Ordering::SeqCst);
-        }
+        *observed = authority_fingerprint(&self.authority_path);
+        drop(observed);
         self.authority_changed.store(
             !policy_store_authority::authorities_unchanged(self),
             Ordering::SeqCst,
