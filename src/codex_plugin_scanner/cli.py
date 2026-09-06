@@ -51,6 +51,10 @@ def __getattr__(name: str):
         from .rules import get_rule_spec
 
         return get_rule_spec
+    if name == "run_guard_command":
+        from .guard.cli import run_guard_command
+
+        return run_guard_command
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -75,7 +79,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
 def _list_supported_ecosystems() -> list[str]:
     from .ecosystems.registry import list_supported_ecosystems
 
-    return list_supported_ecosystems()
+    return list(list_supported_ecosystems())
 
 
 def format_text(result) -> str:
@@ -416,7 +420,10 @@ def main(argv: list[str] | None = None) -> int:
     warn_if_shadowed()
     if program_mode in {"guard", "hol-guard"}:
         try:
-            return _guard_cli("run_guard_command")(args)
+            import codex_plugin_scanner.cli as cli_module
+
+            run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
+            return run_guard(args)
         except ValueError as exc:
             parser.error(str(exc))
         except Exception as exc:
@@ -433,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _dispatch_scanner_command(
     args: argparse.Namespace,
-    parser: FriendlyArgumentParser,
+    parser: argparse.ArgumentParser,
 ) -> int:
     if args.command in {None, "scan"}:
         return _run_scan(args)

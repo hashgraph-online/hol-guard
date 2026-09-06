@@ -84,7 +84,7 @@ def test_cursor_install_all_reports_auto_detected_cursor_action(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.install_commands.detect_all",
+        "codex_plugin_scanner.guard.cli.install_targets.detect_all",
         lambda _: [
             HarnessDetection(
                 harness="cursor",
