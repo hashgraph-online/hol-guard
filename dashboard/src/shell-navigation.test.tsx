@@ -121,6 +121,7 @@ assert(
   drawerSource.includes('role="dialog"') &&
     drawerSource.includes('aria-modal="true"') &&
     drawerSource.includes('event.key === "Escape"') &&
+    drawerSource.includes("dataset.guardModalOpen") &&
     drawerSource.includes('event.key !== "Tab"') &&
     drawerSource.includes('setAttribute("inert", "")'),
   "The full navigation drawer traps focus, closes with Escape, and makes the background inert",
@@ -128,9 +129,34 @@ assert(
 assert(
   layoutSource.includes("<ShellNavigation") &&
     layoutSource.includes('className="guard-shell-content flex flex-col"') &&
+    layoutSource.includes("onSetUpdateChannel={onSetUpdateChannel}") &&
     !layoutSource.includes("<ShellHeader") &&
     !layoutSource.includes("<ShellSidebar"),
   "The application layout is driven by the adaptive shell instead of the legacy header and sidebar",
+);
+assert(
+  drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
+  "The navigation drawer keeps the alpha update control",
+);
+
+const alphaMarkup = renderToStaticMarkup(
+  <ShellNavigation
+    queuedCount={0}
+    view="home"
+    collapsed={false}
+    onToggleCollapse={() => undefined}
+    onNavigate={() => undefined}
+    onSetUpdateChannel={() => undefined}
+  />,
+);
+assert(
+  alphaMarkup.includes("Try alpha updates") &&
+    alphaMarkup.includes('data-testid="guard-alpha-updates-control"'),
+  "Local Guard exposes a tap-sized control to enable alpha updates",
+);
+assert(
+  !markup.includes("Try alpha updates"),
+  "Alpha enrollment stays hidden when the channel handler is not wired",
 );
 assert(
   mainSource.indexOf('import "./shell-navigation.css"') <
