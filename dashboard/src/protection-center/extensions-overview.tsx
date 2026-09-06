@@ -73,7 +73,7 @@ function CatalogFilterEmpty(props: { onClear: () => void }) {
   return (
     <div className="mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6">
       <p className="text-sm font-semibold text-brand-dark">No extensions match these filters.</p>
-      <p className="mt-1 text-sm leading-6 text-brand-dark/70">Clear a chip or start over to see the full catalog again.</p>
+      <p className="mt-1 text-sm leading-6 text-brand-dark/70">Remove a filter or start over to see the full catalog again.</p>
       <button type="button" className="guard-extensions-chip mt-3" onClick={props.onClear}>
         Clear filters
       </button>
