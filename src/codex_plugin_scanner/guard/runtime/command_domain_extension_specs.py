@@ -1,4 +1,4 @@
-"""Metadata for infrastructure command extensions."""
+"""Metadata contracts for infrastructure command extensions."""
 
 from __future__ import annotations
 
