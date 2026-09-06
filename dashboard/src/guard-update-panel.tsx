@@ -23,7 +23,10 @@ import type {
   GuardUpdateStatus,
 } from "./guard-types";
 import { GuardModalLayer } from "./guard-modal-layer";
-import { GuardUpdateChannelSummary } from "./guard-update-channel-summary";
+import {
+  GuardUpdateChannelSummary,
+  GUARD_UPDATE_ACTION_BUTTON_CLASS,
+} from "./guard-update-channel-summary";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
@@ -146,7 +149,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
         <button
           type="button"
           onClick={props.onUpdateGuard}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+          className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
         >
           <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
           Update Guard
@@ -156,7 +159,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
         <button
           type="button"
           onClick={props.onReinstallGuard}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+          className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
         >
           <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
           Reinstall from PyPI

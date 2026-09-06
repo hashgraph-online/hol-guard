@@ -20142,7 +20142,7 @@ function GuardModalLayer({
     overlayRoot
   );
 }
-const CHANNEL_BUTTON_CLASS = "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
   let versionContent = null;
   if (props.version) {
@@ -20195,7 +20195,7 @@ function GuardUpdateChannelSummary(props) {
         onClick: props.onManage,
         disabled: props.busy,
         "data-testid": "guard-alpha-updates-control",
-        className: CHANNEL_BUTTON_CLASS,
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
           "Try alpha updates"
@@ -20293,7 +20293,7 @@ function GuardUpdatePanel(props) {
       {
         type: "button",
         onClick: props.onUpdateGuard,
-        className: "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
           "Update Guard"
@@ -20305,7 +20305,7 @@ function GuardUpdatePanel(props) {
       {
         type: "button",
         onClick: props.onReinstallGuard,
-        className: "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
           "Reinstall from PyPI"
