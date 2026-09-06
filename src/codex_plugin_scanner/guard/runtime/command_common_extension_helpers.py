@@ -58,9 +58,7 @@ def _variant_leaf(
         options_with_values=matcher.options_with_values,
         inverse_flag_pairs=matcher.inverse_flag_pairs,
         required_option_values=matcher.required_option_values,
-        required_flags_in_all_arguments=(
-            matcher.required_flags_in_all_arguments or required_flags_in_all_arguments
-        ),
+        required_flags_in_all_arguments=(matcher.required_flags_in_all_arguments or required_flags_in_all_arguments),
         fail_secure_unknown_options=matcher.fail_secure_unknown_options or fail_secure_unknown_options,
     )
 
