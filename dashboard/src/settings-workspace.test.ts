@@ -10,10 +10,10 @@ import {
   isFineTuningEditable,
   resolveTotpSetupStep,
   hasApprovalGateSettingsChanged,
-  resolveApprovalPasswordSectionCopy,
   resolveTotpSetupModalTitle,
   resolveInitialSettingsTab,
 } from "./settings-workspace";
+import { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -107,6 +107,7 @@ assert(resolveInitialSettingsTab("?section=defaults") === "protection", "setting
 assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
 
 const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+const approvalPasswordCopySource = readFileSync(new URL("./settings/approval-password-copy.tsx", import.meta.url), "utf8");
 assert(!settingsWorkspaceSource.includes("Ask first"), "settings: Ask first is not a first-class label");
 assert(!settingsWorkspaceSource.includes("Block until approved"), "settings: Block until approved is not a first-class label");
 assert(!settingsWorkspaceSource.includes("Watch only"), "settings: Watch only is not a first-class label");
@@ -144,11 +145,11 @@ assert(
   "approval-password: first-time copy points to the explicit setup action",
 );
 assert(
-  settingsWorkspaceSource.includes("Set up approval password"),
+  approvalPasswordCopySource.includes("Set up approval password"),
   "approval-password: first-time setup has an explicit action",
 );
 assert(
-  settingsWorkspaceSource.includes('openProofModal("setup-gate"'),
+  settingsWorkspaceSource.includes('"setup-gate"'),
   "approval-password: explicit setup reuses the setup-gate proof flow",
 );
 assert(

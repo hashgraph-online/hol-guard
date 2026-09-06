@@ -2475,6 +2475,15 @@ function SettingsSelectRow({
     )
   ] });
 }
+function resolveApprovalPasswordSectionCopy(wasConfigured) {
+  if (wasConfigured) {
+    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
+  }
+  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
+}
+function ApprovalPasswordSetupAction(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onClick, variant: "outline", children: "Set up approval password" });
+}
 const PRESENTATION_SCHEMA_VERSION = 1;
 const LEGACY = {
   simple: "everyday",
@@ -2706,12 +2715,6 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
     return false;
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
-}
-function resolveApprovalPasswordSectionCopy(wasConfigured) {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
 function resolveTotpSetupModalTitle(isConfirmStep) {
   if (isConfirmStep) {
@@ -3479,11 +3482,8 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
-  const handleOpenPasswordChangeModal = reactExports.useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
-  }, [openProofModal]);
-  const handleOpenPasswordSetup = reactExports.useCallback(() => {
-    openProofModal("setup-gate", { kind: "save" });
+  const handleOpenPasswordChangeModal = reactExports.useCallback((mode = "change-password") => {
+    openProofModal(mode, { kind: "save" });
   }, [openProofModal]);
   const handleRequestRevokeCooldown = reactExports.useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
@@ -3968,7 +3968,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 totpActionError,
                 onToggle: handleApprovalGateToggle,
                 onOpenPasswordChangeModal: handleOpenPasswordChangeModal,
-                onOpenPasswordSetup: handleOpenPasswordSetup,
                 onTotpCodeChange: handleApprovalGateTotpCode,
                 onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
                 onTotpActionPasswordChange: handleTotpActionPasswordChange,
@@ -4365,7 +4364,7 @@ function ApprovalGateCard(props) {
             className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
             children: "Change password"
           }
-        ) }) : props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenPasswordSetup, variant: "outline", children: "Set up approval password" }) }) : null
+        ) }) : props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Extra checks" }),

@@ -76,6 +76,8 @@ import type {
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
+import { ApprovalPasswordSetupAction, resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
+export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
   buildSettingsUpdatePayload,
@@ -174,13 +176,6 @@ export function hasApprovalGateSettingsChanged(
     || cooldownSeconds !== gateConfig.cooldown_seconds
     || strictAllDecisions !== gateConfig.strict_all_decisions
   );
-}
-
-export function resolveApprovalPasswordSectionCopy(wasConfigured: boolean): string {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -1065,12 +1060,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
 
-  const handleOpenPasswordChangeModal = useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
-  }, [openProofModal]);
-
-  const handleOpenPasswordSetup = useCallback(() => {
-    openProofModal("setup-gate", { kind: "save" });
+  const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
+    openProofModal(mode, { kind: "save" });
   }, [openProofModal]);
 
   const handleRequestRevokeCooldown = useCallback(() => {
@@ -1592,7 +1583,6 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               totpActionError={totpActionError}
               onToggle={handleApprovalGateToggle}
               onOpenPasswordChangeModal={handleOpenPasswordChangeModal}
-              onOpenPasswordSetup={handleOpenPasswordSetup}
               onTotpCodeChange={handleApprovalGateTotpCode}
               onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
               onTotpActionPasswordChange={handleTotpActionPasswordChange}
@@ -2116,8 +2106,7 @@ type ApprovalGateCardProps = {
   totpActionPending: "enroll" | "verify" | "disable" | null;
   totpActionError: string | null;
   onToggle: (event: ChangeEvent<HTMLInputElement>) => void;
-  onOpenPasswordChangeModal: () => void;
-  onOpenPasswordSetup: () => void;
+  onOpenPasswordChangeModal: (mode?: "change-password" | "setup-gate") => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -2188,13 +2177,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   Change password
                 </button>
               </div>
-            ) : props.enabled ? (
-              <div className="mt-3">
-                <ActionButton onClick={props.onOpenPasswordSetup} variant="outline">
-                  Set up approval password
-                </ActionButton>
-              </div>
-            ) : null}
+            ) : props.enabled ? <ApprovalPasswordSetupAction onClick={() => props.onOpenPasswordChangeModal("setup-gate")} /> : null}
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-white p-4">
