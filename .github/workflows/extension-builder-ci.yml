@@ -1,0 +1,140 @@
+name: Extension builder CI
+
+on:
+  pull_request:
+    paths:
+      - src/codex_plugin_scanner/guard/extension_builder/**
+      - src/codex_plugin_scanner/guard/cli/extension_builder_commands.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser.py
+      - src/codex_plugin_scanner/guard/cli/commands_router.py
+      - src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py
+      - src/codex_plugin_scanner/guard/runtime/**
+      - contracts/extensions/**
+      - contracts/mcp-servers/**
+      - contributions/extensions/**
+      - contributions/mcp-servers/**
+      - docs/guard/extension-builder/**
+      - tests/*extension_builder*.py
+      - tests/test_guard_extension_contribution.py
+      - tests/test_guard_extension_trust.py
+      - tests/test_guard_mcp_server_contribution.py
+      - tests/guard_command_corpus*.py
+      - tests/guard_command_decision_diff*.py
+      - tests/fixtures/guard-command-corpus/**
+      - scripts/ci/verify_extension_builder_install.py
+      - scripts/release/stage_guard_cloud_review_artifacts.py
+      - .github/workflows/extension-builder-ci.yml
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-builder-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  authoring:
+    name: authoring (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.10"
+          - os: ubuntu-24.04
+            python: "3.13"
+          - os: windows-2022
+            python: "3.13"
+          - os: macos-15
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+      - name: Run builder and contribution trust tests
+        run: |
+          mkdir -p builder-evidence
+          uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
+            tests/test_guard_extension_contribution.py \
+            tests/test_guard_extension_trust.py \
+            tests/test_guard_mcp_server_contribution.py \
+            --junitxml=builder-evidence/tests.xml --tb=short
+      - name: Build and install a wheel outside the checkout
+        run: |
+          uv build --wheel --out-dir "$RUNNER_TEMP/extension-builder-dist"
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt \
+            > builder-evidence/runtime-requirements.txt
+          root="$RUNNER_TEMP/extension-builder-installed"
+          uv venv --python "${{ matrix.python }}" "$root"
+          installed_python="$root/bin/python"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            installed_python="$root/Scripts/python.exe"
+          fi
+          uv --no-config pip install --python "$installed_python" --require-hashes \
+            -r builder-evidence/runtime-requirements.txt
+          wheels=("$RUNNER_TEMP"/extension-builder-dist/hol_guard-*.whl)
+          test "${#wheels[@]}" = 1
+          uv --no-config pip install --python "$installed_python" --no-deps "${wheels[0]}"
+          uv run --no-sync python scripts/ci/verify_extension_builder_install.py \
+            --python "$installed_python" --wheel "${wheels[0]}" \
+            --output builder-evidence/installed.json
+      - name: Collect isolated branch coverage and source-bound decision evidence
+        if: matrix.os == 'ubuntu-24.04' && matrix.python == '3.13'
+        run: |
+          cat > builder-evidence/coverage.ini <<'CONFIG'
+          [run]
+          branch = True
+          relative_files = True
+          source_pkgs =
+              codex_plugin_scanner.guard.extension_builder
+              codex_plugin_scanner.guard.cli.extension_builder_commands
+              codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher
+          [report]
+          show_missing = True
+          CONFIG
+          COVERAGE_FILE=builder-evidence/.coverage uv run --no-sync pytest \
+            tests/test_guard_extension_builder_*.py \
+            --cov --cov-config=builder-evidence/coverage.ini \
+            --cov-report=term-missing --cov-report=json:builder-evidence/coverage.json --tb=short
+          uv run --no-sync python tests/guard_command_decision_diff.py \
+            > builder-evidence/decision-diff-report.json
+      - name: Check authoring source quality
+        run: |
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/extension_builder \
+            src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
+            src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py \
+            scripts/ci/verify_extension_builder_install.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/extension_builder \
+            src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
+            src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py \
+            scripts/ci/verify_extension_builder_install.py
+      - name: Preserve authoring verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-builder-${{ matrix.os }}-py${{ matrix.python }}
+          path: builder-evidence
+          if-no-files-found: error
+          retention-days: 7

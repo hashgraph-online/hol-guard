@@ -1,5 +1,7 @@
 use super::sensitive_path_argument;
+use glob_class::glob_class_matches;
 use std::collections::{HashSet, VecDeque};
+mod glob_class;
 mod hint;
 mod options;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
@@ -47,24 +49,6 @@ fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
         previous = current;
     }
     previous[value.len()]
-}
-fn glob_class_matches(class: &[u8], value: u8) -> bool {
-    let (negated, members) = match class.first() {
-        Some(b'!' | b'^') => (true, &class[1..]),
-        _ => (false, class),
-    };
-    let mut matched = false;
-    let mut index = 0;
-    while index < members.len() {
-        if index + 2 < members.len() && members[index + 1] == b'-' {
-            matched |= members[index] <= value && value <= members[index + 2];
-            index += 3;
-        } else {
-            matched |= members[index] == value;
-            index += 1;
-        }
-    }
-    matched != negated
 }
 fn glob_token_matches(pattern: &[u8], index: usize, value: u8) -> (usize, bool) {
     if pattern[index] == b'[' {

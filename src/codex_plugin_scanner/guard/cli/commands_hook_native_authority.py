@@ -51,7 +51,12 @@ def try_native_hook_authority(
         # handoff as the resident daemon. Teardown drains it independently of
         # the native decision result.
         evidence_writer = RuntimeHookEvidenceWriter(store=store)
-        worker = HookWorker(store=store, activity_writer=evidence_writer)
+        worker = HookWorker(
+            store=store,
+            activity_writer=evidence_writer,
+            wait_for_native_policy=False,
+            publish_native_policy=False,
+        )
         return worker.review_http_payload(
             payload=payload,
             params={},
