@@ -3,8 +3,12 @@ import { HiMiniClipboard, HiMiniClipboardDocumentCheck, HiMiniExclamationTriangl
 
 import { ApprovalProofModal } from "../../approval-proof-modal";
 import type { EffectiveExtensionControls } from "../../extension-controls-api";
+import type { GuardApprovalGatePublicConfig } from "../../guard-types";
 
-function effectiveStatusKey(effective: EffectiveExtensionControls): string {
+function effectiveStatusKey(
+  effective: EffectiveExtensionControls,
+  approvalGate: GuardApprovalGatePublicConfig | null,
+): string {
   const managed = effective.managed_controls;
   return JSON.stringify({
     schema_version: effective.schema_version,
@@ -12,6 +16,16 @@ function effectiveStatusKey(effective: EffectiveExtensionControls): string {
     revision: effective.revision,
     catalog_digest: effective.catalog_digest,
     global_lockdown: effective.global_lockdown,
+    approval_gate: approvalGate
+      ? {
+        configured: approvalGate.configured,
+        enabled: approvalGate.enabled,
+        fail_closed: approvalGate.fail_closed,
+        strict_all_decisions: approvalGate.strict_all_decisions,
+        totp_enabled: approvalGate.totp_enabled ?? false,
+        totp_pending: approvalGate.totp_pending ?? false,
+      }
+      : null,
     failure_codes: effective.failures
       .map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`)
       .sort(),
@@ -189,7 +203,7 @@ export function ProtectionAuthorityNotice(props: {
 
   const checkAgain = async () => {
     if (checkPending || props.busy) return;
-    checkBaselineRef.current = effectiveStatusKey(props.effective);
+    checkBaselineRef.current = effectiveStatusKey(props.effective, props.approvalGate);
     setCheckPending(true);
     setCheckComplete(false);
     setCheckError(null);
@@ -248,7 +262,7 @@ export function ProtectionAuthorityNotice(props: {
         {checkPending ? <p role="status" aria-live="polite" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>Checking current protection status…</p> : null}
         {checkComplete ? (
           <p role="status" aria-live="polite" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>
-            {effectiveStatusKey(props.effective) === checkBaselineRef.current
+            {effectiveStatusKey(props.effective, props.approvalGate) === checkBaselineRef.current
               ? "Check complete. No change detected; local protection remains in its current fail-safe state."
               : "Check complete. Protection status updated."}
           </p>

@@ -4086,7 +4086,7 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
-function effectiveStatusKey$1(effective) {
+function effectiveStatusKey$1(effective, approvalGate) {
   const managed = effective.managed_controls;
   return JSON.stringify({
     schema_version: effective.schema_version,
@@ -4094,6 +4094,14 @@ function effectiveStatusKey$1(effective) {
     revision: effective.revision,
     catalog_digest: effective.catalog_digest,
     global_lockdown: effective.global_lockdown,
+    approval_gate: approvalGate ? {
+      configured: approvalGate.configured,
+      enabled: approvalGate.enabled,
+      fail_closed: approvalGate.fail_closed,
+      strict_all_decisions: approvalGate.strict_all_decisions,
+      totp_enabled: approvalGate.totp_enabled ?? false,
+      totp_pending: approvalGate.totp_pending ?? false
+    } : null,
     failure_codes: effective.failures.map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`).sort(),
     managed_controls: managed ? {
       control_set_id: managed.control_set_id,
@@ -4222,7 +4230,7 @@ function ProtectionAuthorityNotice(props) {
   };
   const checkAgain = async () => {
     if (checkPending || props.busy) return;
-    checkBaselineRef.current = effectiveStatusKey$1(props.effective);
+    checkBaselineRef.current = effectiveStatusKey$1(props.effective, props.approvalGate);
     setCheckPending(true);
     setCheckComplete(false);
     setCheckError(null);
@@ -4292,7 +4300,7 @@ function ProtectionAuthorityNotice(props) {
         ] }),
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
         checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
-        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey$1(props.effective) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey$1(props.effective, props.approvalGate) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
         checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
@@ -5105,7 +5113,7 @@ function recoveryNotice(recovery) {
   }
   return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
-function effectiveStatusKey(effective) {
+function effectiveStatusKey(effective, runtime) {
   const managed = effective.managed_controls;
   return JSON.stringify({
     schema_version: effective.schema_version,
@@ -5113,6 +5121,7 @@ function effectiveStatusKey(effective) {
     revision: effective.revision,
     catalog_digest: effective.catalog_digest,
     global_lockdown: effective.global_lockdown,
+    cloud_policy_sync_error: runtime?.cloud_policy_sync_error ?? null,
     failure_codes: effective.failures.map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`).sort(),
     managed_controls: managed ? {
       control_set_id: managed.control_set_id,
@@ -5171,7 +5180,7 @@ function ExtensionManagedControlsPanel(props) {
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
   const refresh = reactExports.useCallback(async () => {
     if (refreshState === "checking") return;
-    refreshBaselineRef.current = effectiveStatusKey(props.effective);
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, props.runtime);
     setRefreshState("checking");
     setRefreshError(null);
     try {
@@ -5228,7 +5237,7 @@ function ExtensionManagedControlsPanel(props) {
       ) }),
       connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
       refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
-      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
+      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, props.runtime) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
       refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
     ] }),
     !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
@@ -6230,18 +6239,33 @@ function ProtectionCenterWorkspace(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
+  const loadInFlightRef = reactExports.useRef(null);
+  const refreshInFlightRef = reactExports.useRef(null);
   const localClis = useLocalCliCatalog();
-  const load = reactExports.useCallback(async () => {
-    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
-    try {
-      const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
-      setState({ kind: "ready", catalog, effective });
-      return effective;
-    } catch (error) {
-      setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
-      return null;
-    }
+  const load = reactExports.useCallback(() => {
+    if (loadInFlightRef.current !== null) return loadInFlightRef.current;
+    const request2 = (async () => {
+      setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+      try {
+        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        setState({ kind: "ready", catalog, effective });
+        return effective;
+      } catch (error) {
+        setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+        return null;
+      }
+    })();
+    loadInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      },
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      }
+    );
+    return request2;
   }, []);
   reactExports.useEffect(() => {
     void load();
@@ -6299,12 +6323,25 @@ function ProtectionCenterWorkspace(props) {
   const retryLoad = reactExports.useCallback(() => {
     void load();
   }, [load]);
-  const refreshProtection = reactExports.useCallback(async () => {
-    const refreshed = await load();
-    if (refreshed === null) {
-      throw new Error("Protection status could not be refreshed.");
-    }
-  }, [load]);
+  const refreshProtection = reactExports.useCallback(() => {
+    if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
+    const request2 = (async () => {
+      const [refreshed, refreshedRuntime] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null || refreshedRuntime === null) {
+        throw new Error("Protection status could not be refreshed.");
+      }
+    })();
+    refreshInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      },
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      }
+    );
+    return request2;
+  }, [load, props.onRefreshRuntime]);
   const handleCancelPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -6373,10 +6410,14 @@ function ProtectionCenterWorkspace(props) {
   }, [runAuthorityAction]);
   const handleCheckAgain = reactExports.useCallback(async () => {
     setRecoveryError(null);
-    await Promise.all([
+    const [protectionResult, approvalResult] = await Promise.allSettled([
       refreshProtection(),
       refreshApprovalGate({ failClosed: true })
     ]);
+    if (approvalResult.status === "rejected") {
+      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+    }
+    if (protectionResult.status === "rejected") throw protectionResult.reason;
   }, [refreshApprovalGate, refreshProtection]);
   const handleOpenApprovalSettings = reactExports.useCallback(() => {
     props.onNavigate("/settings?section=approval");

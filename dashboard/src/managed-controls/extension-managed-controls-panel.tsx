@@ -183,7 +183,10 @@ function recoveryNotice(recovery: LocalProtectionInput["recovery"]): string {
 
 type RefreshState = "idle" | "checking" | "complete" | "error";
 
-function effectiveStatusKey(effective: EffectiveExtensionControls): string {
+function effectiveStatusKey(
+  effective: EffectiveExtensionControls,
+  runtime?: GuardRuntimeSnapshot | null,
+): string {
   const managed = effective.managed_controls;
   return JSON.stringify({
     schema_version: effective.schema_version,
@@ -191,6 +194,7 @@ function effectiveStatusKey(effective: EffectiveExtensionControls): string {
     revision: effective.revision,
     catalog_digest: effective.catalog_digest,
     global_lockdown: effective.global_lockdown,
+    cloud_policy_sync_error: runtime?.cloud_policy_sync_error ?? null,
     failure_codes: effective.failures
       .map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`)
       .sort(),
@@ -264,7 +268,7 @@ export function ExtensionManagedControlsPanel(props: {
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
   const refresh = useCallback(async () => {
     if (refreshState === "checking") return;
-    refreshBaselineRef.current = effectiveStatusKey(props.effective);
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, props.runtime);
     setRefreshState("checking");
     setRefreshError(null);
     try {
@@ -337,7 +341,7 @@ export function ExtensionManagedControlsPanel(props: {
         {refreshState === "checking" ? <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">Checking current protection status…</p> : null}
         {refreshState === "complete" ? (
           <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">
-            {effectiveStatusKey(props.effective) === refreshBaselineRef.current
+            {effectiveStatusKey(props.effective, props.runtime) === refreshBaselineRef.current
               ? "Check complete. No change detected; the current verified authority is still in use."
               : "Check complete. Protection status updated."}
           </p>

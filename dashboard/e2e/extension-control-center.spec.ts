@@ -109,15 +109,19 @@ async function mount(page: Page, options: {
   malformedCatalog?: boolean;
   effective?: Record<string, unknown>;
   runtime?: unknown;
+  runtimeSequence?: unknown[];
   failEffectiveRefresh?: boolean;
   refreshEffectiveDelayMs?: number;
 } = {}) {
   let effectiveCalls = 0;
+  let runtimeCalls = 0;
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
     if (path.endsWith("/initialize")) body = { auth_token: "fixture-session-token" };
-    else if (path.endsWith("/runtime")) body = options.runtime ?? freeStateSnapshot;
+    else if (path.endsWith("/runtime")) {
+      body = options.runtimeSequence?.[runtimeCalls++] ?? options.runtime ?? freeStateSnapshot;
+    }
     else if (path.endsWith("/requests")) body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
     else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
@@ -309,6 +313,24 @@ test("managed controls reports loading and unchanged refresh results", async ({ 
   await checkAgain.click();
   await expect(page.getByRole("button", { name: "Checking…", exact: true })).toBeDisabled();
   await expect(page.getByRole("status").filter({ hasText: "No change detected" })).toBeVisible();
+});
+
+test("managed controls reports cleared cloud sync errors as an updated status", async ({ page }) => {
+  await mount(page, {
+    runtimeSequence: [
+      { ...freeStateSnapshot, cloud_policy_sync_error: "sync failed" },
+      { ...freeStateSnapshot, cloud_policy_sync_error: null },
+    ],
+    effective: effective({
+      failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Protection status updated" })).toBeVisible();
 });
 
 test("managed controls reports a failed refresh without hiding the last state", async ({ page }) => {
