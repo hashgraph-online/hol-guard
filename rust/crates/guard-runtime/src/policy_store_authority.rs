@@ -439,3 +439,41 @@ pub(super) fn load_combined_authority(
         migrate: false,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watcher_samples_fingerprint_after_observed_lock() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "hol-guard-authority-watch-{}-{unique}.json",
+            std::process::id()
+        ));
+        fs::write(&path, b"old-authority").unwrap();
+
+        let observed = Arc::new(Mutex::new(authority_fingerprint(&path)));
+        let changed = Arc::new(AtomicBool::new(false));
+        let mut expected = observed.lock().unwrap();
+        start_authority_watcher(path.clone(), Arc::clone(&observed), Arc::downgrade(&changed));
+
+        // Give the watcher time to reach the mutex. The pre-fix watcher read
+        // the old file before blocking here, then used that stale sample after
+        // the internal update published its new expected fingerprint.
+        thread::sleep(Duration::from_millis(25));
+        fs::write(&path, b"new-authority").unwrap();
+        *expected = authority_fingerprint(&path);
+        changed.store(false, Ordering::SeqCst);
+        drop(expected);
+
+        thread::sleep(Duration::from_millis(25));
+        assert!(!changed.load(Ordering::SeqCst));
+
+        drop(changed);
+        let _ = fs::remove_file(path);
+    }
+}
