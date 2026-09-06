@@ -10,6 +10,7 @@ import pytest
 
 import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
+from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store
 from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _generation_floor_mac_v3,
@@ -289,3 +290,18 @@ def test_prepare_workspace_policy_rejects_out_of_range_generation_floor(
     path.chmod(0o600)
     worker = _ready_worker(guard_home, master, monkeypatch)
     assert worker.prepare_workspace_policy(tmp_path / "workspace") is None
+
+
+def test_acked_snapshot_binding_fails_closed_when_secret_material_load_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def _raise_secret_error(*, create: bool) -> tuple[bytes | None, str | None]:
+        assert create is False
+        raise RuntimeError("secret backend unavailable")
+
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", _raise_secret_error)
+
+    assert acked_snapshot_binding_for_store(store) is None
