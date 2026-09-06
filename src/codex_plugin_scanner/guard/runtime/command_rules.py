@@ -517,6 +517,12 @@ def _without_options(
         if argument == "--":
             retained.extend(arguments[index + 1 :])
             break
+        if argument.startswith("--"):
+            option_name = argument.partition("=")[0]
+            if option_name not in options_with_values and option_name not in flags:
+                retained.append(argument)
+                index += 1
+                continue
         advance = known_option_advance(
             argument,
             options_with_values=options_with_values,

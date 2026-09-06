@@ -54,6 +54,8 @@ _KUBECTL_GLOBAL_OPTIONS = frozenset(
         "--token",
         "--user",
         "--username",
+        "-v",
+        "--v",
     }
 )
 _KUBECTL_GLOBAL_FLAGS = frozenset(
@@ -72,6 +74,7 @@ _HELM_GLOBAL_OPTIONS = frozenset(
         "--kube-as-user",
         "--kube-ca-file",
         "--kube-context",
+        "--kube-tls-server-name",
         "--kube-token",
         "--kubeconfig",
         "--namespace",
@@ -97,6 +100,7 @@ def _executable_matcher(
     interspersed_flags: frozenset[str] = _EMPTY_STRING_SET,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,
+    required_flags_in_all_arguments: bool = False,
 ) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=executables,
@@ -107,6 +111,7 @@ def _executable_matcher(
         interspersed_flags=interspersed_flags,
         options_with_values=options_with_values,
         required_option_values=required_option_values,
+        required_flags_in_all_arguments=required_flags_in_all_arguments,
     )
 
 
@@ -181,6 +186,7 @@ def _kubernetes_dry_run_variant(subcommand: str) -> CommandSafeVariant:
             interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
             options_with_values=frozenset({"--dry-run"}),
             required_option_values=(("--dry-run", frozenset({"client", "server"})),),
+            required_flags_in_all_arguments=True,
         ),
     )
 
@@ -208,6 +214,7 @@ def _helm_dry_run_variants(subcommand: str, title: str) -> tuple[CommandSafeVari
                 interspersed_flags=_HELM_GLOBAL_FLAGS,
                 options_with_values=frozenset({"--dry-run"}),
                 required_option_values=(("--dry-run", frozenset({"client", "server"})),),
+                required_flags_in_all_arguments=True,
             ),
         ),
     )
