@@ -28,6 +28,8 @@ def test_computes_the_next_alpha_across_all_registry_sources(existing: list[str]
         ("3.0", ["3.0.0", "3.0.0a290"], "3.0.1a1"),
         ("3.0", ["3.0.0", "3.0.1a1", "3.0.1a4"], "3.0.1a5"),
         ("3.1", ["3.1.0a2"], "3.1.0a3"),
+        ("3.2", [], "3.2.0a1"),
+        ("3.2", ["3.2.0a1", "3.1.0a9"], "3.2.0a2"),
     ],
 )
 def test_computes_the_next_alpha_for_3x_release_trains(release_train: str, existing: list[str], expected: str) -> None:

@@ -27,6 +27,7 @@ GITHUB_SHA = "0123456789abcdef0123456789abcdef01234567"
         ("refs/heads/release/2.2", "2.2.0a37"),
         ("refs/heads/release/3.0", "3.0.1a5"),
         ("refs/heads/release/3.1", "3.1.0a2"),
+        ("refs/heads/release/3.2", "3.2.0a1"),
     ],
 )
 def test_accepts_exact_canonical_release_train_alphas(git_ref: str, version: str) -> None:
@@ -55,12 +56,13 @@ def test_generic_alpha_validator_returns_typed_sha_bound_release() -> None:
     )
 
 
-def test_registry_preserves_release_30_and_release_31() -> None:
+def test_registry_preserves_release_30_31_and_32() -> None:
     assert ALPHA_BRANCHES == (
         "refs/heads/release/2.1",
         "refs/heads/release/2.2",
         "refs/heads/release/3.0",
         "refs/heads/release/3.1",
+        "refs/heads/release/3.2",
     )
     assert RELEASE_TRAINS["refs/heads/release/2.1"].version_prefix == "2.1.0"
     assert RELEASE_TRAINS["refs/heads/release/2.2"].version_prefix == "2.2.0"
@@ -68,6 +70,8 @@ def test_registry_preserves_release_30_and_release_31() -> None:
     assert RELEASE_TRAINS["refs/heads/release/3.0"].version_prefix == "3.0.1"
     assert RELEASE_TRAINS["refs/heads/release/3.0"].stable_enabled is False
     assert RELEASE_TRAINS["refs/heads/release/3.1"].version_prefix == "3.1.0"
+    assert RELEASE_TRAINS["refs/heads/release/3.2"].version_prefix == "3.2.0"
+    assert RELEASE_TRAINS["refs/heads/release/3.2"].stable_enabled is False
 
 
 @pytest.mark.parametrize(

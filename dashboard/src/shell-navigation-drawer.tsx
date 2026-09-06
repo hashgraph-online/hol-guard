@@ -211,6 +211,7 @@ export function NavigationDrawer(
               updateError={props.updateError}
               onUpdateGuard={props.onUpdateGuard}
               onReinstallGuard={props.onReinstallGuard}
+              onSetUpdateChannel={props.onSetUpdateChannel}
               approvalGate={props.approvalGate}
             />
           </section>
