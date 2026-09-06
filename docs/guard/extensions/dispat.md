@@ -4,6 +4,10 @@
 `command.dispat.release` rule reviews release starts with high severity and the `execution` and
 `network_egress` risk classes. Guard policy retains the final decision.
 
+For help, JSON logs, CI gating, CCME commits, configuration boundaries, release-lock coordination,
+gating versus warning-only hooks, and idempotent publishing, see
+[Using Dispat as an agent](dispat-agent-guide.md).
+
 > **Important:** With release locking enabled, both `dispat` and `dispat release` first attempt to
 > acquire the remote `dispat-release-lock` tag before planning or executing release work. This also
 > applies to `--require-release`: even a run that ultimately has nothing to publish takes the lock
