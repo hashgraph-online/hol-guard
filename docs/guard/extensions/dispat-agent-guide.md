@@ -1,8 +1,26 @@
 # Using Dispat as an agent
 
 This guide complements [Guard's Dispat release protection](dispat.md). It describes how to inspect a
-Dispat repository and prepare a release without expanding Guard's release-start rule. Commands shown
-here are examples to adapt to the user's task, not permission to run a release.
+Dispat repository and prepare changes for a CI/CD release without expanding Guard's release-start
+rule. Release commands and publishing examples describe work owned by the CI/CD pipeline.
+
+> **Agents must not execute releases. Release only through CI/CD.** Do not run bare `dispat`,
+> `dispat release`, publishing scripts, or release-recording commands from an agent's terminal, tool
+> session, or an improvised job. Release execution and retries belong exclusively to the
+> repository's reviewed CI/CD release workflow, with its configured triggers, checks, credentials,
+> and approvals. A passing test suite, an empty status plan, or a Guard approval does not replace
+> this requirement.
+
+Agents may inspect configuration, preview plans, prepare PRs, run non-publishing validation scripts,
+and monitor CI/CD logs and results. Check what a script actually does before executing it: calling a
+publish script through `run`, `exec`, `for`, or a shell still performs a release. Do not publish
+packages, deploy release artifacts, push release tags, or create release records manually as a
+workaround. Hand release execution and recovery to the established CI/CD workflow. If that workflow
+is missing or failing, report the blocker instead of releasing locally or bypassing its gates.
+
+This is agent workflow guidance. The Guard extension still reviews the original release-start
+boundary; it does not enforce a CI-only execution policy or broaden coverage to every publishing
+tool.
 
 Quick links:
 
@@ -92,13 +110,13 @@ that a release would refuse, so read the diagnostics too. See [partial releases]
 resolution and planning; reserve `trace` for detailed diagnostics and review its contents before
 sharing. `--quiet-parser=false` restores parser diagnostics when configuration suppresses them.
 
-**CI/CD logs can provide release visibility without webhooks.** For an already-authorized release,
-use `dispat release --log-format json` in the release job. People can follow the CI platform's live
-job logs, and agents with access to those logs can consume the same JSON records to track progress
-and diagnose failures. Retain logs as CI artifacts when later inspection is useful. This needs no
-webhook endpoint or webhook configuration; availability and streaming depend on the CI platform. The
-command still starts a release and remains subject to Guard review. Read the final command exit
-status and diagnostics as well as progress records.
+**CI/CD logs can provide release visibility without webhooks.** The CI/CD release job can run
+`dispat release --log-format json`; agents must not run it themselves. People can follow the CI
+platform's live job logs, and agents with access to those logs can consume the same JSON records to
+track progress and diagnose failures. Retain logs as CI artifacts when later inspection is useful.
+This needs no webhook endpoint or webhook configuration; availability and streaming depend on the CI
+platform. The command still starts a release and remains subject to Guard review. Read the final
+command exit status and diagnostics as well as progress records.
 
 The flag controls logging, not every command's entire output: help/version text and rendered preview
 notes have their own formats. Do not assume arbitrary configured scripts emit JSON. Preserve stderr
@@ -521,9 +539,9 @@ scripts:
 
 A Linux entry file can reference the same common configuration, select `shell: [bash, -c]`, and
 merge `scripts-linux.yaml` after the common script map. Select the appropriate entry file with
-`--config` in each CI matrix job, consistently for inspection, script checks, and any authorized
-release. References do not automatically choose a file based on the operating system. Package or
-space script definitions remain nearer than root scripts, so inspect those overrides too.
+`--config` in each CI matrix job, consistently for inspection, script checks, and the CI/CD release.
+References do not automatically choose a file based on the operating system. Package or space script
+definitions remain nearer than root scripts, so inspect those overrides too.
 
 `$ref` paths resolve relative to the file containing the reference. A list of object references
 merges keys in order, with later values replacing earlier ones; this is not a deep merge. Keys
@@ -908,7 +926,9 @@ After a failed or interrupted release, inspect the plan, per-package results, an
 records. Dispat can resume work not yet recorded, but a publish may have succeeded just before the
 process stopped and before its tag was written. Verify that package's registry or destination before
 retrying; do not assume a nonzero exit means nothing published or blindly retry forever. A retry is
-another release start and remains subject to Guard review. See [recovery].
+another release start and must also run through the established CI/CD release workflow. Agents
+inspect and report the recovery state; they must not retry publication or repair release records
+manually. Guard review does not substitute for the CI/CD requirement. See [recovery].
 
 Other useful inspection commands include `dispat scanner <folder> --log-format json` for manifest
 declarations and plain `dispat compute` for suggested graph/baseline configuration.
