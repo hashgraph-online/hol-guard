@@ -80,12 +80,17 @@ pub(super) fn start_authority_watcher(
                 break;
             };
             let current = authority_fingerprint(&path);
-            let different = observed
-                .lock()
-                .map(|expected| *expected != current)
-                .unwrap_or(true);
-            if different {
-                changed.store(true, Ordering::SeqCst);
+            // Keep the observed fingerprint locked through the flag write. An
+            // internal authority update takes the same lock before publishing
+            // its new expected fingerprint, so a watcher comparison made
+            // against the old value cannot set a stale tamper flag afterward.
+            match observed.lock() {
+                Ok(expected) => {
+                    if *expected != current {
+                        changed.store(true, Ordering::SeqCst);
+                    }
+                }
+                Err(_) => changed.store(true, Ordering::SeqCst),
             }
             thread::sleep(AUTHORITY_WATCH_INTERVAL);
         });
