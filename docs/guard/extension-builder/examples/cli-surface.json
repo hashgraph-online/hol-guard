@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "guard.cli-surface.v1",
+  "flags": [
+    "--help",
+    "--version"
+  ],
+  "optionsWithValues": [
+    "--profile"
+  ],
+  "commands": [
+    {
+      "path": []
+    },
+    {
+      "path": [
+        "items",
+        "list"
+      ],
+      "flags": [
+        "--json"
+      ],
+      "description": "Print a synthetic local inventory."
+    },
+    {
+      "path": [
+        "items",
+        "delete"
+      ],
+      "flags": [
+        "--force"
+      ],
+      "description": "Delete a synthetic item; requires explicit review."
+    }
+  ]
+}

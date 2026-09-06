@@ -1,6 +1,7 @@
 import { useCallback, type KeyboardEvent } from "react";
 import { HiMiniArrowPath, HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, Badge } from "./approval-center-primitives";
+import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import { resolvePolicyViewLabel, type PolicyPageView } from "./policy-workspace";
 
@@ -99,14 +100,12 @@ export function PolicyPageToolbar({ snapshot, onReloadPolicy, reloading = false 
 type PolicyExceptionsToolbarProps = {
   cloudConnected: boolean;
   cloudControlsUrl: string | null;
-  connectUrl: string | null;
   onRequestException: () => void;
 };
 
 export function PolicyExceptionsToolbar({
   cloudConnected,
   cloudControlsUrl,
-  connectUrl,
   onRequestException,
 }: PolicyExceptionsToolbarProps) {
   return (
@@ -114,17 +113,13 @@ export function PolicyExceptionsToolbar({
       <ActionButton variant="primary" onClick={onRequestException} disabled={!cloudConnected}>
         + Request cloud exception
       </ActionButton>
-      {cloudControlsUrl ? (
+      {cloudConnected && cloudControlsUrl ? (
         <ActionButton href={cloudControlsUrl} variant="secondary">
           <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Open Guard Cloud
         </ActionButton>
       ) : null}
-      {!cloudConnected && connectUrl ? (
-        <ActionButton href={connectUrl} variant="secondary">
-          Connect Guard Cloud
-        </ActionButton>
-      ) : null}
+      {!cloudConnected ? <ConnectGuardCloudButton variant="secondary" /> : null}
     </div>
   );
 }
