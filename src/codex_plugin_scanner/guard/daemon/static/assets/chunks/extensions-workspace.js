@@ -4086,14 +4086,16 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
-function effectiveStatusKey$1(effective, approvalGate) {
+function effectiveStatusKey(effective, options = {}) {
   const managed = effective.managed_controls;
+  const approvalGate = options.approvalGate;
   return JSON.stringify({
     schema_version: effective.schema_version,
     health: effective.health,
     revision: effective.revision,
     catalog_digest: effective.catalog_digest,
     global_lockdown: effective.global_lockdown,
+    cloud_policy_sync_error: options.runtime?.cloud_policy_sync_error ?? null,
     approval_gate: approvalGate ? {
       configured: approvalGate.configured,
       enabled: approvalGate.enabled,
@@ -4230,7 +4232,7 @@ function ProtectionAuthorityNotice(props) {
   };
   const checkAgain = async () => {
     if (checkPending || props.busy) return;
-    checkBaselineRef.current = effectiveStatusKey$1(props.effective, props.approvalGate);
+    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
     setCheckPending(true);
     setCheckComplete(false);
     setCheckError(null);
@@ -4300,7 +4302,7 @@ function ProtectionAuthorityNotice(props) {
         ] }),
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
         checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
-        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey$1(props.effective, props.approvalGate) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
         checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
@@ -5113,32 +5115,6 @@ function recoveryNotice(recovery) {
   }
   return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
-function effectiveStatusKey(effective, runtime) {
-  const managed = effective.managed_controls;
-  return JSON.stringify({
-    schema_version: effective.schema_version,
-    health: effective.health,
-    revision: effective.revision,
-    catalog_digest: effective.catalog_digest,
-    global_lockdown: effective.global_lockdown,
-    cloud_policy_sync_error: runtime?.cloud_policy_sync_error ?? null,
-    failure_codes: effective.failures.map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`).sort(),
-    managed_controls: managed ? {
-      control_set_id: managed.control_set_id,
-      control_set_name: managed.control_set_name,
-      bundle_version: managed.bundle_version,
-      workspace_id: managed.workspace_id,
-      authority_mode: managed.authority_mode,
-      catalog_digest: managed.catalog_digest,
-      acknowledgement: {
-        extension_authority_revision: managed.acknowledgement.extension_authority_revision,
-        policy_revision: managed.acknowledgement.policy_revision,
-        effective_projection_digest: managed.acknowledgement.effective_projection_digest,
-        status: managed.acknowledgement.status
-      }
-    } : null
-  });
-}
 function extensionLocalProtectionInput(extension2, effective, runtime) {
   const managed = effective.managed_controls;
   const authority = extensionProtectionAuthority(effective, extension2);
@@ -5180,7 +5156,7 @@ function ExtensionManagedControlsPanel(props) {
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
   const refresh = reactExports.useCallback(async () => {
     if (refreshState === "checking") return;
-    refreshBaselineRef.current = effectiveStatusKey(props.effective, props.runtime);
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
     setRefreshState("checking");
     setRefreshError(null);
     try {
@@ -5237,7 +5213,7 @@ function ExtensionManagedControlsPanel(props) {
       ) }),
       connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
       refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
-      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, props.runtime) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
+      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
       refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
     ] }),
     !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,

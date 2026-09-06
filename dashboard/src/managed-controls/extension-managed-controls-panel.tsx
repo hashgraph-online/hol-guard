@@ -5,6 +5,7 @@ import { startGuardCloudConnect } from "../guard-api";
 import { extensionEffectiveState, permissionEffectiveState } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import type { GuardRuntimeSnapshot } from "../guard-types";
+import { effectiveStatusKey } from "../protection-center/effective-status-key";
 import {
   buildLocalProtectionView,
   type LocalProtectionView,
@@ -183,40 +184,6 @@ function recoveryNotice(recovery: LocalProtectionInput["recovery"]): string {
 
 type RefreshState = "idle" | "checking" | "complete" | "error";
 
-function effectiveStatusKey(
-  effective: EffectiveExtensionControls,
-  runtime?: GuardRuntimeSnapshot | null,
-): string {
-  const managed = effective.managed_controls;
-  return JSON.stringify({
-    schema_version: effective.schema_version,
-    health: effective.health,
-    revision: effective.revision,
-    catalog_digest: effective.catalog_digest,
-    global_lockdown: effective.global_lockdown,
-    cloud_policy_sync_error: runtime?.cloud_policy_sync_error ?? null,
-    failure_codes: effective.failures
-      .map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`)
-      .sort(),
-    managed_controls: managed
-      ? {
-        control_set_id: managed.control_set_id,
-        control_set_name: managed.control_set_name,
-        bundle_version: managed.bundle_version,
-        workspace_id: managed.workspace_id,
-        authority_mode: managed.authority_mode,
-        catalog_digest: managed.catalog_digest,
-        acknowledgement: {
-          extension_authority_revision: managed.acknowledgement.extension_authority_revision,
-          policy_revision: managed.acknowledgement.policy_revision,
-          effective_projection_digest: managed.acknowledgement.effective_projection_digest,
-          status: managed.acknowledgement.status,
-        },
-      }
-      : null,
-  });
-}
-
 export function extensionLocalProtectionInput(
   extension: ExtensionCatalogItem,
   effective: EffectiveExtensionControls,
@@ -268,7 +235,7 @@ export function ExtensionManagedControlsPanel(props: {
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
   const refresh = useCallback(async () => {
     if (refreshState === "checking") return;
-    refreshBaselineRef.current = effectiveStatusKey(props.effective, props.runtime);
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
     setRefreshState("checking");
     setRefreshError(null);
     try {
@@ -341,7 +308,7 @@ export function ExtensionManagedControlsPanel(props: {
         {refreshState === "checking" ? <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">Checking current protection status…</p> : null}
         {refreshState === "complete" ? (
           <p role="status" aria-live="polite" className="mt-3 text-sm text-brand-dark/75">
-            {effectiveStatusKey(props.effective, props.runtime) === refreshBaselineRef.current
+            {effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current
               ? "Check complete. No change detected; the current verified authority is still in use."
               : "Check complete. Protection status updated."}
           </p>

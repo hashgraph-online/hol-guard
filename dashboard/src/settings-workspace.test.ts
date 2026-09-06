@@ -145,6 +145,10 @@ assert(
   "approval-password: first-time copy points to the explicit setup action",
 );
 assert(
+  resolveApprovalPasswordSectionCopy(false, false).includes("Enable the approval gate"),
+  "approval-password: disabled gate copy points to the gate toggle",
+);
+assert(
   approvalPasswordCopySource.includes("Set up approval password"),
   "approval-password: first-time setup has an explicit action",
 );

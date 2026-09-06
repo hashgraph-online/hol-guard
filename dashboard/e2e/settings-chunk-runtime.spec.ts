@@ -38,7 +38,8 @@ const unconfiguredSettingsPayload = {
   },
 };
 
-async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<void> {
+async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
+  const settingsUpdates: Record<string, unknown>[] = [];
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
@@ -48,7 +49,12 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
       body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
     } else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
-    else if (path.endsWith("/settings")) body = settingsPayload;
+    else if (path.endsWith("/settings")) {
+      if (route.request().method() === "POST") {
+        settingsUpdates.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>);
+      }
+      body = settingsPayload;
+    }
     else if (path.endsWith("/approval-gate/totp/enroll")) {
       body = {
         ...gatedSettingsPayload,
@@ -71,6 +77,7 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
     else if (path.endsWith("/diff")) body = null;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
+  return { settingsUpdates };
 }
 
 test("production Settings chunk initializes without React bridge failures", async ({ page }) => {
@@ -95,7 +102,7 @@ test("production Settings chunk initializes without React bridge failures", asyn
 });
 
 test("first-time approval password setup is discoverable beside the gate", async ({ page }) => {
-  await mountSettingsFixture(page, unconfiguredSettingsPayload);
+  const fixture = await mountSettingsFixture(page, unconfiguredSettingsPayload);
   await page.goto(`/settings?${DAEMON}&section=approval`);
 
   await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
@@ -105,4 +112,11 @@ test("first-time approval password setup is discoverable beside the gate", async
   await expect(setupDialog).toBeVisible();
   await expect(setupDialog.getByRole("textbox", { name: "Password", exact: true })).toBeVisible();
   await expect(setupDialog.getByRole("textbox", { name: "Confirm password", exact: true })).toBeVisible();
+  await setupDialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
+  await setupDialog.getByRole("textbox", { name: "Confirm password", exact: true }).fill("test-password");
+  await setupDialog.getByRole("button", { name: "Save settings" }).click();
+  await expect.poll(() => fixture.settingsUpdates).toHaveLength(1);
+  const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
+  expect(updateSettings).toBeDefined();
+  expect(Object.keys(updateSettings ?? {})).toEqual(["approval_gate"]);
 });

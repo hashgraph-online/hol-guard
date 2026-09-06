@@ -76,7 +76,7 @@ import type {
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
-import { ApprovalPasswordSetupAction, resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
+import { ApprovalPasswordSection } from "./settings/approval-password-copy";
 export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
@@ -97,6 +97,8 @@ export {
 } from "./settings-presentation";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+
+type SettingsSaveScope = "all" | "approval-gate";
 
 export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
   const section = new URLSearchParams(search).get("section");
@@ -474,7 +476,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [proofModalError, setProofModalError] = useState<string | null>(null);
   const [proofModalPending, setProofModalPending] = useState(false);
   const [pendingProofAction, setPendingProofAction] = useState<
-    | { kind: "save" }
+    | { kind: "save"; scope?: SettingsSaveScope }
     | {
         kind: "maintenance";
         action:
@@ -802,7 +804,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
   }, [proofModalPending]);
 
-  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials) => {
+  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials, scope: SettingsSaveScope = "all") => {
     if (draft === null) {
       return;
     }
@@ -834,17 +836,24 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      // A presentation-only save is a free preference change: the daemon
-      // accepts it without the high-risk gate, so it must carry only the
-      // presentation keys (no approval_gate, no risk_actions).
-      const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
-      const settingsToSave: Partial<GuardSettings> = presentationOnlyPayload !== null
-        ? presentationOnlyPayload
-        : {
-          ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
-          risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-          approval_gate: approvalGateUpdate,
-        };
+      let settingsToSave: Partial<GuardSettings>;
+      if (scope === "approval-gate") {
+        settingsToSave = { approval_gate: approvalGateUpdate };
+      } else {
+        // A presentation-only save is a free preference change: the daemon
+        // accepts it without the high-risk gate, so it must carry only the
+        // presentation keys (no approval_gate, no risk_actions).
+        const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+        if (presentationOnlyPayload !== null) {
+          settingsToSave = presentationOnlyPayload;
+        } else {
+          settingsToSave = {
+            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+            approval_gate: approvalGateUpdate,
+          };
+        }
+      }
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -1020,7 +1029,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
     try {
       if (pendingProofAction.kind === "save") {
-        await executeSave(proof);
+        await executeSave(proof, pendingProofAction.scope);
       } else if (pendingProofAction.action === "import-settings") {
         if (pendingProofAction.importExport === undefined) {
           throw new Error("Missing settings import payload.");
@@ -1061,7 +1070,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
 
   const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
-    openProofModal(mode, { kind: "save" });
+    openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
   }, [openProofModal]);
 
   const handleRequestRevokeCooldown = useCallback(() => {
@@ -2164,21 +2173,11 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
 
       {showGateDetails ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Approval password</SectionLabel>
-            <p className="mt-1 text-xs text-slate-500">{resolveApprovalPasswordSectionCopy(wasConfigured)}</p>
-            {wasConfigured ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={props.onOpenPasswordChangeModal}
-                  className="text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80"
-                >
-                  Change password
-                </button>
-              </div>
-            ) : props.enabled ? <ApprovalPasswordSetupAction onClick={() => props.onOpenPasswordChangeModal("setup-gate")} /> : null}
-          </div>
+          <ApprovalPasswordSection
+            wasConfigured={wasConfigured}
+            enabled={props.enabled}
+            onOpenPasswordChangeModal={props.onOpenPasswordChangeModal}
+          />
 
           <div className="rounded-xl border border-slate-100 bg-white p-4">
             <SectionLabel>Extra checks</SectionLabel>
