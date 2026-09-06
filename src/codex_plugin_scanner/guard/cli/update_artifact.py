@@ -10,13 +10,12 @@ import json
 import os
 import stat
 import zipfile
-from collections.abc import Callable
 from contextlib import suppress
 from ctypes import wintypes
 from dataclasses import dataclass
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
-from typing import final
+from typing import Any, final
 
 from packaging.utils import InvalidWheelFilename, canonicalize_name, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
@@ -875,8 +874,9 @@ def _read_bounded_descriptor(
         raise UpdateArtifactError(reason_code) from error
 
 
-def _bind_windows_file_apis(kernel32: ctypes.CDLL) -> tuple[Callable[..., object], Callable[..., object]]:
-    """Bind CreateFileW/GetFileInformationByHandle prototypes with explicit marshalling."""
+def _windows_kernel32_prototypes(win_dll: Any) -> tuple[Any, Any]:
+    """Load kernel32 and prototype CreateFileW and GetFileInformationByHandle."""
+    kernel32 = win_dll("kernel32", use_last_error=True)
 
     create_file = kernel32.CreateFileW
     create_file.argtypes = [
@@ -903,8 +903,7 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
         raise UpdateArtifactError(reason_code)
     handle: object | None = None
     try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        create_file, get_information = _bind_windows_file_apis(kernel32)
+        create_file, get_information = _windows_kernel32_prototypes(win_dll)
         handle = create_file(
             str(path),
             _WINDOWS_FILE_READ_ATTRIBUTES,
@@ -942,8 +941,7 @@ def _open_windows_receipt_child_lock(path: Path, *, reason_code: str) -> object:
         raise UpdateArtifactError(reason_code)
     handle: object | None = None
     try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        create_file, get_information = _bind_windows_file_apis(kernel32)
+        create_file, get_information = _windows_kernel32_prototypes(win_dll)
         lock_path = path / f".{_LOCAL_WHEEL_RECEIPT_NAME}.lock.{os.getpid()}.{os.urandom(16).hex()}"
         handle = create_file(
             str(lock_path),
@@ -989,7 +987,21 @@ def _open_windows_regular_descriptor(
     try:
         msvcrt = importlib.import_module("msvcrt")
         kernel32 = win_dll("kernel32", use_last_error=True)
-        create_file, get_information = _bind_windows_file_apis(kernel32)
+
+        create_file = kernel32.CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        get_information = kernel32.GetFileInformationByHandle
+        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
+        get_information.restype = wintypes.BOOL
         handle = create_file(
             str(path),
             _WINDOWS_GENERIC_READ,

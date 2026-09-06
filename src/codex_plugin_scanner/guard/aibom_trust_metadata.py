@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -177,22 +176,25 @@ def _local_security_for_artifact(
     )
 
 
-def _cisco_local_security_layer(
+def _cisco_local_security_payload(
     run: object,
-    *,
     findings: list[dict[str, object]],
-    totals: Mapping[str, Callable[[object], int]],
-    metadata_keys: tuple[str, ...],
-) -> tuple[str, dict[str, object] | None, dict[str, object]]:
-    """Build the shared severity/score/safety/metadata layer for local Cisco security runs."""
+    *,
+    captured_at: str,
+    scripts_total: int,
+    extra_safety_fields: dict[str, object] | None = None,
+) -> tuple[str, object, list[dict[str, object]], dict[str, object] | None, dict[str, object]]:
+    """Project the shared local-scanner status, sorted findings, safety, and metadata payload."""
+    from .inventory_contract import _normalize_inventory_datetime
 
+    status = str(getattr(run, "status", "unknown"))
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
     findings = sorted(
         findings,
         key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
     )
     severity_counts = _cisco_severity_counts(run)
     analyzers_used = _cisco_analyzers_used(run)
-    status = str(getattr(run, "status", "unknown"))
     score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
     safety: dict[str, object] | None = None
     if score is not None:
@@ -201,11 +203,11 @@ def _cisco_local_security_layer(
             "label": _local_skill_security_label(score),
             "findingsTotal": len(findings),
             "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
-            **{key: total(run) for key, total in totals.items()},
+            "scriptsTotal": scripts_total,
+            **(extra_safety_fields or {}),
             "permissionsMissing": [],
         }
 
-    run_metadata = getattr(run, "metadata", None)
     metadata_payload: dict[str, object] = {
         "scannerSource": str(getattr(run, "source", "unknown")),
         "message": str(getattr(run, "message", "")),
@@ -215,12 +217,7 @@ def _cisco_local_security_layer(
     duration_ms = getattr(run, "duration_ms", None)
     if isinstance(duration_ms, int):
         metadata_payload["durationMs"] = duration_ms
-    if isinstance(run_metadata, dict):
-        for key in metadata_keys:
-            value = run_metadata.get(key)
-            if value is not None:
-                metadata_payload[key] = value
-    return status, safety, metadata_payload
+    return status, normalized_captured_at, findings, safety, metadata_payload
 
 
 def _local_skill_security_for_artifact(
@@ -232,7 +229,6 @@ def _local_skill_security_for_artifact(
     cisco_runs: tuple[object, ...],
     workspace_dir: Path | None,
 ) -> dict[str, object] | None:
-    from .inventory_contract import _normalize_inventory_datetime
 
     if item_kind != "skill" or metadata.get("artifactType") != "skill":
         return None
@@ -258,14 +254,19 @@ def _local_skill_security_for_artifact(
     if run is None:
         return None
 
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
-    findings = _local_skill_security_findings(run, skill_root=trust_root)
-    status, safety, metadata_payload = _cisco_local_security_layer(
+    status, normalized_captured_at, findings, safety, metadata_payload = _cisco_local_security_payload(
         run,
-        findings=findings,
-        totals={"scriptsTotal": _local_skill_scripts_total},
-        metadata_keys=("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"),
+        _local_skill_security_findings(run, skill_root=trust_root),
+        captured_at=captured_at,
+        scripts_total=_local_skill_scripts_total(run),
     )
+
+    run_metadata = getattr(run, "metadata", None)
+    if isinstance(run_metadata, dict):
+        for key in ("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"):
+            value = run_metadata.get(key)
+            if value is not None:
+                metadata_payload[key] = value
 
     metadata_payload["evidenceHash"] = guard_evidence_hash(
         {
@@ -299,7 +300,6 @@ def _local_mcp_security_for_artifact(
     cisco_runs: tuple[object, ...],
     workspace_dir: Path | None,
 ) -> dict[str, object] | None:
-    from .inventory_contract import _normalize_inventory_datetime
 
     if item_kind not in {"mcp_server", "mcp_tool"} or getattr(artifact, "artifact_type", None) not in {
         "mcp_server",
@@ -323,15 +323,21 @@ def _local_mcp_security_for_artifact(
     if run is None:
         return None
 
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
     scan_root = _cisco_run_target_path(run) or trust_root
-    findings = _local_mcp_security_findings(run, scan_root=scan_root)
-    status, safety, metadata_payload = _cisco_local_security_layer(
+    status, normalized_captured_at, findings, safety, metadata_payload = _cisco_local_security_payload(
         run,
-        findings=findings,
-        totals={"scriptsTotal": _local_mcp_targets_total, "targetsScanned": _local_mcp_targets_total},
-        metadata_keys=("analyzersUsed", "scanMode", "mode", "targetsScanned"),
+        _local_mcp_security_findings(run, scan_root=scan_root),
+        captured_at=captured_at,
+        scripts_total=_local_mcp_targets_total(run),
+        extra_safety_fields={"targetsScanned": _local_mcp_targets_total(run)},
     )
+
+    run_metadata = getattr(run, "metadata", None)
+    if isinstance(run_metadata, dict):
+        for key in ("analyzersUsed", "scanMode", "mode", "targetsScanned"):
+            value = run_metadata.get(key)
+            if value is not None:
+                metadata_payload[key] = value
 
     metadata_payload["evidenceHash"] = guard_evidence_hash(
         {

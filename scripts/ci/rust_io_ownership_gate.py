@@ -88,6 +88,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
 _ASYNC_POLICY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/mdm/policy.py",
+        "src/codex_plugin_scanner/guard/mdm/managed_file_trust.py",
         "src/codex_plugin_scanner/guard/mdm/contracts.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",

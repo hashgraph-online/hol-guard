@@ -13,13 +13,9 @@ bootstrap_compatibility_module(globals())
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
-    from .commands_support_hook_payload import (
-        _action_envelope_json,
-        _apply_blocked_operation_payload,
-        _approval_surface_policy_for_flow,
-    )
+    from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
     from .commands_support_interaction import (
-        _attach_primary_approval_link,
+        _bind_hook_blocked_operation_queue,
         _codex_browser_wait_metadata,
         _emit,
         _preferred_approval_review_url,
@@ -491,18 +487,19 @@ def _run_hook_copilot_permission_request(
             approval_center_url=approval_center_url,
             now=now,
         )
-        response_payload["approval_requests"] = queued
-        _attach_primary_approval_link(
-            response_payload,
-            harness=_optional_string(args.harness) or args.harness,
+        _bind_hook_blocked_operation_queue(
+            harness=args.harness,
             approval_center_url=approval_center_url,
+            response_payload=response_payload,
+            queued=queued,
         )
     else:
-        queued = _apply_blocked_operation_payload(
-            response_payload,
-            blocked_operation,
-            args=args,
+        queued = _bind_hook_blocked_operation_queue(
+            harness=args.harness,
             approval_center_url=approval_center_url,
+            response_payload=response_payload,
+            queued=[],
+            blocked_operation=blocked_operation,
         )
     response_payload["approval_center_url"] = approval_center_url
     response_payload["review_hint"] = approval_center_hint(

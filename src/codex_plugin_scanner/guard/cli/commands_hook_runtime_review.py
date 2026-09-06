@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
     from .commands_support_hook_payload import (
         _action_envelope_json,
-        _apply_blocked_operation_payload,
         _approval_surface_policy_for_flow,
         _emit_native_hook_notification_stderr,
         _emit_native_hook_response,
@@ -25,7 +24,7 @@ if TYPE_CHECKING:
         _should_emit_prequeue_native_hook_response,
     )
     from .commands_support_interaction import (
-        _attach_primary_approval_link,
+        _bind_hook_blocked_operation_queue,
         _codex_bridge_wait_process,
         _codex_browser_wait_metadata,
         _preferred_approval_review_url,
@@ -405,18 +404,19 @@ def _review_runtime_artifact_hook(
                     approval_center_url=approval_center_url,
                     now=_now(),
                 )
-                response_payload["approval_requests"] = queued
-                _attach_primary_approval_link(
-                    response_payload,
-                    harness=_optional_string(args.harness) or args.harness,
+                _bind_hook_blocked_operation_queue(
+                    harness=args.harness,
                     approval_center_url=approval_center_url,
+                    response_payload=response_payload,
+                    queued=queued,
                 )
             else:
-                queued = _apply_blocked_operation_payload(
-                    response_payload,
-                    blocked_operation,
-                    args=args,
+                queued = _bind_hook_blocked_operation_queue(
+                    harness=args.harness,
                     approval_center_url=approval_center_url,
+                    response_payload=response_payload,
+                    queued=[],
+                    blocked_operation=blocked_operation,
                 )
             _attach_cursor_approval_request_ids(
                 args=args,

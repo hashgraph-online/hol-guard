@@ -640,6 +640,38 @@ def _attach_primary_approval_link(
         approval_center_url=approval_center_url,
     )
 
+def _bind_hook_blocked_operation_queue(
+    *,
+    harness: str,
+    approval_center_url: str,
+    response_payload: dict[str, object],
+    queued: list[dict[str, object]],
+    blocked_operation: Mapping[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Bind daemon operation metadata and the primary approval link into a hook response."""
+    if blocked_operation is not None:
+        operation = blocked_operation.get("operation")
+        if not isinstance(operation, dict):
+            operation = {}
+        operation_queue = blocked_operation.get("approval_requests")
+        if not isinstance(operation_queue, list):
+            operation_queue = []
+        queued = operation_queue
+        operation_id = _optional_string(operation.get("operation_id"))
+        if operation_id is not None:
+            response_payload["operation_id"] = operation_id
+        response_payload["operation"] = operation
+        approval_request_ids = operation.get("approval_request_ids")
+        if isinstance(approval_request_ids, list):
+            response_payload["approval_request_ids"] = approval_request_ids
+    response_payload["approval_requests"] = queued
+    _attach_primary_approval_link(
+        response_payload,
+        harness=_optional_string(harness) or harness,
+        approval_center_url=approval_center_url,
+    )
+    return queued
+
 def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, str | None]:
     return {
         "harness": harness,
@@ -712,7 +744,8 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
         open_browser_url(browser_url)
 
 __all__ = [
-    "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_build_cisco_scan_options",
+    "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_bind_hook_blocked_operation_queue",
+    "_build_cisco_scan_options",
     "_codex_bridge_wait_process",
     "_codex_browser_approval_decision",
     "_codex_browser_wait_metadata",

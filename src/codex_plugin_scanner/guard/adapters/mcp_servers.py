@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from hashlib import sha256
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
+from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from .base import HarnessContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +173,31 @@ def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
     return filtered
 
 
+def proxy_launcher_entry(
+    *,
+    proxy_command: str,
+    context: HarnessContext,
+    server: ManagedMcpServer,
+) -> dict[str, object]:
+    """Build the shared command/args/env mapping that launches a Guard MCP proxy."""
+
+    args = proxy_cli_args(
+        proxy_command=proxy_command,
+        guard_home=str(context.guard_home),
+        server=server,
+        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
+        workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+    )
+    entry: dict[str, object] = {
+        "command": sys.executable,
+        "args": args,
+    }
+    env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
+    if env:
+        entry["env"] = env
+    return entry
+
+
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
@@ -293,6 +321,7 @@ __all__ = [
     "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
     "proxy_cli_args",
+    "proxy_launcher_entry",
     "proxy_process_env",
     "skipped_stdio_server_names",
     "stable_mcp_server_identifier",

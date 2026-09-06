@@ -1,5 +1,10 @@
 # Extension contributions
 
+For exported command metadata or MCP tool inventories, start with the
+[offline Extension Builder](extension-builder/README.md). It generates native
+files and an integration plan while keeping every contribution External and off.
+Semantic review and the activation requirements below still apply.
+
 Community command-safety extensions are **external**. They stay off until a user turns them on for this device. HOL floors and HOL-curated libraries (AWS, Azure, Git, Kubernetes, Docker, and other mapped tools) stay on.
 
 ## Trust classes
