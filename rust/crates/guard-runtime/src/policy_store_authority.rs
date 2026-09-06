@@ -459,7 +459,11 @@ mod tests {
         let observed = Arc::new(Mutex::new(authority_fingerprint(&path)));
         let changed = Arc::new(AtomicBool::new(false));
         let mut expected = observed.lock().unwrap();
-        start_authority_watcher(path.clone(), Arc::clone(&observed), Arc::downgrade(&changed));
+        start_authority_watcher(
+            path.clone(),
+            Arc::clone(&observed),
+            Arc::downgrade(&changed),
+        );
 
         // Give the watcher time to reach the mutex. The pre-fix watcher read
         // the old file before blocking here, then used that stale sample after
