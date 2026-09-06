@@ -5180,12 +5180,22 @@ def _is_timeout_error(error: OSError) -> bool:
     return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
 
 
-def _urlopen_json_with_timeout_retry(
+def _urlopen_with_sync_retries(
     *,
     request: urllib.request.Request,
     timeout_seconds: int,
     retry_timeout_seconds: int,
-) -> dict[str, object]:
+    parse_json_response: bool,
+    nonce_fast_path: bool,
+) -> object:
+    """Drive one Guard Cloud request through the shared sync retry policies.
+
+    Retry order is deliberate: an optional DPoP nonce fast path for raw
+    requests, then bounded 429 rate-limit waits with a freshly signed
+    request, then bounded gateway retries, then the generic DPoP nonce
+    challenge retry, and finally one timeout retry at the longer budget.
+    """
+
     current_request = request
     current_timeout_seconds = timeout_seconds
     retried_timeout = False
@@ -5195,74 +5205,11 @@ def _urlopen_json_with_timeout_retry(
     while True:
         try:
             with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+                if parse_json_response:
+                    return json.loads(response.read().decode("utf-8"))
+                return None
         except urllib.error.HTTPError as error:
-            if error.code == 429 and rate_limit_retry_count < 2:
-                retry_after = _parse_retry_after_header(error)
-                time.sleep(min(retry_after, 120))
-                rate_limit_retry_count += 1
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
-                retry_after = _retry_after_sleep_seconds(error, retry_timeout_seconds)
-                time.sleep(retry_after)
-                gateway_retry_count += 1
-                current_request = _request_for_gateway_retry(current_request)
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
-            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
-            retry_request = (
-                None
-                if dpop_nonce is None or nonce_retry_count >= 3
-                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
-            )
-            if retry_request is not None:
-                nonce_retry_count += 1
-                current_request = retry_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            raise
-        except OSError as error:
-            if not retried_timeout and _is_timeout_error(error):
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = retry_timeout_seconds
-                retried_timeout = True
-                continue
-            raise
-        if not isinstance(payload, dict):
-            raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
-        return payload
-
-
-def _urlopen_with_timeout_retry(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-) -> None:
-    current_request = request
-    current_timeout_seconds = timeout_seconds
-    retried_timeout = False
-    nonce_retry_count = 0
-    rate_limit_retry_count = 0
-    gateway_retry_count = 0
-    while True:
-        try:
-            with managed_urlopen(current_request, timeout=current_timeout_seconds):
-                return
-        except urllib.error.HTTPError as error:
-            if error.code == 401:
+            if nonce_fast_path and error.code == 401:
                 error_payload = _http_error_payload(error)
                 dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
                 if dpop_nonce is not None and nonce_retry_count < 3:
@@ -5316,6 +5263,39 @@ def _urlopen_with_timeout_retry(
                 retried_timeout = True
                 continue
             raise
+
+
+def _urlopen_json_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> dict[str, object]:
+    payload = _urlopen_with_sync_retries(
+        request=request,
+        timeout_seconds=timeout_seconds,
+        retry_timeout_seconds=retry_timeout_seconds,
+        parse_json_response=True,
+        nonce_fast_path=False,
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+    return payload
+
+
+def _urlopen_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> None:
+    _urlopen_with_sync_retries(
+        request=request,
+        timeout_seconds=timeout_seconds,
+        retry_timeout_seconds=retry_timeout_seconds,
+        parse_json_response=False,
+        nonce_fast_path=True,
+    )
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
