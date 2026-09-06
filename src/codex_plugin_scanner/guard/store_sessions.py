@@ -4,8 +4,28 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import wraps
+from typing import Concatenate, ParamSpec
+
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_resume import update_request_resume as _update_request_resume
+
+_P = ParamSpec("_P")
+
+
+def _with_resume_connection(
+    update: Callable[Concatenate[sqlite3.Connection, _P], None],
+) -> Callable[Concatenate[StoreSessionsMixin, _P], None]:
+    """Open the Guard store connection around a request-resume update."""
+
+    @wraps(update)
+    def _method(self: StoreSessionsMixin, /, *args: _P.args, **kwargs: _P.kwargs) -> None:
+        with self._connect() as connection:
+            update(connection, *args, **kwargs)
+
+    return _method
 
 
 def _guard_session_row(row: sqlite3.Row) -> dict[str, object]:
@@ -281,56 +301,7 @@ class StoreSessionsMixin:
         with self._connect() as connection:
             return load_latest_request_resume(connection, harness=harness)
 
-    def update_request_resume(
-        self,
-        *,
-        request_id: str,
-        resolution_action: str | None,
-        strategy: str | None,
-        supported: bool | None,
-        status: str,
-        reason: str | None,
-        message: str | None,
-        last_error: str | None,
-        attempt_count: int,
-        last_attempt_at: str | None,
-        sent_at: str | None,
-        now: str,
-        continuation_contract_version: str | None = None,
-        continuation_capability: str | None = None,
-        continuation_status: str | None = None,
-        continuation_reason: str | None = None,
-        continuation_evidence: list[dict[str, object]] | None = None,
-        continuation_offer_hash: str | None = None,
-        continuation_action: str | None = None,
-        continuation_completed_at: str | None = None,
-        continuation_cancelled_at: str | None = None,
-    ) -> None:
-        with self._connect() as connection:
-            persist_request_resume_update(
-                connection,
-                request_id=request_id,
-                resolution_action=resolution_action,
-                strategy=strategy,
-                supported=supported,
-                status=status,
-                reason=reason,
-                message=message,
-                last_error=last_error,
-                attempt_count=attempt_count,
-                last_attempt_at=last_attempt_at,
-                sent_at=sent_at,
-                now=now,
-                continuation_contract_version=continuation_contract_version,
-                continuation_capability=continuation_capability,
-                continuation_status=continuation_status,
-                continuation_reason=continuation_reason,
-                continuation_evidence=continuation_evidence,
-                continuation_offer_hash=continuation_offer_hash,
-                continuation_action=continuation_action,
-                continuation_completed_at=continuation_completed_at,
-                continuation_cancelled_at=continuation_cancelled_at,
-            )
+    update_request_resume = _with_resume_connection(_update_request_resume)
 
     def add_guard_operation_item(
         self,
