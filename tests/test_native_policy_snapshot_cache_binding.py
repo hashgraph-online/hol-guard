@@ -45,6 +45,14 @@ class _TimeoutPublisher:
         return
 
 
+class _CloseTrackingPublisher(_TimeoutPublisher):
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+
 class _PoisonPublisher(_TimeoutPublisher):
     def start(self) -> None:
         raise AssertionError("CLI hook workers must not start a competing publisher")
@@ -99,7 +107,7 @@ def _ready_worker(
     return hook_worker_module.HookWorker(store=store, publish_native_policy=publish_native_policy)
 
 
-def test_prepare_workspace_policy_reuses_resident_authority_when_wait_times_out(
+def test_prepare_workspace_policy_fails_closed_when_publisher_times_out(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -119,11 +127,7 @@ def test_prepare_workspace_policy_reuses_resident_authority_when_wait_times_out(
     worker = _ready_worker(guard_home, master, monkeypatch)
     binding = worker.prepare_workspace_policy(tmp_path / "workspace")
 
-    assert binding is not None
-    assert binding["generation"] == snapshot["generation"]
-    assert binding["policy_digest"] == snapshot["policy_digest"]
-    assert binding["runtime_identity"] == snapshot["runtime_identity"]
-    assert binding["mode"] == snapshot["mode"]
+    assert binding is None
 
 
 def test_prepare_workspace_policy_ignores_publisher_cache_and_lifecycle_generation(
@@ -203,6 +207,38 @@ def test_prepare_workspace_policy_rejects_forged_floor_mac(
     path.chmod(0o600)
     worker = _ready_worker(guard_home, master, monkeypatch)
     assert worker.prepare_workspace_policy(tmp_path / "workspace") is None
+
+
+def test_non_publishing_worker_does_not_close_shared_publisher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    publisher = _CloseTrackingPublisher()
+    worker = _ready_worker(
+        guard_home,
+        b"o" * 32,
+        monkeypatch,
+        publisher=publisher,
+        publish_native_policy=False,
+    )
+
+    worker.close()
+
+    assert publisher.close_calls == 0
+
+
+def test_publishing_worker_closes_publisher_it_started(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    publisher = _CloseTrackingPublisher()
+    worker = _ready_worker(guard_home, b"p" * 32, monkeypatch, publisher=publisher)
+
+    worker.close()
+
+    assert publisher.close_calls == 1
 
 
 def test_prepare_workspace_policy_binds_resident_authority_without_publishing(

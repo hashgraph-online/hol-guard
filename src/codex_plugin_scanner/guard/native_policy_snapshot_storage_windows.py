@@ -7,7 +7,7 @@ from typing import Any
 
 from .native_policy_snapshot_constants import (
     _MAX_STATE_BYTES,
-    POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
+    POLICY_SNAPSHOT_MAX_BYTES,
     NativePolicySnapshotError,
 )
 
@@ -20,7 +20,11 @@ def _snapshot_api() -> Any:
     return native_policy_snapshot
 
 
-def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
+def _windows_read_snapshot_bytes(
+    path: Path,
+    *,
+    maximum_bytes: int = POLICY_SNAPSHOT_MAX_BYTES,
+) -> bytes | None:
     """Read one cache object from a single verified non-reparse handle."""
 
     import ctypes
@@ -39,7 +43,7 @@ def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
         owner_sid = api._windows_owner_sid()
         api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
         expected_size = (int(information.nFileSizeHigh) << 32) | int(information.nFileSizeLow)
-        if expected_size <= 0 or expected_size > POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES:
+        if expected_size <= 0 or expected_size > maximum_bytes:
             raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
         read_file = kernel32.ReadFile
         read_file.argtypes = [
@@ -50,10 +54,10 @@ def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
             ctypes.c_void_p,
         ]
         read_file.restype = wintypes.BOOL
-        buffer = (ctypes.c_ubyte * (POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES + 1))()
+        buffer = (ctypes.c_ubyte * (maximum_bytes + 1))()
         total = 0
-        while total <= POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES:
-            request_size = min(64 * 1024, POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES + 1 - total)
+        while total <= maximum_bytes:
+            request_size = min(64 * 1024, maximum_bytes + 1 - total)
             if request_size <= 0:
                 break
             count = wintypes.DWORD()
@@ -71,7 +75,7 @@ def _windows_read_snapshot_bytes(path: Path) -> bytes | None:
             if chunk_size == 0:
                 break
             total += chunk_size
-        if total != expected_size or total > POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES:
+        if total != expected_size or total > maximum_bytes:
             raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
         return bytes(buffer[:total])
     finally:

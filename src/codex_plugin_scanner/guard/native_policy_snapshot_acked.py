@@ -9,6 +9,7 @@ from .native_policy_snapshot_codec import derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import (
     _RUST_SNAPSHOT_STATE_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,
+    POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_storage import _read_v3_snapshot_file
@@ -32,6 +33,7 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
         cached = _read_v3_snapshot_file(
             Path(guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY / _RUST_SNAPSHOT_STATE_NAME,
             verifier_key=derive_native_policy_verifier_key(material[0]),
+            maximum_bytes=POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
         )
     except (NativePolicySnapshotError, OverflowError):
         return None

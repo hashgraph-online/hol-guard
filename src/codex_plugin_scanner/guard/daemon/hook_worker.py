@@ -138,7 +138,8 @@ class HookWorker(HookWorkerNativeMixin):
                     self._python_oracle = cast(Callable[[HookReviewRequest], HookReviewResponse], review)
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         mode = native_mode()
-        if publish_native_policy and mode in {"auto", "force", "shadow"}:
+        self._owns_policy_snapshot_publisher = publish_native_policy and mode in {"auto", "force", "shadow"}
+        if self._owns_policy_snapshot_publisher:
             self.policy_snapshot_publisher.start()
         if wait_for_native_policy and mode in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
@@ -201,9 +202,10 @@ class HookWorker(HookWorkerNativeMixin):
         return native_runtime_status()
 
     def close(self) -> None:
-        """Stop the asynchronous native policy publisher with the worker."""
+        """Stop the publisher only when this worker started publication."""
 
-        self.policy_snapshot_publisher.close()
+        if self._owns_policy_snapshot_publisher:
+            self.policy_snapshot_publisher.close()
 
     def prepare_workspace_policy(
         self,
@@ -216,8 +218,8 @@ class HookWorker(HookWorkerNativeMixin):
         Workspace overlays are published asynchronously, so the first hook
         for a workspace must complete this same barrier used by normal hook
         evaluation. The barrier is always capped at the native readiness
-        budget. A timeout or a competing publisher still reuses the
-        resident-accepted snapshot when one remains valid.
+        budget. Publishing workers fail closed when readiness is unavailable;
+        non-publishing workers may reuse a still-valid resident-accepted snapshot.
         """
 
         if native_mode() not in {"auto", "force", "shadow"}:
@@ -245,6 +247,8 @@ class HookWorker(HookWorkerNativeMixin):
             snapshot = current_snapshot()
             if isinstance(snapshot, dict):
                 return snapshot
+        if self._publish_native_policy:
+            return None
         return acked_snapshot_binding_for_store(self.store)
 
     def _native_policy_snapshot(
