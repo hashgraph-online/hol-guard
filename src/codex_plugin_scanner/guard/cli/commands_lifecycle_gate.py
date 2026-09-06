@@ -166,7 +166,9 @@ def _apps_disconnect_confirmation_matches(args: argparse.Namespace) -> bool:
 def _command_subject(args: argparse.Namespace) -> str:
     command = _string_attribute(args, "guard_command")
     if command == "install":
-        return "all" if _bool_attribute(args, "all") else _string_attribute(args, "harness") or "detected"
+        if _bool_attribute(args, "all"):
+            return "all"
+        return _harness_subject(_attribute(args, "harness"))
     if command == "uninstall":
         if _bool_attribute(args, "self_uninstall"):
             return "hol-guard"
@@ -183,6 +185,18 @@ def _attribute(args: argparse.Namespace, name: str) -> object | None:
 def _string_attribute(args: argparse.Namespace, name: str) -> str:
     value = _attribute(args, name)
     return value if isinstance(value, str) else ""
+
+
+def _harness_subject(value: object) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        names = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+        if len(names) == 1:
+            return names[0]
+        if len(names) > 1:
+            return ",".join(names)
+    return "detected"
 
 
 def _bool_attribute(args: argparse.Namespace, name: str) -> bool:
