@@ -1,0 +1,90 @@
+name: Branch patch domain command regressions
+
+on:
+  push:
+    branches:
+      - fix/docker-kubernetes-command-coverage
+    paths:
+      - .github/workflows/branch-patch-domain-command-regressions.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/docker-kubernetes-command-coverage
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Patch domain global options and option-value safe variants
+        run: |
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py")
+          text = path.read_text(encoding="utf-8")
+          replacements = (
+              (
+                  '        "--user",\n        "--username",\n    }\n)\n_KUBECTL_GLOBAL_FLAGS',
+                  '        "--user",\n        "--username",\n        "-v",\n        "--v",\n    }\n)\n_KUBECTL_GLOBAL_FLAGS',
+              ),
+              (
+                  '        "--kube-context",\n        "--kube-token",',
+                  '        "--kube-context",\n        "--kube-tls-server-name",\n        "--kube-token",',
+              ),
+              (
+                  '    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,\n) -> ExecutableMatcher:',
+                  '    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,\n    required_flags_in_all_arguments: bool = False,\n) -> ExecutableMatcher:',
+              ),
+              (
+                  '        options_with_values=options_with_values,\n        required_option_values=required_option_values,\n    )',
+                  '        options_with_values=options_with_values,\n        required_option_values=required_option_values,\n        required_flags_in_all_arguments=required_flags_in_all_arguments,\n    )',
+              ),
+              (
+                  '            options_with_values=frozenset({"--dry-run"}),\n            required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n        ),\n    )\n\n\ndef _helm_dry_run_variants',
+                  '            options_with_values=frozenset({"--dry-run"}),\n            required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n            required_flags_in_all_arguments=True,\n        ),\n    )\n\n\ndef _helm_dry_run_variants',
+              ),
+              (
+                  '                options_with_values=frozenset({"--dry-run"}),\n                required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n            ),\n        ),\n    )\n\n\ndef _rule',
+                  '                options_with_values=frozenset({"--dry-run"}),\n                required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n                required_flags_in_all_arguments=True,\n            ),\n        ),\n    )\n\n\ndef _rule',
+              ),
+          )
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"expected patch anchor missing: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+
+          tests = Path("tests/test_guard_command_common_extension_regressions.py")
+          test_text = tests.read_text(encoding="utf-8")
+          old_cases = '''        ("kubectl -v 6 apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),\n        ("kubectl --v 6 scale deployment api --replicas=2", "command.kubernetes-operations.scale-resources"),\n        (\n            "helm --kube-tls-server-name cluster.example upgrade api ./chart",\n            "command.kubernetes-operations.helm-upgrade",\n        ),'''
+          new_cases = '''        ("kubectl -v 6 apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),\n        ("kubectl --v 6 scale deployment api --replicas=2", "command.kubernetes-operations.scale-resources"),\n        ("kubectl -v 6 delete pod api", "command.kubernetes-operations.delete-resources"),\n        ("kubectl --v 6 drain node-a", "command.kubernetes-operations.drain-node"),\n        (\n            "helm --kube-tls-server-name cluster.example upgrade api ./chart",\n            "command.kubernetes-operations.helm-upgrade",\n        ),\n        (\n            "helm --kube-tls-server-name cluster.example uninstall api",\n            "command.kubernetes-operations.helm-uninstall",\n        ),'''
+          if old_cases not in test_text:
+              raise SystemExit("expected regression case anchor missing")
+          test_text = test_text.replace(old_cases, new_cases, 1)
+          old_safe = '''        "kubectl apply -f deployment.yaml --dry-run=client",\n        "kubectl replace -f deployment.yaml --dry-run=server",'''
+          new_safe = '''        "kubectl apply -f deployment.yaml --dry-run=client",\n        "kubectl delete pod api --dry-run=client",\n        "kubectl drain node-a --dry-run server",\n        "kubectl replace -f deployment.yaml --dry-run=server",'''
+          if old_safe not in test_text:
+              raise SystemExit("expected safe-variant anchor missing")
+          tests.write_text(test_text.replace(old_safe, new_safe, 1), encoding="utf-8")
+          PY
+      - name: Run focused command-extension tests
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_command_common_extension_regressions.py \
+            tests/test_guard_command_container_kubernetes_common_extensions.py
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py tests/test_guard_command_common_extension_regressions.py
+          git commit -m "fix: align domain command option handling"
+          git push origin HEAD:fix/docker-kubernetes-command-coverage
