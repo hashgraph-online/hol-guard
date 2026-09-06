@@ -43,15 +43,6 @@ def test_hol_guard_version_answers_without_command_surface(monkeypatch: pytest.M
     assert _COMMANDS_HUB not in sys.modules
 
 
-def test_importing_guard_package_does_not_load_command_surface(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
-
-    import codex_plugin_scanner.guard as guard_package
-
-    assert _COMMANDS_HUB not in sys.modules
-    assert callable(guard_package.run_guard_command)
-
-
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 

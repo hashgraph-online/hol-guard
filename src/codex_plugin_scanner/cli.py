@@ -8,9 +8,18 @@ from pathlib import Path
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
-from .guard.cli import add_guard_parser, add_guard_root_parser, run_guard_command
 from .reporting import format_json as format_json
 from .version import __version__
+
+
+def _guard_cli(name: str):
+    # Deferred: importing the Guard CLI eagerly pulls the whole Guard command
+    # surface through the package __init__, which short-lived invocations
+    # must not pay for. The Guard package itself stays eager so spawned hook
+    # workers see the same import order as the daemon.
+    from .guard import cli as guard_cli_module
+
+    return getattr(guard_cli_module, name)
 
 
 def _supported_harness_values() -> tuple[str, ...]:
@@ -106,7 +115,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-        add_guard_root_parser(parser)
+        _guard_cli("add_guard_root_parser")(parser)
         return parser
 
     description = "Scan plugin ecosystems for CI and publish readiness."
@@ -196,7 +205,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     )
     doctor_parser.add_argument("--bundle")
     if program_mode == "combined":
-        add_guard_parser(subparsers)
+        _guard_cli("add_guard_parser")(subparsers)
 
     return parser
 
@@ -407,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
     warn_if_shadowed()
     if program_mode in {"guard", "hol-guard"}:
         try:
-            return run_guard_command(args)
+            return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
             parser.error(str(exc))
         except Exception as exc:
@@ -438,7 +447,7 @@ def _dispatch_scanner_command(
         return _run_doctor(args)
     if args.command == "guard":
         try:
-            return run_guard_command(args)
+            return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
             parser.error(str(exc))
         except Exception as exc:

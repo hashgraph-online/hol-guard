@@ -51,9 +51,7 @@ def _resolve_targets(
     if targets:
         return targets
     action = "install" if command == "install" else "remove"
-    raise ValueError(
-        f"No supported Guard harnesses detected for {action}; pass one explicitly or configure one first."
-    )
+    raise ValueError(f"No supported Guard harnesses detected for {action}; pass one explicitly or configure one first.")
 
 
 __all__ = ["_resolve_targets"]
