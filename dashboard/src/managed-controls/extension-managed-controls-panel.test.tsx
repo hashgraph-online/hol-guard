@@ -187,4 +187,17 @@ const catalogMismatchMarkup = renderToStaticMarkup(createElement(ExtensionManage
 assert.match(catalogMismatchMarkup, /local Extension catalog do not match/);
 assert.match(catalogMismatchMarkup, /Managed by workspace-managed-controls · Set on this device/);
 
+const staleMarkup = renderToStaticMarkup(createElement(ExtensionManagedControlsPanel, {
+  extension,
+  effective: {
+    ...mixedEffective,
+    failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+  },
+  onRefresh: () => undefined,
+}));
+assert.match(staleMarkup, /Guard Cloud data is stale/);
+assert.match(staleMarkup, /Local protection continues with the last verified authority/);
+assert.match(staleMarkup, /Check again/);
+assert.doesNotMatch(staleMarkup, /fresh acknowledgement succeeds/);
+
 console.log("extension-managed-controls-panel.test.tsx: all assertions passed");

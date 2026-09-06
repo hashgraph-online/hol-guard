@@ -4086,6 +4086,41 @@ function protectionCenterLoadError(message) {
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
 }
+function effectiveStatusKey(effective, options = {}) {
+  const managed = effective.managed_controls;
+  const approvalGate = options.approvalGate;
+  return JSON.stringify({
+    schema_version: effective.schema_version,
+    health: effective.health,
+    revision: effective.revision,
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: effective.global_lockdown,
+    cloud_policy_sync_error: options.runtime?.cloud_policy_sync_error ?? null,
+    approval_gate: approvalGate ? {
+      configured: approvalGate.configured,
+      enabled: approvalGate.enabled,
+      fail_closed: approvalGate.fail_closed,
+      strict_all_decisions: approvalGate.strict_all_decisions,
+      totp_enabled: approvalGate.totp_enabled ?? false,
+      totp_pending: approvalGate.totp_pending ?? false
+    } : null,
+    failure_codes: effective.failures.map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`).sort(),
+    managed_controls: managed ? {
+      control_set_id: managed.control_set_id,
+      control_set_name: managed.control_set_name,
+      bundle_version: managed.bundle_version,
+      workspace_id: managed.workspace_id,
+      authority_mode: managed.authority_mode,
+      catalog_digest: managed.catalog_digest,
+      acknowledgement: {
+        extension_authority_revision: managed.acknowledgement.extension_authority_revision,
+        policy_revision: managed.acknowledgement.policy_revision,
+        effective_projection_digest: managed.acknowledgement.effective_projection_digest,
+        status: managed.acknowledgement.status
+      }
+    } : null
+  });
+}
 function authorityNoticeView(health, approvalGateReady) {
   switch (health) {
     case "tampered":
@@ -4178,6 +4213,10 @@ function ProtectionAuthorityNotice(props) {
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
+  const [checkPending, setCheckPending] = reactExports.useState(false);
+  const [checkComplete, setCheckComplete] = reactExports.useState(false);
+  const [checkError, setCheckError] = reactExports.useState(null);
+  const checkBaselineRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
@@ -4189,6 +4228,21 @@ function ProtectionAuthorityNotice(props) {
       setCopyState("copied");
     } catch {
       setCopyState("failed");
+    }
+  };
+  const checkAgain = async () => {
+    if (checkPending || props.busy) return;
+    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
+    setCheckPending(true);
+    setCheckComplete(false);
+    setCheckError(null);
+    try {
+      await props.onCheckAgain();
+      setCheckComplete(true);
+    } catch {
+      setCheckError("Guard could not refresh the current protection status. The displayed state remains in force; try again.");
+    } finally {
+      setCheckPending(false);
     }
   };
   const warning2 = view.tone === "warning";
@@ -4204,8 +4258,8 @@ function ProtectionAuthorityNotice(props) {
             "button",
             {
               type: "button",
-              "aria-busy": props.busy,
-              disabled: props.busy || gatePending,
+              "aria-busy": props.busy || checkPending,
+              disabled: props.busy || checkPending || gatePending,
               onClick: () => {
                 if (view.action.kind === "configure-approval") {
                   props.onOpenApprovalSettings();
@@ -4236,14 +4290,20 @@ function ProtectionAuthorityNotice(props) {
             "button",
             {
               type: "button",
-              disabled: props.busy,
-              onClick: props.onCheckAgain,
+              disabled: props.busy || checkPending,
+              "aria-busy": checkPending,
+              onClick: () => {
+                void checkAgain();
+              },
               className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
-              children: "Check again"
+              children: checkPending ? "Checking…" : "Check again"
             }
           )
         ] }),
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
+        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
         view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
@@ -5048,7 +5108,17 @@ function ManagedControlsPrimaryAction(props) {
     ] });
   }
   if (props.action.action === "refresh") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onRefresh, className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: props.action.label });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onRefresh,
+        disabled: props.checking,
+        "aria-busy": props.checking,
+        className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-60",
+        children: props.checking ? "Checking…" : props.action.label
+      }
+    );
   }
   if (props.action.action === "connect-cloud") {
     if (props.connectHref) {
@@ -5138,7 +5208,7 @@ function recoveryNotice(recovery) {
   if (recovery === "degraded") {
     return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
   }
-  return "Cloud sync is stale. Guard keeps the last verified authority fail-safe until a fresh acknowledgement succeeds.";
+  return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
 function extensionLocalProtectionInput(extension2, effective, runtime) {
   const managed = effective.managed_controls;
@@ -5172,13 +5242,26 @@ function ExtensionManagedControlsPanel(props) {
   const [connecting, setConnecting] = reactExports.useState(false);
   const [connectHref, setConnectHref] = reactExports.useState(null);
   const [connectMessage, setConnectMessage] = reactExports.useState(null);
+  const [refreshState, setRefreshState] = reactExports.useState("idle");
+  const [refreshError, setRefreshError] = reactExports.useState(null);
+  const refreshBaselineRef = reactExports.useRef(null);
   const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
   const view = buildLocalProtectionView(input);
   const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
-  const refresh = () => {
-    void props.onRefresh();
-  };
+  const refresh = reactExports.useCallback(async () => {
+    if (refreshState === "checking") return;
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
+    setRefreshState("checking");
+    setRefreshError(null);
+    try {
+      await props.onRefresh();
+      setRefreshState("complete");
+    } catch {
+      setRefreshState("error");
+      setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
+    }
+  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
   const connect = reactExports.useCallback(() => {
     setConnecting(true);
     setConnectMessage(null);
@@ -5217,12 +5300,16 @@ function ExtensionManagedControlsPanel(props) {
         {
           action: view.primaryAction,
           connecting,
+          checking: refreshState === "checking",
           connectHref,
           onConnect: connect,
           onRefresh: refresh
         }
       ) }),
-      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null
+      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
+      refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
+      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
+      refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
     ] }),
     !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
     hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
@@ -6223,18 +6310,33 @@ function ProtectionCenterWorkspace(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
+  const loadInFlightRef = reactExports.useRef(null);
+  const refreshInFlightRef = reactExports.useRef(null);
   const localClis = useLocalCliCatalog();
-  const load = reactExports.useCallback(async () => {
-    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
-    try {
-      const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
-      setState({ kind: "ready", catalog, effective });
-      return effective;
-    } catch (error) {
-      setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
-      return null;
-    }
+  const load = reactExports.useCallback(() => {
+    if (loadInFlightRef.current !== null) return loadInFlightRef.current;
+    const request2 = (async () => {
+      setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+      try {
+        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        setState({ kind: "ready", catalog, effective });
+        return effective;
+      } catch (error) {
+        setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+        return null;
+      }
+    })();
+    loadInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      },
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      }
+    );
+    return request2;
   }, []);
   reactExports.useEffect(() => {
     void load();
@@ -6292,9 +6394,25 @@ function ProtectionCenterWorkspace(props) {
   const retryLoad = reactExports.useCallback(() => {
     void load();
   }, [load]);
-  const refreshProtection = reactExports.useCallback(async () => {
-    await load();
-  }, [load]);
+  const refreshProtection = reactExports.useCallback(() => {
+    if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
+    const request2 = (async () => {
+      const [refreshed] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null) {
+        throw new Error("Protection status could not be refreshed.");
+      }
+    })();
+    refreshInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      },
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      }
+    );
+    return request2;
+  }, [load, props.onRefreshRuntime]);
   const handleCancelPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -6361,13 +6479,17 @@ function ProtectionCenterWorkspace(props) {
   const handleAuthorityAction = reactExports.useCallback((kind, credentials) => {
     void runAuthorityAction(kind, credentials);
   }, [runAuthorityAction]);
-  const handleCheckAgain = reactExports.useCallback(() => {
-    void load();
+  const handleCheckAgain = reactExports.useCallback(async () => {
     setRecoveryError(null);
-    void refreshApprovalGate({ failClosed: true }).catch(() => {
+    const [protectionResult, approvalResult] = await Promise.allSettled([
+      refreshProtection(),
+      refreshApprovalGate({ failClosed: true })
+    ]);
+    if (approvalResult.status === "rejected") {
       setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
-    });
-  }, [load, refreshApprovalGate]);
+    }
+    if (protectionResult.status === "rejected") throw protectionResult.reason;
+  }, [refreshApprovalGate, refreshProtection]);
   const handleOpenApprovalSettings = reactExports.useCallback(() => {
     props.onNavigate("/settings?section=approval");
   }, [props.onNavigate]);

@@ -27,8 +27,19 @@ const gatedSettingsPayload = {
     },
   },
 };
+const unconfiguredSettingsPayload = {
+  ...gatedSettingsPayload,
+  settings: {
+    ...gatedSettingsPayload.settings,
+    approval_gate: {
+      ...gatedSettingsPayload.settings.approval_gate,
+      configured: false,
+    },
+  },
+};
 
-async function mountSettingsFixture(page: Page): Promise<void> {
+async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
+  const settingsUpdates: Record<string, unknown>[] = [];
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
@@ -38,7 +49,12 @@ async function mountSettingsFixture(page: Page): Promise<void> {
       body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
     } else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
-    else if (path.endsWith("/settings")) body = gatedSettingsPayload;
+    else if (path.endsWith("/settings")) {
+      if (route.request().method() === "POST") {
+        settingsUpdates.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>);
+      }
+      body = settingsPayload;
+    }
     else if (path.endsWith("/approval-gate/totp/enroll")) {
       body = {
         ...gatedSettingsPayload,
@@ -61,6 +77,7 @@ async function mountSettingsFixture(page: Page): Promise<void> {
     else if (path.endsWith("/diff")) body = null;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
+  return { settingsUpdates };
 }
 
 test("production Settings chunk initializes without React bridge failures", async ({ page }) => {
@@ -71,9 +88,9 @@ test("production Settings chunk initializes without React bridge failures", asyn
   });
   await mountSettingsFixture(page);
 
-  await page.goto(`/settings?${DAEMON}`);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
 
-  await expect(page.getByRole("heading", { name: "Set how hard Guard should push back" })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Approval gate settings" })).toBeVisible();
   await page.getByRole("button", { name: /Approval gate/ }).click();
   await page.getByRole("button", { name: "Set up authenticator" }).click();
   await page.getByLabel("Approval password").fill("test-password");
@@ -82,4 +99,24 @@ test("production Settings chunk initializes without React bridge failures", asyn
     page.getByRole("img", { name: "Scan this QR code in Google Authenticator or another TOTP app" })
   ).toBeVisible();
   await expect(runtimeErrors).toEqual([]);
+});
+
+test("first-time approval password setup is discoverable beside the gate", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, unconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+
+  await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
+  await expect(page.getByRole("button", { name: "Set up approval password" })).toBeVisible();
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const setupDialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(setupDialog).toBeVisible();
+  await expect(setupDialog.getByRole("textbox", { name: "Password", exact: true })).toBeVisible();
+  await expect(setupDialog.getByRole("textbox", { name: "Confirm password", exact: true })).toBeVisible();
+  await setupDialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
+  await setupDialog.getByRole("textbox", { name: "Confirm password", exact: true }).fill("test-password");
+  await setupDialog.getByRole("button", { name: "Save settings" }).click();
+  await expect.poll(() => fixture.settingsUpdates).toHaveLength(1);
+  const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
+  expect(updateSettings).toBeDefined();
+  expect(Object.keys(updateSettings ?? {})).toEqual(["approval_gate"]);
 });
