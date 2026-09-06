@@ -48,7 +48,7 @@ def test_documented_aliases_and_global_options_preserve_sensitive_matches(
         "kubectl drain node-a --dry-run server",
         "kubectl replace -f deployment.yaml --dry-run=server",
         "kubectl apply -f deployment.yaml --dry-run=none --dry-run=client",
-        "helm uninstall api --dry-run=client",
+        "helm uninstall api --dry-run",
     ],
 )
 def test_option_value_safe_variants_use_effective_full_argument_value(command: str, tmp_path: Path) -> None:
