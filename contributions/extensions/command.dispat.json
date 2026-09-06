@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.dispat",
+  "version": "1.0.0",
+  "name": "Dispat",
+  "description": "Reviews Dispat release starts while leaving status previews quiet.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.yohimik",
+    "displayName": "Community",
+    "url": "https://github.com/yohimik/dispat"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F766E" },
+  "homepage": "https://dispat.dev/",
+  "license": "Apache-2.0",
+  "executables": ["dispat", "dispat.exe", "dispat.cmd"],
+  "ecosystemIds": ["dispat"],
+  "riskClasses": ["execution", "network_egress"],
+  "actionClasses": ["Dispat release command"],
+  "referenceUrls": ["https://github.com/yohimik/dispat", "https://dispat.dev/"],
+  "saferAlternatives": ["Run dispat status with the same selection flags before releasing."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_dispat_extensions"
+  }
+}
