@@ -43,3 +43,38 @@ def wait_for_receipt_corpus(
             raise RuntimeError(f"native_default_auto_probe_failed: invalid evidence stats: {stats}")
         current = cast(Mapping[str, object], stats)
     return current
+
+
+def wait_for_route_corpus(
+    metrics: object,
+    *,
+    expected: int,
+    timeout_seconds: float = 5.0,
+) -> Mapping[str, object]:
+    """Observe completed route accounting before changing modes or inspecting counts.
+
+    An installed hook response can reach the caller before its serving thread
+    finishes route bookkeeping. This wait is outside the measured policy-readiness
+    budget. Wrong routes and incomplete counts remain visible to the probe's exact
+    assertions; reaching a count is not itself proof of correct routing.
+    """
+    if expected < 1:
+        raise ValueError("Expected route count must be positive")
+    snapshot_fn = getattr(metrics, "snapshot", None)
+    if not callable(snapshot_fn):
+        raise RuntimeError("native_default_auto_probe_failed: route recorder has no snapshot()")
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    while True:
+        snapshot = cast(object, snapshot_fn())
+        if not isinstance(snapshot, Mapping):
+            raise RuntimeError("native_default_auto_probe_failed: invalid route metric snapshot")
+        current = cast(Mapping[str, object], snapshot)
+        routes = current.get("routes")
+        if not isinstance(routes, Mapping):
+            raise RuntimeError("native_default_auto_probe_failed: invalid route metric inventory")
+        values = tuple(routes.values())
+        if any(type(value) is not int or value < 0 for value in values):
+            raise RuntimeError("native_default_auto_probe_failed: invalid route metric count")
+        if sum(cast(tuple[int, ...], values)) >= expected or time.monotonic() >= deadline:
+            return current
+        time.sleep(0.05)
