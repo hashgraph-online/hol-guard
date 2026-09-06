@@ -4,6 +4,22 @@ This guide complements [Guard's Dispat release protection](dispat.md). It descri
 Dispat repository and prepare a release without expanding Guard's release-start rule. Commands shown
 here are examples to adapt to the user's task, not permission to run a release.
 
+Quick links:
+
+- [Inspection and configuration](#inspect-the-tool-and-configuration-first),
+  [JSON logs](#use-json-logs-and-preserve-exit-codes), and
+  [release locks](#respect-an-active-release-lock).
+- [Full-suite gate](#gate-on-the-full-suite-before-starting-a-release) and
+  [release-time tests, smoke checks, and artifact outputs](#test-the-release-time-changes-and-the-built-artifacts).
+- [Scoped script sweeps](#run-lint-build-or-tests-for-a-selected-change-window) and
+  [`exec`, `if`, and `for`](#try-individual-scripts-and-compose-helper-commands).
+- [Infrastructure releases](#consider-dispats-infrastructure-release-pattern),
+  [pnpm workspaces](#let-pnpm-manage-its-workspace-dependencies), and
+  [webhooks](#use-configurable-webhooks-for-release-observations).
+- [CCME intent](#write-commits-with-the-repositorys-ccme-intent),
+  [stages and environments](#know-which-stages-gate-a-release), and
+  [recovery](#recover-and-choose-other-commands-deliberately).
+
 ## Inspect the tool and configuration first
 
 Use help explicitly: a bare `dispat` starts a release.
@@ -229,9 +245,9 @@ transformed dependency metadata is what consumers receive.
 Select tests that exercise the changed dependency boundary, not only the version-number field.
 Include required lint, type checks, unit tests, or integration checks for the package as
 appropriate. Use provider publication ordering when those checks fetch dependencies released in the
-same run; see `isBuildWaitingPublish` above. A package gate protects that package's publication.
-Earlier providers or independent packages may already have published when it fails, so it is not a
-repository-wide rollback mechanism.
+same run; see [provider publication ordering][space-options]. A package gate protects that package's
+publication. Earlier providers or independent packages may already have published when it fails, so
+it is not a repository-wide rollback mechanism.
 
 ### Smoke-test the binaries that will ship
 
@@ -381,6 +397,110 @@ complete, accurate scopes for all changes: explicit scopes take precedence over 
 so narrow scopes must not hide unrelated edits. Do not relabel a production fix as `test` to
 suppress its release intent. A scoped follow-up sweep also does not replace a required full-suite
 pre-release gate.
+
+## Try individual scripts and compose helper commands
+
+Use [`dispat exec`][exec] to test one existing script without waiting for a change-window selection
+or starting the release pipeline. For example, run a package's tests once:
+
+```sh
+dispat exec tests --for pkg:core --in pkg:core --fallback
+```
+
+`--for` chooses the script/environment subject; `--in` chooses the working directory. They are
+independent: `--for pkg:core` alone does not change into that package. Script lookup normally stays
+at the named level; `--fallback` deliberately searches package, space, then root, as `dispat run`
+does. Choose the repository's actual script name and use fallback only when that inheritance is
+intended.
+
+The default environment is static configuration plus the inherited process environment. For a script
+that needs computed release variables, add `--env both` with a package subject:
+
+```sh
+dispat exec tests:release --for pkg:core --in pkg:core --fallback --env both
+```
+
+This computes plan variables but does not perform version reconciliation, generate build artifacts,
+or run the surrounding release hooks. Prepare required inputs through the authorized workflow before
+claiming this reproduces a release-stage test. A fresh invocation does not recover previous
+`DISPAT_OUTPUT_*` values from a completed process. An `exec` called inside a stage inherits that
+stage's existing environment. Arguments after `--` go to the configured script; consult its own
+help, because a script's flags are not Dispat flags.
+
+[`dispat if`][if] chooses shell text based on environment, file/directory existence, or changed
+packages. For example, with these scripts already declared at the root:
+
+```sh
+dispat if 'CI=true' --then 'dispat exec ci-checks' --else 'dispat exec local-checks'
+```
+
+Branches are shell commands, not implicit script-name lookups. A false condition without an `--else`
+succeeds without doing work; for a required check, make the missing prerequisite fail explicitly.
+`--changed --since HEAD~1 --consumers -p web` can test whether the latest commit affects `web` or
+its providers. Unlike a sweep, this condition expands consumers before narrowing the selection; it
+answers a boolean rather than executing packages.
+
+[`dispat for`][for] runs shell text once per item. It supports literal items, packages, spaces,
+groups, and change windows. For example:
+
+```sh
+dispat for --since HEAD~1 --consumers \
+  --do 'dispat exec tests --for "pkg:$DISPAT_PACKAGE" --in "$DISPAT_DIR" --fallback'
+```
+
+Each iteration receives `DISPAT_ITEM`, zero-based `DISPAT_INDEX`, and `DISPAT_TOTAL`; package items
+also supply `DISPAT_PACKAGE` and absolute `DISPAT_DIR`. Iteration itself does not change directory.
+Without a change window, `-s` and `-g` iterate spaces/groups, not their packages. Loops are
+sequential and normally stop on the first failure; prefer `dispat run` when you need its concurrent
+dependency scheduling and failed-provider skip behavior. `--keep-going` continues a loop but retains
+failure in its result. Empty loops succeed without running the body; use `--require-items` when an
+empty selection must fail.
+
+All three helpers execute the scripts supplied to them, which may themselves mutate or publish. They
+are not release previews. Preserve their exit statuses; `--on-failure` on `exec`, `if`, or `for`
+replaces the original exit status with its handler's status, so a successful notification handler
+must not accidentally hide a failed gate. Read command-specific `--help` before using unfamiliar
+flags or script arguments.
+
+### Share script workflows across Linux and Windows
+
+Dispat's named scripts and [split, referenced configuration][refs] can support the same workflow on
+Linux and Windows without duplicating the package graph or release policy. Keep common script names
+such as `build`, `tests`, and `smoke`, then supply platform-specific command definitions where shell
+syntax, executable names, paths, or toolchains differ.
+
+For an explicitly requested configuration design, a Windows entry file could look like this:
+
+```yaml
+# dispat.windows.yaml; referenced files must exist and contain the intended shared configuration.
+$ref: ./cfg/release-common.yaml
+shell: [cmd, /C]
+scripts:
+  $ref:
+    - ./cfg/scripts-common.yaml
+    - ./cfg/scripts-windows.yaml
+```
+
+A Linux entry file can reference the same common configuration, select `shell: [bash, -c]`, and
+merge `scripts-linux.yaml` after the common script map. Select the appropriate entry file with
+`--config` in each CI matrix job, consistently for inspection, script checks, and any authorized
+release. References do not automatically choose a file based on the operating system. Package or
+space script definitions remain nearer than root scripts, so inspect those overrides too.
+
+`$ref` paths resolve relative to the file containing the reference. A list of object references
+merges keys in order, with later values replacing earlier ones; this is not a deep merge. Keys
+beside a reference replace the referenced keys whole. Paths inside the fragment keep their normal
+repository/package meaning, so moving configuration fragments does not move package folders. See
+[reference resolution][refs] and the [configured shell][configuration].
+
+Dispat coordinates the work; it does not translate arbitrary shell commands. Use commands the
+selected runner can execute, adapt environment/output-file syntax to its shell, and validate the
+workflow on each target. The shell snippets in this guide use POSIX syntax. Script sequences start
+fresh shell processes, so `cd` or `export` in one command does not carry into the next; use the
+documented stage output handoff instead. At the referenced version, `dispat if` branch execution
+uses `/bin/sh -c`, and literal `for` loops that do not load configuration use the default shell.
+These helpers require that shell to be available even if the outer configured script uses `cmd`. Use
+the [helper references][if] and installed-version help when designing native Windows jobs.
 
 ## Consider Dispat's infrastructure release pattern
 
@@ -773,15 +893,15 @@ Consult installed-version help and the corresponding source when these descripti
 
 [autoversion-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/autoversion.md
 [autowriter]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/autowriter.md
-[ccme]: https://github.com/yohimik/dispat/blob/main/specs/ccme-spec/SPEC.md
-[ccme-api]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/go/ccme.md
-[change-scope]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/change-scope.md
-[cli]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/README.md
-[commits]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/commits.md
-[compute]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/compute.md
-[configuration]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/README.md
-[dependencies]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dependencies.md
-[diagnostics]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/plan-errors.md
+[ccme]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/specs/ccme-spec/SPEC.md
+[ccme-api]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/go/ccme.md
+[change-scope]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/change-scope.md
+[cli]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/README.md
+[commits]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/commits.md
+[compute]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/compute.md
+[configuration]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/README.md
+[dependencies]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/dependencies.md
+[diagnostics]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/plan-errors.md
 [dispat-binary-build]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/Dockerfile
 [dispat-docs-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/dispat.yaml
 [dispat-package-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/dispat.yaml
@@ -789,45 +909,48 @@ Consult installed-version help and the corresponding source when these descripti
 [dispat-pnpm]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/examples/pnpm.md
 [dispat-services-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat.yaml
 [dispat-test-dockerfile]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/Dockerfile.gotest
-[dotenv]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/dotenv.md
-[environment]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/env.md
-[hooks]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/run-hooks.md
+[dotenv]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/dotenv.md
+[environment]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/env.md
+[exec]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/exec.md
+[for]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/for.md
+[hooks]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/run-hooks.md
+[if]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/if.md
 [infra-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/dispat.yaml
 [infra-guide]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/README.md
 [infra-rebuild]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/rebuild.sh
-[lock]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/release-lock.md
+[lock]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/releasing/release-lock.md
 [login]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#flowlogin
 [manifest-formats]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/editing/manifests.md#supported-formats
 [outcome-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#run-outcome-data
 [output-capture]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/services/dispat/internal/release/outputs.go
 [output-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#script-outputs
-[packages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/packages.md
-[parser]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/parser.md
-[partial]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/partial-releases.md
+[packages]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/packages.md
+[parser]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/parser.md
+[partial]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/releasing/partial-releases.md
 [pnpm-workspaces]: https://pnpm.io/workspaces
-[post-publish]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/internals/architecture.md#after-the-point-of-no-return
-[preview]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/preview.md
-[records]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/records.md
-[recovery]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/recovery.md
-[refs]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/refs.md
+[post-publish]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/internals/architecture.md#after-the-point-of-no-return
+[preview]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/preview.md
+[records]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/records.md
+[recovery]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/releasing/recovery.md
+[refs]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/refs.md
 [release-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/release.yml
 [replacement-rules]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/editing/replacer.md#replacing-during-a-release
-[run]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/run.md
-[scanner]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/scanner.md
+[run]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/run.md
+[scanner]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/scanner.md
 [script-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md
-[scripts]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/scripts.md
+[scripts]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/scripts.md
 [space-options]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#space-options
-[spaces]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md
-[stages]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/spaces.md#stages-and-hooks
+[spaces]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md
+[stages]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/spaces.md#stages-and-hooks
 [standalone-packages]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/packages.md#standalone-packages-path
-[status]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/cli/status.md
-[steps]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/reference/releasing/steps.md
+[status]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/status.md
+[steps]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/releasing/steps.md
 [terraform-import]: https://developer.hashicorp.com/terraform/cli/import
 [terraform-locking]: https://developer.hashicorp.com/terraform/language/state/locking
 [terraform-state]: https://developer.hashicorp.com/terraform/language/state/purpose
 [test-ci]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/.github/workflows/tests.yml
 [trigger]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/trigger.md
-[versions]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/configuration/versions.md
+[versions]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/versions.md
 [webhooks]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/webhooks.md
 [workspace-env]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/environment.md#workspace-data
 [writer]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/writer.md
