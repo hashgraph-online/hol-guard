@@ -4420,7 +4420,6 @@ function populatedCatalogAreaOptions(extensions) {
 function catalogFilterChipCount(extensions, filters, patch) {
   return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
 }
-const CATALOG_FILTER_PANEL_ID = "catalog-filter-panel";
 function CatalogFilterOption(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
@@ -4513,6 +4512,7 @@ function AreaFilterOption(props) {
 }
 function CatalogFilterBar(props) {
   const [panelOpen, setPanelOpen] = reactExports.useState(false);
+  const panelId = reactExports.useId();
   const triggerRef = reactExports.useRef(null);
   const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
   const filtering = catalogFiltersActive(props.filters);
@@ -4552,7 +4552,7 @@ function CatalogFilterBar(props) {
           type: "button",
           ref: triggerRef,
           "aria-expanded": panelOpen,
-          "aria-controls": CATALOG_FILTER_PANEL_ID,
+          "aria-controls": panelId,
           onClick: () => setPanelOpen((open) => !open),
           className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
           children: [
@@ -4607,7 +4607,7 @@ function CatalogFilterBar(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        id: CATALOG_FILTER_PANEL_ID,
+        id: panelId,
         hidden: !panelOpen,
         className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [

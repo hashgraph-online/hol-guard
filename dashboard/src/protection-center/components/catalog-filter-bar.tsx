@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { HiMiniAdjustmentsHorizontal, HiMiniCheck, HiMiniChevronDown, HiMiniXMark } from "react-icons/hi2";
 
 import type { ExtensionCatalogItem, ExtensionTrustClass } from "../../extension-controls-api";
@@ -17,8 +17,6 @@ import {
   type CatalogFilterState,
   type CatalogKindFilter,
 } from "../model/catalog-filters";
-
-const CATALOG_FILTER_PANEL_ID = "catalog-filter-panel";
 
 function CatalogFilterOption(props: {
   label: string;
@@ -151,6 +149,7 @@ export function CatalogFilterBar(props: {
   onChange: (next: CatalogFilterState) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
+  const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const areas = useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
   const filtering = catalogFiltersActive(props.filters);
@@ -195,7 +194,7 @@ export function CatalogFilterBar(props: {
           type="button"
           ref={triggerRef}
           aria-expanded={panelOpen}
-          aria-controls={CATALOG_FILTER_PANEL_ID}
+          aria-controls={panelId}
           onClick={() => setPanelOpen((open) => !open)}
           className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none"
         >
@@ -248,7 +247,7 @@ export function CatalogFilterBar(props: {
         )}
       </div>
       <div
-        id={CATALOG_FILTER_PANEL_ID}
+        id={panelId}
         hidden={!panelOpen}
         className="mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5"
       >
