@@ -1,0 +1,29 @@
+name: PR 2798 CI diagnostic
+on:
+  push:
+    branches:
+      - diagnostics/pr2798-ci-898507
+    paths:
+      - .github/workflows/pr2798-ci-diagnostic.yml
+permissions:
+  contents: read
+  actions: read
+  checks: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: hashgraph-online/hol-guard
+    steps:
+      - name: Summarize every CI shard
+        run: |
+          gh api --paginate repos/hashgraph-online/hol-guard/actions/runs/34024633788/jobs?per_page=100 --jq '.jobs[] | {id, name, status, conclusion, failed_steps: [.steps[] | select(.conclusion == "failure") | .name]}'
+      - name: Read failed test output
+        run: |
+          gh run view 34024633788 --log-failed > failed-steps.log
+          tail -n 900 failed-steps.log
+      - name: Summarize current head checks
+        run: |
+          gh api --paginate repos/hashgraph-online/hol-guard/commits/898507c3c8bac83da778ae3d0a9c95064cbbcb69/check-runs?per_page=100 --jq '.check_runs[] | {id, name, status, conclusion, details_url}'
