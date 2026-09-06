@@ -24,60 +24,79 @@ jobs:
         with:
           version: '0.9.26'
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Inspect remaining matcher regressions
+      - name: Apply matcher fixes
         run: |
           uv run --no-sync python - <<'PY'
           from pathlib import Path
-          from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-          from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-          from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-          from codex_plugin_scanner.guard.runtime.command_option_parsing import argument_semantics
-          from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher, _after_leading_options, _without_options
 
-          commands = [
-              "docker compose down --rmi=all",
-              "docker compose down --rmi local",
-              "kubectl patch deployment api -p '{}' --local --local=false",
-          ]
-          root = Path.cwd()
-          for command in commands:
-              canonical = parse_shell_command(command, cwd=root, home_dir=root)
-              print("COMMAND", command)
-              print("PAYLOAD", inspect_command(command, cwd=root, home_dir=root))
-              print("ARGS", canonical.segments[0].arguments)
-              for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
-                  for rule in extension.rules:
-                      if rule.matcher is None:
-                          continue
-                      base = rule.matcher.match(canonical)
-                      variants = [(variant.variant_id, variant.matcher.match(canonical), repr(variant.matcher)) for variant in rule.safe_variants]
-                      if base or any(match for _, match, _ in variants):
-                          print("RULE", rule.rule_id, "BASE", base)
-                          for variant_id, match, matcher_repr in variants:
-                              if match or rule.rule_id in {
-                                  "command.container-runtime.compose-destructive-cleanup",
-                                  "command.kubernetes-operations.patch-resources",
-                              }:
-                                  print("VARIANT", variant_id, "MATCH", match, matcher_repr)
-                      if rule.rule_id not in {
-                          "command.container-runtime.compose-destructive-cleanup",
-                          "command.kubernetes-operations.patch-resources",
-                      }:
-                          continue
-                      matcher = rule.matcher
-                      leaves = matcher.matchers if hasattr(matcher, "matchers") else (matcher,)
-                      for leaf in leaves:
-                          if not isinstance(leaf, ExecutableMatcher):
-                              continue
-                          args = tuple(arg.lower() for arg in canonical.segments[0].arguments)
-                          subargs = _without_options(args, leaf.interspersed_options_with_values, leaf.interspersed_flags)
-                          if leaf.allow_leading_options:
-                              subargs = _after_leading_options(subargs, leaf.leading_options_with_values, leaf.interspersed_flags)
-                          flagargs = args if leaf.required_flags_in_all_arguments else subargs[len(leaf.subcommands):]
-                          semantics = argument_semantics(
-                              flagargs,
-                              options_with_values=leaf.options_with_values | leaf.leading_options_with_values | leaf.interspersed_options_with_values,
-                              inverse_flag_pairs=leaf.inverse_flag_pairs,
-                          )
-                          print("LEAF", repr(leaf), "SUBARGS", subargs, "FLAGARGS", flagargs, "SEM", semantics, "MATCH", leaf.match(canonical))
+          rules = Path("src/codex_plugin_scanner/guard/runtime/command_rules.py")
+          text = rules.read_text(encoding="utf-8")
+          old = '''        if argument == "--":\n            retained.extend(arguments[index + 1 :])\n            break\n        advance = known_option_advance(\n            argument,\n            options_with_values=options_with_values,\n            known_flags=flags,\n        )\n'''
+          new = '''        if argument == "--":\n            retained.extend(arguments[index + 1 :])\n            break\n        if argument.startswith("--"):\n            option_name = argument.partition("=")[0]\n            if option_name not in options_with_values and option_name not in flags:\n                retained.append(argument)\n                index += 1\n                continue\n        advance = known_option_advance(\n            argument,\n            options_with_values=options_with_values,\n            known_flags=flags,\n        )\n'''
+          if old not in text:
+              raise SystemExit("_without_options patch anchor missing")
+          rules.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          domain = Path("src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py")
+          text = domain.read_text(encoding="utf-8")
+          replacements = (
+              (
+                  '        "--user",\n        "--username",\n    }\n)\n_KUBECTL_GLOBAL_FLAGS',
+                  '        "--user",\n        "--username",\n        "-v",\n        "--v",\n    }\n)\n_KUBECTL_GLOBAL_FLAGS',
+              ),
+              (
+                  '        "--kube-context",\n        "--kube-token",',
+                  '        "--kube-context",\n        "--kube-tls-server-name",\n        "--kube-token",',
+              ),
+              (
+                  '    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,\n) -> ExecutableMatcher:',
+                  '    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_REQUIREMENTS,\n    required_flags_in_all_arguments: bool = False,\n) -> ExecutableMatcher:',
+              ),
+              (
+                  '        options_with_values=options_with_values,\n        required_option_values=required_option_values,\n    )',
+                  '        options_with_values=options_with_values,\n        required_option_values=required_option_values,\n        required_flags_in_all_arguments=required_flags_in_all_arguments,\n    )',
+              ),
+              (
+                  '            options_with_values=frozenset({"--dry-run"}),\n            required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n        ),\n    )\n\n\ndef _helm_dry_run_variants',
+                  '            options_with_values=frozenset({"--dry-run"}),\n            required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n            required_flags_in_all_arguments=True,\n        ),\n    )\n\n\ndef _helm_dry_run_variants',
+              ),
+              (
+                  '                options_with_values=frozenset({"--dry-run"}),\n                required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n            ),\n        ),\n    )\n\n\ndef _rule',
+                  '                options_with_values=frozenset({"--dry-run"}),\n                required_option_values=(("--dry-run", frozenset({"client", "server"})),),\n                required_flags_in_all_arguments=True,\n            ),\n        ),\n    )\n\n\ndef _rule',
+              ),
+          )
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"domain patch anchor missing: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          domain.write_text(text, encoding="utf-8")
+
+          tests = Path("tests/test_guard_command_common_extension_regressions.py")
+          test_text = tests.read_text(encoding="utf-8")
+          old_cases = '''        ("kubectl -v 6 apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),\n        ("kubectl --v 6 scale deployment api --replicas=2", "command.kubernetes-operations.scale-resources"),\n        (\n            "helm --kube-tls-server-name cluster.example upgrade api ./chart",\n            "command.kubernetes-operations.helm-upgrade",\n        ),'''
+          new_cases = '''        ("docker compose down --rmi=all", "command.container-runtime.compose-destructive-cleanup"),\n        ("kubectl -v 6 apply -f deployment.yaml", "command.kubernetes-operations.apply-resources"),\n        ("kubectl --v 6 scale deployment api --replicas=2", "command.kubernetes-operations.scale-resources"),\n        ("kubectl -v 6 delete pod api", "command.kubernetes-operations.delete-resources"),\n        ("kubectl --v 6 drain node-a", "command.kubernetes-operations.drain-node"),\n        (\n            "helm --kube-tls-server-name cluster.example upgrade api ./chart",\n            "command.kubernetes-operations.helm-upgrade",\n        ),\n        (\n            "helm --kube-tls-server-name cluster.example uninstall api",\n            "command.kubernetes-operations.helm-uninstall",\n        ),'''
+          if old_cases not in test_text:
+              raise SystemExit("regression case anchor missing")
+          test_text = test_text.replace(old_cases, new_cases, 1)
+          old_safe = '''        "kubectl apply -f deployment.yaml --dry-run=client",\n        "kubectl replace -f deployment.yaml --dry-run=server",'''
+          new_safe = '''        "kubectl apply -f deployment.yaml --dry-run=client",\n        "kubectl delete pod api --dry-run=client",\n        "kubectl drain node-a --dry-run server",\n        "kubectl replace -f deployment.yaml --dry-run=server",'''
+          if old_safe not in test_text:
+              raise SystemExit("safe-variant anchor missing")
+          test_text = test_text.replace(old_safe, new_safe, 1)
+          tests.write_text(test_text, encoding="utf-8")
           PY
+      - name: Run focused command-extension tests
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_command_common_extension_regressions.py \
+            tests/test_guard_command_container_kubernetes_common_extensions.py
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/codex_plugin_scanner/guard/runtime/command_rules.py \
+            src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py \
+            tests/test_guard_command_common_extension_regressions.py
+          git commit -m "fix: preserve subcommand option semantics"
+          git push origin HEAD:fix/docker-kubernetes-command-coverage
