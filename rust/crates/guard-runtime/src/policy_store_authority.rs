@@ -73,6 +73,17 @@ pub(super) fn start_authority_watcher(
     observed: Arc<Mutex<Option<String>>>,
     changed: Weak<AtomicBool>,
 ) {
+    start_authority_watcher_with_sample_hook(path, observed, changed, || {});
+}
+
+fn start_authority_watcher_with_sample_hook<F>(
+    path: PathBuf,
+    observed: Arc<Mutex<Option<String>>>,
+    changed: Weak<AtomicBool>,
+    after_sample: F,
+) where
+    F: Fn() + Send + 'static,
+{
     let _ = thread::Builder::new()
         .name("hol-guard-policy-authority-watch".to_owned())
         .spawn(move || loop {
@@ -86,6 +97,7 @@ pub(super) fn start_authority_watcher(
             match observed.lock() {
                 Ok(expected) => {
                     let current = authority_fingerprint(&path);
+                    after_sample();
                     if *expected != current {
                         changed.store(true, Ordering::SeqCst);
                     }
@@ -458,26 +470,42 @@ mod tests {
 
         let observed = Arc::new(Mutex::new(authority_fingerprint(&path)));
         let changed = Arc::new(AtomicBool::new(false));
-        let mut expected = observed.lock().unwrap();
-        start_authority_watcher(
+        let (sampled_tx, sampled_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        start_authority_watcher_with_sample_hook(
             path.clone(),
             Arc::clone(&observed),
             Arc::downgrade(&changed),
+            move || {
+                sampled_tx.send(()).unwrap();
+                resume_rx.recv().unwrap();
+            },
         );
 
-        // Give the watcher time to reach the mutex. The pre-fix watcher read
-        // the old file before blocking here, then used that stale sample after
-        // the internal update published its new expected fingerprint.
-        thread::sleep(Duration::from_millis(25));
-        fs::write(&path, b"new-authority").unwrap();
-        *expected = authority_fingerprint(&path);
-        changed.store(false, Ordering::SeqCst);
-        drop(expected);
+        sampled_rx.recv().unwrap();
+        match observed.try_lock() {
+            Err(std::sync::TryLockError::WouldBlock) => {}
+            Err(std::sync::TryLockError::Poisoned(_)) => panic!("observed mutex poisoned"),
+            Ok(_) => panic!("watcher sampled authority before locking observed"),
+        }
+        resume_tx.send(()).unwrap();
 
-        thread::sleep(Duration::from_millis(25));
+        {
+            let mut expected = observed.lock().unwrap();
+            fs::write(&path, b"new-authority").unwrap();
+            *expected = authority_fingerprint(&path);
+            changed.store(false, Ordering::SeqCst);
+        }
+
+        sampled_rx.recv().unwrap();
         assert!(!changed.load(Ordering::SeqCst));
+        resume_tx.send(()).unwrap();
+        sampled_rx.recv().unwrap();
+        assert!(!changed.load(Ordering::SeqCst));
+        resume_tx.send(()).unwrap();
 
         drop(changed);
+        drop(resume_tx);
         let _ = fs::remove_file(path);
     }
 }
