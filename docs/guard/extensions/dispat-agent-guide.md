@@ -400,6 +400,40 @@ pre-release gate.
 
 ## Try individual scripts and compose helper commands
 
+Choose the command by both the work it selects and where that work runs:
+
+| Command                                     | Work and script lookup                                                                                                                                                               | Working directory                                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [`dispat run <name>`][run]                  | Sweeps selected packages in dependency order, with concurrency and failed-provider handling. Each package resolves the named script through package, space, then root configuration. | Each selected package's own folder, including when it inherits a space or root script.                                               |
+| [`dispat exec <name>`][exec]                | Executes one declared script once, without a package sweep. `--for` selects its script/environment subject; lookup stays at that level unless `--fallback` is requested.             | The invocation's current folder by default. `--for` does not move it; `--in` explicitly chooses another folder.                      |
+| [`dispat for ... --do '<shell text>'`][for] | Executes the supplied shell text sequentially for each item. Items can be literal words or selected packages, spaces, or groups; `--do` does not look up a configured script name.   | The same invocation folder for every item. `--in` moves the whole loop to one folder; selecting a package does not enter its folder. |
+
+**A script's configuration location does not determine its working directory.** A root-level `tests`
+script inherited by `run` executes inside each covered package. `exec tests` instead looks up that
+root-level script once and runs it in the current folder. To use the current package's script with
+`exec`, choose `--for cwd` or an explicit package subject.
+
+For example, compare these commands when invoked from the repository root:
+
+```sh
+# Run core's resolved tests in core's folder, even if core has no pending changes.
+dispat run tests --since all -p core
+
+# Run core's declared tests once, while staying at the repository root.
+dispat exec tests --for pkg:core
+
+# Explicitly enter core's folder for that one script invocation.
+dispat exec tests --for pkg:core --in pkg:core
+
+# Print the repository root once per package; selecting items does not enter them.
+dispat for -p '*' --do 'pwd'
+```
+
+These are different execution modes, not interchangeable spellings: `run` supplies computed
+package-plan variables, whereas `exec` defaults to static configuration and inherited environment.
+When called inside another script, "current folder" means that caller's working directory. A `for`
+inside a package build therefore stays in that build's folder unless explicitly redirected.
+
 Use [`dispat exec`][exec] to test one existing script without waiting for a change-window selection
 or starting the release pipeline. For example, run a package's tests once:
 
@@ -450,11 +484,15 @@ dispat for --since HEAD~1 --consumers \
 
 Each iteration receives `DISPAT_ITEM`, zero-based `DISPAT_INDEX`, and `DISPAT_TOTAL`; package items
 also supply `DISPAT_PACKAGE` and absolute `DISPAT_DIR`. Iteration itself does not change directory.
-Without a change window, `-s` and `-g` iterate spaces/groups, not their packages. Loops are
-sequential and normally stop on the first failure; prefer `dispat run` when you need its concurrent
-dependency scheduling and failed-provider skip behavior. `--keep-going` continues a loop but retains
-failure in its result. Empty loops succeed without running the body; use `--require-items` when an
-empty selection must fail.
+The nested `exec` above explicitly uses `--for` for each package's script/environment and `--in` for
+its folder. Omitting `--in` would keep every invocation in the loop's current folder. For direct
+shell work in each package, use a body such as `cd "$DISPAT_DIR" && npm test` instead. Writing
+`--do 'tests'` alone asks the shell to execute a command called `tests`; it does not resolve
+Dispat's `scripts.tests` configuration. Without a change window, `-s` and `-g` iterate
+spaces/groups, not their packages. Loops are sequential and normally stop on the first failure;
+prefer `dispat run` when you need its concurrent dependency scheduling and failed-provider skip
+behavior. `--keep-going` continues a loop but retains failure in its result. Empty loops succeed
+without running the body; use `--require-items` when an empty selection must fail.
 
 All three helpers execute the scripts supplied to them, which may themselves mutate or publish. They
 are not release previews. Preserve their exit statuses; `--on-failure` on `exec`, `if`, or `for`
