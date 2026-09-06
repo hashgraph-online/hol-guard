@@ -12,16 +12,25 @@ from .types import Ecosystem, NormalizedPackage, PackageCandidate
 IGNORED_ECOSYSTEM_DIRS = frozenset({"node_modules", ".git", ".venv", "venv", "dist", "__pycache__"})
 
 
-def iter_safe_recursive_files(root: Path, base_dir: Path, pattern: str) -> tuple[Path, ...]:
-    """Recursively enumerate in-root non-symlink files matching a glob name."""
+def _resolved_walk_root(root: Path, base_dir: Path) -> Path | None:
+    """Resolve the enumeration root, or None when the base cannot be walked safely."""
 
     try:
         resolved_root = root.resolve()
     except (OSError, RuntimeError):
-        return ()
+        return None
     if base_dir.is_symlink():
-        return ()
+        return None
     if not base_dir.is_dir() or not resolves_within_root(resolved_root, base_dir, require_exists=True):
+        return None
+    return resolved_root
+
+
+def iter_safe_recursive_files(root: Path, base_dir: Path, pattern: str) -> tuple[Path, ...]:
+    """Recursively enumerate in-root non-symlink files matching a glob name."""
+
+    resolved_root = _resolved_walk_root(root, base_dir)
+    if resolved_root is None:
         return ()
 
     matches: list[Path] = []
@@ -60,13 +69,8 @@ def iter_safe_recursive_files(root: Path, base_dir: Path, pattern: str) -> tuple
 def iter_safe_recursive_dirs(root: Path, base_dir: Path, pattern: str) -> tuple[Path, ...]:
     """Recursively enumerate in-root non-symlink directories matching a glob name."""
 
-    try:
-        resolved_root = root.resolve()
-    except (OSError, RuntimeError):
-        return ()
-    if base_dir.is_symlink():
-        return ()
-    if not base_dir.is_dir() or not resolves_within_root(resolved_root, base_dir, require_exists=True):
+    resolved_root = _resolved_walk_root(root, base_dir)
+    if resolved_root is None:
         return ()
 
     matches: list[Path] = []
