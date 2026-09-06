@@ -20104,11 +20104,12 @@ function GuardModalLayer({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onCloseRef.current();
       }
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [mounted]);
   const handleBackdropClick = (event) => {
     if (event.target === event.currentTarget) {
@@ -20141,8 +20142,9 @@ function GuardModalLayer({
     overlayRoot
   );
 }
+const CHANNEL_BUTTON_CLASS = "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
-  let versionContent = /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" });
+  let versionContent = null;
   if (props.version) {
     versionContent = /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "p",
@@ -20158,43 +20160,50 @@ function GuardUpdateChannelSummary(props) {
   }
   let channelAction;
   if (props.useAlpha) {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
-        role: "status",
-        "aria-label": "Alpha updates enabled",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onManage,
-              disabled: props.busy,
-              "aria-label": "Manage alpha updates",
-              title: "Manage alpha updates",
-              className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-              children: "Manage"
-            }
-          )
-        ]
-      }
-    );
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "inline-flex min-w-0 items-center gap-1.5",
+          role: "status",
+          "aria-label": "Alpha updates enabled",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold leading-5 text-brand-blue", children: "Alpha updates" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onManage,
+          disabled: props.busy,
+          "aria-label": "Manage alpha updates",
+          title: "Manage alpha updates",
+          "data-testid": "guard-alpha-updates-control",
+          className: "inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+          children: "Manage"
+        }
+      )
+    ] });
   } else {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsx(
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         type: "button",
         onClick: props.onManage,
         disabled: props.busy,
-        className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-        children: "Try alpha updates"
+        "data-testid": "guard-alpha-updates-control",
+        className: CHANNEL_BUTTON_CLASS,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+          "Try alpha updates"
+        ]
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
     versionContent,
     channelAction
   ] });
@@ -20731,6 +20740,9 @@ function useNavigationDrawerFocus(open, dialogRef, closeButtonRef, onClose) {
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (Number(document.documentElement.dataset.guardModalOpen ?? 0) > 0) {
+          return;
+        }
         event.preventDefault();
         onClose();
         return;
@@ -20887,6 +20899,7 @@ function NavigationDrawer(props) {
                       updateError: props.updateError,
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
+                      onSetUpdateChannel: props.onSetUpdateChannel,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -21099,6 +21112,7 @@ function PersistentSidebar(props) {
                   updateError: props.updateError,
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
+                  onSetUpdateChannel: props.onSetUpdateChannel,
                   approvalGate: props.approvalGate
                 }
               )
@@ -31049,7 +31063,8 @@ function ApprovalCenterLayout(props) {
     updatePhase,
     updateError,
     onUpdateGuard,
-    onReinstallGuard
+    onReinstallGuard,
+    onSetUpdateChannel
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -31066,6 +31081,7 @@ function ApprovalCenterLayout(props) {
         updateError,
         onUpdateGuard,
         onReinstallGuard,
+        onSetUpdateChannel,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,

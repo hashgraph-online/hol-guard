@@ -121,6 +121,7 @@ assert(
   drawerSource.includes('role="dialog"') &&
     drawerSource.includes('aria-modal="true"') &&
     drawerSource.includes('event.key === "Escape"') &&
+    drawerSource.includes("dataset.guardModalOpen") &&
     drawerSource.includes('event.key !== "Tab"') &&
     drawerSource.includes('setAttribute("inert", "")'),
   "The full navigation drawer traps focus, closes with Escape, and makes the background inert",
