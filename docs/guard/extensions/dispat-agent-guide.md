@@ -76,6 +76,14 @@ that a release would refuse, so read the diagnostics too. See [partial releases]
 resolution and planning; reserve `trace` for detailed diagnostics and review its contents before
 sharing. `--quiet-parser=false` restores parser diagnostics when configuration suppresses them.
 
+**CI/CD logs can provide release visibility without webhooks.** For an already-authorized release,
+use `dispat release --log-format json` in the release job. People can follow the CI platform's live
+job logs, and agents with access to those logs can consume the same JSON records to track progress
+and diagnose failures. Retain logs as CI artifacts when later inspection is useful. This needs no
+webhook endpoint or webhook configuration; availability and streaming depend on the CI platform. The
+command still starts a release and remains subject to Guard review. Read the final command exit
+status and diagnostics as well as progress records.
+
 The flag controls logging, not every command's entire output: help/version text and rendered preview
 notes have their own formats. Do not assume arbitrary configured scripts emit JSON. Preserve stderr
 and the command's exit status; piping output through a parser must not turn a failed Dispat command
@@ -218,6 +226,9 @@ instruction. Check packed artifacts according to that policy instead of applying
 `--forbid-range 'workspace:*'` gate to source manifests that intentionally retain the protocol.
 
 ## Use configurable webhooks for release observations
+
+Webhooks are optional. Use [JSON job logs](#use-json-logs-and-preserve-exit-codes) when people and
+agents watch through CI/CD; configure webhooks when an external receiver needs pushed events.
 
 Dispat supports [webhooks] for release, stage, and package events, plus script events raised with
 [`dispat trigger`][trigger]. Agents can read these events to follow progress without scraping
