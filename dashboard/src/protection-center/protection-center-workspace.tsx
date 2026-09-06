@@ -229,8 +229,8 @@ export function ProtectionCenterWorkspace(props: {
   const refreshProtection = useCallback((): Promise<void> => {
     if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
     const request = (async () => {
-      const [refreshed, refreshedRuntime] = await Promise.all([load(), props.onRefreshRuntime()]);
-      if (refreshed === null || refreshedRuntime === null) {
+      const [refreshed] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null) {
         throw new Error("Protection status could not be refreshed.");
       }
     })();

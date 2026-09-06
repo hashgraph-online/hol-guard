@@ -5166,7 +5166,7 @@ function ExtensionManagedControlsPanel(props) {
       setRefreshState("error");
       setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
     }
-  }, [props.effective, props.onRefresh, refreshState]);
+  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
   const connect = reactExports.useCallback(() => {
     setConnecting(true);
     setConnectMessage(null);
@@ -6302,8 +6302,8 @@ function ProtectionCenterWorkspace(props) {
   const refreshProtection = reactExports.useCallback(() => {
     if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
     const request2 = (async () => {
-      const [refreshed, refreshedRuntime] = await Promise.all([load(), props.onRefreshRuntime()]);
-      if (refreshed === null || refreshedRuntime === null) {
+      const [refreshed] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null) {
         throw new Error("Protection status could not be refreshed.");
       }
     })();

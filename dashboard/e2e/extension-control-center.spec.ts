@@ -109,15 +109,17 @@ async function mount(page: Page, options: {
   malformedCatalog?: boolean;
   effective?: Record<string, unknown>;
   runtime?: unknown;
+  runtimeRefresh?: unknown;
   failEffectiveRefresh?: boolean;
   refreshEffectiveDelayMs?: number;
 } = {}) {
   let effectiveCalls = 0;
+  let runtimeCalls = 0;
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
     if (path.endsWith("/initialize")) body = { auth_token: "fixture-session-token" };
-    else if (path.endsWith("/runtime")) body = options.runtime ?? freeStateSnapshot;
+    else if (path.endsWith("/runtime")) { runtimeCalls += 1; body = runtimeCalls > 1 ? options.runtimeRefresh ?? options.runtime ?? freeStateSnapshot : options.runtime ?? freeStateSnapshot; }
     else if (path.endsWith("/requests")) body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
     else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
@@ -290,7 +292,10 @@ test("canonical Extension detail exposes managed authority without gating local 
 test("managed controls reports loading and unchanged refresh results", async ({ page }) => {
   await mount(page, {
     refreshEffectiveDelayMs: 50,
+    runtime: { ...freeStateSnapshot, cloud_policy_sync_error: "stale" },
+    runtimeRefresh: freeStateSnapshot,
     effective: effective({
+      health: "degraded-unacknowledged",
       failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
       layers: [{
         schema_version: "1.0.0",
@@ -305,7 +310,9 @@ test("managed controls reports loading and unchanged refresh results", async ({ 
   await page.getByRole("button", { name: /^Git/ }).click();
   await page.getByRole("tab", { name: "Managed controls" }).click();
   await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
-  const checkAgain = page.getByRole("button", { name: "Check again", exact: true });
+  await page.getByRole("button", { name: "Check again", exact: true }).first().click();
+  await expect(page.getByRole("status").filter({ hasText: "No change detected" }).first()).toBeVisible();
+  const checkAgain = page.getByRole("button", { name: "Check again", exact: true }).last();
   await checkAgain.click();
   await expect(page.getByRole("button", { name: "Checking…", exact: true })).toBeDisabled();
   await expect(page.getByRole("status").filter({ hasText: "No change detected" })).toBeVisible();

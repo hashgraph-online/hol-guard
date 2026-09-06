@@ -245,7 +245,7 @@ export function ExtensionManagedControlsPanel(props: {
       setRefreshState("error");
       setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
     }
-  }, [props.effective, props.onRefresh, refreshState]);
+  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
   const connect = useCallback(() => {
     setConnecting(true);
     setConnectMessage(null);
