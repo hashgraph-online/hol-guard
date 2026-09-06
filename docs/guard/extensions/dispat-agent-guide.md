@@ -221,11 +221,12 @@ options describe a script sweep, not release-preview flags; check [run help][run
 allow decision or a reason to use them as an alternative route around a release approval.
 
 This guidance was checked against Dispat commit
-[`2fadeeb7459f5041d98ce253440e651e06fb5b34`](https://github.com/yohimik/dispat/tree/2fadeeb7459f5041d98ce253440e651e06fb5b34).
-The current release implementation and dedicated lock documentation acquire the lock before
-planning, including `--require-release`; older wording in some CLI/CI pages describes a pre-lock
-empty-plan check and should not be used as a release-preview guarantee. Consult installed-version
-help and the corresponding source when these descriptions differ.
+[`909dc401f3725a610604b77b0e790808cee9a524`](https://github.com/yohimik/dispat/tree/909dc401f3725a610604b77b0e790808cee9a524).
+The `dispat release` implementation (also used by bare `dispat`) acquires the lock before planning,
+including with `--require-release`, as described in the dedicated lock documentation.
+`dispat status --require-release` remains a lock-free status gate. Older wording in some CLI/CI
+pages describes a pre-lock empty-plan check and should not be used as a release-preview guarantee.
+Consult installed-version help and the corresponding source when these descriptions differ.
 
 [ccme]: https://github.com/yohimik/dispat/blob/main/specs/ccme-spec/SPEC.md
 [ccme-api]: https://github.com/yohimik/dispat/blob/main/packages/docs/docs/go/ccme.md

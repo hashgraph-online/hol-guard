@@ -46,9 +46,9 @@ rule's evidence. No Dispat configuration or scripts are read or executed by this
 MCP integration is involved.
 
 The command contract was checked against Dispat commit
-[`2fadeeb7459f5041d98ce253440e651e06fb5b34`](https://github.com/yohimik/dispat/tree/2fadeeb7459f5041d98ce253440e651e06fb5b34),
+[`909dc401f3725a610604b77b0e790808cee9a524`](https://github.com/yohimik/dispat/tree/909dc401f3725a610604b77b0e790808cee9a524),
 specifically `services/dispat/internal/cli/{cli,options,dispatch,usage}.go` and
 `services/dispat/internal/app/{release,lock}.go`. See the
 [Dispat repository](https://github.com/yohimik/dispat) and
-[release-lock documentation](https://github.com/yohimik/dispat/blob/2fadeeb7459f5041d98ce253440e651e06fb5b34/packages/docs/docs/reference/releasing/release-lock.md)
+[release-lock documentation](https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/reference/releasing/release-lock.md)
 for the release pipeline and lock-free gate.
