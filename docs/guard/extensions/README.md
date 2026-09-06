@@ -24,6 +24,9 @@ Protection model meanings:
 - **Required core**: an immutable minimum protection floor shipped by HOL Guard.
 - **Built in**: a reviewed detector in the canonical local registry.
 - **Package Firewall**: package operations delegated to Guard's supply-chain enforcement surface.
+- **External opt-in**: a community Extension that contributes review evidence after local enablement.
+
+See [Dispat release protection](dispat.md) for its release-start boundary and preview examples.
 
 <!-- BEGIN GENERATED EXTENSION DIRECTORY -->
 
@@ -129,6 +132,7 @@ Protection model meanings:
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
+| `command.dispat` | Reviews Dispat release starts while leaving status previews quiet. | 1 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |

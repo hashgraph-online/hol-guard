@@ -136,6 +136,7 @@ packages = ["src/codex_plugin_scanner"]
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
+"contributions/extensions/command.dispat.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.dispat.json"
 "contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
 "contributions/extensions/command.probe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.probe.json"
 "contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"

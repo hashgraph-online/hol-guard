@@ -14,6 +14,7 @@ _ARTIFACTS = {
     "contracts/extensions/trust-class-map.v1.json": "extensions/trust-class-map.v1.json",
     "contracts/extensions/contribution.v1.schema.json": "extensions/contribution.v1.schema.json",
     "contributions/extensions/command.blitcp.json": "extensions/contributions/command.blitcp.json",
+    "contributions/extensions/command.dispat.json": "extensions/contributions/command.dispat.json",
     "contributions/extensions/command.noodle.json": "extensions/contributions/command.noodle.json",
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
