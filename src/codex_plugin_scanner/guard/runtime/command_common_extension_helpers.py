@@ -39,7 +39,13 @@ def executable_matcher(
     )
 
 
-def _variant_leaf(matcher: ExecutableMatcher, required_flags: frozenset[str]) -> ExecutableMatcher:
+def _variant_leaf(
+    matcher: ExecutableMatcher,
+    required_flags: frozenset[str],
+    *,
+    required_flags_in_all_arguments: bool = False,
+    fail_secure_unknown_options: bool = False,
+) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=matcher.executables,
         subcommands=matcher.subcommands,
@@ -52,8 +58,10 @@ def _variant_leaf(matcher: ExecutableMatcher, required_flags: frozenset[str]) ->
         options_with_values=matcher.options_with_values,
         inverse_flag_pairs=matcher.inverse_flag_pairs,
         required_option_values=matcher.required_option_values,
-        required_flags_in_all_arguments=matcher.required_flags_in_all_arguments,
-        fail_secure_unknown_options=matcher.fail_secure_unknown_options,
+        required_flags_in_all_arguments=(
+            matcher.required_flags_in_all_arguments or required_flags_in_all_arguments
+        ),
+        fail_secure_unknown_options=matcher.fail_secure_unknown_options or fail_secure_unknown_options,
     )
 
 
@@ -95,14 +103,28 @@ def flag_variant(
     variant_id: str,
     title: str,
     required_flags: frozenset[str],
+    required_flags_in_all_arguments: bool = False,
+    fail_secure_unknown_options: bool = False,
 ) -> CommandSafeVariant:
     """Create a rule-local safe variant without dropping matcher constraints."""
 
     if isinstance(matcher, ExecutableMatcher):
-        variant_matcher: CommandMatcher = _variant_leaf(matcher, required_flags)
+        variant_matcher: CommandMatcher = _variant_leaf(
+            matcher,
+            required_flags,
+            required_flags_in_all_arguments=required_flags_in_all_arguments,
+            fail_secure_unknown_options=fail_secure_unknown_options,
+        )
     else:
         leaves = tuple(
-            _variant_leaf(child, required_flags) for child in matcher.matchers if isinstance(child, ExecutableMatcher)
+            _variant_leaf(
+                child,
+                required_flags,
+                required_flags_in_all_arguments=required_flags_in_all_arguments,
+                fail_secure_unknown_options=fail_secure_unknown_options,
+            )
+            for child in matcher.matchers
+            if isinstance(child, ExecutableMatcher)
         )
         if len(leaves) != len(matcher.matchers):
             raise ValueError("flag variants require executable matcher leaves")
@@ -172,7 +194,7 @@ def rule(
     action_class: str,
     risk_classes: tuple[str, ...],
     safer_alternative: str,
-    example_command: str,
+    example_command: str | None = None,
     severity: CommandRuleSeverity = "high",
     safe_variants: tuple[CommandSafeVariant, ...] = (),
 ) -> CommandSafetyRule:
