@@ -13,7 +13,17 @@ use std::os::unix::net::UnixStream;
 pub(crate) trait ResidentStream: Read + Write + Send {
     fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
     fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
-    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize>;
+    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()>;
+    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        self.set_resident_nonblocking(true)?;
+        let result = self.read(output);
+        let restore = self.set_resident_nonblocking(false);
+        match (result, restore) {
+            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
+            (result, Ok(())) => result,
+            (_, Err(error)) => Err(error),
+        }
+    }
     fn configure_low_latency(&self) -> io::Result<()> {
         Ok(())
     }
@@ -28,15 +38,8 @@ impl ResidentStream for TcpStream {
         TcpStream::set_write_timeout(self, timeout)
     }
 
-    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        self.set_nonblocking(true)?;
-        let result = self.read(output);
-        let restore = self.set_nonblocking(false);
-        match (result, restore) {
-            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
-            (result, Ok(())) => result,
-            (_, Err(error)) => Err(error),
-        }
+    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        self.set_nonblocking(nonblocking)
     }
 
     fn configure_low_latency(&self) -> io::Result<()> {
@@ -54,15 +57,8 @@ impl ResidentStream for UnixStream {
         UnixStream::set_write_timeout(self, timeout)
     }
 
-    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        self.set_nonblocking(true)?;
-        let result = self.read(output);
-        let restore = self.set_nonblocking(false);
-        match (result, restore) {
-            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
-            (result, Ok(())) => result,
-            (_, Err(error)) => Err(error),
-        }
+    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        self.set_nonblocking(nonblocking)
     }
 }
 

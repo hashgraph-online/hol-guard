@@ -141,24 +141,8 @@ class ExtensionControlApiService:
             "items": items,
         }
 
-    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
-        current = self._store.read_extension_control_authority_for_registry(self._registry)
-        if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
-            runtime = self._runtime.current()
-            if current.health is AuthorityHealth.PROTECTED and runtime.health is not AuthorityHealth.PROTECTED:
-                try:
-                    if runtime.health in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
-                        _ = self._runtime.replace_after_recovery(current)
-                    else:
-                        _ = self._runtime.refresh(current)
-                except ValueError as exc:
-                    raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
-                return self.effective()
-            raise ExtensionControlApiError(409, "authority_not_recoverable")
-        _ = self._runtime.refresh(current)
+    def _require_action_grant(self, payload: dict[str, object], *, action: str, subject: str) -> None:
         session_nonce = required_request_string(payload, "session_nonce")
-        action = "recover-authority"
-        subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
         try:
             grant = require_extension_control(
                 self._store.guard_home,
@@ -176,6 +160,25 @@ class ExtensionControlApiService:
             )
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
+
+    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
+        current = self._store.read_extension_control_authority_for_registry(self._registry)
+        if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+            runtime = self._runtime.current()
+            if current.health is AuthorityHealth.PROTECTED and runtime.health is not AuthorityHealth.PROTECTED:
+                try:
+                    if runtime.health in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+                        _ = self._runtime.replace_after_recovery(current)
+                    else:
+                        _ = self._runtime.refresh(current)
+                except ValueError as exc:
+                    raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
+                return self.effective()
+            raise ExtensionControlApiError(409, "authority_not_recoverable")
+        _ = self._runtime.refresh(current)
+        action = "recover-authority"
+        subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
+        self._require_action_grant(payload, action=action, subject=subject)
         try:
             view = self._store.recover_extension_control_authority(
                 catalog_digest=self._registry.catalog_digest,
@@ -194,27 +197,10 @@ class ExtensionControlApiService:
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
         if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
             raise ExtensionControlApiError(409, "authority_not_degraded")
-        session_nonce = required_request_string(payload, "session_nonce")
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         action = "acknowledge-degraded"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
-        try:
-            grant = require_extension_control(
-                self._store.guard_home,
-                approval_gate_input=input_from_mapping(payload),
-                action=action,
-                subject=subject,
-                session_nonce=session_nonce,
-            )
-            consume_extension_control_grant(
-                self._store.guard_home,
-                grant,
-                action=action,
-                subject=subject,
-                session_nonce=session_nonce,
-            )
-        except ApprovalGateError as exc:
-            raise ExtensionControlApiError(exc.status, exc.code) from exc
+        self._require_action_grant(payload, action=action, subject=subject)
         view = self._store.acknowledge_extension_control_degraded_mode()
         _ = self._runtime.refresh(view)
         return self.effective()
