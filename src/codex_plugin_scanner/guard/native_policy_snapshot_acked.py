@@ -26,7 +26,10 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
     material_getter = getattr(store, "_policy_integrity_secret_material", None)
     if guard_home is None or not callable(material_getter):
         return None
-    material = material_getter(create=False)
+    try:
+        material = material_getter(create=False)
+    except Exception:
+        return None
     if not isinstance(material, tuple) or len(material) != 2 or not isinstance(material[0], bytes):
         return None
     try:
