@@ -54,6 +54,7 @@ function randomToken(): string {
 export function AddCustomExtensionWorkspace(props: {
   items: LocalCliItem[];
   revision: number;
+  discovering?: boolean;
   onBack: () => void;
   onAdded: (cliId: string) => void;
 }) {
@@ -312,7 +313,11 @@ export function AddCustomExtensionWorkspace(props: {
           <header className="mt-3 max-w-2xl pb-4">
             <h1 id="add-custom-extension-title" className="text-2xl font-semibold tracking-tight text-brand-dark">Add a custom extension</h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              {dialogIntro(rememberedProjects.length > 0, recognized?.surface ?? null)}
+              {dialogIntro(
+                rememberedProjects.length > 0,
+                recognized?.surface ?? null,
+                props.discovering === true && recognized === null,
+              )}
             </p>
           </header>
           <label htmlFor="custom-extension-command" className="mt-4 block text-sm font-semibold text-brand-dark">
@@ -381,6 +386,7 @@ export function AddCustomExtensionWorkspace(props: {
           ) : (
             <SuggestionPanel
               query={command}
+              discovering={props.discovering === true}
               hasSuggestions={hasSuggestions}
               packageScriptSuggestions={packageScriptSuggestions}
               harnessSuggestions={harnessSuggestions}

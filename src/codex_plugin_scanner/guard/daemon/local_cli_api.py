@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from ..adapters.harness_mcp_discovery import (
     DiscoveredHarnessMcpServer,
+    apply_source_labels,
     discover_harness_mcp_servers,
     discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
@@ -53,6 +54,7 @@ from ..runtime.package_json_script_memory import (
     operator_working_directory,
     public_local_cli_item,
     recognize_operator_package_scripts,
+    refresh_package_script_catalogs,
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from .local_cli_continuity_api import decorate_local_cli_continuity
@@ -87,10 +89,29 @@ class LocalCliApiService:
         # when the daemon is under lock contention.
         stored = self._store.list_local_cli_items()
         items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
-        revision = self._store.read_local_cli_revision()
+        return self._list_payload(items)
+
+    def discover_items(self) -> dict[str, object]:
+        """Refresh package.json catalogs and app MCP servers, then return the list.
+
+        GET listing stays a store read. This write path is for Add custom
+        extension so project scripts reappear without blocking the overview.
+        """
+        stored = self._store.list_local_cli_items()
+        try:
+            labels = self._observe_harness_mcp_servers()
+            items = apply_source_labels(
+                refresh_package_script_catalogs(self._store, home_dir=Path.home()),
+                labels,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+            items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
+        return self._list_payload(items)
+
+    def _list_payload(self, items: list[dict[str, object]]) -> dict[str, object]:
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
-            "revision": revision,
+            "revision": self._store.read_local_cli_revision(),
             "items": items,
             "cloud": decorate_local_cli_continuity(self._store, items),
         }

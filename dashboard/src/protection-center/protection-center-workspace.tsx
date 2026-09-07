@@ -176,6 +176,10 @@ export function ProtectionCenterWorkspace(props: {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+  useEffect(() => {
+    if (routeState.route.kind !== "add-custom") return;
+    void localClis.discover();
+  }, [localClis.discover, routeState.route.kind]);
 
   const catalogExtensions = useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
@@ -423,6 +427,7 @@ export function ProtectionCenterWorkspace(props: {
         <AddCustomExtensionWorkspace
           items={localClis.data?.items ?? []}
           revision={localClis.data?.revision ?? 0}
+          discovering={localClis.discovering}
           onBack={closeExtension}
           onAdded={handleCustomExtensionAdded}
         />

@@ -322,7 +322,14 @@ _EXTENSION_CONTROL_PATHS = frozenset(
         "/v1/extension-controls/acknowledge-degraded",
     }
 )
-_LOCAL_CLI_PATHS = frozenset({"/v1/local-clis/preview", "/v1/local-clis/apply", "/v1/local-clis/recognize"})
+_LOCAL_CLI_PATHS = frozenset(
+    {
+        "/v1/local-clis/preview",
+        "/v1/local-clis/apply",
+        "/v1/local-clis/recognize",
+        "/v1/local-clis/discover",
+    }
+)
 
 
 class _HookPathValidationError(ValueError):
@@ -2714,6 +2721,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     response = self._daemon_server().local_cli_api.preview(payload)
                 elif parsed.path.endswith("/recognize"):
                     response = self._daemon_server().local_cli_api.recognize(payload)
+                elif parsed.path.endswith("/discover"):
+                    response = self._daemon_server().local_cli_api.discover_items()
                 else:
                     response = self._daemon_server().local_cli_api.apply(payload)
             except LocalCliApiError as error:
@@ -6985,6 +6994,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/local-clis/preview",
             "/v1/local-clis/apply",
             "/v1/local-clis/recognize",
+            "/v1/local-clis/discover",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",

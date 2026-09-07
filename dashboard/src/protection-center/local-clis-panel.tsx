@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { HiMiniArrowLeft, HiMiniPlus } from "react-icons/hi2";
 
@@ -15,6 +15,7 @@ import {
   applyLocalCliMutation,
   bulkCommandState,
   enrollablePackageScriptCommands,
+  fetchLocalCliDiscover,
   fetchLocalCliList,
   LocalCliApiError,
   previewLocalCliMutation,
@@ -445,16 +446,46 @@ function CustomExtensionReviewModal(props: {
 export function useLocalCliCatalog() {
   const [data, setData] = useState<LocalCliListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const loadGeneration = useRef(0);
   const load = useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
     try {
-      setData(await fetchLocalCliList());
+      const next = await fetchLocalCliList();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
       setError(null);
     } catch (caught) {
+      if (loadGeneration.current !== generation) return;
       setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+    }
+  }, []);
+  const discover = useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    setDiscovering(true);
+    try {
+      const next = await fetchLocalCliDiscover();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
+      setError(null);
+    } catch {
+      try {
+        const next = await fetchLocalCliList();
+        if (loadGeneration.current !== generation) return;
+        setData(next);
+        setError(null);
+      } catch (caught) {
+        if (loadGeneration.current !== generation) return;
+        setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+      }
+    } finally {
+      if (loadGeneration.current === generation) setDiscovering(false);
     }
   }, []);
   useEffect(() => {
     void load();
   }, [load]);
-  return { data, error, load };
+  return { data, error, load, discover, discovering };
 }

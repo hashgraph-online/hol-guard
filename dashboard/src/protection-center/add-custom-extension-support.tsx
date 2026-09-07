@@ -89,6 +89,7 @@ export function blockActionLabel(surface: LocalCliItem["surface"]): string {
 export function dialogIntro(
   hasProjects: boolean,
   surface: LocalCliItem["surface"] | null,
+  discovering = false,
 ): string {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
@@ -98,6 +99,9 @@ export function dialogIntro(
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
+  }
+  if (discovering) {
+    return "Looking for project scripts and app servers on this device.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
 }
@@ -131,6 +135,7 @@ export function suggestionSummary(item: LocalCliItem): string {
 
 export function SuggestionPanel(props: {
   query: string;
+  discovering?: boolean;
   hasSuggestions: boolean;
   packageScriptSuggestions: LocalCliItem[];
   harnessSuggestions: LocalCliItem[];
@@ -139,8 +144,8 @@ export function SuggestionPanel(props: {
 }) {
   if (!props.hasSuggestions) {
     return (
-      <p className="mt-5 text-sm leading-6 text-brand-dark/70">
-        {suggestionEmptyCopy(props.query)}
+      <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {suggestionEmptyCopy(props.query, props.discovering === true)}
       </p>
     );
   }
@@ -188,9 +193,12 @@ export function ProjectSwitcher(props: {
   );
 }
 
-function suggestionEmptyCopy(query: string): string {
+function suggestionEmptyCopy(query: string, discovering: boolean): string {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
+  }
+  if (discovering) {
+    return "Scanning this device for package scripts and app servers.";
   }
   return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }
