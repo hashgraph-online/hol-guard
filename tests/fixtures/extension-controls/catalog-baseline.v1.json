@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "14dfe51da62093fc36240bd1deed75626c5931179b89b4e157c0530afb939b09",
+  "catalog_digest": "6a097a2e33553091e875457bdd7d2cbf5473648c5d306e8f2703d1f432948206",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 67,
+  "extension_count": 68,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -58,6 +58,7 @@
     "command.kubernetes-secrets",
     "command.load-balancer",
     "command.mcp-filesystem",
+    "command.mcp-tether",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -94,7 +95,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 222,
+  "permission_count": 223,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -244,6 +245,7 @@
     "command.kubernetes-secrets.permission.secret-read": "kubectl get secret db-credentials -o yaml",
     "command.load-balancer.permission.delete": "aws elbv2 delete-load-balancer",
     "command.mcp-filesystem.permission.mcp-filesystem-tool": "npx -y @modelcontextprotocol/server-filesystem",
+    "command.mcp-tether.permission.mcp-tether-tool": "uvx -y tether-memory",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
@@ -540,6 +542,7 @@
     "command.kubernetes-secrets.permission.secret-read",
     "command.load-balancer.permission.delete",
     "command.mcp-filesystem.permission.mcp-filesystem-tool",
+    "command.mcp-tether.permission.mcp-tether-tool",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",

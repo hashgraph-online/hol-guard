@@ -122,6 +122,7 @@ Protection model meanings:
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
+| `command.mcp-tether` | Reviews tether memory writes: remember, link, forget, and the association updates recall makes. Off until you turn it on. | 0 | External opt-in |
 | `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |
 
 ### Other extensions

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.tether",
+  "version": "1.0.0",
+  "name": "tether memory MCP",
+  "description": "Reviews tether memory writes: remember, link, forget, and the association updates recall makes. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.sidyellur",
+    "displayName": "sidyellur",
+    "url": "https://github.com/sidyellur/tether"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F766E"
+  },
+  "homepage": "https://github.com/sidyellur/tether",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "tether-memory"
+  },
+  "riskClasses": ["external-filesystem-write", "remote-state-mutation"],
+  "tools": [
+    { "name": "remember", "state": "inherit" },
+    { "name": "recall", "state": "inherit" },
+    { "name": "link", "state": "inherit" },
+    { "name": "forget", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/sidyellur/tether",
+    "https://pypi.org/project/tether-memory/"
+  ],
+  "saferAlternatives": [
+    "Keep remember, link, and forget on Recommended review; forget is a reversible soft delete, so Block is rarely needed.",
+    "Leave libSQL sync unset to keep memory writes on this device only."
+  ]
+}

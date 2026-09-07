@@ -20,6 +20,7 @@ _ARTIFACTS = {
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
+    "contributions/mcp-servers/mcp.tether.json": "mcp_servers/contributions/mcp.tether.json",
 }
 
 
