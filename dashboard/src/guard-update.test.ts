@@ -79,6 +79,10 @@ assert(
     alphaUpdateMarkup.includes(">Update</button>"),
   "update-ready state pairs the version line with a compact inline Update action",
 );
+assert(
+  alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"),
+  "the ready-version label wraps long release strings instead of clipping them",
+);
 
 const loadingMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {

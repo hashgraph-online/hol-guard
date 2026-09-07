@@ -141,7 +141,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       {updateChannelSummary}
       {props.updateStatus?.update_available ? (
         <div className="flex items-center justify-between gap-2">
-          <p className="min-w-0 truncate text-[11px] leading-4 text-brand-dark/75">
+          <p className="min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]">
             {updateStatusLabel(props.updateStatus)}
           </p>
           {showUpdateButton && props.onUpdateGuard ? (

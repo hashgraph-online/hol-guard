@@ -4461,6 +4461,10 @@
     letter-spacing: var(--tracking-widest);
   }
 
+  .\[overflow-wrap\:anywhere\] {
+    overflow-wrap: anywhere;
+  }
+
   .break-words {
     overflow-wrap: break-word;
   }
