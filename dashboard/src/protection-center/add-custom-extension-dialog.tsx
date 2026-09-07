@@ -38,6 +38,8 @@ import {
   dialogIntro,
   enrollConfirmCopy,
   enrollSubmitDisabled,
+  mcpCatalogHasTools,
+  McpListingStatus,
   ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
@@ -123,7 +125,12 @@ export function AddCustomExtensionWorkspace(props: {
     setReviewingScripts(false);
     setStep("review");
   }, []);
-  const runRecognize = useCallback(async (commandText: string, cliId?: string, silent = false) => {
+  const runRecognize = useCallback(async (
+    commandText: string,
+    cliId?: string,
+    silent = false,
+    keepOnError = false,
+  ) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
@@ -135,9 +142,11 @@ export function AddCustomExtensionWorkspace(props: {
       setError(null);
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
-      setRecognized(null);
-      setSummary(null);
-      setStep("pick");
+      if (!keepOnError) {
+        setRecognized(null);
+        setSummary(null);
+        setStep("pick");
+      }
       if (!silent) {
         setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
       }
@@ -162,6 +171,10 @@ export function AddCustomExtensionWorkspace(props: {
   const findTool = useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  const retryMcpListing = useCallback(() => {
+    if (recognized === null) return;
+    void runRecognize(command.trim() || recognized.example_label, recognized.cli_id, false, true);
+  }, [command, recognized, runRecognize]);
   useEffect(() => {
     if (props.discovering === true) sawDiscovering.current = true;
     if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
@@ -279,6 +292,8 @@ export function AddCustomExtensionWorkspace(props: {
   const showingMcpCatalog = recognized?.surface === "mcp";
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const mcpHasTools = mcpCatalogHasTools(enrollable);
+  const showMcpRetry = showingMcpCatalog && !mcpHasTools;
   const visibleCommands = showingPackageCatalog
     ? filterPackageScriptCommands(enrollable, command)
     : commands;
@@ -331,6 +346,7 @@ export function AddCustomExtensionWorkspace(props: {
                 rememberedProjects.length > 0,
                 recognized?.surface ?? null,
                 props.discovering === true && recognized === null,
+                !showMcpRetry,
               )}
             </p>
           </header>
@@ -358,10 +374,13 @@ export function AddCustomExtensionWorkspace(props: {
                 {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
               </p>
               {summary ? <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{summary}</p> : null}
-              {showingCatalog && enrollable.length > 0 ? (
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <BulkPolicyPicker value={bulkState} disabled={busy} onChange={applyBulk} />
               ) : null}
-              {showingCatalog ? (
+              {showMcpRetry ? (
+                <McpListingStatus name={recognized.name} busy={busy} onRetry={retryMcpListing} />
+              ) : null}
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <CatalogPreview
                   query={command}
                   showFilterCount={showingPackageCatalog}
