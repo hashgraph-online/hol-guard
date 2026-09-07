@@ -62,6 +62,25 @@ def test_marketplace_plugin_strict_boolean_passes(tmp_path: Path) -> None:
     assert result.findings == ()
 
 
+def test_marketplace_root_strict_without_plugins_still_reports_strict(tmp_path: Path) -> None:
+    result = check_marketplace_structure(
+        _marketplace(
+            {
+                "name": "my-plugins",
+                "owner": {"name": "Example"},
+                "strict": True,
+            },
+            tmp_path,
+        )
+    )
+
+    assert result.passed is False
+    assert [finding.rule_id for finding in result.findings] == [
+        "CLAUDE_MARKETPLACE_PLUGINS_MISSING",
+        "CLAUDE_MARKETPLACE_STRICT_INVALID",
+    ]
+
+
 def test_marketplace_root_strict_is_rejected(tmp_path: Path) -> None:
     result = check_marketplace_structure(
         _marketplace(
@@ -138,7 +157,7 @@ def test_scan_documented_marketplace_does_not_emit_strict_finding(tmp_path: Path
     assert structure.points == 4
 
 
-def test_claude_adapter_reads_plugin_strict_not_root(tmp_path: Path) -> None:
+def test_claude_adapter_does_not_collapse_marketplace_strict(tmp_path: Path) -> None:
     manifest_path = tmp_path / ".claude-plugin" / "marketplace.json"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text(
@@ -152,7 +171,12 @@ def test_claude_adapter_reads_plugin_strict_not_root(tmp_path: Path) -> None:
                         "name": "quality-review-plugin",
                         "source": "./plugins/quality-review-plugin",
                         "strict": False,
-                    }
+                    },
+                    {
+                        "name": "docs-plugin",
+                        "source": "./plugins/docs-plugin",
+                        "strict": True,
+                    },
                 ],
             }
         ),
@@ -162,4 +186,4 @@ def test_claude_adapter_reads_plugin_strict_not_root(tmp_path: Path) -> None:
     adapter = ClaudeAdapter()
     package = adapter.parse(adapter.detect(tmp_path)[0])
 
-    assert package.policies["strict"] == "false"
+    assert "strict" not in package.policies

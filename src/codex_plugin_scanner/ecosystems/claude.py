@@ -80,17 +80,7 @@ class ClaudeAdapter:
             components["mcp_servers"] = (str(mcp_file.relative_to(root)),)
 
         policies: dict[str, str] = {}
-        if candidate.package_kind == "marketplace":
-            plugins = manifest.get("plugins")
-            if isinstance(plugins, list):
-                for plugin in plugins:
-                    if not isinstance(plugin, dict) or "strict" not in plugin:
-                        continue
-                    strict_mode = plugin.get("strict")
-                    if isinstance(strict_mode, bool):
-                        policies["strict"] = "true" if strict_mode else "false"
-                        break
-        else:
+        if candidate.package_kind != "marketplace":
             strict_mode = manifest.get("strict")
             if isinstance(strict_mode, bool):
                 policies["strict"] = "true" if strict_mode else "false"

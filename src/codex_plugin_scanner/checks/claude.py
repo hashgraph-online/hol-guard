@@ -123,23 +123,6 @@ def check_marketplace_structure(package: NormalizedPackage) -> CheckResult:
             applicable=False,
         )
     plugins = package.raw_manifest.get("plugins")
-    if not isinstance(plugins, list):
-        return CheckResult(
-            name="Claude marketplace structure",
-            passed=False,
-            points=0,
-            max_points=4,
-            message='Claude marketplace must include a "plugins" array.',
-            findings=(
-                _finding(
-                    "CLAUDE_MARKETPLACE_PLUGINS_MISSING",
-                    "Claude marketplace plugins array missing",
-                    'The Claude marketplace manifest must include a top-level "plugins" array.',
-                    'Add "plugins": [] to .claude-plugin/marketplace.json.',
-                    file_path=".claude-plugin/marketplace.json",
-                ),
-            ),
-        )
     findings: list[Finding] = []
     if "strict" in package.raw_manifest:
         findings.append(
@@ -150,6 +133,25 @@ def check_marketplace_structure(package: NormalizedPackage) -> CheckResult:
                 'Remove root-level "strict". Set boolean "strict" on a plugin entry, or omit it to default to true.',
                 file_path=".claude-plugin/marketplace.json",
             )
+        )
+    if not isinstance(plugins, list):
+        findings.insert(
+            0,
+            _finding(
+                "CLAUDE_MARKETPLACE_PLUGINS_MISSING",
+                "Claude marketplace plugins array missing",
+                'The Claude marketplace manifest must include a top-level "plugins" array.',
+                'Add "plugins": [] to .claude-plugin/marketplace.json.',
+                file_path=".claude-plugin/marketplace.json",
+            ),
+        )
+        return CheckResult(
+            name="Claude marketplace structure",
+            passed=False,
+            points=0,
+            max_points=4,
+            message='Claude marketplace must include a "plugins" array.',
+            findings=tuple(findings),
         )
     for index, plugin in enumerate(plugins):
         if not isinstance(plugin, dict) or "strict" not in plugin:
