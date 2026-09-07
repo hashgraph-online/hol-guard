@@ -27,7 +27,10 @@ import codex_plugin_scanner
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
-from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+from codex_plugin_scanner.guard.native_resident_client import (
+    close_native_resident_clients,
+    native_resident_client_failure_code,
+)
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
@@ -112,6 +115,9 @@ def _native_state_files(guard_home: Path) -> list[Path]:
 
 
 def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    # Persistent clients renew lease files until closed, even after resident-stop.
+    # Stop those writers before the temporary Guard home can be removed.
+    close_native_resident_clients(guard_home)
     try:
         result = subprocess.run(
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
