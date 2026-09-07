@@ -68,6 +68,25 @@ class _ExtensionControlAuthoritySupportMixin:
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
 
+    def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
+        """Read the authenticated authority using its persisted catalog identity."""
+
+        catalog_digest = self._extension_control_last_catalog_digest
+        try:
+            with self._extension_control_authority_lock():
+                self._require_compatible_extension_control_schema()
+                with self._connect() as connection:
+                    row = connection.execute(
+                        "select catalog_digest from extension_control_authority_snapshot where singleton = 1"
+                    ).fetchone()
+                if row is not None:
+                    catalog_digest = _row_str(row, "catalog_digest")
+                return self._read_extension_control_authority_locked(catalog_digest)
+        except ExtensionControlAuthorityError:
+            return self._tampered_view(catalog_digest)
+        except Exception:
+            return self._degraded_view(catalog_digest)
+
     def _authority_key(self, *, required: bool) -> bytes | None:
         try:
             value = self._secret_store().get_secret(self._key_ref())
