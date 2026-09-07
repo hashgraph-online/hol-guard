@@ -7,12 +7,16 @@ from collections.abc import Callable
 
 def dispatch_local_cli_post(api: object, path: str, payload: dict[str, object]) -> dict[str, object]:
     if path.endswith("/preview"):
-        return api.preview(payload)
-    if path.endswith("/recognize"):
-        return api.recognize(payload)
-    if path.endswith("/discover"):
-        return api.discover_items()
-    return api.apply(payload)
+        result = getattr(api, "preview")(payload)
+    elif path.endswith("/recognize"):
+        result = getattr(api, "recognize")(payload)
+    elif path.endswith("/discover"):
+        result = getattr(api, "discover_items")()
+    else:
+        result = getattr(api, "apply")(payload)
+    if not isinstance(result, dict):
+        raise TypeError("local_cli_post_dispatch")
+    return result
 
 
 def handle_local_cli_list(handler: object) -> None:
