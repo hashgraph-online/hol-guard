@@ -19932,7 +19932,7 @@ function updateStatusLabel(status) {
     return "Checking version…";
   }
   if (status.update_available && status.latest_version) {
-    return `Version ${status.latest_version} is ready`;
+    return `${status.latest_version} is ready`;
   }
   return `Version ${status.current_version}`;
 }
@@ -19978,7 +19978,7 @@ function updateHelpCopy(status, phase, errorMessage, embeddedInDesktop = false) 
     if (embeddedInDesktop) {
       return "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen.";
     }
-    return "This restarts Guard for a moment. Open approvals will stay saved.";
+    return "Restarts briefly. Approvals stay saved.";
   }
   if (status && !status.auto_updatable && status.recovery_reinstall_available) {
     if (embeddedInDesktop) {
@@ -20142,70 +20142,65 @@ function GuardModalLayer({
     overlayRoot
   );
 }
-const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-brand-blue/30 bg-white px-2.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
-  let versionContent = null;
-  if (props.version) {
-    versionContent = /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "p",
+  let channelStatus = null;
+  if (props.useAlpha) {
+    channelStatus = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "span",
       {
-        className: "min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70",
-        "aria-label": `Guard version ${props.version}`,
+        className: "inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-4 text-brand-blue",
+        role: "status",
+        "aria-label": "Alpha updates enabled",
         children: [
-          "v",
-          props.version
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: "Alpha updates" })
         ]
       }
     );
   }
-  let channelAction;
-  if (props.useAlpha) {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-1.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1", children: [
+      props.version ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "span",
         {
-          className: "inline-flex min-w-0 items-center gap-1.5",
-          role: "status",
-          "aria-label": "Alpha updates enabled",
+          className: "shrink-0 font-mono text-[10px] leading-4 text-brand-dark/70",
+          "aria-label": `Guard version ${props.version}`,
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold leading-5 text-brand-blue", children: "Alpha updates" })
+            "v",
+            props.version
           ]
         }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onManage,
-          disabled: props.busy,
-          "aria-label": "Manage alpha updates",
-          title: "Manage alpha updates",
-          "data-testid": "guard-alpha-updates-control",
-          className: "inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-          children: "Manage"
-        }
-      )
-    ] });
-  } else {
-    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      ) : null,
+      channelStatus
+    ] }),
+    props.useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onManage,
+        disabled: props.busy,
+        "aria-label": "Manage alpha updates",
+        title: "Manage alpha updates",
+        "data-testid": "guard-alpha-updates-control",
+        className: GUARD_UPDATE_CHANNEL_CONTROL_CLASS,
+        children: "Manage"
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         type: "button",
         onClick: props.onManage,
         disabled: props.busy,
         "data-testid": "guard-alpha-updates-control",
-        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+        className: GUARD_UPDATE_CHANNEL_CONTROL_CLASS,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
           "Try alpha updates"
         ]
       }
-    );
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
-    versionContent,
-    channelAction
+    )
   ] });
 }
 const UPDATE_STATUS_POLL_MS = 6e4;
@@ -20284,22 +20279,25 @@ function GuardUpdatePanel(props) {
       version
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-1.5", children: [
     updateChannelSummary,
-    props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
-    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
-    showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: props.onUpdateGuard,
-        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
-          "Update Guard"
-        ]
-      }
-    ) : null,
+    props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 truncate text-[11px] leading-4 text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }),
+      showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: props.onUpdateGuard,
+          "aria-label": "Update Guard to the latest version",
+          className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+            "Update"
+          ]
+        }
+      ) : null
+    ] }) : null,
+    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
     showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -20307,13 +20305,13 @@ function GuardUpdatePanel(props) {
         onClick: props.onReinstallGuard,
         className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
           "Reinstall from PyPI"
         ]
       }
     ) : null,
-    busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue", role: "status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
+    busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
       phase === "updating" ? "Updating Guard…" : "Reconnecting…"
     ] }),
     alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(

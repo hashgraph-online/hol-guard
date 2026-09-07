@@ -36,18 +36,20 @@ assert(normalized.version_check.update_available === true, "version_check should
 assert(normalized.update_in_progress === true, "update_in_progress should normalize");
 assert(normalized.release_channel === "stable", "missing update channel should default to stable");
 
+const alphaReadyStatus = normalizeGuardUpdateStatus({
+  current_version: "1.2.3",
+  latest_version: "1.2.4a1",
+  installer: "pip",
+  version_check: { source: "pypi", status: "stale", current_version: "1.2.3", latest_version: "1.2.4a1", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+  release_channel: "alpha",
+});
+
 const alphaMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
-    updateStatus: normalizeGuardUpdateStatus({
-      current_version: "1.2.3",
-      latest_version: "1.2.4a1",
-      installer: "pip",
-      version_check: { source: "pypi", status: "stale", current_version: "1.2.3", latest_version: "1.2.4a1", update_available: true },
-      auto_updatable: true,
-      update_available: true,
-      blocked_reason: null,
-      release_channel: "alpha",
-    }),
+    updateStatus: alphaReadyStatus,
     onSetUpdateChannel: () => undefined,
   }),
 );
@@ -56,6 +58,27 @@ assert(alphaMarkup.includes('aria-label="Manage alpha updates"'), "sidebar shoul
 assert(alphaMarkup.includes('data-testid="guard-alpha-updates-control"'), "alpha settings should stay findable as a dedicated control");
 assert(!alphaMarkup.includes("Alpha updates enabled</button>"), "active alpha status should not render as a wide text button");
 assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
+assert(
+  alphaMarkup.includes("min-h-6") && !alphaMarkup.includes("min-h-11") && !alphaMarkup.includes("w-full"),
+  "Local Guard update controls stay compact inline rows, not full-width blocks",
+);
+assert(
+  alphaMarkup.includes("1.2.4a1 is ready") && alphaMarkup.includes("Restarts briefly. Approvals stay saved."),
+  "update-ready copy keeps the version line and reassurance together",
+);
+
+const alphaUpdateMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: alphaReadyStatus,
+    onUpdateGuard: () => undefined,
+    onSetUpdateChannel: () => undefined,
+  }),
+);
+assert(
+  alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') &&
+    alphaUpdateMarkup.includes(">Update</button>"),
+  "update-ready state pairs the version line with a compact inline Update action",
+);
 
 const loadingMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
