@@ -56,6 +56,10 @@ def _iter_facade_overrides() -> dict[str, object]:
 def _support_overrides() -> Iterator[None]:
     overrides = _iter_facade_overrides()
     missing = object()
+    canonical_override_bindings = {
+        name: getattr(_support, name, missing)
+        for name in overrides
+    }
     export_map, module_export_names = _support._build_export_map(overrides)
     override_names = set(overrides)
     targets: list[tuple[ModuleType, set[str]]] = [(_support, set(export_map))]
@@ -105,6 +109,23 @@ def _support_overrides() -> Iterator[None]:
                         delattr(module, name)
                 else:
                     setattr(module, name, value)
+        # A compatibility module can be imported for the first time while the
+        # scoped facade overrides are active.  Such a module was not present in
+        # ``snapshots`` and can otherwise retain an override after this context
+        # exits.  Restore only bindings that still point at the applied override
+        # so module-owned values are left untouched.
+        snapshotted_module_ids = {id(module) for module, _ in snapshots}
+        for module in tuple(sys.modules.values()):
+            if module is None or id(module) in snapshotted_module_ids:
+                continue
+            module_name = getattr(module, "__name__", "")
+            if not module_name.startswith(compatibility_prefix):
+                continue
+            for name, canonical_value in canonical_override_bindings.items():
+                if canonical_value is missing or not hasattr(module, name):
+                    continue
+                if getattr(module, name) is export_map[name]:
+                    setattr(module, name, canonical_value)
 
 
 def _support_attr(name: str) -> Any:

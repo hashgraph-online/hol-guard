@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
 
@@ -39,3 +42,23 @@ def test_commands_facade_restores_propagated_overrides(monkeypatch) -> None:
         assert generic_commands.schedule_guard_daemon_ensure is replacement
 
     assert generic_commands.schedule_guard_daemon_ensure is original
+
+
+def test_commands_facade_restores_late_loaded_compatibility_overrides(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.cli import commands_support as support
+
+    original = support.queue_blocked_approvals
+
+    def replacement(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", replacement)
+    module_name = f"{guard_commands_module.__package__}.commands_hook_late_import_test"
+    late_module = ModuleType(module_name)
+
+    with guard_commands_module._support_overrides():
+        late_module.queue_blocked_approvals = replacement
+        monkeypatch.setitem(sys.modules, module_name, late_module)
+        assert late_module.queue_blocked_approvals is replacement
+
+    assert late_module.queue_blocked_approvals is original
