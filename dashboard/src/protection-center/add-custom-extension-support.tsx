@@ -129,6 +129,14 @@ export function mcpCatalogHasTools(commands: LocalCliItem["commands"]): boolean 
   return commands.some((entry) => entry.command_id !== "other");
 }
 
+export function mcpListingRetryError(
+  helpStatus: LocalCliItem["help_status"],
+  commands: LocalCliItem["commands"],
+): string | null {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
+}
+
 export function McpListingStatus(props: {
   name: string;
   busy: boolean;

@@ -147,12 +147,17 @@ def _timeout_for(tokens: Sequence[str], timeout: float | None) -> float:
 def _resolve_launch_argv(tokens: Sequence[str], *, cwd: Path) -> tuple[str, ...] | None:
     first = tokens[0]
     search_path = probe_search_path()
-    if Path(first).is_absolute() and not is_package_shim_executable(first):
-        resolved = first
-    else:
+    if is_package_shim_executable(first):
         found = shutil.which(Path(first).name, path=search_path)
         if found is None:
-            candidate = cwd / Path(first).name
+            return None
+        resolved = found
+    elif Path(first).is_absolute():
+        resolved = first
+    else:
+        found = shutil.which(first, path=search_path)
+        if found is None:
+            candidate = cwd / first
             if not candidate.is_file():
                 return None
             resolved = str(candidate)

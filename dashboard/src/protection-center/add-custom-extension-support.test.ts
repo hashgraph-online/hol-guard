@@ -9,6 +9,7 @@ import {
   listToolsAgainLabel,
   mcpCatalogHasTools,
   mcpListingBusyCopy,
+  mcpListingRetryError,
   mcpListingRetryFailedCopy,
   suggestionSummary,
 } from "./add-custom-extension-support";
@@ -67,6 +68,9 @@ assert.match(mcpListingBusyCopy("chrome-devtools"), /This can take a few seconds
 assert.match(mcpListingRetryFailedCopy(), /still could not list tools/);
 assert.equal(mcpCatalogHasTools(mcpItem.commands), false);
 assert.equal(mcpCatalogHasTools(packageItem.commands), true);
+assert.equal(mcpListingRetryError("failed", mcpItem.commands), mcpListingRetryFailedCopy());
+assert.equal(mcpListingRetryError("empty", mcpItem.commands), null);
+assert.equal(mcpListingRetryError("ok", packageItem.commands), null);
 assert.equal(
   addDialogSubmitLabel({ recognized: packageItem, busy: false, pending: "allowed" }),
   "Continue",

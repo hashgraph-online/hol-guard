@@ -2465,6 +2465,10 @@ function mcpListingRetryFailedCopy() {
 function mcpCatalogHasTools(commands) {
   return commands.some((entry) => entry.command_id !== "other");
 }
+function mcpListingRetryError(helpStatus, commands) {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
+}
 function McpListingStatus(props) {
   if (props.busy) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 max-w-xl text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: mcpListingBusyCopy(props.name) });
@@ -3526,8 +3530,8 @@ function AddCustomExtensionWorkspace(props) {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : void 0);
       if (recognizeGeneration.current !== generation) return;
       markRecognized(result.item, result.summary);
-      if (keepOnError && !mcpCatalogHasTools(result.item.commands)) {
-        setError(mcpListingRetryFailedCopy());
+      if (keepOnError) {
+        setError(mcpListingRetryError(result.help_status, result.item.commands));
       } else {
         setError(null);
       }
