@@ -66,6 +66,14 @@ eligible profile claimant, not runtime trust or upstream ownership. Once claimed
 additional roles and transfers require an explicit invitation and the named
 account's acceptance. Renaming a GitHub account must not change ownership.
 
+Omitting `maintainerGithubIds` and providing an empty array both mean there are
+no additional delegates. Neither removes the introducing-PR author's eligibility.
+The directory always emits an array; consumers use `claimPolicy: provenance` to
+verify the introducing author independently and treat the array as supplemental.
+`claimPolicy: project` never grants a third-party claim through this field.
+Contribution IDs retain the native 256-character contract; mapped MCP runtime IDs
+and source paths allow the additional prefix and filename characters.
+
 ## Generate a separate listing template
 
 The optional helper reads and validates an existing contribution kit, then prints

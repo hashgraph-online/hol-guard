@@ -45,13 +45,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "maxLength": 128,
+            "maxLength": 256,
             "pattern": "^(command|mcp)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
           },
           "runtimeExtensionId": {
             "type": "string",
             "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$",
-            "maxLength": 128
+            "maxLength": 264
           },
           "kind": {
             "enum": [
@@ -142,7 +142,7 @@
             ]
           },
           "maintainerGithubIds": {
-            "description": "Reviewed profile delegation only; never runtime or upstream ownership. Omit for automatic introducing-PR author eligibility.",
+            "description": "Additional reviewed profile claimants. An empty array means no extra delegates. For claimPolicy provenance, verify introducing-PR author eligibility independently; delegates never replace that evidence. For claimPolicy project, this array grants no third-party claim authority.",
             "type": "array",
             "maxItems": 8,
             "uniqueItems": true,
@@ -153,7 +153,7 @@
           },
           "sourcePath": {
             "type": "string",
-            "maxLength": 256,
+            "maxLength": 288,
             "pattern": "^(contributions/(extensions|mcp-servers)/(command|mcp)\\.[a-z0-9.-]+\\.json|src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry\\.py)$"
           },
           "contributionDigest": {

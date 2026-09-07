@@ -17,7 +17,7 @@
     },
     "extensionId": {
       "type": "string",
-      "maxLength": 128,
+      "maxLength": 256,
       "pattern": "^(command|mcp)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
     },
     "tagline": {
@@ -67,7 +67,7 @@
       }
     },
     "maintainerGithubIds": {
-      "description": "Reviewed profile delegation only; never runtime or upstream ownership. Omit for automatic introducing-PR author eligibility.",
+      "description": "Additional reviewed profile claimants only; never runtime or upstream ownership. Omitted or empty means no extra delegates and does not remove introducing-PR author eligibility.",
       "type": "array",
       "maxItems": 8,
       "uniqueItems": true,
