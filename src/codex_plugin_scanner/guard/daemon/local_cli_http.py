@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 
 
-def dispatch_local_cli_post(api: object, path: str, payload: dict[str, object]) -> dict[str, object]:
+class _LocalCliPostApi(Protocol):
+    def apply(self, payload: dict[str, object]) -> dict[str, object]: ...
+    def discover_items(self) -> dict[str, object]: ...
+    def preview(self, payload: dict[str, object]) -> dict[str, object]: ...
+    def recognize(self, payload: dict[str, object]) -> dict[str, object]: ...
+
+
+def dispatch_local_cli_post(api: _LocalCliPostApi, path: str, payload: dict[str, object]) -> dict[str, object]:
     if path.endswith("/preview"):
-        result = getattr(api, "preview")(payload)
-    elif path.endswith("/recognize"):
-        result = getattr(api, "recognize")(payload)
-    elif path.endswith("/discover"):
-        result = getattr(api, "discover_items")()
-    else:
-        result = getattr(api, "apply")(payload)
-    if not isinstance(result, dict):
-        raise TypeError("local_cli_post_dispatch")
-    return result
+        return api.preview(payload)
+    if path.endswith("/recognize"):
+        return api.recognize(payload)
+    if path.endswith("/discover"):
+        return api.discover_items()
+    return api.apply(payload)
 
 
 def handle_local_cli_list(handler: object) -> None:
