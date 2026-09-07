@@ -1,0 +1,75 @@
+name: Branch refresh managed extension vector
+
+on:
+  push:
+    branches:
+      - fix/docker-kubernetes-command-coverage
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-refresh-managed-extension-vector
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Refresh catalog-bound vector
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          old_catalog = "1adafb47517f49174bb846825773329fa541f34945bb44fe34297f081afa469e"
+          new_catalog = "bf17d75a4af5639216ae991c862736f03821b0d57446a1767d4760ea6b87365e"
+          old_projection = "sha256:76525b573c10b3befa84652841136306221e07cf3e0904da9b797b410eb7f9f0"
+          new_projection = "sha256:a2129c86b74baa0fc7dd05a1d137f13fb3d89fda4105390f94738421b2d53243"
+
+          vector_path = Path("contracts/managed-controls/v1/extension-projection-digest-vector.json")
+          vector = json.loads(vector_path.read_text())
+          vector["catalogDigest"] = new_catalog
+          vector["canonicalProjectionJson"] = vector["canonicalProjectionJson"].replace(old_catalog, new_catalog)
+          vector["expectedExtensionProjectionDigest"] = new_projection
+          vector_path.write_text(json.dumps(vector, indent=2) + "\n")
+
+          test_path = Path("tests/test_policy_bundle_delivery_runtime.py")
+          text = test_path.read_text()
+          text = text.replace(
+              f'_GUARD_RELEASE_CATALOG_DIGEST = "{old_catalog}"',
+              f'_GUARD_RELEASE_CATALOG_DIGEST = "{new_catalog}"',
+          )
+          text = text.replace(
+              f'_GUARD_RELEASE_PROJECTION_DIGEST = "{old_projection}"',
+              f'_GUARD_RELEASE_PROJECTION_DIGEST = "{new_projection}"',
+          )
+          test_path.write_text(text)
+          PY
+      - name: Commit refreshed vector
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: fix/docker-kubernetes-command-coverage
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- contracts/managed-controls/v1/extension-projection-digest-vector.json tests/test_policy_bundle_delivery_runtime.py; then
+            exit 0
+          fi
+          remote_tip="$(git ls-remote origin "refs/heads/${TARGET_BRANCH}" | cut -f1)"
+          if [ "$remote_tip" != "$TRIGGER_SHA" ]; then
+            echo "Branch advanced; skipping stale refresh commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/managed-controls/v1/extension-projection-digest-vector.json tests/test_policy_bundle_delivery_runtime.py
+          git commit -m "test: refresh managed extension projection vector"
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic ${auth}" \
+            push origin "HEAD:${TARGET_BRANCH}"
