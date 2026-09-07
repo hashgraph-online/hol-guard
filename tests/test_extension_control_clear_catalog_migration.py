@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
+    ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
@@ -147,6 +149,59 @@ def test_clear_preserves_persisted_catalog_and_local_controls(
     assert runtime.current().managed_revision == 2
     persisted_after = store.read_persisted_extension_control_authority()
     assert persisted_after == persisted_before
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_health"),
+    (
+        (ExtensionControlAuthorityError("invalid snapshot"), AuthorityHealth.TAMPERED),
+        (RuntimeError("authority store unavailable"), AuthorityHealth.DEGRADED_UNACKNOWLEDGED),
+    ),
+)
+def test_persisted_authority_read_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_health: AuthorityHealth,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _activate_under_catalog(store, BUILT_IN_COMMAND_EXTENSION_REGISTRY, monkeypatch)
+
+    def fail_read(_catalog_digest: str) -> ExtensionControlAuthorityView:
+        raise failure
+
+    monkeypatch.setattr(store, "_read_extension_control_authority_locked", fail_read)
+    view = store.read_persisted_extension_control_authority()
+
+    assert view.health is expected_health
+    assert view.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+
+
+def test_clear_rejects_active_state_without_its_catalog_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _activate_under_catalog(store, BUILT_IN_COMMAND_EXTENSION_REGISTRY, monkeypatch)
+    with store._connect() as connection:
+        row = connection.execute(
+            "select payload_json from sync_state where state_key = ?",
+            (MANAGED_CONTROLS_ACTIVE_STATE_KEY,),
+        ).fetchone()
+        assert row is not None
+        payload = json.loads(str(row["payload_json"]))
+        assert isinstance(payload, dict)
+        payload.pop("catalogDigest", None)
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (json.dumps(payload, allow_nan=False), MANAGED_CONTROLS_ACTIVE_STATE_KEY),
+        )
+
+    with pytest.raises(ExtensionControlAuthorityError, match="invalid managed controls activation"):
+        store.clear_policy_bundle_authority(
+            "2026-08-23T12:05:00Z",
+            policy_bundle_last_error={"reason": "missing-catalog"},
+        )
 
 
 @pytest.mark.parametrize("health", (AuthorityHealth.TAMPERED, AuthorityHealth.DEGRADED_UNACKNOWLEDGED))
