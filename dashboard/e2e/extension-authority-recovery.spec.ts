@@ -66,7 +66,9 @@ async function mountRecoveryFixture(page: Page, setup?: {
     else if (path.endsWith("/extension-controls/catalog")) body = catalog;
     else if (path.endsWith("/extension-controls/effective")) {
       const recoveryHealth = repaired ? "protected" : "tampered";
-      body = authority(setup?.initialHealth ?? (setup ? "unenrolled" : recoveryHealth));
+      // Configured fixtures start unenrolled unless a failure scenario must expose tampered state.
+      const initialHealth = setup?.initialHealth ?? (setup ? "unenrolled" : recoveryHealth);
+      body = authority(initialHealth);
     }
     else if (path.endsWith("/extension-controls/recover-authority")) {
       const payload = request.postDataJSON() as { approval_totp_code?: string };
