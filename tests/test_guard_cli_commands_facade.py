@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import sys
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
 
@@ -39,6 +42,40 @@ def test_commands_facade_restores_propagated_overrides(monkeypatch) -> None:
         assert generic_commands.schedule_guard_daemon_ensure is replacement
 
     assert generic_commands.schedule_guard_daemon_ensure is original
+
+
+def test_commands_facade_restores_late_loaded_compatibility_overrides(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.cli import commands_support as support
+
+    original = support.queue_blocked_approvals
+
+    def replacement(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", replacement)
+    module_name = f"{guard_commands_module.__package__}.commands_hook_generic"
+    package = sys.modules[guard_commands_module.__package__]
+    attribute_name = "commands_hook_generic"
+    previous_module = sys.modules.pop(module_name, None)
+    had_package_attribute = hasattr(package, attribute_name)
+    previous_package_attribute = getattr(package, attribute_name, None)
+    if had_package_attribute:
+        delattr(package, attribute_name)
+
+    try:
+        with guard_commands_module._support_overrides():
+            late_module = importlib.import_module(module_name)
+            assert late_module.queue_blocked_approvals is replacement
+
+        assert late_module.queue_blocked_approvals is original
+    finally:
+        sys.modules.pop(module_name, None)
+        if previous_module is not None:
+            sys.modules[module_name] = previous_module
+        if hasattr(package, attribute_name):
+            delattr(package, attribute_name)
+        if had_package_attribute:
+            setattr(package, attribute_name, previous_package_attribute)
 
 
 def test_commands_facade_restores_overrides_captured_by_modules_imported_inside_window(monkeypatch) -> None:
