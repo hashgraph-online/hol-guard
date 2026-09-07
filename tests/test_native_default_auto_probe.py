@@ -135,7 +135,7 @@ def test_wait_for_route_corpus_observes_completion_before_snapshot() -> None:
         def snapshot(self) -> Mapping[str, object]:
             return next(snapshots)
 
-    complete = wait_for_route_corpus(FakeMetrics(), expected=21)
+    complete = wait_for_route_corpus(FakeMetrics(), expected=21, timeout_seconds=1.0)
     assert complete["routes"] == {"native_resident": 21}
 
 
@@ -226,9 +226,7 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
     assert capsys.readouterr().err == expected_error[outcome]
 
 
-def test_probe_cleans_both_homes_when_smoke_check_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_probe_cleans_both_homes_when_smoke_check_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from ci.native_runtime import probe_native_default_auto as probe
 
     roots: list[Path] = []
