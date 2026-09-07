@@ -225,12 +225,18 @@ def _normalize_secret_candidate(value: str) -> str:
     return normalized
 
 
+def _looks_like_interpolated_secret(value: str) -> bool:
+    """Env and template expansions are references, not embedded credentials."""
+    normalized = _normalize_secret_candidate(value)
+    return normalized.startswith(("${", "{{"))
+
+
 def _looks_like_placeholder_secret(value: str) -> bool:
     normalized = _normalize_secret_candidate(value)
     lowered = normalized.lower()
     if not normalized:
         return True
-    if normalized.startswith(("${", "{{", "<", "[")):
+    if _looks_like_interpolated_secret(normalized) or normalized.startswith(("<", "[")):
         return True
     if "..." in normalized or "…" in normalized:
         return True
@@ -404,6 +410,8 @@ def _should_skip_secret_match(
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
+    if _looks_like_interpolated_secret(candidate):
+        return True
     if detector.kind == "generic" and _provider_payload(candidate) is None:
         if _is_generated_token_expression(relative_path, content, match):
             return True
