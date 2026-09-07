@@ -123,6 +123,50 @@ MAX_SCAN_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_SECRET_MATCHES_PER_FILE = 10_000
 MAX_SCAN_DEPTH = 64
 
+# A bounded TypeScript field-name dictionary is metadata, not credential values.
+# Require a typed, multi-entry map whose every value is the upper-snake spelling
+# of its key. Arbitrary uppercase strings and ordinary credential objects do not
+# qualify. Compute spans once per file rather than rescanning for every match.
+FIELD_NAME_MAP_RE = re.compile(
+    r"(?m)^[ \t]*const [A-Za-z_$][\w$]*[ \t]*:[ \t]*Record<[^;\n{}]{1,160}>"
+    r"[ \t]*=[ \t]*\{(?P<body>[^{}]{1,4096})\}[ \t]*;"
+)
+FIELD_NAME_ENTRY_RE = re.compile(r"""\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*(["'])([A-Za-z][A-Za-z0-9_]*)\2\s*""")
+GENERATED_TOKEN_RE = re.compile(r'\$\(openssl rand -(?:hex|base64) [1-9][0-9]{0,3}\)"(?=$|[\s;])')
+
+
+def _field_name_map_spans(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
+    if relative_path.suffix.lower() not in {".ts", ".tsx"}:
+        return ()
+    spans = []
+    for mapping in FIELD_NAME_MAP_RE.finditer(content):
+        entries = mapping.group("body").strip().rstrip(",").split(",")
+        if len(entries) < 2:
+            continue
+        for entry in entries:
+            pair = FIELD_NAME_ENTRY_RE.fullmatch(entry)
+            if pair is None:
+                break
+            key, _, value = pair.groups()
+            if key[0].isupper():
+                key, value = value, key
+            snake_key = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key).upper()
+            if not re.fullmatch(r"[a-z][A-Za-z0-9]*", key) or value != snake_key:
+                break
+        else:
+            spans.append(mapping.span("body"))
+    return tuple(spans)
+
+
+def _is_generated_token_expression(relative_path: Path, content: str, match: re.Match[str]) -> bool:
+    if relative_path.suffix.lower() not in DOCUMENTATION_EXTS | {".sh", ".bash"}:
+        return False
+    start = match.start(1)
+    # Single-quoted shell values are literal; arbitrary substitutions may carry
+    # credentials. Accept only the complete double-quoted random generator.
+    return start > 0 and content[start - 1] == '"' and GENERATED_TOKEN_RE.match(content, start) is not None
+
+
 BINARY_EXTS = {
     ".png",
     ".jpg",
@@ -434,8 +478,14 @@ def _should_skip_secret_match(
     *,
     lines: list[str] | None = None,
     offsets: tuple[int, ...] | None = None,
+    field_name_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
     candidate = _extract_secret_candidate(detector, match)
+    if detector.kind == "generic" and _provider_payload(candidate) is None:
+        if _is_generated_token_expression(relative_path, content, match):
+            return True
+        if any(start <= match.start() < end for start, end in field_name_spans):
+            return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
@@ -457,6 +507,7 @@ def _should_skip_secret_match(
 def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
     offsets = _newline_offsets(content)
     lines = content.splitlines()
+    field_name_spans = _field_name_map_spans(relative_path, content)
     first_line = _first_private_key_line(relative_path, content, lines=lines, offsets=offsets)
     first_offset: int | None = None
     matches_seen = 0
@@ -478,6 +529,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 match,
                 lines=lines,
                 offsets=offsets,
+                field_name_spans=field_name_spans,
             ):
                 continue
             first_offset = match.start()
