@@ -137,6 +137,7 @@ GENERATED_TOKEN_RE = re.compile(r'\$\(openssl rand -(?:hex|base64) [1-9][0-9]{0,
 
 
 def _field_name_map_spans(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
+    """Index bounded TS field maps only when every value is case-derived from its key."""
     if relative_path.suffix.lower() not in {".ts", ".tsx"}:
         return ()
     spans = []
@@ -160,6 +161,7 @@ def _field_name_map_spans(relative_path: Path, content: str) -> tuple[tuple[int,
 
 
 def _is_generated_token_expression(relative_path: Path, content: str, match: re.Match[str]) -> bool:
+    """Recognize a complete double-quoted OpenSSL token generator in shell or docs."""
     if relative_path.suffix.lower() not in DOCUMENTATION_EXTS | {".sh", ".bash"}:
         return False
     start = match.start(1)
@@ -482,6 +484,7 @@ def _should_skip_secret_match(
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
+    """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
     if detector.kind == "generic" and _provider_payload(candidate) is None:
         if _is_generated_token_expression(relative_path, content, match):
@@ -510,6 +513,7 @@ def _should_skip_secret_match(
 
 
 def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
+    """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
     field_name_spans = _field_name_map_spans(relative_path, content)
