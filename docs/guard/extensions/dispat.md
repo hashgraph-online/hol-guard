@@ -4,9 +4,11 @@
 `command.dispat.release` rule reviews release starts with high severity and the `execution` and
 `network_egress` risk classes. Guard policy retains the final decision.
 
-For help, JSON logs, CI gating, CCME commits, configuration boundaries, release-lock coordination,
-gating versus warning-only hooks, and idempotent publishing, see
-[Using Dispat as an agent](dispat-agent-guide.md).
+For extended Dispat help, agents must run the installed `dispat --help` and open the official
+agent-guide URL printed under "If you are an agent, read the common guide:". The link depends on the
+binary's version; do not replace it with a fixed URL to `main`. See
+[Using Dispat as an agent](dispat-agent-guide.md) for guide-version selection, Guard workflow
+requirements, and examples covering CI gating, configuration boundaries, stages, and recovery.
 
 > **Agent workflow: release only through CI/CD.** Agents must not execute bare `dispat`,
 > `dispat release`, or equivalent publishing work themselves. Prepare and validate changes, then
