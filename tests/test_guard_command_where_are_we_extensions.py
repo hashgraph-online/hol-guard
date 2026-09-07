@@ -38,7 +38,7 @@ _REPOSITORY_WRITE_RULE = "command.where-are-we.repository-write"
 _INSTALL_HOOK_RULE = "command.where-are-we.install-hook"
 _TRACKER_FETCH_RULE = "command.where-are-we.tracker-fetch"
 
-# `where-are-we --effects --json` for 1.4.1, the manifest the rule table is
+# `where-are-we --effects --json` for 1.5.0, the manifest the rule table is
 # written against. Held here so a flag added at writes-repo or above in a later
 # release fails this suite instead of silently escaping review.
 _EFFECTS_SCHEMA = "where-are-we-effects/1"
@@ -47,13 +47,20 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--agent-file": "writes-repo",
     "--also": "read",
     "--ask": "read",
+    "--at": "read",
     "--callees": "read",
     "--callers": "read",
+    "--context": "read",
     "--corpus": "read",
+    "--cost": "read",
+    "--ctags": "writes-map-dir",
+    "--defines": "read",
     "--diff": "writes-map-dir",
     "--docs": "writes-repo",
     "--dry-run": "read",
     "--effects": "read",
+    "--export": "writes-repo",
+    "--files": "read",
     "--for": "read",
     "--force": "writes-map-dir",
     "--help": "read",
@@ -63,6 +70,7 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--init": "writes-repo",
     "--install-hook": "writes-config",
     "--json": "read",
+    "--limit": "read",
     "--lsp": "read",
     "--max-lines": "read",
     "--mcp": "read",
@@ -73,6 +81,7 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--pointer": "read",
     "--product": "read",
     "--quiet": "read",
+    "--rank": "read",
     "--repo": "read",
     "--rules": "read",
     "--runs-api": "network",
@@ -105,6 +114,13 @@ WHERE_ARE_WE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("where-are-we --ag AGENTS.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --ini", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --do write", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --repo . --export map-export.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --export=map-export.md --repo .", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    # `--export -` writes to stdout, but the tool's own classifier still calls
+    # the line writes-repo, because the class belongs to the flag and not to the
+    # value. The rule follows the manifest rather than reading the value.
+    ("where-are-we --repo . --export -", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --ex map-export.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     (
         'where-are-we --repo "/tmp/my repo" --agent-file "docs/agent notes.md"',
         _REPOSITORY_WRITE_ACTION,
@@ -150,6 +166,18 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --out /tmp/map --html --force",
     "where-are-we --repo . --out /tmp/map --watch 30",
     "where-are-we --repo . --diff",
+    "where-are-we --repo . --ctags",
+    "where-are-we --repo . --out /tmp/map --ctags --force",
+    "where-are-we --repo . --rank",
+    "where-are-we --repo . --rank src/a.py,src/b.py --limit 40",
+    "where-are-we --repo . --rank --ask x --limit 20",
+    "where-are-we --repo . --files src/a.py --ask x",
+    "where-are-we --repo . --files - --ask x",
+    "where-are-we --repo . --defines build_map",
+    "where-are-we --repo . --at src/a.py:120",
+    "where-are-we --repo . --context resolve_target",
+    "where-are-we --repo . --cost",
+    "where-are-we --repo . --cost 2000 --json",
     "where-are-we --repo . --for coder --only Layers --skip Steps --max-lines 400",
     "where-are-we --repo . --spec-depth 3 --spec-limit 40 --ask x",
     "where-are-we --repo . --sections | grep steps",
@@ -166,6 +194,9 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --agent-file AGENTS.md --dry-run",
     "where-are-we --dry-run --repo . --init",
     "where-are-we --repo . --docs write --dry-run",
+    "where-are-we --repo . --export map-export.md --dry-run",
+    "where-are-we --repo . --export - --dry-run",
+    "where-are-we --repo . --export map-export.md --help",
     "where-are-we --repo . --specs ABC-1 --spec-source github --dry-run",
     "grep 'where-are-we --repo . --install-hook git' docs",
     "echo where-are-we --init",

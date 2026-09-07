@@ -6,7 +6,7 @@ from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
-# Flag surface verified against where-are-we 1.4.1 (PyPI), which publishes its
+# Flag surface verified against where-are-we 1.5.0 (PyPI), which publishes its
 # own effects manifest: `where-are-we --effects --json`, schema
 # "where-are-we-effects/1", installed beside the code as effects.json. It
 # classes every flag read < writes-map-dir < writes-repo < writes-config <
@@ -24,21 +24,27 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 # executable, so each rule is a required-flag constraint.
 
 # Every value-taking option, so a reviewed flag spelled inside another option's
-# value cannot be mistaken for the option itself. --docs is deliberately absent:
-# it takes an optional argument, and treating it as value-taking would let it
-# swallow a following reviewed flag.
+# value cannot be mistaken for the option itself. The three options that take an
+# optional argument (--docs, --cost, --rank) are deliberately absent: treating
+# one as value-taking would let it swallow a following reviewed flag.
 _OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
     {
         "--agent-file",
         "--also",
         "--ask",
+        "--at",
         "--callees",
         "--callers",
+        "--context",
         "--corpus",
+        "--defines",
+        "--export",
+        "--files",
         "--for",
         "--impact",
         "--impact-depth",
         "--install-hook",
+        "--limit",
         "--max-lines",
         "--more",
         "--only",
@@ -74,6 +80,7 @@ _AGENT_FILE_FLAGS: tuple[str, ...] = (
 )
 _INIT_FLAGS: tuple[str, ...] = ("--init", "--ini")
 _DOCS_FLAGS: tuple[str, ...] = ("--docs", "--doc", "--do")
+_EXPORT_FLAGS: tuple[str, ...] = ("--export", "--expor", "--expo", "--exp", "--ex")
 _INSTALL_HOOK_FLAGS: tuple[str, ...] = (
     "--install-hook",
     "--install-hoo",
@@ -105,7 +112,7 @@ _RUNS_API_FLAGS: tuple[str, ...] = (
     "--run",
 )
 
-REPOSITORY_WRITE_FLAGS: tuple[str, ...] = _AGENT_FILE_FLAGS + _INIT_FLAGS + _DOCS_FLAGS
+REPOSITORY_WRITE_FLAGS: tuple[str, ...] = _AGENT_FILE_FLAGS + _INIT_FLAGS + _DOCS_FLAGS + _EXPORT_FLAGS
 INSTALL_HOOK_FLAGS: tuple[str, ...] = _INSTALL_HOOK_FLAGS
 TRACKER_FETCH_FLAGS: tuple[str, ...] = _SPECS_FLAGS + _SPEC_CMD_FLAGS + _SPEC_SOURCE_FLAGS + _RUNS_API_FLAGS
 
@@ -159,8 +166,9 @@ WHERE_ARE_WE_COMMAND_RULES = (
         description=(
             "Identifies the where-are-we flags that write into the repository being mapped rather than into the "
             "map directory: --agent-file writes the brief into an agent file such as AGENTS.md or CLAUDE.md, "
-            "--init writes a starter .framework-map.json, and --docs write creates the READMEs, manifest and "
-            "architecture page a repository lacks."
+            "--init writes a starter .framework-map.json, --docs write creates the READMEs, manifest and "
+            "architecture page a repository lacks, and --export writes one self-contained file wherever the "
+            "caller named."
         ),
         severity="medium",
         risk_classes=("local_secret_read",),
@@ -170,6 +178,7 @@ WHERE_ARE_WE_COMMAND_RULES = (
             "Confirm which agent file is being written before writing it; the map lands between markers and the "
             "rest of the file survives, but the target is chosen by the caller.",
             "Use --docs without an argument, which only reports what it would write.",
+            "Confirm the --export destination, which is whatever path the caller named rather than a path under --out.",
         ),
         matcher=_WHERE_ARE_WE_REPOSITORY_WRITE,
         default_mode="review",

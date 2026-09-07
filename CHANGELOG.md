@@ -11,12 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `command.where-are-we`, a community opt-in command safety Extension for the
   where-are-we repository-map CLI. It reviews the three surfaces that leave the
-  map directory: repository writes (`--agent-file`, `--init`, `--docs`), agent
-  and git hook installation (`--install-hook`), and the tracker walk that goes
-  off the machine (`--specs`, `--spec-cmd`, `--spec-source`, `--runs-api`).
-  Map queries, map-directory writes under `--out`, `--help`, `--effects` and
-  `--dry-run` stay non-reviewable. The rule table follows the tool's own
-  published effects manifest.
+  map directory: repository writes (`--agent-file`, `--init`, `--docs`,
+  `--export`), agent and git hook installation (`--install-hook`), and the
+  tracker walk that goes off the machine (`--specs`, `--spec-cmd`,
+  `--spec-source`, `--runs-api`). Map queries, map-directory writes under
+  `--out`, `--help`, `--effects` and `--dry-run` stay non-reviewable. The rule
+  table follows the tool's own published effects manifest.
 
 ### Fixed
 
