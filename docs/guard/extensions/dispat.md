@@ -7,8 +7,8 @@
 For extended Dispat help, agents must run the installed `dispat --help` and open the official
 agent-guide URL printed under "If you are an agent, read the common guide:". The link depends on the
 binary's version; do not replace it with a fixed URL to `main`. See
-[Using Dispat as an agent](dispat-agent-guide.md) for guide-version selection, Guard workflow
-requirements, and examples covering CI gating, configuration boundaries, stages, and recovery.
+[Using Dispat as an agent](dispat-agent-guide.md) for the official-guide handoff and Guard workflow
+requirements.
 
 > **Agent workflow: release only through CI/CD.** Agents must not execute bare `dispat`,
 > `dispat release`, or equivalent publishing work themselves. Prepare and validate changes, then
