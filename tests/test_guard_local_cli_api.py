@@ -158,11 +158,7 @@ def test_discover_items_refreshes_package_scripts_from_cwd(tmp_path: Path, monke
     assert listed == []
     discovered = service.discover_items()["items"]
     assert isinstance(discovered, list)
-    package_items = [
-        item
-        for item in discovered
-        if isinstance(item, dict) and item.get("surface") == "package-scripts"
-    ]
+    package_items = [item for item in discovered if isinstance(item, dict) and item.get("surface") == "package-scripts"]
     assert package_items
     names = {
         str(command.get("name"))

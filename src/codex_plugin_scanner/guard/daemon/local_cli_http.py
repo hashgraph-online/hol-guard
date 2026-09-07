@@ -5,6 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable
 
 
+def dispatch_local_cli_post(api: object, path: str, payload: dict[str, object]) -> dict[str, object]:
+    if path.endswith("/preview"):
+        return api.preview(payload)
+    if path.endswith("/recognize"):
+        return api.recognize(payload)
+    if path.endswith("/discover"):
+        return api.discover_items()
+    return api.apply(payload)
+
+
 def handle_local_cli_list(handler: object) -> None:
     daemon_server = getattr(handler, "_daemon_server", None)
     write_json = getattr(handler, "_write_json", None)
