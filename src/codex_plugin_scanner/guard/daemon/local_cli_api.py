@@ -440,7 +440,7 @@ def _recognize_mcp_summary(name: str, help_status: str, tool_count: int) -> str:
         )
     return (
         f"Guard could not list tools from {name}. You can still add the server. "
-        "Tools stay on Recommended until listing works."
+        "List tools again, or continue and keep tools on Recommended."
     )
 
 
