@@ -427,7 +427,7 @@ export function ProtectionCenterWorkspace(props: {
         <AddCustomExtensionWorkspace
           items={localClis.data?.items ?? []}
           revision={localClis.data?.revision ?? 0}
-          discovering={localClis.discovering}
+          discovering={localClis.discovering || !localClis.catalogReady}
           onBack={closeExtension}
           onAdded={handleCustomExtensionAdded}
         />

@@ -451,14 +451,6 @@ export async function fetchLocalCliList(): Promise<LocalCliListResponse> {
   return normalizeLocalCliList(await readJson(await fetchLocalCliApi("/v1/local-clis")));
 }
 
-export async function fetchLocalCliDiscover(): Promise<LocalCliListResponse> {
-  return normalizeLocalCliList(await readJson(await fetchLocalCliApi("/v1/local-clis/discover", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  })));
-}
-
 export async function previewLocalCliMutation(payload: LocalCliMutationPayload): Promise<{ summary: string }> {
   const body = await readJson(await fetchLocalCliApi("/v1/local-clis/preview", {
     method: "POST",

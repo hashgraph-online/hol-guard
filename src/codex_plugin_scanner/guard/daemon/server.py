@@ -322,14 +322,9 @@ _EXTENSION_CONTROL_PATHS = frozenset(
         "/v1/extension-controls/acknowledge-degraded",
     }
 )
-_LOCAL_CLI_PATHS = frozenset(
-    {
-        "/v1/local-clis/preview",
-        "/v1/local-clis/apply",
-        "/v1/local-clis/recognize",
-        "/v1/local-clis/discover",
-    }
-)
+_LOCAL_CLI_PATHS = frozenset({
+    "/v1/local-clis/preview", "/v1/local-clis/apply", "/v1/local-clis/recognize", "/v1/local-clis/discover",
+})
 
 
 class _HookPathValidationError(ValueError):
@@ -6991,10 +6986,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/recover-authority",
             "/v1/extension-controls/acknowledge-degraded",
             "/v1/local-clis",
-            "/v1/local-clis/preview",
-            "/v1/local-clis/apply",
-            "/v1/local-clis/recognize",
-            "/v1/local-clis/discover",
+            *_LOCAL_CLI_PATHS,
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",

@@ -162,12 +162,24 @@ export function AddCustomExtensionWorkspace(props: {
     await runRecognize(command);
   }, [command, runRecognize]);
   useEffect(() => {
-    if (didAutoSelect.current || recognized !== null || command.trim() !== "") return;
+    if (props.discovering === true || command.trim() !== "") return;
     const preferred = preferredPackageScriptExtension(props.items);
     if (preferred === null) return;
+    if (recognized !== null) {
+      if (recognized.cli_id !== preferred.cli_id) return;
+      if (
+        recognized.identity_hash === preferred.identity_hash
+        && recognized.commands.length === preferred.commands.length
+      ) {
+        return;
+      }
+      markRecognized(preferred, suggestionSummary(preferred));
+      return;
+    }
+    if (didAutoSelect.current) return;
     didAutoSelect.current = true;
     selectSuggestion(preferred);
-  }, [command, props.items, recognized, selectSuggestion]);
+  }, [command, markRecognized, props.discovering, props.items, recognized, selectSuggestion]);
   useEffect(() => {
     const trimmed = command.trim();
     if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;

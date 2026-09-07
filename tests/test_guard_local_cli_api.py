@@ -214,6 +214,58 @@ def test_discover_items_falls_back_to_store_when_refresh_fails(tmp_path: Path, m
     assert listed["state"] == "allowed"
 
 
+def test_discover_items_rereads_store_after_partial_refresh_failure(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    existing = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    persisted = UnlistedCliIdentity(
+        cli_id="local-cli.mcp-abcdef123456",
+        name="github",
+        kind="executable",
+        identity_hash="b" * 64,
+        example_label="npx -y @modelcontextprotocol/server-github",
+    )
+    store = GuardStore(home)
+    store.record_local_cli_observation(existing, seen_at="2026-08-25T16:00:00Z")
+    store.upsert_local_cli_grant(
+        identity=existing,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-08-25T16:00:00Z",
+    )
+    service = LocalCliApiService(store=store)
+
+    def persist_then_fail_refresh(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        store.record_local_cli_observation(
+            persisted,
+            seen_at="2026-08-25T16:05:00Z",
+            surface="mcp",
+        )
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda: {})
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        persist_then_fail_refresh,
+    )
+    payload = service.discover_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    ids = {item["cli_id"] for item in items if isinstance(item, dict)}
+    assert existing.cli_id in ids
+    assert persisted.cli_id in ids
+
+
 def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
     tmp_path: Path,
     monkeypatch,

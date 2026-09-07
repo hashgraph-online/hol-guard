@@ -87,9 +87,7 @@ class LocalCliApiService:
         # Listing must stay a read of persisted grants. Live MCP/package
         # discovery writes to the same store and can abort the HTTP response
         # when the daemon is under lock contention.
-        stored = self._store.list_local_cli_items()
-        items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
-        return self._list_payload(items)
+        return self._list_payload(self._listed_public_items())
 
     def discover_items(self) -> dict[str, object]:
         """Refresh package.json catalogs and app MCP servers, then return the list.
@@ -97,7 +95,6 @@ class LocalCliApiService:
         GET listing stays a store read. This write path is for Add custom
         extension so project scripts reappear without blocking the overview.
         """
-        stored = self._store.list_local_cli_items()
         try:
             labels = self._observe_harness_mcp_servers()
             items = apply_source_labels(
@@ -105,8 +102,12 @@ class LocalCliApiService:
                 labels,
             )
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
-            items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
+            items = self._listed_public_items()
         return self._list_payload(items)
+
+    def _listed_public_items(self) -> list[dict[str, object]]:
+        stored = self._store.list_local_cli_items()
+        return [public_local_cli_item(item) for item in stored if _package_item_available(item)]
 
     def _list_payload(self, items: list[dict[str, object]]) -> dict[str, object]:
         return {
