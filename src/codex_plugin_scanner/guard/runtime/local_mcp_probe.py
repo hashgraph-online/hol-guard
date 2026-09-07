@@ -19,6 +19,8 @@ from .local_mcp_stdio import (
     MAX_MCP_PROBE_TOOLS,
     MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
     MCP_PROBE_TIMEOUT_SECONDS,
+    is_package_shim_executable,
+    probe_search_path,
     run_mcp_tools_list,
 )
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -144,10 +146,16 @@ def _timeout_for(tokens: Sequence[str], timeout: float | None) -> float:
 
 def _resolve_launch_argv(tokens: Sequence[str], *, cwd: Path) -> tuple[str, ...] | None:
     first = tokens[0]
-    if Path(first).is_absolute():
+    search_path = probe_search_path()
+    if is_package_shim_executable(first):
+        found = shutil.which(Path(first).name, path=search_path)
+        if found is None:
+            return None
+        resolved = found
+    elif Path(first).is_absolute():
         resolved = first
     else:
-        found = shutil.which(first)
+        found = shutil.which(first, path=search_path)
         if found is None:
             candidate = cwd / first
             if not candidate.is_file():
