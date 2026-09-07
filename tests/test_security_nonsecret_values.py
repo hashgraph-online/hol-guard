@@ -19,6 +19,39 @@ FIELD_MAP = """const SUFFIX_BY_FIELD: Record<Field, string> = {
 };"""
 
 
+@pytest.mark.parametrize("path", ["scripts/start.sh", "src/config.py", "src/provider.ts"])
+@pytest.mark.parametrize(
+    "content",
+    [
+        'API_KEY="${GEMINI_API_KEY:-}"',
+        'api_key = "${GEMINI_API_KEY}"',
+        'token = "{{secrets.GEMINI_API_KEY}}"',
+        'API_KEY="${GEMINI_API_KEY:-$BACKUP_KEY}"',
+    ],
+)
+def test_interpolated_secret_values_are_not_hardcoded(path, content):
+    """Variable expansions are references, including in production scripts."""
+    assert _first_hardcoded_secret_line(Path(path), content) is None
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        'password="${PASSWORD:-actual-pass-937}"',
+        'password="${PASSWORD}actual-pass-937"',
+        'API_KEY="${API_KEY:-actual-secret-937}"',
+    ],
+)
+def test_interpolations_with_literal_payloads_still_fire(content):
+    """A non-empty default or suffix is still embedded credential material."""
+    assert _first_hardcoded_secret_line(Path("scripts/start.sh"), content) == 1
+
+
+def test_interpolated_assignment_does_not_hide_adjacent_secret():
+    content = 'API_KEY="${GEMINI_API_KEY:-}"\npassword="actual-pass-937"'
+    assert _first_hardcoded_secret_line(Path("scripts/start.sh"), content) == 2
+
+
 @pytest.mark.parametrize("path", ["README.md", "examples/docker.md", "scripts/start.sh"])
 @pytest.mark.parametrize("encoding", ["hex", "base64"])
 def test_generated_token_expression_is_not_a_literal_secret(path, encoding):

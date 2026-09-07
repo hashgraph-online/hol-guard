@@ -225,12 +225,26 @@ def _normalize_secret_candidate(value: str) -> str:
     return normalized
 
 
+_PURE_SHELL_EXPANSION_RE = re.compile(
+    r"^\$\{[A-Za-z_][A-Za-z0-9_]*"
+    r"(?:(?::-|-|:=|=|:\?|\?|:\+|\+)(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*)?)?"
+    r"\}$"
+)
+_PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
+
+
+def _looks_like_interpolated_secret(value: str) -> bool:
+    """True only for complete env/template references with no literal payload."""
+    normalized = _normalize_secret_candidate(value)
+    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
+
+
 def _looks_like_placeholder_secret(value: str) -> bool:
     normalized = _normalize_secret_candidate(value)
     lowered = normalized.lower()
     if not normalized:
         return True
-    if normalized.startswith(("${", "{{", "<", "[")):
+    if _looks_like_interpolated_secret(normalized) or normalized.startswith(("<", "[")):
         return True
     if "..." in normalized or "…" in normalized:
         return True
@@ -404,6 +418,8 @@ def _should_skip_secret_match(
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
+    if _looks_like_interpolated_secret(candidate):
+        return True
     if detector.kind == "generic" and _provider_payload(candidate) is None:
         if _is_generated_token_expression(relative_path, content, match):
             return True
