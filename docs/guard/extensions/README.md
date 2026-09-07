@@ -133,6 +133,7 @@ Protection model meanings:
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.repro-surgeon` | Reviews installed Repro Surgeon 0.2.1 execution commands. Doctor, init, and report are outside this rule; npm/npx launchers remain under Package Firewall. Direct node scripts are not covered. | 1 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 

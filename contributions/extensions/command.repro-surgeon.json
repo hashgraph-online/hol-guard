@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.repro-surgeon",
+  "version": "1.0.0",
+  "name": "Repro Surgeon",
+  "description": "Reviews installed Repro Surgeon reduce, resume, verify, and demo project-command execution.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.pavangupta352",
+    "displayName": "Pavan",
+    "url": "https://github.com/pavangupta352"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#1F3A8A" },
+  "homepage": "https://github.com/pavangupta352/repro-surgeon",
+  "license": "MIT",
+  "executables": ["repro-surgeon"],
+  "ecosystemIds": ["repro-surgeon"],
+  "riskClasses": ["execution", "network_egress"],
+  "actionClasses": ["Repro Surgeon project-command execution command"],
+  "referenceUrls": [
+    "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/src/cli.ts",
+    "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/SECURITY.md#execution-boundary",
+    "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/docs/execution-container.md"
+  ],
+  "saferAlternatives": [
+    "Inspect the selected configuration and source; use doctor for input checks.",
+    "Run untrusted project commands in an independently configured container or VM."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_repro_surgeon_extensions"
+  }
+}

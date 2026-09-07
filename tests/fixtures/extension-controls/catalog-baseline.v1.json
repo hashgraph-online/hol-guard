@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "14dfe51da62093fc36240bd1deed75626c5931179b89b4e157c0530afb939b09",
+  "catalog_digest": "f8aa2326681b82344ac996bcd1b4ddaf89f59847e67abce8952ab8b88403ce68",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 67,
+  "extension_count": 68,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -81,6 +81,7 @@
     "command.remote.scp",
     "command.remote.ssh",
     "command.repo2nb",
+    "command.repro-surgeon",
     "command.search.elasticsearch",
     "command.shell-mutations",
     "command.skill-sunset",
@@ -94,7 +95,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 222,
+  "permission_count": 223,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -317,7 +318,8 @@
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
     "command.system.permission.disk-or-power-mutation": "halt",
-    "command.windows.permission.destructive-storage": "clear-disk"
+    "command.windows.permission.destructive-storage": "clear-disk",
+    "command.repro-surgeon.permission.execute": "repro-surgeon reduce ./app --out ./app-repro"
   },
   "permission_families": {
     "command.git.permission.add": "git-workspace",
@@ -577,6 +579,7 @@
     "command.remote.ssh.permission.execution",
     "command.repo2nb.permission.reverse-force",
     "command.repo2nb.permission.sync",
+    "command.repro-surgeon.permission.execute",
     "command.search.elasticsearch.permission.delete",
     "command.shell-mutations.permission.destructive-shell",
     "command.shell-mutations.permission.github-body-substitution",
@@ -625,7 +628,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 209,
+  "rule_count": 210,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -799,6 +802,7 @@
     "command.remote.ssh.configured-execution",
     "command.repo2nb.reverse-force",
     "command.repo2nb.sync",
+    "command.repro-surgeon.execute",
     "command.search.elasticsearch.delete",
     "command.shell-mutations.destructive-shell",
     "command.shell-mutations.managed-config-write",

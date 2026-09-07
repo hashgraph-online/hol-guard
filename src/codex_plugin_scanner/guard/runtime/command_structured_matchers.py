@@ -245,6 +245,11 @@ def structured_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[s
     framework_hints = framework_matcher_index_hints(matcher)
     if framework_hints is not None:
         return framework_hints
+    from .command_repro_surgeon_extensions import repro_surgeon_matcher_index_hints
+
+    repro_surgeon_hints = repro_surgeon_matcher_index_hints(matcher)
+    if repro_surgeon_hints is not None:
+        return repro_surgeon_hints
     if isinstance(matcher, LeadingOperandCountMatcher):
         return matcher.executables, frozenset()
     if isinstance(matcher, SubcommandOperandPrefixMatcher):
