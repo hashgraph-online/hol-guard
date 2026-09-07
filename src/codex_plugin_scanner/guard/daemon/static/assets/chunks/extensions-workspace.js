@@ -2432,12 +2432,15 @@ function blockActionLabel(surface) {
   if (surface === "package-scripts") return "Block these scripts";
   return "Block this tool";
 }
-function dialogIntro(hasProjects, surface) {
+function dialogIntro(hasProjects, surface, discovering = false) {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
+  }
+  if (discovering) {
+    return "Looking for project scripts and app servers on this device.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
@@ -2471,9 +2474,10 @@ function suggestionSummary(item) {
 }
 function SuggestionPanel(props) {
   if (!props.hasSuggestions) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", children: suggestionEmptyCopy(props.query) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: suggestionEmptyCopy(props.query, props.discovering === true) });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    props.discovering === true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: "Looking for more project scripts and app servers on this device." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SuggestionGroup,
       {
@@ -2515,9 +2519,12 @@ function ProjectSwitcher(props) {
     item.cli_id
   )) });
 }
-function suggestionEmptyCopy(query) {
+function suggestionEmptyCopy(query, discovering) {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
+  }
+  if (discovering) {
+    return "Scanning this device for package scripts and app servers.";
   }
   return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }
@@ -3432,6 +3439,7 @@ function AddCustomExtensionWorkspace(props) {
   const recognizeGeneration = reactExports.useRef(0);
   const autoRecognizedCommand = reactExports.useRef("");
   const didAutoSelect = reactExports.useRef(false);
+  const sawDiscovering = reactExports.useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
   const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
   const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
@@ -3517,12 +3525,22 @@ function AddCustomExtensionWorkspace(props) {
     await runRecognize(command);
   }, [command, runRecognize]);
   reactExports.useEffect(() => {
-    if (didAutoSelect.current || recognized !== null || command.trim() !== "") return;
+    if (props.discovering === true) sawDiscovering.current = true;
+    if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
     const preferred = preferredPackageScriptExtension(props.items);
     if (preferred === null) return;
+    if (recognized !== null) {
+      if (recognized.cli_id !== preferred.cli_id) return;
+      if (recognized.identity_hash === preferred.identity_hash && recognized.commands.length === preferred.commands.length) {
+        return;
+      }
+      markRecognized(preferred, suggestionSummary(preferred));
+      return;
+    }
+    if (didAutoSelect.current) return;
     didAutoSelect.current = true;
     selectSuggestion(preferred);
-  }, [command, props.items, recognized, selectSuggestion]);
+  }, [command, markRecognized, props.discovering, props.items, recognized, selectSuggestion]);
   reactExports.useEffect(() => {
     const trimmed = command.trim();
     if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;
@@ -3660,7 +3678,11 @@ function AddCustomExtensionWorkspace(props) {
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-3 max-w-2xl pb-4", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "add-custom-extension-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: "Add a custom extension" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(rememberedProjects.length > 0, recognized?.surface ?? null) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(
+              rememberedProjects.length > 0,
+              recognized?.surface ?? null,
+              props.discovering === true && recognized === null
+            ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: commandFieldLabel(recognized?.surface ?? null) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3718,6 +3740,7 @@ function AddCustomExtensionWorkspace(props) {
             SuggestionPanel,
             {
               query: command,
+              discovering: props.discovering === true,
               hasSuggestions,
               packageScriptSuggestions,
               harnessSuggestions,
@@ -3735,6 +3758,69 @@ function AddCustomExtensionWorkspace(props) {
       ]
     }
   );
+}
+async function fetchLocalCliDiscover() {
+  const response = await fetchLocalCliApi("/v1/local-clis/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new LocalCliApiError("local_cli_request_failed", "Guard could not refresh custom extensions.");
+  }
+  return normalizeLocalCliList(payload);
+}
+function useLocalCliCatalog() {
+  const [data, setData] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [discovering, setDiscovering] = reactExports.useState(false);
+  const [catalogReady, setCatalogReady] = reactExports.useState(false);
+  const loadGeneration = reactExports.useRef(0);
+  const load = reactExports.useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    try {
+      const next = await fetchLocalCliList();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
+      setError(null);
+    } catch (caught) {
+      if (loadGeneration.current !== generation) return;
+      setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+    }
+  }, []);
+  const discover = reactExports.useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    setDiscovering(true);
+    setCatalogReady(false);
+    try {
+      const next = await fetchLocalCliDiscover();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
+      setError(null);
+    } catch {
+      try {
+        const next = await fetchLocalCliList();
+        if (loadGeneration.current !== generation) return;
+        setData(next);
+        setError(null);
+      } catch (caught) {
+        if (loadGeneration.current !== generation) return;
+        setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+      }
+    } finally {
+      if (loadGeneration.current === generation) {
+        setDiscovering(false);
+        setCatalogReady(true);
+      }
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void load();
+  }, [load]);
+  return { data, error, load, discover, discovering, catalogReady };
 }
 function randomToken$1() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -4049,22 +4135,6 @@ function CustomExtensionReviewModal(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: props.busy ? "Saving…" : "Confirm" })
     ] })
   ] }) });
-}
-function useLocalCliCatalog() {
-  const [data, setData] = reactExports.useState(null);
-  const [error, setError] = reactExports.useState(null);
-  const load = reactExports.useCallback(async () => {
-    try {
-      setData(await fetchLocalCliList());
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
-    }
-  }, []);
-  reactExports.useEffect(() => {
-    void load();
-  }, [load]);
-  return { data, error, load };
 }
 const PROTECTION_TERMS = {
   pageTitle: "Extensions"
@@ -6342,10 +6412,18 @@ function ProtectionCenterWorkspace(props) {
     void load();
   }, [load]);
   reactExports.useEffect(() => {
-    const onPopState = () => setRouteState(currentExtensionRouteState());
+    const onPopState = () => {
+      const next = currentExtensionRouteState();
+      if (next.route.kind === "add-custom") void localClis.discover();
+      setRouteState(next);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [localClis.discover]);
+  reactExports.useEffect(() => {
+    if (routeState.route.kind !== "add-custom") return;
+    void localClis.discover();
+  }, [localClis.discover, routeState.route.kind]);
   const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
   const canonicalSelected = reactExports.useMemo(() => canonicalExtensionId(catalogExtensions, requestedExtensionId), [catalogExtensions, requestedExtensionId]);
@@ -6380,10 +6458,11 @@ function ProtectionCenterWorkspace(props) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const openAddCustom = reactExports.useCallback(() => {
+    void localClis.discover();
     pushExtensionHistory(addCustomExtensionHref());
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, []);
+  }, [localClis.discover]);
   const handleCustomExtensionAdded = reactExports.useCallback((cliId) => {
     void localClis.load();
     openLocalCliDetail(cliId);
@@ -6565,6 +6644,7 @@ function ProtectionCenterWorkspace(props) {
       {
         items: localClis.data?.items ?? [],
         revision: localClis.data?.revision ?? 0,
+        discovering: localClis.discovering || !localClis.catalogReady,
         onBack: closeExtension,
         onAdded: handleCustomExtensionAdded
       }

@@ -73,6 +73,7 @@ export function AddCustomExtensionWorkspace(props: {
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
   const didAutoSelect = useRef(false);
+  const sawDiscovering = useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
   const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
   const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
@@ -162,7 +163,8 @@ export function AddCustomExtensionWorkspace(props: {
     await runRecognize(command);
   }, [command, runRecognize]);
   useEffect(() => {
-    if (props.discovering === true || command.trim() !== "") return;
+    if (props.discovering === true) sawDiscovering.current = true;
+    if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
     const preferred = preferredPackageScriptExtension(props.items);
     if (preferred === null) return;
     if (recognized !== null) {

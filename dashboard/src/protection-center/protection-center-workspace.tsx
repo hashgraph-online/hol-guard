@@ -172,10 +172,14 @@ export function ProtectionCenterWorkspace(props: {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const onPopState = () => setRouteState(currentExtensionRouteState());
+    const onPopState = () => {
+      const next = currentExtensionRouteState();
+      if (next.route.kind === "add-custom") void localClis.discover();
+      setRouteState(next);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [localClis.discover]);
   useEffect(() => {
     if (routeState.route.kind !== "add-custom") return;
     void localClis.discover();
@@ -219,10 +223,11 @@ export function ProtectionCenterWorkspace(props: {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const openAddCustom = useCallback(() => {
+    void localClis.discover();
     pushExtensionHistory(addCustomExtensionHref());
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, []);
+  }, [localClis.discover]);
   const handleCustomExtensionAdded = useCallback((cliId: string) => {
     void localClis.load();
     openLocalCliDetail(cliId);

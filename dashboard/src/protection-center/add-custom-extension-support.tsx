@@ -97,11 +97,11 @@ export function dialogIntro(
   if (surface === "mcp") {
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
   }
-  if (hasProjects) {
-    return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
-  }
   if (discovering) {
     return "Looking for project scripts and app servers on this device.";
+  }
+  if (hasProjects) {
+    return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
 }
@@ -151,6 +151,11 @@ export function SuggestionPanel(props: {
   }
   return (
     <>
+      {props.discovering === true ? (
+        <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+          Looking for more project scripts and app servers on this device.
+        </p>
+      ) : null}
       <SuggestionGroup
         heading="From this device"
         helper="Projects Guard has already seen, including nested names such as guard:audit."
