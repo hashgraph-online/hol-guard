@@ -31,6 +31,7 @@ def test_downstream_publication_requires_successful_same_repository_push(filenam
     for condition in (
         "github.event.workflow_run.conclusion == 'success'",
         "github.event.workflow_run.event == 'push'",
+        "github.event.workflow_run.run_attempt == 1",
         "github.event.workflow_run.head_repository.full_name == github.repository",
         "github.event.workflow_run.head_branch)",
         "[skip release publish]",
@@ -70,7 +71,9 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
 
 
 def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
-    job = _workflow("ci.yml")["jobs"]["test-plan"]
+    workflow = _workflow("ci.yml")
+    assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
+    job = workflow["jobs"]["test-plan"]
     restore = next(step for step in job["steps"] if step.get("id") == "latest-duration-telemetry")
     assert restore["env"]["TELEMETRY_BRANCH"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
     command = restore["run"]
