@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
+from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_rules import matcher_index_hints
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -34,6 +35,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.package_intent import parse_package_intent
+from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from tests.command_extension_contracts import (
     assert_review_required_cases,
     assert_reviewed_command_cases,
@@ -111,6 +113,7 @@ def test_enabled_execution_reaches_inspection_and_runtime(command: str, enabled:
         "printf '%s' 'repro-surgeon demo'",
         "repro-surgeon --help",
         "repro-surgeon reduce --help",
+        'repro-surgeon reduce "$PROJECT" --help',
         "repro-surgeon --help reduce ./app",
         "repro-surgeon resume -h",
         "repro-surgeon verify --version",
@@ -154,6 +157,47 @@ def test_non_execution_and_unsupported_launchers_have_no_own_evidence(
 )
 def test_malformed_options_cannot_claim_safe_help(command: str, enabled: None, tmp_path: Path) -> None:
     assert_reviewed_command_cases(((command, _ACTION, _RULE),), tmp_path)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "$TOOL reduce ./app",
+        "$TOOL reduce --help",
+        '"${TOOL}" demo -v',
+        "repro-${SUFFIX} verify ./repro --help",
+        "repro-surgeon $ACTION ./app --help",
+        'repro-surgeon "${ACTION}" ./app --version',
+    ),
+)
+def test_variable_built_commands_remain_explicitly_unsupported(command: str, enabled: None, tmp_path: Path) -> None:
+    # no_match means this extension did not recognize the command, not that
+    # resolving or executing these shell variables would be safe.
+    inspection = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    runtime = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
+    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+    assert inspection["status"] == "no_match"
+    assert runtime is None
+    assert all(item.extension.extension_id != _ID for item in evaluation.extension_observations)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        'repro-surgeon reduce "$PROJECT"',
+        'repro-surgeon resume "${RUN_ROOT}" --json',
+        'repro-surgeon verify "$EXPORT" --config "${CONFIG}"',
+        'repro-surgeon demo --out "$OUTPUT"',
+        "repro-surgeon reduce --match ${HELP:---help}",
+        'repro-surgeon reduce --config "$HELP"',
+    ),
+)
+def test_literal_execution_with_dynamic_values_is_reviewed(command: str, enabled: None, tmp_path: Path) -> None:
+    assert_reviewed_command_cases(((command, _ACTION, _RULE),), tmp_path)
+    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+    own = [item for item in evaluation.extension_observations if item.extension.extension_id == _ID]
+    assert own
+    assert all(item.safe_variants == () for item in own)
 
 
 @pytest.mark.parametrize("subcommand", ("reduce", "resume", "verify", "demo"))

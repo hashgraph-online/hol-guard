@@ -3,7 +3,7 @@
   "id": "command.repro-surgeon",
   "version": "1.0.0",
   "name": "Repro Surgeon",
-  "description": "Reviews installed Repro Surgeon reduce, resume, verify, and demo project-command execution.",
+  "description": "Reviews installed Repro Surgeon reduce, resume, verify, and demo project-command execution. Review does not guarantee configuration integrity.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {

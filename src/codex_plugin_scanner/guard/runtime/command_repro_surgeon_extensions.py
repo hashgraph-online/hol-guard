@@ -128,7 +128,8 @@ REPRO_SURGEON_COMMAND_EXTENSION_SPECS = (
         name="Repro Surgeon command protection",
         description=(
             "Reviews installed Repro Surgeon 0.2.1 execution commands. Doctor, init, and report are outside "
-            "this rule; npm/npx launchers remain under Package Firewall. Direct node scripts are not covered."
+            "this rule; npm/npx launchers remain under Package Firewall. Direct node scripts are not covered. "
+            "Review does not guarantee configuration integrity."
         ),
         action_classes=(_ACTION,),
         risk_classes=("execution", "network_egress"),
