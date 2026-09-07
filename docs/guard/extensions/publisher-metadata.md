@@ -1,36 +1,36 @@
 # Extension publisher metadata
 
 HOL Guard Extensions separates a contributor's public profile from an extension's
-security behavior. Claiming a profile must never enable an extension, change its
-trust class, approve a command, or imply that the contributor owns the upstream tool.
+security behavior. Claiming a profile never enables an extension, changes its
+trust class, approves a command, or implies ownership of the upstream tool.
 
 ## Identity and eligibility
 
-The stable contribution ID is the public identity. For example, `command.blitcp`
-uses `contributions/extensions/command.blitcp.json`. An MCP contribution such as
+The stable contribution ID is the public identity. `command.blitcp` uses
+`contributions/extensions/command.blitcp.json`. An MCP contribution such as
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 
-The publisher workflow verifies the numeric GitHub account that authored the
-merged pull request introducing that specific file. A profile URL, username,
-repository membership, or authorship of an unrelated change is not sufficient.
-The contribution must still exist on the canonical `main` history. Ambiguous
-history, renames, direct pushes, or disputed attribution require maintainer review.
-An ordinary later edit does not replace the original contributor's claim.
+Publisher verification checks the numeric GitHub account that authored the merged
+pull request introducing that specific file. A profile link, username, repository
+membership, or authorship of an unrelated change is not sufficient. The contribution
+must still exist on canonical `main`. Ambiguous history, renames, direct pushes,
+and disputed attribution require maintainer review. An ordinary later edit does
+not replace the original contributor's claim.
 
-First-party and trusted-library coverage is project-maintained, not automatically
-claimable by the last person who edited its source.
+First-party and trusted-library coverage is project-maintained. It is not claimable
+by the last person who edited its source.
 
 ## Optional presentation file
 
-Existing contributors do not need a new metadata file merely to establish the
-introducing-PR relationship. Optional presentation metadata belongs in:
+Existing contributors do not need a sidecar merely to establish the introducing-PR
+relationship. Optional presentation data belongs in:
 
 ```text
 contributions/extension-listings/<contribution-id>.json
 ```
 
-For example, this is a valid presentation file for `command.blitcp`:
+Example for `command.blitcp`:
 
 ```json
 {
@@ -47,38 +47,39 @@ For example, this is a valid presentation file for `command.blitcp`:
 ```
 
 The schema is [`listing.v1.schema.json`](../../../contracts/extensions/listing.v1.schema.json).
-It rejects unknown fields, control characters, unbounded prose, duplicate values,
-unsafe links, identity mismatches, and symlinked files. URLs are references only;
-validation never fetches them. Use a public HTTPS hostname, not a literal IP address,
-local host, credential-bearing URL, or nonstandard port.
+Validation rejects unknown fields, control characters, excessive lengths, duplicate
+values, unsafe links, identity mismatches, symlinks, and orphaned listings. URLs are
+references only; validation never fetches them. Use a public HTTPS hostname without
+credentials, a nonstandard port, or a literal IP address.
 
-Do not add `activation`, `trustClass`, policy decisions, executable code, email
-addresses, secrets, or commands to presentation metadata. Runtime contribution
-contracts remain separate and strict.
+Do not include policy, executable code, activation state, trust classes, private
+email addresses, secrets, or commands. Native contribution contracts remain the
+only source of runtime behavior.
 
 ### Reviewed delegation
 
-`maintainerGithubIds` may contain up to eight numeric GitHub user IDs represented
-as decimal strings. Omit it unless maintainers have reviewed the delegation. This
-field can establish an additional eligible profile claimant; it does not create
-runtime trust or establish ownership of an upstream product. Once claimed,
-additional roles and transfers require the existing publisher's explicit
-invitation and the named account's acceptance. Renaming a GitHub account must not
-change ownership.
+`maintainerGithubIds` may contain up to eight numeric GitHub IDs as decimal strings.
+Omit it unless maintainers have reviewed that delegation. It can establish another
+eligible profile claimant, not runtime trust or upstream ownership. Once claimed,
+additional roles and transfers require an explicit invitation and the named
+account's acceptance. Renaming a GitHub account must not change ownership.
 
-## Builder compatibility
+## Generate a separate listing template
 
-Builder 1.1 creates an inert `listing-template.json` beside its README. Review it
-before copying it into the optional presentation directory. The template does not
-infer a GitHub identity and is not installed as a runtime artifact.
+The optional helper reads and validates an existing contribution kit, then prints
+presentation metadata. It does not modify the kit, add managed paths, upgrade a
+builder version, write files, or contact a service:
 
-Builder 1.0 kits remain byte-reproducible and verifiable. Updating an old kit to
-1.1 adds presentation guidance without changing its native artifacts or native
-revision digest. Existing ownership-file and local-edit protections still apply.
+```bash
+uv run python -m codex_plugin_scanner.guard.extension_builder.listing_cli path/to/kit
+```
+
+Review the output before saving it as a sidecar. No GitHub identity is inferred.
+An accepted native homepage that is unsuitable for public presentation is omitted
+from the optional template; it does not prevent native contribution generation.
+Existing kit formats and their ownership checks are unchanged.
 
 ## Public catalog projection
-
-Generate and verify the catalog from the canonical native registry:
 
 ```bash
 uv run python scripts/export_extension_directory.py
@@ -86,21 +87,21 @@ uv run python scripts/export_extension_directory.py --check
 uv run python scripts/render_command_extension_directory.py --check
 ```
 
-The generated [`catalog.v1.json`](catalog.v1.json) follows
+The compact generated [`catalog.v1.json`](catalog.v1.json) follows
 [`directory.v1.schema.json`](../../../contracts/extensions/directory.v1.schema.json).
-It carries source IDs, exact contribution digests, runtime IDs, coverage counts,
-MCP inheritance, trust classes, and presentation fields. It does not contain
-activation decisions, install counts, ratings, certification claims, or secrets.
-An entry being present in this catalog does not mean it is enabled on any device.
+It carries contribution IDs and digests, runtime IDs, coverage counts, MCP
+inheritance, native trust classes, and presentation fields. It carries no activation
+decisions, installation counts, ratings, certification claims, or secrets.
 
-Consumers should pin an immutable source commit, verify provenance independently,
-and distinguish merged source from an actually published release. A public
-maintainer profile is not a security certification or an upstream endorsement.
+Contribution files use LF checkout semantics so digests match canonical Git blobs
+on Windows, macOS, and Linux. Consumers pin an immutable source commit and verify
+provenance independently. A source merge is not evidence of release availability
+or enabled protection on a device.
 
-## Publisher workflow availability
+## Cloud availability
 
-The catalog and metadata contract are independently useful to directory consumers.
-The companion Guard Cloud Extension Studio rollout is tracked separately. Do not
-send claim reminders until the deployed claim route has passed its production
-canary. The planned entry point is `/guard/extension-studio?extension=<id>`;
-possession of that link grants no authority.
+The directory and metadata contract can be used independently of Guard Cloud.
+Extension Studio is a separate rollout. This helper deliberately includes no
+sign-in instruction or claim notification. The Cloud entry point must be deployed
+and verified before contributor invitations are enabled. A maintainer profile is
+not a security certification or an upstream endorsement.

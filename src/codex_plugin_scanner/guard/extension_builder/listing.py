@@ -19,6 +19,7 @@ from .models import Metadata
 
 LISTING_SCHEMA = "guard.extension-listing.v1"
 MAX_LISTING_BYTES = 16_384
+MAX_TAGLINE_LENGTH = 140
 CATEGORY_LABELS = {
     "core-safety": "Core safety",
     "cloud-infrastructure": "Cloud and infrastructure",
@@ -37,12 +38,8 @@ DEFAULT_LIMITATIONS = (
 
 @lru_cache(maxsize=1)
 def listing_schema() -> dict[str, object]:
-    payload = (
-        files("codex_plugin_scanner.guard.extension_builder")
-        .joinpath("listing.v1.schema.json")
-        .read_text(encoding="utf-8")
-    )
-    return cast(dict[str, object], json.loads(payload))
+    payload = files("codex_plugin_scanner.guard.extension_builder").joinpath("listing.v1.schema.json")
+    return cast(dict[str, object], json.loads(payload.read_text(encoding="utf-8")))
 
 
 def _public_https(value: str) -> None:
@@ -57,7 +54,7 @@ def _public_https(value: str) -> None:
             or parsed.port not in (None, 443)
             or host.lower() in {"localhost", "localhost.localdomain"}
             or host.lower().endswith((".localhost", ".local", ".internal"))
-            or any(ord(char) < 32 for char in value)
+            or any(ord(char) <= 32 or ord(char) == 127 for char in value)
             or "\\" in value
         ):
             raise ValueError("non-public reference")
@@ -84,7 +81,7 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     if expected_id is not None and row["extensionId"] != expected_id:
         raise BuilderError("listing_identity", "Listing identity must match its native contribution and filename.")
     for value in [row["tagline"], *cast(list[str], row["limitations"])]:
-        if not isinstance(value, str) or value != value.strip() or any(ord(char) < 32 for char in value):
+        if not isinstance(value, str) or value != value.strip() or any(ord(char) < 32 or ord(char) == 127 for char in value):
             raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
     reference = row.get("documentationUrl")
     if isinstance(reference, str):
@@ -102,54 +99,41 @@ def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
 
 
 def listing_template(metadata: Metadata) -> str:
-    """Produce a reviewable template, with no inferred identity or execution."""
+    """Produce optional presentation data without changing a native contribution kit."""
 
     row: dict[str, object] = {
         "schemaVersion": LISTING_SCHEMA,
         "extensionId": metadata.contribution_id,
-        "tagline": f"Reviewed operation coverage for {metadata.name}."[:140],
+        "tagline": f"Reviewed operation coverage for {metadata.name}."[:MAX_TAGLINE_LENGTH].rstrip(),
         "category": "specialized-tools" if metadata.kind == "mcp" else "other",
         "limitations": list(DEFAULT_LIMITATIONS),
-        "documentationUrl": metadata.homepage,
     }
+    try:
+        _public_https(metadata.homepage)
+    except BuilderError:
+        pass  # Optional public links cannot invalidate accepted native metadata.
+    else:
+        row["documentationUrl"] = metadata.homepage
     return canonical_json(validate_listing(row, expected_id=metadata.contribution_id))
 
 
 def category_for_extension(extension_id: str) -> str:
     if extension_id in {
-        "command.container-runtime",
-        "command.data-protection",
-        "command.encoded-execution",
-        "command.filesystem",
-        "command.git",
-        "command.guard-self-protection",
-        "command.kubernetes-secrets",
-        "command.shell-mutations",
-        "command.system",
-        "command.windows",
+        "command.container-runtime", "command.data-protection", "command.encoded-execution",
+        "command.filesystem", "command.git", "command.guard-self-protection", "command.kubernetes-secrets",
+        "command.shell-mutations", "command.system", "command.windows",
     }:
         return "core-safety"
     if extension_id in {
-        "command.api-gateway",
-        "command.cdn",
-        "command.dns",
-        "command.infrastructure-as-code",
-        "command.kubernetes-operations",
-        "command.load-balancer",
+        "command.api-gateway", "command.cdn", "command.dns", "command.infrastructure-as-code",
+        "command.kubernetes-operations", "command.load-balancer",
     } or extension_id.startswith("command.cloud."):
         return "cloud-infrastructure"
     if extension_id.startswith(("command.backup.", "command.database.", "command.storage.")):
         return "data-resilience"
-    if extension_id == "command.github" or extension_id.startswith(
-        ("command.cicd.", "command.platform.", "command.remote.")
-    ):
+    if extension_id == "command.github" or extension_id.startswith(("command.cicd.", "command.platform.", "command.remote.")):
         return "delivery-remote"
-    if extension_id in {
-        "command.email",
-        "command.feature-flags",
-        "command.monitoring",
-        "command.payment",
-    } or extension_id.startswith(("command.messaging.", "command.search.")):
+    if extension_id in {"command.email", "command.feature-flags", "command.monitoring", "command.payment"} or extension_id.startswith(("command.messaging.", "command.search.")):
         return "managed-services"
     if extension_id.startswith("command.package."):
         return "package-supply-chain"

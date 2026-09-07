@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.extension_builder.io import checked_path
 from codex_plugin_scanner.guard.extension_builder.listing import (
     DEFAULT_LIMITATIONS,
+    MAX_TAGLINE_LENGTH,
     category_for_extension,
     load_listing,
 )
@@ -37,7 +38,7 @@ def _sources(root: Path) -> dict[str, tuple[str, dict[str, object], str]]:
     ):
         parent = checked_path(root / "contributions" / directory)
         for path in sorted(parent.glob("*.json")):
-            checked_path(path)
+            _ = checked_path(path)
             if not path.is_file() or path.stat().st_size > MAX_SOURCE_BYTES:
                 raise ValueError("Contribution is not a bounded regular source file")
             payload = validate(path)
@@ -86,7 +87,7 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
             model = "external-opt-in"
         else:
             model = "built-in"
-        tools = payload.get("tools", [])
+        description = str(payload.get("description", native.description))
         entries.append(
             {
                 "id": extension_id,
@@ -94,8 +95,8 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
                 "kind": "mcp" if extension_id.startswith("mcp.") else "command",
                 "version": native.version,
                 "name": str(payload.get("name", native.name)),
-                "description": str(payload.get("description", native.description)),
-                "tagline": listing.get("tagline", str(payload.get("description", native.description))[:140]),
+                "description": description,
+                "tagline": listing.get("tagline", description[:MAX_TAGLINE_LENGTH].rstrip()),
                 "category": listing.get("category", category_for_extension(extension_id)),
                 "tags": listing.get("tags", []),
                 "limitations": listing.get("limitations", list(DEFAULT_LIMITATIONS)),
@@ -115,7 +116,7 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
                 "actionClasses": list(native.action_classes),
                 "ruleCount": len(native.rules),
                 "permissionCount": len(native.permissions),
-                "toolStates": tools,
+                "toolStates": payload.get("tools", []),
             }
         )
         seen.add(extension_id)
@@ -130,12 +131,12 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
 
 
 def render_directory(root: Path = ROOT) -> str:
-    return json.dumps(export_directory(root), indent=2, ensure_ascii=True, sort_keys=True) + "\n"
+    return json.dumps(export_directory(root), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true")
+    _ = parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     try:
         rendered = render_directory()
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Extension catalog is stale; run python scripts/export_extension_directory.py")
     else:
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-        OUTPUT.write_text(rendered, encoding="utf-8", newline="\n")
+        _ = OUTPUT.write_text(rendered, encoding="utf-8", newline="\n")
     return 0
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import SUPPORTED_BUILDER_VERSIONS
+from . import BUILDER_VERSION
 from .errors import BuilderError
 from .io import canonical_json, checked_path, digest, object_value, read_bytes, read_json, sha256, text_from_bytes
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
@@ -75,10 +75,7 @@ def managed_files(kit: Kit) -> dict[str, bytes]:
     files = {path: content.encode("utf-8") for path, content in kit.native_files().items()}
     prefix = ownership_root(kit.discovery.metadata)
     kit_files = dict(kit.files)
-    names = ["discovery.json", "review.json", "report.json", "README.md"]
-    if kit.builder_version != "1.0.0":
-        names.append("listing-template.json")
-    for name in names:
+    for name in ("discovery.json", "review.json", "report.json", "README.md"):
         files[f"{prefix}/{name}"] = kit_files[name].encode("utf-8")
     return files
 
@@ -87,7 +84,7 @@ def ownership_record(kit: Kit) -> bytes:
     return canonical_json(
         {
             "schemaVersion": OWNERSHIP_SCHEMA,
-            "builderVersion": kit.builder_version,
+            "builderVersion": BUILDER_VERSION,
             "contributionId": kit.discovery.metadata.contribution_id,
             "revisionDigest": kit.revision,
             "managedFiles": {path: sha256(content) for path, content in sorted(managed_files(kit).items())},
@@ -106,16 +103,13 @@ def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
     if record is None:
         return None
     payload = object_value(read_json(prefix / "record.json"))
-    if (
-        payload.get("schemaVersion") != OWNERSHIP_SCHEMA
-        or payload.get("builderVersion") not in SUPPORTED_BUILDER_VERSIONS
-    ):
+    if payload.get("schemaVersion") != OWNERSHIP_SCHEMA or payload.get("builderVersion") != BUILDER_VERSION:
         raise conflict("The prior authoring record uses an unsupported builder contract; migrate it explicitly.")
     discovery = load_discovery(read_json(prefix / "discovery.json"))
     if discovery.metadata.contribution_id != metadata.contribution_id:
         raise conflict("The existing authoring record belongs to a different contribution.")
     review = load_review(read_json(prefix / "review.json"), discovery)
-    previous = build_kit(discovery, review, builder_version=str(payload["builderVersion"]))
+    previous = build_kit(discovery, review)
     if record != ownership_record(previous):
         raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
     for path, expected in managed_files(previous).items():
@@ -202,7 +196,7 @@ def plan_repository(kit: Kit, repository: Path) -> IntegrationPlan:
     root = checked_path(repository)
     if not root.is_dir():
         raise BuilderError("repository_directory", "The destination must be an existing HOL Guard checkout.")
-    verified = build_kit(kit.discovery, kit.review, builder_version=kit.builder_version)
+    verified = build_kit(kit.discovery, kit.review)
     if verified.files != kit.files:
         raise BuilderError("kit_changed", "Only a reproducible, validated kit can be integrated.")
     metadata = kit.discovery.metadata

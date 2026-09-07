@@ -9,10 +9,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import BUILDER_VERSION, SUPPORTED_BUILDER_VERSIONS
+from . import BUILDER_VERSION
 from .errors import BuilderError
 from .io import canonical_json, checked_path, parse_json, read_bytes, read_json, sha256
-from .listing import listing_template
 from .models import Discovery, load_discovery
 from .render_native import (
     contribution_path,
@@ -35,7 +34,6 @@ class Kit:
     discovery: Discovery
     review: Review
     files: tuple[tuple[str, str], ...]
-    builder_version: str = BUILDER_VERSION
 
     @property
     def revision(self) -> str:
@@ -46,7 +44,7 @@ class Kit:
         return {
             "ok": True,
             "schemaVersion": MANIFEST_SCHEMA,
-            "builderVersion": self.builder_version,
+            "builderVersion": BUILDER_VERSION,
             "contributionId": self.discovery.metadata.contribution_id,
             "discoveryDigest": self.discovery.binding,
             "revisionDigest": self.revision,
@@ -93,7 +91,7 @@ def _report(discovery: Discovery, review: Review) -> dict[str, object]:
     }
 
 
-def _readme_v1(discovery: Discovery) -> str:
+def _readme(discovery: Discovery) -> str:
     metadata = discovery.metadata
     safe_name = re.sub(r"([\\`*_{}\[\]()#+.!|<>~-])", r"\\\1", metadata.name)
     return f"""# {safe_name}: Guard contribution kit
@@ -149,29 +147,7 @@ crash-atomic filesystem transaction. After a crash, inspect Git status and the
 """
 
 
-def _claim_readme(discovery: Discovery) -> str:
-    extension_id = discovery.metadata.contribution_id
-    return f"""
-## After your contribution is merged
-
-HOL Guard Extensions gives contributors a public coverage page and an optional
-publisher profile. Sign in at https://hol.org/guard/extension-studio?extension={extension_id}
-with the GitHub account that authored the merged contribution. The portal verifies
-that specific contribution; a link or a GitHub username alone grants no ownership.
-Claiming is free, does not require marketing consent, and never changes protection.
-Maintainer verification is not an upstream endorsement or a security certificate.
-
-`listing-template.json` is inert presentation metadata, not a runtime artifact.
-After reviewing its description and limits, you may copy it to
-`contributions/extension-listings/{extension_id}.json` in a separate source change.
-Do not put secrets, executable code, or runtime policy in listing metadata.
-The template does not infer a GitHub identity or grant anyone claim authority.
-"""
-
-
-def build_kit(discovery: Discovery, review: Review, *, builder_version: str = BUILDER_VERSION) -> Kit:
-    if builder_version not in SUPPORTED_BUILDER_VERSIONS:
-        raise BuilderError("builder_version", "Unsupported contribution builder version.")
+def build_kit(discovery: Discovery, review: Review) -> Kit:
     # Normalization can expand a small source into a large document. Enforce the
     # same byte and structure budgets that subsequent on-disk replay will use.
     discovery = load_discovery(parse_json(canonical_json(discovery.to_dict()).encode("utf-8")))
@@ -181,19 +157,17 @@ def build_kit(discovery: Discovery, review: Review, *, builder_version: str = BU
         "discovery.json": canonical_json(discovery.to_dict()),
         "review.json": canonical_json(review.to_dict()),
         "report.json": canonical_json(_report(discovery, review)),
-        "README.md": _readme_v1(discovery) + (_claim_readme(discovery) if builder_version != "1.0.0" else ""),
+        "README.md": _readme(discovery),
         f"artifacts/{contribution_path(metadata)}": render_contribution(discovery, review),
         f"artifacts/{test_path(metadata)}": (
             render_cli_tests(discovery, review) if metadata.kind == "cli" else render_mcp_tests(discovery, review)
         ),
     }
-    if builder_version != "1.0.0":
-        files["listing-template.json"] = listing_template(metadata)
     if metadata.kind == "cli":
         files[f"artifacts/{detector_path(metadata)}"] = render_detector(discovery, review)
     manifest = {
         "schemaVersion": MANIFEST_SCHEMA,
-        "builderVersion": builder_version,
+        "builderVersion": BUILDER_VERSION,
         "contributionId": metadata.contribution_id,
         "discoveryDigest": discovery.binding,
         "revisionDigest": revision_digest(discovery, review),
@@ -203,7 +177,7 @@ def build_kit(discovery: Discovery, review: Review, *, builder_version: str = BU
     sizes = [len(content.encode("utf-8")) for content in files.values()]
     if max(sizes) > MAX_ARTIFACT_BYTES or sum(sizes) > MAX_KIT_BYTES:
         raise BuilderError("kit_limit", "Compiled kit exceeds the bounded artifact budget.")
-    return Kit(discovery, review, tuple(sorted(files.items())), builder_version)
+    return Kit(discovery, review, tuple(sorted(files.items())))
 
 
 def _listed_files(root: Path, expected: set[str]) -> set[str]:
@@ -239,11 +213,7 @@ def load_kit(path: Path) -> Kit:
         raise BuilderError("kit_directory", "A kit must be an existing regular directory.")
     discovery = load_discovery(read_json(root / "discovery.json"))
     review = load_review(read_json(root / "review.json"), discovery)
-    manifest = read_json(root / "manifest.json")
-    version = manifest.get("builderVersion") if isinstance(manifest, dict) else None
-    if not isinstance(version, str) or version not in SUPPORTED_BUILDER_VERSIONS:
-        raise BuilderError("builder_version", "Unsupported contribution builder version.")
-    expected = build_kit(discovery, review, builder_version=version)
+    expected = build_kit(discovery, review)
     expected_names = {name for name, _ in expected.files}
     if _listed_files(root, expected_names) != expected_names:
         raise BuilderError(
@@ -258,7 +228,7 @@ def load_kit(path: Path) -> Kit:
 
 
 def write_kit(kit: Kit, path: Path) -> None:
-    if build_kit(kit.discovery, kit.review, builder_version=kit.builder_version).files != kit.files:
+    if build_kit(kit.discovery, kit.review).files != kit.files:
         raise BuilderError("kit_changed", "Only a reproducible compiled kit can be written.")
     output = checked_path(path)
     if output.exists():
