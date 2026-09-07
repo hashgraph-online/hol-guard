@@ -197,7 +197,6 @@ def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bo
 
 
 _LOCAL_CLI_SALVAGE_TABLES = (
-    "local_cli_schema_migration",
     "local_cli_authority",
     "local_cli_observation",
     "local_cli_grant",
@@ -216,7 +215,7 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
     if source.is_symlink() or destination.is_symlink() or not destination.is_file():
         return False
     try:
-        source_uri = f"{source.resolve().as_uri()}?mode=ro&immutable=1"
+        source_uri = f"{source.resolve().as_uri()}?mode=ro"
         with (
             sqlite3.connect(source_uri, uri=True, timeout=1.0) as src,
             sqlite3.connect(destination, timeout=1.0) as dst,
@@ -250,15 +249,17 @@ def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, ta
     placeholders = ",".join("?" for _ in shared)
     try:
         rows = src.execute(f'select {quoted} from "{table}"').fetchall()
-        _ = dst.execute(f'delete from "{table}"')
-        if rows:
-            _ = dst.executemany(
-                f'insert or replace into "{table}" ({quoted}) values ({placeholders})',
-                rows,
-            )
     except sqlite3.Error:
         return False
-    return True
+    inserted = False
+    statement = f'insert or replace into "{table}" ({quoted}) values ({placeholders})'
+    for row in rows:
+        try:
+            _ = dst.execute(statement, row)
+            inserted = True
+        except sqlite3.Error:
+            continue
+    return inserted or not rows
 
 
 def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:

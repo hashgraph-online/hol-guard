@@ -50,6 +50,25 @@ def test_salvage_copies_custom_extension_grant(tmp_path: Path) -> None:
     assert any(item.get("cli_id") == _identity().cli_id and item.get("state") == "allowed" for item in listed)
 
 
+def test_salvage_keeps_destination_schema_marker(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src")
+    with sqlite3.connect(source.path) as connection:
+        connection.execute(
+            "update local_cli_schema_migration set version = 1, checksum = 'stale' where singleton = 1"
+        )
+        connection.commit()
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is True
+    granted = destination.read_local_cli_grant(_identity().cli_id)
+    assert granted is not None
+    with sqlite3.connect(destination.path) as connection:
+        version, checksum = connection.execute(
+            "select version, checksum from local_cli_schema_migration where singleton = 1"
+        ).fetchone()
+    assert version != 1
+    assert checksum != "stale"
+
+
 def test_salvage_ignores_unreadable_quarantine(tmp_path: Path) -> None:
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     junk = tmp_path / "junk.db"
