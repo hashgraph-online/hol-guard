@@ -33,4 +33,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tests/fixtures/guard-command-corpus/decision-diff-report.json
           git commit -m "test: refresh command decision diff evidence"
+          git fetch origin fix/command-coverage-followup
+          git rebase origin/fix/command-coverage-followup
           git push origin HEAD:fix/command-coverage-followup
