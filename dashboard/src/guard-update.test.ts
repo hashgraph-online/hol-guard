@@ -60,6 +60,7 @@ assert(!alphaMarkup.includes("Alpha updates enabled</button>"), "active alpha st
 assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
 assert(alphaMarkup.includes("min-h-8") && !alphaMarkup.includes("min-h-11") && !alphaMarkup.includes("min-h-6") && !alphaMarkup.includes("w-full"), "Local Guard update controls stay compact inline rows with uniform 32px targets, not full-width blocks");
 assert(alphaMarkup.includes("1.2.4a1 is ready") && alphaMarkup.includes("Restarts briefly. Approvals stay saved."), "update-ready copy keeps the version line and reassurance together");
+assert(alphaMarkup.includes('<span class="text-[11px] font-semibold leading-4">Manage</span>'), "control labels carry font sizing on an inner span the button reset cannot override");
 
 const alphaUpdateMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
@@ -68,7 +69,7 @@ const alphaUpdateMarkup = renderToStaticMarkup(
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</button>"), "update-ready state pairs the version line with a compact inline Update action");
+assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</span></button>"), "update-ready state pairs the version line with a compact inline Update action");
 assert(alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"), "the ready-version label wraps long release strings instead of clipping them");
 
 const longVersion = "3.0.111a1.dev456+g1a2b3c4d5e6";
