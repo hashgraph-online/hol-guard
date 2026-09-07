@@ -97,18 +97,14 @@ def test_pyproject_exposes_guard_and_scanner_commands_without_codex_alias() -> N
 def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "Lean baseline install" in readme
-    assert "Python 3.10 through 3.14" in readme
-    assert "Resolver-safe Cisco extra" in readme
-    assert 'pip install "hol-guard[cisco]"' in readme
-    assert 'pip install "plugin-scanner[cisco]"' in readme
+    assert "pipx install hol-guard" in readme
+    assert "pipx install plugin-scanner" in readme
+    assert "baseline packages work without Cisco dependencies" in readme
+    assert "pipx install 'plugin-scanner[cisco]'" in readme
     assert "Python 3.11 through 3.14" in readme
-    assert "published `cisco` extra remains resolver-safe" in readme
-    assert "repo-controlled Docker image or `cisco-mcp` uv group" in readme
-    assert "LiteLLM 1.93" in readme
-    assert "deferred" in readme
-    assert "cisco-ai-a2a-scanner" in readme
-    assert "cisco-aibom" in readme
+    assert "published `cisco` extra provides skill scanning" in readme
+    assert "uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13" in readme
+    assert "--cisco-skill-scan on --cisco-mcp-scan on" in readme
 
 
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
