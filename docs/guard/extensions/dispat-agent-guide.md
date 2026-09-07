@@ -4,6 +4,11 @@ This guide complements [Guard's Dispat release protection](dispat.md). It descri
 Dispat repository and prepare changes for a CI/CD release without expanding Guard's release-start
 rule. Release commands and publishing examples describe work owned by the CI/CD pipeline.
 
+> **For extended Dispat help, run `dispat --help` and open the official agent-guide URL it prints.**
+> Use the installed binary's link, not a fixed guide URL copied from this page or another project.
+> This page supplements upstream guidance with Guard's protection boundary and workflow
+> requirements.
+
 > **Agents must not execute releases. Release only through CI/CD.** Do not run bare `dispat`,
 > `dispat release`, publishing scripts, or release-recording commands from an agent's terminal, tool
 > session, or an improvised job. Release execution and retries belong exclusively to the
@@ -52,6 +57,29 @@ dispat release --help
 Command-specific help describes the installed binary's supported flags. There is no release
 `--dry-run` flag. `dispat <script>` can execute a configured script when the word is not a built-in
 command; an unfamiliar word is not a discovery command. See the [CLI reference][cli].
+
+To find extended help for this installation:
+
+1. Read `dispat --version`, then the top-level `dispat --help` output, including stderr. Open the
+   URL under **"If you are an agent, read the common guide:"**. Command-specific help is for flags;
+   use top-level help to discover the guide and reference links.
+1. Released binaries supporting these links select the `services/dispat/v<version>` snapshot for the
+   guide, configuration reference, and API reference. The URL therefore changes with the CLI
+   version. Development builds use `main` and explicitly label the documentation as upcoming; that
+   is not the documentation contract for a stable installed release.
+1. Follow the guide's patch-selection instructions: check published `specs/agent-guide/v*` releases
+   for the latest stable guide patch on the installed CLI's major/minor line. Guide and CLI patch
+   numbers can differ. Keep configuration and API links from the binary's help pinned to its CLI
+   release; a newer guide does not add features to that binary.
+1. If guide updates cannot be checked, use the help-linked guide and report the limitation. If an
+   older binary prints no guide link, report that and verify a compatible published guide before
+   relying on it; do not silently substitute `main` or invent a URL.
+
+See the [help-link implementation][help-references] for the release/development distinction.
+
+The examples below retain their cited source snapshots. For extended help, follow the matching
+official guide and installed command help while preserving the CI/CD-only release and configuration
+authorization requirements here.
 
 > **Important: configuration changes require a direct user instruction.** Read the existing Dispat
 > configuration to understand the task. Do not create, rewrite, or "repair" it, run `dispat init`,
@@ -941,7 +969,7 @@ options describe a script sweep, not release-preview flags; check [run help][run
 `self-update` can mutate state or execute code. Being outside `command.dispat.release` is not an
 allow decision or a reason to use them as an alternative route around a release approval.
 
-This guidance was checked against Dispat commit
+The release-start command contract and examples were checked against Dispat commit
 [`909dc401f3725a610604b77b0e790808cee9a524`](https://github.com/yohimik/dispat/tree/909dc401f3725a610604b77b0e790808cee9a524).
 The `dispat release` implementation (also used by bare `dispat`) acquires the lock before planning,
 including with `--require-release`, as described in the dedicated lock documentation.
@@ -971,6 +999,7 @@ Consult installed-version help and the corresponding source when these descripti
 [environment]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/env.md
 [exec]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/exec.md
 [for]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/for.md
+[help-references]: https://github.com/yohimik/dispat/blob/services/dispat/v1.8.2/services/dispat/internal/cli/usage.go
 [hooks]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/configuration/run-hooks.md
 [if]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/packages/docs/docs/cli/if.md
 [infra-config]: https://github.com/yohimik/dispat/blob/909dc401f3725a610604b77b0e790808cee9a524/infra/dispat.yaml
