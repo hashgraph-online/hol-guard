@@ -58,14 +58,8 @@ assert(alphaMarkup.includes('aria-label="Manage alpha updates"'), "sidebar shoul
 assert(alphaMarkup.includes('data-testid="guard-alpha-updates-control"'), "alpha settings should stay findable as a dedicated control");
 assert(!alphaMarkup.includes("Alpha updates enabled</button>"), "active alpha status should not render as a wide text button");
 assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
-assert(
-  alphaMarkup.includes("min-h-8") && !alphaMarkup.includes("min-h-11") && !alphaMarkup.includes("min-h-6") && !alphaMarkup.includes("w-full"),
-  "Local Guard update controls stay compact inline rows with uniform 32px targets, not full-width blocks",
-);
-assert(
-  alphaMarkup.includes("1.2.4a1 is ready") && alphaMarkup.includes("Restarts briefly. Approvals stay saved."),
-  "update-ready copy keeps the version line and reassurance together",
-);
+assert(alphaMarkup.includes("min-h-8") && !alphaMarkup.includes("min-h-11") && !alphaMarkup.includes("min-h-6") && !alphaMarkup.includes("w-full"), "Local Guard update controls stay compact inline rows with uniform 32px targets, not full-width blocks");
+assert(alphaMarkup.includes("1.2.4a1 is ready") && alphaMarkup.includes("Restarts briefly. Approvals stay saved."), "update-ready copy keeps the version line and reassurance together");
 
 const alphaUpdateMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
@@ -74,38 +68,19 @@ const alphaUpdateMarkup = renderToStaticMarkup(
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(
-  alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') &&
-    alphaUpdateMarkup.includes(">Update</button>"),
-  "update-ready state pairs the version line with a compact inline Update action",
-);
-assert(
-  alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"),
-  "the ready-version label wraps long release strings instead of clipping them",
-);
+assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</button>"), "update-ready state pairs the version line with a compact inline Update action");
+assert(alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"), "the ready-version label wraps long release strings instead of clipping them");
 
 const longVersion = "3.0.111a1.dev456+g1a2b3c4d5e6";
 const longVersionMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
     guardVersion: "3.0.110",
-    updateStatus: normalizeGuardUpdateStatus({
-      current_version: "3.0.110",
-      latest_version: longVersion,
-      installer: "pip",
-      version_check: { source: "pypi", status: "stale", current_version: "3.0.110", latest_version: longVersion, update_available: true },
-      auto_updatable: true,
-      update_available: true,
-      blocked_reason: null,
-      release_channel: "alpha",
-    }),
+    updateStatus: normalizeGuardUpdateStatus({ ...alphaReadyStatus, current_version: "3.0.110", latest_version: longVersion, version_check: { source: "pypi", status: "stale", current_version: "3.0.110", latest_version: longVersion, update_available: true } }),
     onUpdateGuard: () => undefined,
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(
-  longVersionMarkup.includes(`v3.0.110`) && longVersionMarkup.includes(`${longVersion} is ready`),
-  "long release strings render in full on both the version and ready-version lines",
-);
+assert(longVersionMarkup.includes("v3.0.110") && longVersionMarkup.includes(`${longVersion} is ready`), "long release strings render in full on both the version and ready-version lines");
 
 const loadingMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
