@@ -222,8 +222,15 @@ def close_native_resident_clients(guard_home: Path | None = None) -> None:
         ]
         for key, _pool in selected:
             _CLIENT_POOLS.pop(key, None)
+    first_error: Exception | None = None
     for _key, pool in selected:
-        pool.close()
+        try:
+            pool.close()
+        except Exception as error:
+            if first_error is None:
+                first_error = error
+    if first_error is not None:
+        raise first_error
 
 
 atexit.register(close_native_resident_clients)
