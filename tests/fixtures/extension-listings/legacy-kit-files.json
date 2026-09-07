@@ -1,0 +1,10 @@
+{
+  "README.md": "23546e527dd5413eaab1c50fe614bd2c7153e5fc12da0433c8f00082f776d7df",
+  "artifacts/contributions/extensions/command.builder-demo.json": "8e173570dc8cb1d0b5c732cfe6d522ebac6f8f3230feb4b45d973ce68d60139d",
+  "artifacts/src/codex_plugin_scanner/guard/runtime/command_builder_demo_extensions.py": "92e58e180624a8f2ada38d15c475e5308093b8243366ceb2f7b275dbae4d5e64",
+  "artifacts/tests/test_generated_cli_builder_demo_extension.py": "bb9ad17d88410b87618af4f1cad985bf9ffd17eb9ce724df225a59eb3095916b",
+  "discovery.json": "cc44e3be97c0e23eddb24dec694c5f3a6cf63d051f3fc9f39c746a931ae9b2de",
+  "manifest.json": "0a5042d95f58b463c8c8463c11bd475fc5ec9206e181df0694a36d6ae86cabc3",
+  "report.json": "f991fd91ca157006905a54fd42284bcbb8c623d3d1ed77b192a11b5a1838f98f",
+  "review.json": "ec72e7abe596f2f61e50bb194405feed16f85febffd3cfaf07feda2ce4ea782c"
+}
