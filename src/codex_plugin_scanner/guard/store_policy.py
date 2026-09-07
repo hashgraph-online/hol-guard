@@ -1171,8 +1171,12 @@ class StorePolicyMixin:
         managed_base_snapshot_captured = False
         from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
-        managed_base_authority = self.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        # A catalog upgrade is expected drift, not an integrity failure. Use
+        # the registry-aware read so remote-authority removal can migrate the
+        # authenticated local snapshot before publishing its cleared view.
+        managed_base_authority = self.read_extension_control_authority_for_registry(
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            include_managed_controls=False,
         )
         with self._connect() as authority_connection:
             authority_row = authority_connection.execute(
