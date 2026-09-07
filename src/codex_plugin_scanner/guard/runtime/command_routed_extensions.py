@@ -26,6 +26,7 @@ def _routed_matcher(
     required_flags: frozenset[str] = frozenset(),
     forbidden_flags: frozenset[str] = frozenset(),
 ) -> AnyMatcher:
+    """Construct an AnyMatcher for the Routed CLI with optional subcommands and flag filters."""
     return AnyMatcher(
         matchers=(
             executable_matcher(
@@ -52,6 +53,7 @@ def _routed_rule(
     example_command: str,
     severity: CommandRuleSeverity = "high",
 ) -> CommandSafetyRule:
+    """Construct a CommandSafetyRule for Routed operations with canonical metadata."""
     return CommandSafetyRule(
         rule_id=rule_id,
         title=title,

@@ -60,6 +60,7 @@ ROUTED_SAFE_COMMANDS: tuple[str, ...] = (
 
 
 def _routed_control_layer(state: ControlState) -> ExtensionControlLayer:
+    """Construct an ExtensionControlLayer that sets the activation state for command.routed."""
     return ExtensionControlLayer(
         schema_version=CONTROL_SCHEMA_VERSION,
         kind=ControlLayerKind.LOCAL_ADMIN,
@@ -75,6 +76,7 @@ def _routed_control_layer(state: ControlState) -> ExtensionControlLayer:
 
 
 def test_routed_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
+    """Ensure Routed commands remain inert and unmonitored when the extension is disabled."""
     for command, _action_class, rule_id in ROUTED_REVIEW_CASES:
         evaluation = evaluate_command(
             command,
@@ -87,6 +89,7 @@ def test_routed_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
 
 
 def test_routed_rules_match_when_enabled(tmp_path: Path) -> None:
+    """Verify mutating Routed commands trigger appropriate review rules when enabled."""
     layer = _routed_control_layer(ControlState.ENABLED)
     for command, action_class, rule_id in ROUTED_REVIEW_CASES:
         evaluation = evaluate_command(
@@ -103,10 +106,12 @@ def test_routed_rules_match_when_enabled(tmp_path: Path) -> None:
 
 
 def test_routed_safe_read_only_and_help_commands_remain_safe(tmp_path: Path) -> None:
+    """Ensure read-only, diagnostic, and top-level help commands stay safe."""
     assert_safe_command_cases(ROUTED_SAFE_COMMANDS, tmp_path)
 
 
 def test_routed_safe_commands_remain_unmatched_when_enabled(tmp_path: Path) -> None:
+    """Verify read-only and safe commands remain un-flagged even when the extension is enabled."""
     layer = _routed_control_layer(ControlState.ENABLED)
     for command in ROUTED_SAFE_COMMANDS:
         evaluation = evaluate_command(
@@ -119,6 +124,7 @@ def test_routed_safe_commands_remain_unmatched_when_enabled(tmp_path: Path) -> N
 
 
 def test_routed_extension_publishes_reference_and_action_risks() -> None:
+    """Verify extension specification metadata, URLs, and action risk classes."""
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.routed")
 
     assert extension is not None

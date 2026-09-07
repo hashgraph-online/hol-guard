@@ -55,6 +55,7 @@ def stage_artifacts(source_root: Path) -> tuple[Path, ...]:
 
 
 def main() -> int:
+    """Execute the artifact staging CLI and print staged paths."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--source-root",
