@@ -105,3 +105,11 @@ Maintainers evaluate Extension changes against these merge gates:
 - **Operability**: clear safer alternatives, authoritative references, directory entry, and focused tests.
 
 A change is complete only when code, catalog, documentation, and tests describe the same protection boundary.
+
+## Public profile and presentation metadata
+
+A merged external contribution can also have a public publisher profile. See
+[publisher metadata](publisher-metadata.md) for optional listing fields, numeric
+GitHub attribution, generated directory validation, and the boundary between a
+profile claim and runtime security authority. This does not change the contribution
+review or runtime activation requirements above.

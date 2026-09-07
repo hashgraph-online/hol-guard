@@ -56,10 +56,6 @@ def _iter_facade_overrides() -> dict[str, object]:
 def _support_overrides() -> Iterator[None]:
     overrides = _iter_facade_overrides()
     missing = object()
-    canonical_override_bindings = {
-        name: getattr(_support, name, missing)
-        for name in overrides
-    }
     export_map, module_export_names = _support._build_export_map(overrides)
     override_names = set(overrides)
     targets: list[tuple[ModuleType, set[str]]] = [(_support, set(export_map))]
@@ -78,15 +74,22 @@ def _support_overrides() -> Iterator[None]:
     # remain independent of the Python evaluator.
     compatibility_prefix = f"{__package__}.commands_hook_"
     known_targets = {id(module) for module, _ in targets}
-    for module in tuple(sys.modules.values()):
-        if module is None or id(module) in known_targets:
-            continue
-        module_name = getattr(module, "__name__", "")
-        if not module_name.startswith(compatibility_prefix):
-            continue
-        affected_names = {name for name in override_names if hasattr(module, name)}
-        if affected_names:
-            targets.append((module, affected_names))
+
+    def _compatibility_targets(skip: set[int]) -> list[tuple[ModuleType, set[str]]]:
+        found: list[tuple[ModuleType, set[str]]] = []
+        for module in tuple(sys.modules.values()):
+            if module is None or id(module) in skip:
+                continue
+            module_name = getattr(module, "__name__", "")
+            if not module_name.startswith(compatibility_prefix):
+                continue
+            affected_names = {name for name in override_names if hasattr(module, name)}
+            if affected_names:
+                found.append((module, affected_names))
+        return found
+
+    for module, affected_names in _compatibility_targets(known_targets):
+        targets.append((module, affected_names))
     snapshots = [
         (module, {name: getattr(module, name, missing) for name in affected_names})
         for module, affected_names in targets
@@ -109,23 +112,15 @@ def _support_overrides() -> Iterator[None]:
                         delattr(module, name)
                 else:
                     setattr(module, name, value)
-        # A compatibility module can be imported for the first time while the
-        # scoped facade overrides are active.  Such a module was not present in
-        # ``snapshots`` and can otherwise retain an override after this context
-        # exits.  Restore only bindings that still point at the applied override
-        # so module-owned values are left untouched.
-        snapshotted_module_ids = {id(module) for module, _ in snapshots}
-        for module in tuple(sys.modules.values()):
-            if module is None or id(module) in snapshotted_module_ids:
-                continue
-            module_name = getattr(module, "__name__", "")
-            if not module_name.startswith(compatibility_prefix):
-                continue
-            for name, canonical_value in canonical_override_bindings.items():
-                if canonical_value is missing or not hasattr(module, name):
-                    continue
-                if getattr(module, name) is export_map[name]:
-                    setattr(module, name, canonical_value)
+        # A compatibility module imported for the first time inside the scoped
+        # window bound the override values at import time and is absent from
+        # the entry snapshots, so its captured bindings would outlive the
+        # window. Reset only the names still bound to an override value.
+        snapshotted = {id(module) for module, _ in snapshots}
+        for module, affected_names in _compatibility_targets(snapshotted):
+            for name in affected_names:
+                if getattr(module, name, missing) is export_map[name]:
+                    setattr(module, name, getattr(_support, name))
 
 
 def _support_attr(name: str) -> Any:

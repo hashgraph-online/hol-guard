@@ -2457,10 +2457,17 @@ function listToolsAgainLabel() {
   return "List tools again";
 }
 function mcpListingBusyCopy(name) {
-  return `Listing tools from ${name}. npx servers can take a few seconds.`;
+  return `Listing tools from ${name}. This can take a few seconds.`;
+}
+function mcpListingRetryFailedCopy() {
+  return "Guard still could not list tools. You can add the server anyway.";
 }
 function mcpCatalogHasTools(commands) {
   return commands.some((entry) => entry.command_id !== "other");
+}
+function mcpListingRetryError(helpStatus, commands) {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
 }
 function McpListingStatus(props) {
   if (props.busy) {
@@ -3523,7 +3530,11 @@ function AddCustomExtensionWorkspace(props) {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : void 0);
       if (recognizeGeneration.current !== generation) return;
       markRecognized(result.item, result.summary);
-      setError(null);
+      if (keepOnError) {
+        setError(mcpListingRetryError(result.help_status, result.item.commands));
+      } else {
+        setError(null);
+      }
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
       if (!keepOnError) {

@@ -41,10 +41,10 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--shard-count 96" in plan_job
     assert "build_pytest_shard_plan.py" in plan_job
     assert "Restore latest trusted duration telemetry" in plan_job
-    assert '.workflow_run.head_branch == "release/3.0"' in plan_job
+    assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in plan_job
     assert 'test "$event" = "push"' in plan_job
     assert 'test "$conclusion" = "success"' in plan_job
-    assert 'test "$branch" = "release/3.0"' in plan_job
+    assert 'test "$branch" = "$TELEMETRY_BRANCH"' in plan_job
     assert 'test "$workflow_path" = ".github/workflows/ci.yml"' in plan_job
     assert "needs: test-plan" in tests_job
     assert "name: pytest-shard-plan" in tests_job

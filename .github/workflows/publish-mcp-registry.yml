@@ -1,7 +1,9 @@
 name: Publish to MCP Registry
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types: [completed]
     branches: [main, release/3.0]
 
 permissions:
@@ -9,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: hol-guard-mcp-registry-${{ github.ref }}
+  group: hol-guard-mcp-registry-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -17,7 +19,12 @@ jobs:
     name: Publish verified MCP metadata
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      !contains(github.event.head_commit.message || '', '[skip release publish]')
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
+      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -25,14 +32,14 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Wait for the canonical release tag
         id: release
         env:
-          SOURCE_SHA: ${{ github.sha }}
-          SOURCE_REF: ${{ github.ref }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_REF: refs/heads/${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
           tag=""

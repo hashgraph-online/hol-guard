@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,6 +23,13 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     SupplyChainUserCopy,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
+
+
+@pytest.fixture(autouse=True)
+def _restore_cli_facade_approval_hooks() -> Iterator[None]:
+    yield
+    restore_cli_facade_approval_hooks()
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -264,9 +272,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     def unexpected_browser_approval(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("terminal package block must not queue or wait for browser approval")
 
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected_browser_approval)
-    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected_browser_approval)
-    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unexpected_browser_approval)
+    isolate_terminal_block_patches(monkeypatch, unexpected_browser_approval)
 
     def fail_subprocess(*args: object, **kwargs: object) -> object:
         raise AssertionError("blocked package request must not launch a subprocess")

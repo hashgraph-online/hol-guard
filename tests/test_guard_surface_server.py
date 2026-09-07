@@ -1133,7 +1133,10 @@ class TestGuardSurfaceServer:
             "session": "cursor-session-789",
         }
 
-    def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
+    def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
+        # This tests audit contents, not the production write deadline. Coverage
+        # tracing can keep a background SQLite writer busy beyond that deadline.
+        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -1159,15 +1162,8 @@ class TestGuardSurfaceServer:
         assert error.value.code == 401
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "unauthorized"
-        # The unauthorized audit is persisted before the 401 is written, but the
-        # sqlite write can lag under shard load; poll briefly instead of racing it.
-        events: list[dict[str, object]] = []
-        audit_deadline = time.monotonic() + 10.0
-        while time.monotonic() < audit_deadline:
-            events = store.list_events(event_name="daemon.auth.unauthorized")
-            if events:
-                break
-            time.sleep(0.05)
+        # The handler commits the audit synchronously before writing the 401.
+        events = store.list_events(event_name="daemon.auth.unauthorized")
         assert events, "unauthorized audit event was never persisted"
         assert events[-1]["payload"]["path"] == "/v1/hooks/claude-code"
 
@@ -2723,14 +2719,15 @@ class TestGuardSurfaceServer:
         assert payload["latest_connect_state"]["status"] == "connected"
         assert payload["latest_connect_state"]["milestone"] == "first_sync_succeeded"
 
-    def test_guard_daemon_receipts_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
+    def test_guard_daemon_receipts_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
             with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/receipts", timeout=5)
+                urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/receipts", timeout=15)
         finally:
             daemon.stop()
 
@@ -2738,6 +2735,7 @@ class TestGuardSurfaceServer:
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "unauthorized"
         events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert events, "unauthorized audit event was never persisted"
         assert events[-1]["payload"]["path"] == "/v1/receipts"
 
     def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
@@ -2854,7 +2852,7 @@ class TestGuardSurfaceServer:
     ) -> None:
         guard_home = tmp_path / "pytest-of-user" / "guard-home"
         store = GuardStore(guard_home)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.05)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60.0)
         monkeypatch.setattr(
             daemon._server.hook_process_runner,
             "enable_full_capacity",
@@ -2862,6 +2860,10 @@ class TestGuardSurfaceServer:
         )
         daemon.start()
 
+        assert not daemon._shutdown_started.is_set()
+        # Advance only the idle deadline after startup, without racing the
+        # watchdog against initialization on a traced or busy runner.
+        daemon._server.last_activity_monotonic = time.monotonic() - 61.0
         assert daemon._shutdown_started.wait(timeout=3)
         daemon_thread = daemon._thread
         assert daemon_thread is not None

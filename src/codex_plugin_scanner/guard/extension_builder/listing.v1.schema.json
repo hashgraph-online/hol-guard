@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/guard/contracts/extension-listing.v1.schema.json",
+  "title": "HOL Guard extension listing (presentation only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "extensionId",
+    "tagline",
+    "category",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "guard.extension-listing.v1"
+    },
+    "extensionId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(command|mcp)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "tagline": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 140
+    },
+    "category": {
+      "enum": [
+        "core-safety",
+        "cloud-infrastructure",
+        "data-resilience",
+        "delivery-remote",
+        "managed-services",
+        "package-supply-chain",
+        "specialized-tools",
+        "other"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 400
+      }
+    },
+    "documentationUrl": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 1024,
+      "pattern": "^https://",
+      "format": "uri"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 30,
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      }
+    },
+    "maintainerGithubIds": {
+      "description": "Additional reviewed profile claimants only; never runtime or upstream ownership. Omitted or empty means no extra delegates and does not remove introducing-PR author eligibility.",
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[1-9][0-9]{0,19}$"
+      }
+    }
+  }
+}
