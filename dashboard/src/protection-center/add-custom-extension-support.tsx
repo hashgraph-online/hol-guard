@@ -121,6 +121,33 @@ export function mcpListingBusyCopy(name: string): string {
   return `Listing tools from ${name}. npx servers can take a few seconds.`;
 }
 
+export function mcpCatalogHasTools(commands: LocalCliItem["commands"]): boolean {
+  return commands.some((entry) => entry.command_id !== "other");
+}
+
+export function McpListingStatus(props: {
+  name: string;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  if (props.busy) {
+    return (
+      <p className="mt-4 max-w-xl text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {mcpListingBusyCopy(props.name)}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={props.onRetry}
+      className="mt-4 min-h-11 text-sm font-semibold text-brand-blue"
+    >
+      {listToolsAgainLabel()}
+    </button>
+  );
+}
+
 export function filterCountCopy(visible: number, total: number): string {
   if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
   if (visible === total) return `${visible} scripts in this project.`;

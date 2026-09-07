@@ -2459,6 +2459,23 @@ function listToolsAgainLabel() {
 function mcpListingBusyCopy(name) {
   return `Listing tools from ${name}. npx servers can take a few seconds.`;
 }
+function mcpCatalogHasTools(commands) {
+  return commands.some((entry) => entry.command_id !== "other");
+}
+function McpListingStatus(props) {
+  if (props.busy) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 max-w-xl text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: mcpListingBusyCopy(props.name) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: props.onRetry,
+      className: "mt-4 min-h-11 text-sm font-semibold text-brand-blue",
+      children: listToolsAgainLabel()
+    }
+  );
+}
 function filterCountCopy(visible, total) {
   if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
   if (visible === total) return `${visible} scripts in this project.`;
@@ -3655,6 +3672,8 @@ function AddCustomExtensionWorkspace(props) {
   const showingMcpCatalog = recognized?.surface === "mcp";
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const mcpHasTools = mcpCatalogHasTools(enrollable);
+  const showMcpRetry = showingMcpCatalog && !mcpHasTools;
   const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(enrollable, command) : commands;
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
@@ -3700,7 +3719,7 @@ function AddCustomExtensionWorkspace(props) {
               rememberedProjects.length > 0,
               recognized?.surface ?? null,
               props.discovering === true && recognized === null,
-              !(showingMcpCatalog && enrollable.length === 0)
+              !showMcpRetry
             ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: commandFieldLabel(recognized?.surface ?? null) }),
@@ -3721,17 +3740,9 @@ function AddCustomExtensionWorkspace(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-selected", className: "text-xl font-semibold tracking-tight text-brand-dark", children: recognized.name }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-xs text-brand-dark/70", children: recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label }),
             summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: summary }) : null,
-            showingCatalog && enrollable.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk }) : null,
-            showingMcpCatalog && enrollable.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 max-w-xl", children: busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: mcpListingBusyCopy(recognized.name) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: retryMcpListing,
-                className: "min-h-11 text-sm font-semibold text-brand-blue",
-                children: listToolsAgainLabel()
-              }
-            ) }) : null,
-            showingCatalog && enrollable.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk }) : null,
+            showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(McpListingStatus, { name: recognized.name, busy, onRetry: retryMcpListing }) : null,
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               CatalogPreview,
               {
                 query: command,

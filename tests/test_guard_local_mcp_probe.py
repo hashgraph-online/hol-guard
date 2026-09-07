@@ -367,7 +367,8 @@ def test_probe_env_reuses_npm_cache(tmp_path: Path, monkeypatch) -> None:
     assert env["HOME"] == str(isolated)
     assert env["npm_config_cache"] == str(npm)
     assert env["NPM_CONFIG_CACHE"] == str(npm)
-    assert env["npm_config_yes"] == "true"
+    assert "npm_config_yes" not in env
+    assert "NPM_CONFIG_YES" not in env
 
 
 def test_probe_env_resolves_relative_npm_cache(tmp_path: Path, monkeypatch) -> None:
@@ -380,3 +381,106 @@ def test_probe_env_resolves_relative_npm_cache(tmp_path: Path, monkeypatch) -> N
     assert env["npm_config_cache"] == resolved
     assert env["NPM_CONFIG_CACHE"] == resolved
     assert Path(env["npm_config_cache"]).is_absolute()
+
+
+def test_incomplete_pagination_does_not_persist_partial_tools(tmp_path: Path) -> None:
+    server = tmp_path / "paged-mcp.py"
+    server.write_text(
+        """
+import json
+import sys
+import time
+
+page = 0
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    if method == "initialize":
+        print(json.dumps({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "paged"}},
+        }), flush=True)
+    elif method == "tools/list":
+        page += 1
+        if page > 1:
+            time.sleep(2)
+        print(json.dumps({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {
+                "tools": [{"name": f"tool_{page}", "description": "paged"}],
+                "nextCursor": "more" if page == 1 else None,
+            },
+        }), flush=True)
+""",
+        encoding="utf-8",
+    )
+    probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path, timeout=0.4)
+    assert probed is None
+
+
+def test_live_stdio_probe_reads_utf8_tool_names(tmp_path: Path) -> None:
+    server = tmp_path / "utf8-mcp.py"
+    server.write_text(
+        """
+import json
+import sys
+
+def send(payload):
+    body = (json.dumps(payload, ensure_ascii=False) + "\\n").encode("utf-8")
+    sys.stdout.buffer.write(body)
+    sys.stdout.buffer.flush()
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    if method == "initialize":
+        send({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "utf8"}},
+        })
+    elif method == "tools/list":
+        send({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"tools": [{"name": "open_page", "description": "caf\\u00e9 naive"}]},
+        })
+        break
+""",
+        encoding="utf-8",
+    )
+    probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path)
+    assert probed is not None
+    assert any(tool.name == "open_page" and tool.description == "café naive" for tool in probed.tools)
+
+
+def test_live_stdio_probe_reads_tools_after_server_exits(tmp_path: Path) -> None:
+    server = tmp_path / "exit-mcp.py"
+    server.write_text(
+        """
+import json
+import sys
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    if method == "initialize":
+        print(json.dumps({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "exit"}},
+        }), flush=True)
+    elif method == "tools/list":
+        print(json.dumps({
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"tools": [{"name": "list_pages", "description": "List"}]},
+        }), flush=True)
+        break
+""",
+        encoding="utf-8",
+    )
+    probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path)
+    assert probed is not None
+    assert any(tool.name == "list_pages" for tool in probed.tools)

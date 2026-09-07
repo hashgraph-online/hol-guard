@@ -52,8 +52,6 @@ def probe_env(tmp: str) -> dict[str, str]:
         "npm_config_fund": "false",
         "NPM_CONFIG_UPDATE_NOTIFIER": "false",
         "npm_config_loglevel": "error",
-        "npm_config_yes": "true",
-        "NPM_CONFIG_YES": "true",
     }
     env.update(_package_cache_env())
     if os.name == "nt":
@@ -138,13 +136,13 @@ def _exchange_tools_list(argv: list[str], tmp: str, *, timeout: float) -> list[d
             session.write({"jsonrpc": "2.0", "id": request_id, "method": "tools/list", "params": params})
             listed = _await_result(session, request_id, deadline)
             if listed is None or listed.get("error") is not None:
-                return collected if collected else None
+                return None
             result = listed.get("result")
             if not isinstance(result, dict):
-                return collected if collected else None
+                return None
             tools = result.get("tools")
             if not isinstance(tools, list):
-                return collected if collected else None
+                return None
             collected.extend(item for item in tools if isinstance(item, dict))
             if len(collected) >= MAX_MCP_PROBE_TOOLS:
                 return collected[:MAX_MCP_PROBE_TOOLS]
@@ -196,10 +194,11 @@ def _reply_server_request(session: _RpcSession, message: dict[str, object]) -> N
 class _RpcSession:
     def __init__(self, process: subprocess.Popen[bytes]) -> None:
         self._process = process
-        self._buffer = ""
+        self._buffer = b""
         self._messages: list[dict[str, object]] = []
         self._lock = threading.Lock()
         self._closed = threading.Event()
+        self._eof = threading.Event()
         self._thread = threading.Thread(target=self._drain, daemon=True)
         self._thread.start()
 
@@ -208,7 +207,8 @@ class _RpcSession:
         if stdin is None:
             return
         payload = (json.dumps(message, separators=(",", ":")) + "\n").encode("utf-8")
-        _ = os.write(stdin.fileno(), payload)
+        with contextlib.suppress(OSError, ValueError):
+            _ = os.write(stdin.fileno(), payload)
 
     def read(self, *, timeout: float) -> dict[str, object] | None:
         deadline = time.monotonic() + timeout
@@ -216,7 +216,7 @@ class _RpcSession:
             with self._lock:
                 if self._messages:
                     return self._messages.pop(0)
-            if self._process.poll() is not None:
+            if self._process.poll() is not None and self._eof.is_set():
                 with self._lock:
                     return self._messages.pop(0) if self._messages else None
             time.sleep(0.01)
@@ -231,6 +231,12 @@ class _RpcSession:
         self._thread.join(1)
 
     def _drain(self) -> None:
+        try:
+            self._drain_stream()
+        finally:
+            self._eof.set()
+
+    def _drain_stream(self) -> None:
         stdout = self._process.stdout
         if stdout is None:
             return
@@ -243,7 +249,7 @@ class _RpcSession:
             if chunk == b"":
                 return
             with self._lock:
-                self._buffer += chunk.decode("utf-8", errors="replace")
+                self._buffer += chunk
                 while True:
                     parsed = _pop_json_message(self._buffer)
                     if parsed is None:
@@ -253,7 +259,7 @@ class _RpcSession:
                     if _is_rpc_message(message):
                         self._messages.append(message)
                 if len(self._buffer) > MCP_PROBE_OUTPUT_LIMIT:
-                    self._buffer = ""
+                    self._buffer = b""
                     return
 
 
@@ -265,37 +271,35 @@ def _is_rpc_message(message: dict[str, object] | None) -> TypeGuard[dict[str, ob
     return "method" in message and "id" in message
 
 
-def _pop_json_message(buffer: str) -> tuple[dict[str, object] | None, str] | None:
-    if buffer.startswith("Content-Length:"):
-        header, sep, rest = buffer.partition("\r\n\r\n")
+def _pop_json_message(buffer: bytes) -> tuple[dict[str, object] | None, bytes] | None:
+    if buffer.startswith(b"Content-Length:"):
+        header, sep, rest = buffer.partition(b"\r\n\r\n")
         if not sep:
-            header, sep, rest = buffer.partition("\n\n")
+            header, sep, rest = buffer.partition(b"\n\n")
         if not sep:
             return None
         try:
-            length = int(header.split(":", 1)[1].strip().splitlines()[0])
+            length = int(header.split(b":", 1)[1].strip().splitlines()[0])
         except ValueError:
             return None
         if length > MCP_PROBE_OUTPUT_LIMIT:
-            return (None, "")
-        raw = rest.encode("utf-8")
-        if len(raw) < length:
+            return (None, b"")
+        if len(rest) < length:
             return None
         try:
-            payload = json.loads(raw[:length].decode("utf-8"))
-        except json.JSONDecodeError:
-            return (None, raw[length:].decode("utf-8"))
-        leftover = raw[length:].decode("utf-8")
-        return (payload if isinstance(payload, dict) else None, leftover)
-    line, sep, rest = buffer.partition("\n")
+            payload = json.loads(rest[:length].decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return (None, rest[length:])
+        return (payload if isinstance(payload, dict) else None, rest[length:])
+    line, sep, rest = buffer.partition(b"\n")
     if not sep:
         return None
     stripped = line.strip()
     if not stripped:
         return _pop_json_message(rest) if rest else None
     try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
+        payload = json.loads(stripped.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return (None, rest)
     return (payload if isinstance(payload, dict) else None, rest)
 

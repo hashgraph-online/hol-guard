@@ -38,8 +38,8 @@ import {
   dialogIntro,
   enrollConfirmCopy,
   enrollSubmitDisabled,
-  listToolsAgainLabel,
-  mcpListingBusyCopy,
+  mcpCatalogHasTools,
+  McpListingStatus,
   ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
@@ -292,6 +292,8 @@ export function AddCustomExtensionWorkspace(props: {
   const showingMcpCatalog = recognized?.surface === "mcp";
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const mcpHasTools = mcpCatalogHasTools(enrollable);
+  const showMcpRetry = showingMcpCatalog && !mcpHasTools;
   const visibleCommands = showingPackageCatalog
     ? filterPackageScriptCommands(enrollable, command)
     : commands;
@@ -344,7 +346,7 @@ export function AddCustomExtensionWorkspace(props: {
                 rememberedProjects.length > 0,
                 recognized?.surface ?? null,
                 props.discovering === true && recognized === null,
-                !(showingMcpCatalog && enrollable.length === 0),
+                !showMcpRetry,
               )}
             </p>
           </header>
@@ -372,27 +374,13 @@ export function AddCustomExtensionWorkspace(props: {
                 {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
               </p>
               {summary ? <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{summary}</p> : null}
-              {showingCatalog && enrollable.length > 0 ? (
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <BulkPolicyPicker value={bulkState} disabled={busy} onChange={applyBulk} />
               ) : null}
-              {showingMcpCatalog && enrollable.length === 0 ? (
-                <div className="mt-4 max-w-xl">
-                  {busy ? (
-                    <p className="text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
-                      {mcpListingBusyCopy(recognized.name)}
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={retryMcpListing}
-                      className="min-h-11 text-sm font-semibold text-brand-blue"
-                    >
-                      {listToolsAgainLabel()}
-                    </button>
-                  )}
-                </div>
+              {showMcpRetry ? (
+                <McpListingStatus name={recognized.name} busy={busy} onRetry={retryMcpListing} />
               ) : null}
-              {showingCatalog && enrollable.length > 0 ? (
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <CatalogPreview
                   query={command}
                   showFilterCount={showingPackageCatalog}

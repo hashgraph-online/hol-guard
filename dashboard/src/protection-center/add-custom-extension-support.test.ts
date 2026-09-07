@@ -7,6 +7,7 @@ import {
   enrollConfirmCopy,
   filterCountCopy,
   listToolsAgainLabel,
+  mcpCatalogHasTools,
   mcpListingBusyCopy,
   suggestionSummary,
 } from "./add-custom-extension-support";
@@ -62,6 +63,8 @@ assert.match(filterCountCopy(1, 8), /1 of 8 scripts match/);
 assert.match(suggestionSummary(packageItem), /1 script from ads-app/);
 assert.equal(listToolsAgainLabel(), "List tools again");
 assert.match(mcpListingBusyCopy("chrome-devtools"), /npx servers can take a few seconds/);
+assert.equal(mcpCatalogHasTools(mcpItem.commands), false);
+assert.equal(mcpCatalogHasTools(packageItem.commands), true);
 assert.equal(
   addDialogSubmitLabel({ recognized: packageItem, busy: false, pending: "allowed" }),
   "Continue",
