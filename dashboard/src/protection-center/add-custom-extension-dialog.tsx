@@ -39,6 +39,7 @@ import {
   enrollConfirmCopy,
   enrollSubmitDisabled,
   mcpCatalogHasTools,
+  mcpListingRetryFailedCopy,
   McpListingStatus,
   ProjectSwitcher,
   SuggestionPanel,
@@ -139,7 +140,11 @@ export function AddCustomExtensionWorkspace(props: {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : undefined);
       if (recognizeGeneration.current !== generation) return;
       markRecognized(result.item, result.summary);
-      setError(null);
+      if (keepOnError && !mcpCatalogHasTools(result.item.commands)) {
+        setError(mcpListingRetryFailedCopy());
+      } else {
+        setError(null);
+      }
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
       if (!keepOnError) {

@@ -37,9 +37,31 @@ def run_mcp_tools_list(
         return None
 
 
+def probe_search_path() -> str:
+    """PATH for MCP probes, without Guard package-shim wrappers."""
+
+    fallback = os.environ.get("PATH", "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin")
+    filtered = [entry for entry in fallback.split(os.pathsep) if entry and not _is_package_shim_dir(entry)]
+    for extra in ("/usr/bin", "/bin", "/opt/homebrew/bin", "/usr/local/bin"):
+        if extra not in filtered and Path(extra).is_dir():
+            filtered.append(extra)
+    return os.pathsep.join(filtered) if filtered else fallback
+
+
+def is_package_shim_executable(path: str) -> bool:
+    candidate = Path(path)
+    parent = candidate.parent
+    return parent.name == "bin" and parent.parent.name == "package-shims"
+
+
+def _is_package_shim_dir(entry: str) -> bool:
+    path = Path(entry)
+    return path.name == "bin" and path.parent.name == "package-shims"
+
+
 def probe_env(tmp: str) -> dict[str, str]:
     env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin"),
+        "PATH": probe_search_path(),
         "HOME": tmp,
         "TMPDIR": tmp,
         "LANG": "C",

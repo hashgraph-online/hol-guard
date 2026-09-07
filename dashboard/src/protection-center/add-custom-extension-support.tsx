@@ -118,7 +118,11 @@ export function listToolsAgainLabel(): string {
 }
 
 export function mcpListingBusyCopy(name: string): string {
-  return `Listing tools from ${name}. npx servers can take a few seconds.`;
+  return `Listing tools from ${name}. This can take a few seconds.`;
+}
+
+export function mcpListingRetryFailedCopy(): string {
+  return "Guard still could not list tools. You can add the server anyway.";
 }
 
 export function mcpCatalogHasTools(commands: LocalCliItem["commands"]): boolean {
