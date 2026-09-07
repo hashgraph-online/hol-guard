@@ -98,7 +98,7 @@ hol-guard command extensions command.git --json
 
 `command test` and `command explain` inspect the command without executing it or creating an approval. Use `hol-guard approvals` to resolve a pending request and `hol-guard receipts` to review the recorded decision.
 
-The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the runtime registry. External contributions require explicit opt-in; required core protections remain enabled.
+The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the runtime registry. External contributions require explicit opt-in; required core protections remain enabled. To add coverage, follow the [Extension contribution guide](docs/guard/extensions/contributing.md).
 
 ### Check a package
 
@@ -155,8 +155,8 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hashgraph-online/ai-plugin-scanner-action@v1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: hashgraph-online/ai-plugin-scanner-action@fdb49f9d85321a2ced2933301b395dd3c1ce9c8f # v1.2.631
         with:
           plugin_dir: "."
           min_score: 80
