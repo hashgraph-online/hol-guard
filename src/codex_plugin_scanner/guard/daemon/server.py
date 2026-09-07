@@ -260,8 +260,8 @@ from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_aut
 from .hook_worker_responses import prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
-from .local_cli_api import LocalCliApiError, LocalCliApiService
-from .local_cli_http import dispatch_local_cli_post, handle_local_cli_list
+from .local_cli_api import LocalCliApiService
+from .local_cli_http import handle_local_cli_list, handle_local_cli_post
 from .managed_controls_api import managed_policy_rows
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
@@ -2716,12 +2716,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path in _LOCAL_CLI_PATHS:
-            try:
-                response = dispatch_local_cli_post(self._daemon_server().local_cli_api, parsed.path, payload)
-            except LocalCliApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
+            handle_local_cli_post(self, parsed.path, payload)
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
