@@ -8,7 +8,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_harness_mcp_servers,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.daemon.local_cli_http import (
     _RECOGNIZE_SOCKET_TIMEOUT_SECONDS,
     handle_local_cli_post,
@@ -324,3 +324,104 @@ def test_handle_local_cli_post_extends_recognize_timeout() -> None:
     assert handler.connection.timeout == _RECOGNIZE_SOCKET_TIMEOUT_SECONDS
     assert handler.status == 200
     assert handler.written == {"ok": True, "command": "npx -y chrome-devtools-mcp@latest"}
+
+
+def test_handle_local_cli_post_writes_unavailable_without_api() -> None:
+    class Handler:
+        written: dict[str, object] | None = None
+        status: int | None = None
+
+        def _daemon_server(self) -> object:
+            return type("Daemon", (), {"local_cli_api": None})()
+
+        def _write_json(
+            self,
+            payload: dict[str, object],
+            status: int = 200,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
+            self.written = payload
+            self.status = status
+
+    handler = Handler()
+    handle_local_cli_post(handler, "/v1/local-clis/discover", {})
+    assert handler.status == 500
+    assert handler.written is not None
+    assert handler.written["error"] == "local_cli_unavailable"
+
+
+def test_handle_local_cli_post_maps_api_error() -> None:
+    class Api:
+        def recognize(self, payload: dict[str, object]) -> dict[str, object]:
+            raise LocalCliApiError(400, "missing_package_json", "missing")
+
+        def apply(self, payload: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("apply")
+
+        def discover_items(self) -> dict[str, object]:
+            raise AssertionError("discover")
+
+        def preview(self, payload: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("preview")
+
+    class Handler:
+        written: dict[str, object] | None = None
+        status: int | None = None
+
+        def _daemon_server(self) -> object:
+            return type("Daemon", (), {"local_cli_api": Api()})()
+
+        def _write_json(
+            self,
+            payload: dict[str, object],
+            status: int = 200,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
+            self.written = payload
+            self.status = status
+
+    handler = Handler()
+    handle_local_cli_post(handler, "/v1/local-clis/recognize", {"command": "npx"})
+    assert handler.status == 400
+    assert handler.written == {"error": "missing_package_json", "message": "missing"}
+
+
+def test_handle_local_cli_post_rejects_non_dict_response() -> None:
+    class Api:
+        def discover_items(self) -> object:
+            return ["not-a-dict"]
+
+        def recognize(self, payload: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("recognize")
+
+        def apply(self, payload: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("apply")
+
+        def preview(self, payload: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("preview")
+
+    class Handler:
+        written: dict[str, object] | None = None
+        status: int | None = None
+
+        def _daemon_server(self) -> object:
+            return type("Daemon", (), {"local_cli_api": Api()})()
+
+        def _write_json(
+            self,
+            payload: dict[str, object],
+            status: int = 200,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
+            self.written = payload
+            self.status = status
+
+    handler = Handler()
+    handle_local_cli_post(handler, "/v1/local-clis/discover", {})
+    assert handler.status == 500
+    assert handler.written is not None
+    assert handler.written["error"] == "local_cli_unavailable"
+
+
+def test_handle_local_cli_post_ignores_incomplete_handler() -> None:
+    handle_local_cli_post(object(), "/v1/local-clis/recognize", {"command": "npx"})

@@ -108,3 +108,22 @@ def test_probe_preserves_relative_executable_path(tmp_path: Path, monkeypatch) -
     assert probed is not None
     assert "servers" in probed.argv[0]
     assert any(tool.name == "list_pages" for tool in probed.tools)
+
+
+def test_probe_returns_none_when_shim_has_no_real_launcher(tmp_path: Path, monkeypatch) -> None:
+    shim_dir = tmp_path / "package-shims" / "bin"
+    shim_dir.mkdir(parents=True)
+    shim = shim_dir / "npx"
+    shim.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    shim.chmod(0o755)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.local_mcp_probe.probe_search_path",
+        lambda: str(tmp_path / "empty"),
+    )
+    probed = probe_stdio_mcp_server(
+        f"{shim} -y chrome-devtools-mcp@latest",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        timeout=1.0,
+    )
+    assert probed is None
