@@ -20143,7 +20143,7 @@ function GuardModalLayer({
   );
 }
 const GUARD_UPDATE_CONTROL_TEXT_CLASS = "text-[11px] font-semibold leading-4";
-const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-8 shrink-0 items-center rounded-sm px-0.5 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-brand-blue/30 bg-white px-2.5 text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-1.5", children: [

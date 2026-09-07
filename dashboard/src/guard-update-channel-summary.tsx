@@ -14,7 +14,7 @@ export type GuardUpdateChannelSummaryProps = {
 export const GUARD_UPDATE_CONTROL_TEXT_CLASS = "text-[11px] font-semibold leading-4";
 
 export const GUARD_UPDATE_CHANNEL_CONTROL_CLASS =
-  "inline-flex min-h-8 shrink-0 items-center rounded-sm px-0.5 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 
 // Compact pill for panel-level actions (update, reinstall): 32px target that
 // sits inline beside the status line instead of filling the card width.
