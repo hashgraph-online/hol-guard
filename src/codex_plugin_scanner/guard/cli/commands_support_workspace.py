@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 
 from ._commands_shared import *
+from .install_targets import sole_harness_name
 from .commands_parser_helpers import *
 from .commands_parser_helpers import (
     _add_aibom_cli_args as _add_aibom_cli_args,
@@ -379,8 +380,7 @@ _PROJECT_ROOT_MARKERS = (
 def _requested_install_harness(args: argparse.Namespace) -> str | None:
     if bool(getattr(args, "all", False)):
         return None
-    harness = str(getattr(args, "harness", "") or "").strip()
-    return harness or None
+    return sole_harness_name(getattr(args, "harness", None))
 
 def _workspace_from_cursor_project_dir() -> Path | None:
     project_dir = os.environ.get("CURSOR_PROJECT_DIR", "").strip()

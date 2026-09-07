@@ -27,13 +27,14 @@ if TYPE_CHECKING:
     from .daemon.manager import GuardDaemonHookFailureKind
 
 from .frozen_runtime_commands import (
+    FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
     FROZEN_DAEMON_RECOVERY_WORKER_ARG,
     frozen_daemon_recovery_command,
     is_frozen_guard_runtime,
 )
 
-_FROZEN_BRIDGE_ARG = "--_hol-guard-codex-bridge"
+_FROZEN_BRIDGE_ARG = FROZEN_CODEX_BRIDGE_ARG
 _FROZEN_DAEMON_RECOVER_ARG = FROZEN_DAEMON_RECOVER_ARG
 _FROZEN_DAEMON_RECOVERY_WORKER_ARG = FROZEN_DAEMON_RECOVERY_WORKER_ARG
 

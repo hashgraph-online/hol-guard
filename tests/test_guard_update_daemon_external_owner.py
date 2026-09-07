@@ -264,6 +264,8 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
         ),
         ("C:/Program Files/HOL Guard/hol-guard/hol-n.exe", True),
         ("opt/hol-desktop/core/bundled/3.0.63/bin/hol-guard", True),
+        ("opt/hol-desktop/core/bundled/3.0.63/lib/hol-guard-core/hol-guard", True),
+        ("opt/hol-desktop/core/bundled/3.0.63/lib/hol-guard-core/hol-guard.exe", True),
         ("home/u/.local/share/hol-desktop/versions/3.0.70/hol-guard", True),
         ("opt/hol-desktop/core/current-hol-guard", True),
         ("opt/hol-desktop/core/current-hol-guard.cmd", True),
@@ -272,6 +274,8 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
         ("/Users/dev/src/hol-guard", False),
         ("/Users/dev/.local/pipx/venvs/hol-guard/lib/python3.12/site-packages", False),
         ("/opt/hol-guard/lib/python", False),
+        ("opt/hol-desktop/core/bundled/3.0.63/lib/other-core/hol-guard", False),
+        ("opt/hol-desktop/core/bundled/3.0.63/lib/hol-guard-core/python", False),
         ("Applications/Other Tools.app/Contents/MacOS/hol-guard", False),
         ("D:/tools/hol guard/daemon.exe", False),
         ("", False),
@@ -280,3 +284,26 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
 )
 def test_daemon_source_is_desktop_core_recognizes_every_desktop_shape(source_root: object, expected: bool) -> None:
     assert runtime_peer.daemon_source_is_desktop_core(source_root) is expected
+
+
+def test_bundled_linux_core_source_is_available_when_executable_exists(tmp_path: Path) -> None:
+    source_root = (
+        tmp_path
+        / "home"
+        / ".local"
+        / "share"
+        / "org.hol.guard.desktop"
+        / "core"
+        / "bundled"
+        / "3.0.86"
+        / "lib"
+        / "hol-guard-core"
+        / "hol-guard"
+    )
+    source_root.parent.mkdir(parents=True)
+    source_root.write_text("synthetic Desktop Core", encoding="utf-8")
+
+    assert runtime_peer.daemon_desktop_core_source_available(str(source_root)) is True
+    assert runtime_peer.daemon_desktop_core_source_available(
+        str(source_root.parent.parent / "other-core" / "hol-guard")
+    ) is False

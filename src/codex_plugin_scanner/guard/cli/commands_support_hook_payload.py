@@ -253,6 +253,28 @@ def _headless_approval_resolver(
             home_dir=context.home_dir,
         )
 
+        def apply_delivery_and_wait(payload, queued):
+            """Attach delivery copy and either record the pending wait or block on approvals.
+
+            Returns the wait result, or None when no wait was performed.
+            """
+            payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
+            _localize_pending_approval_copy(payload, harness=args.harness)
+            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
+                payload["approval_wait"] = {
+                    "resolved": False,
+                    "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
+                    "items": [],
+                }
+                return None
+            wait_result = wait_for_approval_requests(
+                store=store,
+                request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+                timeout_seconds=config.approval_wait_timeout_seconds,
+            )
+            payload["approval_wait"] = wait_result
+            return wait_result
+
         def resolve_from_local_queue():
             queued = queue_blocked_approvals(
                 redaction_level=config.receipt_redaction_level,
@@ -276,21 +298,9 @@ def _headless_approval_resolver(
                 queued=queued,
                 review_url=_preferred_approval_review_url(payload, harness=args.harness),
             )
-            payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-            _localize_pending_approval_copy(payload, harness=args.harness)
-            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
-                payload["approval_wait"] = {
-                    "resolved": False,
-                    "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
-                    "items": [],
-                }
+            wait_result = apply_delivery_and_wait(payload, queued)
+            if wait_result is None:
                 return payload
-            wait_result = wait_for_approval_requests(
-                store=store,
-                request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-                timeout_seconds=config.approval_wait_timeout_seconds,
-            )
-            payload["approval_wait"] = wait_result
             if bool(wait_result.get("resolved")):
                 resolved_items = _mapping_list(wait_result.get("items"))
                 payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
@@ -359,21 +369,9 @@ def _headless_approval_resolver(
             managed_install=managed_install,
             review_url=_preferred_approval_review_url(payload, harness=args.harness),
         )
-        payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-        _localize_pending_approval_copy(payload, harness=args.harness)
-        if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
-            payload["approval_wait"] = {
-                "resolved": False,
-                "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
-                "items": [],
-            }
+        wait_result = apply_delivery_and_wait(payload, queued)
+        if wait_result is None:
             return payload
-        wait_result = wait_for_approval_requests(
-            store=store,
-            request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-            timeout_seconds=config.approval_wait_timeout_seconds,
-        )
-        payload["approval_wait"] = wait_result
         if bool(wait_result.get("resolved")):
             resolved_items = _mapping_list(wait_result.get("items"))
             payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)

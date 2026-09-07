@@ -76,10 +76,9 @@ def _summary_int(value: object) -> int | None:
     return int(value) if isinstance(value, (int, float)) else None
 
 
-def parse_source_ref(payload: Mapping[str, object]) -> HookSourceFileRef | None:
-    ref = payload.get("guard_source_ref")
-    if not isinstance(ref, Mapping):
-        return None
+def parse_hook_source_file_ref(ref: Mapping[str, object]) -> HookSourceFileRef:
+    """Parse one guard source ref mapping, fail-closed on invalid fields."""
+
     version = ref.get("version")
     path = ref.get("path")
     output_sha256 = ref.get("output_sha256")
@@ -96,6 +95,13 @@ def parse_source_ref(payload: Mapping[str, object]) -> HookSourceFileRef | None:
         tool_input_path=tool_input_path if isinstance(tool_input_path, str) else None,
         adapter_stat=dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {},
     )
+
+
+def parse_source_ref(payload: Mapping[str, object]) -> HookSourceFileRef | None:
+    ref = payload.get("guard_source_ref")
+    if not isinstance(ref, Mapping):
+        return None
+    return parse_hook_source_file_ref(ref)
 
 
 def build_hook_review_request(

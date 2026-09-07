@@ -20,6 +20,7 @@ from uuid import uuid4
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+from typing_extensions import Unpack
 
 from ...version import __version__
 from ..browser_opener import open_browser_url
@@ -44,7 +45,7 @@ from .oauth_client import (
     guard_api_base_path,
     resolve_guard_oauth_client_config,
 )
-from .oauth_credential_persistence import persist_oauth_local_credentials
+from .oauth_credential_persistence import OAuthCredentialUpdateParams, persist_oauth_local_credentials
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
@@ -959,43 +960,10 @@ def _oauth_dpop_key_material_from_credentials(
     )
 
 
-def _persist_oauth_local_credentials(
-    *,
-    store: GuardStore,
-    issuer: str,
-    client_id: str,
-    refresh_token: str,
-    dpop_key_material: GuardDpopKeyMaterial,
-    now: str,
-    grant_id: str | None = None,
-    machine_id: str | None = None,
-    device_id: str | None = None,
-    supply_chain_entitlement: dict[str, object] | None = None,
-    workspace_id: str | None = None,
-    cloud_user_profile: dict[str, str] | None = None,
-    runtime_id: str | None = None,
-    runtime_label: str | None = None,
-    access_token: str | None = None,
-    access_token_expires_at: str | None = None,
-) -> None:
+def _persist_oauth_local_credentials(**kwargs: Unpack[OAuthCredentialUpdateParams]) -> None:
     persist_oauth_local_credentials(
-        store=store,
-        issuer=issuer,
-        client_id=client_id,
-        refresh_token=refresh_token,
-        dpop_key_material=dpop_key_material,
-        now=now,
-        grant_id=grant_id,
-        machine_id=machine_id,
-        device_id=device_id,
-        supply_chain_entitlement=supply_chain_entitlement,
-        workspace_id=workspace_id,
-        cloud_user_profile=cloud_user_profile,
-        runtime_id=runtime_id,
-        runtime_label=runtime_label,
-        access_token=access_token,
-        access_token_expires_at=access_token_expires_at,
-        reconcile=lambda target: reconcile_connect_state_with_oauth_entitlement(target, now=now),
+        reconcile=lambda target: reconcile_connect_state_with_oauth_entitlement(target, now=kwargs["now"]),
+        **kwargs,
     )
 
 
@@ -1446,6 +1414,23 @@ def connect_recovery_command(latest_state: dict[str, object] | None) -> str:
 
 def connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
     return isinstance(reason, str) and "already consumed" in reason.lower()
+
+
+def connect_retry_required_from_state(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None:
+        return False
+    status = latest_state.get("status")
+    milestone = latest_state.get("milestone")
+    status_text = status if isinstance(status, str) and status else None
+    milestone_text = milestone if isinstance(milestone, str) and milestone else None
+    return status_text == "retry_required" or milestone_text == "first_sync_failed"
+
+
+def connect_retry_refresh_race_from_state(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None or not connect_retry_required_from_state(latest_state):
+        return False
+    reason = latest_state.get("reason")
+    return connect_retry_refresh_race_from_reason(reason if isinstance(reason, str) and reason else None)
 
 
 def resolve_guard_cloud_state(

@@ -12,6 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PREPARE_SCRIPT = ROOT / "scripts/ci/prepare_sonar_analysis.sh"
+SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
 
 
 def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
@@ -19,10 +20,12 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
     download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
-    setup_index = next(i for i, step in enumerate(steps) if step.get("name") == "Prepare coverage and pinned Rust analysis")
+    setup_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Prepare coverage and pinned Rust analysis"
+    )
     scan_index = next(i for i, step in enumerate(steps) if step.get("name") == "Analyze with SonarQube Cloud")
     setup = steps[setup_index]
-    script = PREPARE_SCRIPT.read_text(encoding="utf-8")
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
     install = 'rustup toolchain install "$toolchain" --profile minimal --component clippy'
     default = 'rustup default "$toolchain"'
     clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
@@ -31,7 +34,14 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     assert download_index < setup_index < scan_index
     assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
     assert '"rust/rust-toolchain.toml"' in script
-    assert script.index(install) < script.index(default) < script.index(clippy)
+    assert script.index(install) < script.index(default)
+    assert clippy in PREPARE_SCRIPT.read_text(encoding="utf-8")
+    toolchain_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Initialize pinned Rust analysis toolchain"
+    )
+    cache_index = next(i for i, step in enumerate(steps) if step.get("name") == "Cache Rust analysis dependencies")
+    assert steps[toolchain_index]["run"] == "bash scripts/ci/setup_sonar_rust.sh"
+    assert toolchain_index < cache_index < setup_index
     assert "set -euo pipefail" in script
     assert setup["shell"] == "bash"
     assert not job.get("continue-on-error", False)
@@ -40,7 +50,7 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
 
 
 def _run_preparation(
-    tmp_path: Path, shard_count: int, fail_command: str = ""
+    tmp_path: Path, shard_count: int, fail_command: str = "", script: Path = PREPARE_SCRIPT
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     bash = shutil.which("bash")
     if os.name == "nt" or bash is None:
@@ -64,7 +74,7 @@ def _run_preparation(
         directory.mkdir(parents=True)
         (directory / ".coverage").touch()
     result = subprocess.run(
-        [bash, str(PREPARE_SCRIPT)],
+        [bash, str(script)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -82,22 +92,33 @@ def _run_preparation(
 def test_preparation_combines_all_shards_before_installing_and_running_clippy(tmp_path: Path) -> None:
     result, commands = _run_preparation(tmp_path, 96)
     assert result.returncode == 0, result.stderr
-    assert len(commands) == 6
+    assert len(commands) == 3
     assert commands[0].split() == [
-        "uv", "run", "--no-sync", "coverage", "combine",
+        "uv",
+        "run",
+        "--no-sync",
+        "coverage",
+        "combine",
         *(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(96)),
     ]
     assert commands[1] == "uv run --no-sync coverage xml"
-    assert commands[2].startswith("python -c import tomllib;")
-    assert commands[3:] == [
+    assert commands[2] == "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
+
+
+def test_setup_initializes_pinned_toolchain_before_cache(tmp_path: Path) -> None:
+    result, commands = _run_preparation(tmp_path, 0, script=SETUP_SCRIPT)
+    assert result.returncode == 0, result.stderr
+    assert commands[0].startswith("python -c import tomllib;")
+    assert commands[1:] == [
         "rustup toolchain install 1.88.0 --profile minimal --component clippy",
         "rustup default 1.88.0",
-        "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace",
     ]
 
 
 @pytest.mark.parametrize("shard_count", [0, 95, 97])
-def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(tmp_path: Path, shard_count: int) -> None:
+def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
+    tmp_path: Path, shard_count: int
+) -> None:
     result, commands = _run_preparation(tmp_path, shard_count)
     assert result.returncode != 0
     assert commands == []
@@ -108,13 +129,17 @@ def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
     [
         "uv run --no-sync coverage combine",
         "uv run --no-sync coverage xml",
-        "python",
-        "rustup toolchain install",
-        "rustup default",
         "cargo clippy",
     ],
 )
 def test_preparation_stops_at_each_failed_command(tmp_path: Path, failed_command: str) -> None:
     result, commands = _run_preparation(tmp_path, 96, failed_command)
+    assert result.returncode == 7
+    assert commands[-1].startswith(failed_command)
+
+
+@pytest.mark.parametrize("failed_command", ["python", "rustup toolchain install", "rustup default"])
+def test_setup_stops_at_each_failed_command(tmp_path: Path, failed_command: str) -> None:
+    result, commands = _run_preparation(tmp_path, 0, failed_command, SETUP_SCRIPT)
     assert result.returncode == 7
     assert commands[-1].startswith(failed_command)

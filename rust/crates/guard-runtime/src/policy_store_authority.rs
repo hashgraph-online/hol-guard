@@ -14,7 +14,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const AUTHORITY_WATCH_INTERVAL: Duration = Duration::from_millis(5);
 
-/// Return a cryptographic identity for the bounded authority object and its metadata, identity, and bytes.
 pub(super) fn authority_fingerprint(path: &Path) -> Option<String> {
     let metadata = fs::symlink_metadata(path).ok()?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -67,25 +66,37 @@ pub(super) fn authority_fingerprint(path: &Path) -> Option<String> {
     Some(hex::encode(hasher.finalize()))
 }
 
-/// Watch durable authority identities without reparsing policy on requests.
 pub(super) fn start_authority_watcher(
     path: PathBuf,
     observed: Arc<Mutex<Option<String>>>,
     changed: Weak<AtomicBool>,
 ) {
+    start_authority_watcher_with_sample_hook(path, observed, changed, || {});
+}
+
+fn start_authority_watcher_with_sample_hook<F>(
+    path: PathBuf,
+    observed: Arc<Mutex<Option<String>>>,
+    changed: Weak<AtomicBool>,
+    after_sample: F,
+) where
+    F: Fn() + Send + 'static,
+{
     let _ = thread::Builder::new()
         .name("hol-guard-policy-authority-watch".to_owned())
         .spawn(move || loop {
             let Some(changed) = changed.upgrade() else {
                 break;
             };
-            let current = authority_fingerprint(&path);
-            let different = observed
-                .lock()
-                .map(|expected| *expected != current)
-                .unwrap_or(true);
-            if different {
-                changed.store(true, Ordering::SeqCst);
+            match observed.lock() {
+                Ok(expected) => {
+                    let current = authority_fingerprint(&path);
+                    after_sample();
+                    if *expected != current {
+                        changed.store(true, Ordering::SeqCst);
+                    }
+                }
+                Err(_) => changed.store(true, Ordering::SeqCst),
             }
             thread::sleep(AUTHORITY_WATCH_INTERVAL);
         });
@@ -265,10 +276,6 @@ pub(super) fn load_authority(
     ) {
         Ok(value) => value,
         Err(error) => {
-            // A pre-transactional snapshot can be left truncated or
-            // otherwise unreadable. A valid authenticated legacy floor still
-            // preserves the monotonic boundary, so migrate a floor-only
-            // record and let the publisher install a strictly newer snapshot.
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 return Ok(LoadedAuthority {
                     snapshot: None,
@@ -301,9 +308,6 @@ pub(super) fn load_authority(
             expected_scope_digest,
             verifier_key,
         ),
-        // A v3 snapshot at the historical path is the pre-transactional
-        // layout. Reconcile it with the old floor before replacing it with a
-        // combined authority record.
         Some(guard_policy_snapshot::POLICY_SNAPSHOT_SCHEMA) => load_legacy_authority(
             Some((value, bytes)),
             legacy_floor_path,
@@ -313,8 +317,6 @@ pub(super) fn load_authority(
             verifier_key,
         ),
         _ => {
-            // Preserve a trusted floor even if an interrupted/legacy state
-            // file has no parseable snapshot schema.
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 Ok(LoadedAuthority {
                     snapshot: None,
@@ -331,9 +333,6 @@ pub(super) fn load_authority(
     }
 }
 
-/// Load only the transactional authority record used by the resident.
-/// Legacy files are intentionally excluded from this path; upgrades invoke
-/// `PolicySnapshotStore::migrate_legacy_state` explicitly before startup.
 pub(super) fn load_current_authority(
     authority_path: &Path,
     expected_runtime_identity: &str,
@@ -405,8 +404,6 @@ pub(super) fn load_combined_authority(
         if candidate.generation != record.generation_floor
             || candidate.policy_digest != record.policy_digest
         {
-            // The authenticated floor remains usable for a strictly newer
-            // push, but this incoherent candidate must never authorize a hook.
             invalid_on_startup = true;
         } else if validate_v3(
             &candidate,
@@ -423,8 +420,6 @@ pub(super) fn load_combined_authority(
             snapshot = Some(candidate);
         }
     }
-    // A combined record is already authoritative; the old files are ignored
-    // even when they contain an older generation or malformed data.
     Ok(LoadedAuthority {
         snapshot,
         canonical_bytes: canonical_snapshot,
@@ -434,3 +429,7 @@ pub(super) fn load_combined_authority(
         migrate: false,
     })
 }
+
+#[cfg(test)]
+#[path = "policy_store_authority_tests.rs"]
+mod tests;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob as globlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
@@ -12,7 +13,6 @@ from ..adapters.cline import ClineHarnessAdapter
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
-from ..consumer import detect_all
 from ..managed_install_proof import bind_managed_install_proof
 from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
@@ -23,6 +23,7 @@ from .cursor_actions import (
     cursor_protected_surfaces,
     cursor_protected_surfaces_from_store,
 )
+from .install_targets import _resolve_targets
 
 _HARNESS_OBSERVED_COPY = {
     "protected": "Active Guard protection is installed.",
@@ -67,7 +68,7 @@ def _apply_adapter_management(
 
 def apply_managed_install(
     command: str,
-    requested_harness: str | None,
+    requested_harness: str | Sequence[str] | None,
     install_all: bool,
     context: HarnessContext,
     store: GuardStore,
@@ -623,42 +624,6 @@ def scan_workspace_skills(
                     }
                 )
     return results
-
-
-def _resolve_targets(
-    command: str,
-    requested_harness: str | None,
-    install_all: bool,
-    context: HarnessContext,
-    store: GuardStore,
-) -> list[str]:
-    if requested_harness is not None and install_all:
-        raise ValueError("Pass either a harness or --all, not both.")
-    if requested_harness is not None and not install_all:
-        return [get_adapter(requested_harness).harness]
-    if not install_all:
-        action = "install" if command == "install" else "uninstall"
-        suffix = " or --self" if command == "uninstall" else ""
-        raise ValueError(f"Guard {action} requires a harness or --all{suffix}.")
-    detected = {
-        detection.harness
-        for detection in detect_all(context)
-        if detection.installed
-        or detection.command_available
-        or len(detection.config_paths) > 0
-        or len(detection.artifacts) > 0
-    }
-    if command == "uninstall":
-        detected.update(
-            str(item.get("harness"))
-            for item in store.list_managed_installs()
-            if bool(item.get("active")) and isinstance(item.get("harness"), str)
-        )
-    targets = sorted(detected)
-    if targets:
-        return targets
-    action = "install" if command == "install" else "remove"
-    raise ValueError(f"No supported Guard harnesses detected for {action}; pass one explicitly or configure one first.")
 
 
 __all__ = [

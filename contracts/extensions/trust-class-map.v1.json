@@ -80,6 +80,7 @@
       "command.mcp-filesystem",
       "command.noodle",
       "command.probe",
+      "command.remote.essh",
       "command.repo2nb",
       "command.skill-sunset"
     ]

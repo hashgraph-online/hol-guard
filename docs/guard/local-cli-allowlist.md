@@ -2,7 +2,7 @@
 
 Extensions already cover built-in tools such as Git, npm, and cloud CLIs. Agents also run tools that are not in that catalog: a local binary, or an interpreter launching a specific script.
 
-On the Extensions page, choose **Add custom extension** and paste the command for your tool. For a local script or binary, paste something like `python3 <skill-root>/scripts/cwv.py --by url`. Guard binds to that exact file, runs `--help`, and lists the commands it finds.
+On the Extensions page, choose **Add custom extension**. Guard scans remembered project `package.json` files and stdio MCP servers already configured in your apps, then lists them. You can still paste a command. For a local script or binary, paste something like `python3 <skill-root>/scripts/cwv.py --by url`. Guard binds to that exact file, runs `--help`, and lists the commands it finds.
 
 For package scripts, paste `npm run`, `pnpm run`, `yarn run`, `bun run`, a project folder, or `package.json`. Guard reads that file's `scripts` and lists nested names such as `guard:reddit-targeting:audit` as separate commands. `npm --prefix <dir> run` and a path to a directory with `package.json` both work. Lifecycle hooks such as `preinstall` stay hidden. Package launchers used as whole install/execute commands still stay in All tools.
 
