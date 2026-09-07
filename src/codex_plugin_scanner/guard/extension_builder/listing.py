@@ -81,7 +81,11 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     if expected_id is not None and row["extensionId"] != expected_id:
         raise BuilderError("listing_identity", "Listing identity must match its native contribution and filename.")
     for value in [row["tagline"], *cast(list[str], row["limitations"])]:
-        if not isinstance(value, str) or value != value.strip() or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        if (
+            not isinstance(value, str)
+            or value != value.strip()
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        ):
             raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
     reference = row.get("documentationUrl")
     if isinstance(reference, str):
@@ -119,21 +123,39 @@ def listing_template(metadata: Metadata) -> str:
 
 def category_for_extension(extension_id: str) -> str:
     if extension_id in {
-        "command.container-runtime", "command.data-protection", "command.encoded-execution",
-        "command.filesystem", "command.git", "command.guard-self-protection", "command.kubernetes-secrets",
-        "command.shell-mutations", "command.system", "command.windows",
+        "command.container-runtime",
+        "command.data-protection",
+        "command.encoded-execution",
+        "command.filesystem",
+        "command.git",
+        "command.guard-self-protection",
+        "command.kubernetes-secrets",
+        "command.shell-mutations",
+        "command.system",
+        "command.windows",
     }:
         return "core-safety"
     if extension_id in {
-        "command.api-gateway", "command.cdn", "command.dns", "command.infrastructure-as-code",
-        "command.kubernetes-operations", "command.load-balancer",
+        "command.api-gateway",
+        "command.cdn",
+        "command.dns",
+        "command.infrastructure-as-code",
+        "command.kubernetes-operations",
+        "command.load-balancer",
     } or extension_id.startswith("command.cloud."):
         return "cloud-infrastructure"
     if extension_id.startswith(("command.backup.", "command.database.", "command.storage.")):
         return "data-resilience"
-    if extension_id == "command.github" or extension_id.startswith(("command.cicd.", "command.platform.", "command.remote.")):
+    if extension_id == "command.github" or extension_id.startswith(
+        ("command.cicd.", "command.platform.", "command.remote.")
+    ):
         return "delivery-remote"
-    if extension_id in {"command.email", "command.feature-flags", "command.monitoring", "command.payment"} or extension_id.startswith(("command.messaging.", "command.search.")):
+    if extension_id in {
+        "command.email",
+        "command.feature-flags",
+        "command.monitoring",
+        "command.payment",
+    } or extension_id.startswith(("command.messaging.", "command.search.")):
         return "managed-services"
     if extension_id.startswith("command.package."):
         return "package-supply-chain"

@@ -52,18 +52,36 @@ def test_template_has_no_inferred_claim_or_runtime_authority(kind: Literal["cli"
     assert row["limitations"]
 
 
-@pytest.mark.parametrize("field,value", [
-    ("activation", "default-on"), ("trustClass", "first-party"), ("detector", "evil.py"),
-    ("policy", {}), ("email", "private@example.test"), ("script", "alert(1)"),
-    ("tagline", "short"), ("tagline", "x" * 141), ("tagline", "  untrimmed line  "),
-    ("tagline", "a newline\nis invalid"), ("tagline", "a forbidden\x7f character"),
-    ("limitations", []), ("limitations", ["short"]), ("limitations", ["x" * 401]),
-    ("limitations", ["a long limitation"] * 2), ("category", "certified-safe"),
-    ("extensionId", "../../escape"), ("extensionId", "command.UPPER"),
-    ("maintainerGithubIds", [123]), ("maintainerGithubIds", ["0"]),
-    ("maintainerGithubIds", ["01"]), ("maintainerGithubIds", ["123", "123"]),
-    ("maintainerGithubIds", ["9" * 21]), ("tags", ["Some Tag"]), ("tags", ["valid", "valid"]),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("activation", "default-on"),
+        ("trustClass", "first-party"),
+        ("detector", "evil.py"),
+        ("policy", {}),
+        ("email", "private@example.test"),
+        ("script", "alert(1)"),
+        ("tagline", "short"),
+        ("tagline", "x" * 141),
+        ("tagline", "  untrimmed line  "),
+        ("tagline", "a newline\nis invalid"),
+        ("tagline", "a forbidden\x7f character"),
+        ("limitations", []),
+        ("limitations", ["short"]),
+        ("limitations", ["x" * 401]),
+        ("limitations", ["a long limitation"] * 2),
+        ("category", "certified-safe"),
+        ("extensionId", "../../escape"),
+        ("extensionId", "command.UPPER"),
+        ("maintainerGithubIds", [123]),
+        ("maintainerGithubIds", ["0"]),
+        ("maintainerGithubIds", ["01"]),
+        ("maintainerGithubIds", ["123", "123"]),
+        ("maintainerGithubIds", ["9" * 21]),
+        ("tags", ["Some Tag"]),
+        ("tags", ["valid", "valid"]),
+    ],
+)
 def test_rejects_invalid_or_authoritative_metadata(field: str, value: object) -> None:
     row = listing()
     row[field] = value
@@ -71,13 +89,24 @@ def test_rejects_invalid_or_authoritative_metadata(field: str, value: object) ->
         validate_listing(row)
 
 
-@pytest.mark.parametrize("url", [
-    "http://example.test", "javascript:alert(1)", "https://user:secret@example.test",
-    "https://localhost/path", "https://127.0.0.1/", "https://[::1]/",
-    "https://169.254.169.254/latest", "https://8.8.8.8/", "https://example.internal/",
-    "https://example.test:8443/", "https://example.test\\@attacker.test/",
-    "https://example.test/\nsecret", "https://intranet/",
-])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.test",
+        "javascript:alert(1)",
+        "https://user:secret@example.test",
+        "https://localhost/path",
+        "https://127.0.0.1/",
+        "https://[::1]/",
+        "https://169.254.169.254/latest",
+        "https://8.8.8.8/",
+        "https://example.internal/",
+        "https://example.test:8443/",
+        "https://example.test\\@attacker.test/",
+        "https://example.test/\nsecret",
+        "https://intranet/",
+    ],
+)
 def test_rejects_private_or_unsafe_links(url: str) -> None:
     row = listing()
     row["documentationUrl"] = url
@@ -151,13 +180,22 @@ def test_listing_command_rejects_an_invalid_kit_without_output(tmp_path: Path) -
 
 
 def test_category_labels_are_total_for_supported_ids() -> None:
-    for extension_id in ["command.git", "command.cloud.aws", "command.database.postgresql", "command.remote.essh",
-                         "command.email", "command.package.node", "mcp.filesystem", "command.unknown"]:
+    for extension_id in [
+        "command.git",
+        "command.cloud.aws",
+        "command.database.postgresql",
+        "command.remote.essh",
+        "command.email",
+        "command.package.node",
+        "mcp.filesystem",
+        "command.unknown",
+    ]:
         assert category_for_extension(extension_id) in CATEGORY_LABELS
 
 
 def test_validation_does_not_access_network(monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden(*args: object, **kwargs: object) -> None:
         raise AssertionError("Listing validation must not access the network")
+
     monkeypatch.setattr(socket, "create_connection", forbidden)
     assert validate_listing(listing())["extensionId"] == "command.builder-demo"
