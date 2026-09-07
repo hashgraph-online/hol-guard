@@ -77,7 +77,7 @@ async function mountRecoveryFixture(page: Page, setup?: {
       await new Promise((resolve) => setTimeout(resolve, 250));
       if (setup?.failRecovery) {
         await route.fulfill({
-          status: 422,
+          status: 503,
           contentType: "application/json",
           body: JSON.stringify({ error: "authority_recovery_failed" }),
         });
@@ -129,10 +129,13 @@ test("authenticated extension recovery shows progress and reaches protected stat
     page.getByRole("dialog", { name: "Repair protection" }).getByRole("button", { name: "Repairing…" }),
   ).toBeDisabled();
   await expect(page.getByText("Local protection repaired and verified.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Protection needs repair" })).toHaveCount(0);
   await expect(runtimeErrors).toEqual([]);
 });
 
 test("failed extension recovery keeps the repair banner and explains the failure", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
   await mountRecoveryFixture(page, {
     configured: true,
     enabled: true,
@@ -151,4 +154,5 @@ test("failed extension recovery keeps the repair banner and explains the failure
   await expect(page.getByRole("heading", { name: "Protection needs repair" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Repair protection" })).toHaveCount(2);
   await expect(page.getByText("Local protection repaired and verified.")).toHaveCount(0);
+  await expect(runtimeErrors).toEqual([]);
 });
