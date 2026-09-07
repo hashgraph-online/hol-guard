@@ -34,6 +34,8 @@ ROUTED_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("routed adapters uninstall cursor", _ADAPTER_ACTION, "command.routed.adapters-uninstall"),
     ("routed update", _UPDATE_ACTION, "command.routed.update"),
     ("routed update -q", _UPDATE_ACTION, "command.routed.update"),
+    ("routed upgrade", _UPDATE_ACTION, "command.routed.update"),
+    ("routed upgrade --json", _UPDATE_ACTION, "command.routed.update"),
     ("/usr/local/bin/routed doctor --fix", _DOCTOR_FIX_ACTION, "command.routed.doctor-fix"),
     ("routed.exe adapters install", _ADAPTER_ACTION, "command.routed.adapters-install"),
     ("zsh -lc 'routed adapters install cursor'", _ADAPTER_ACTION, "command.routed.adapters-install"),
@@ -46,18 +48,12 @@ ROUTED_SAFE_COMMANDS: tuple[str, ...] = (
     "routed doctor --json",
     "routed update --check",
     "routed update --check --json",
+    "routed upgrade --check",
+    "routed upgrade --check --json",
     "routed adapters",
     "routed adapters list",
     "routed --help",
     "routed -h",
-    "routed doctor --help",
-    "routed doctor -h",
-    "routed adapters install --help",
-    "routed adapters install -h",
-    "routed adapters uninstall --help",
-    "routed adapters uninstall -h",
-    "routed update --help",
-    "routed update -h",
     "grep 'routed doctor --fix' README.md",
     "printf '%s\\n' 'routed update'",
 )
@@ -80,7 +76,12 @@ def _routed_control_layer(state: ControlState) -> ExtensionControlLayer:
 
 def test_routed_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in ROUTED_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            extension_control_layers=(),
+        )
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.routed" for item in evaluation.extension_observations)
 

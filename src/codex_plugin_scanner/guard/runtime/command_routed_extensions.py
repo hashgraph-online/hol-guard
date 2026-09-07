@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import CommandMatcher
 from .command_rules import (
     AnyMatcher,
     CommandRuleSeverity,
     CommandSafetyRule,
-    CommandSafeVariant,
 )
 
 _ROUTED_GLOBAL_FLAGS = frozenset({"--json", "-q", "--quiet"})
@@ -20,13 +19,6 @@ ROUTED_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "routed doctor reconciliation command": ("destructive_shell",),
     "routed update command": ("execution", "network_egress"),
 }
-
-
-def _help_variants(matcher: AnyMatcher) -> tuple[CommandSafeVariant, ...]:
-    return (
-        safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),
-        safe_flag_variant(matcher, variant_id="short-help", title="Command help", flag="-h"),
-    )
 
 
 def _routed_matcher(
@@ -59,7 +51,6 @@ def _routed_rule(
     safer_alternative: str,
     example_command: str,
     severity: CommandRuleSeverity = "high",
-    help_matcher: AnyMatcher | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -70,7 +61,7 @@ def _routed_rule(
         action_classes=(action_class,),
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
-        safe_variants=_help_variants(help_matcher) if help_matcher is not None else (),
+        safe_variants=(),
         example_command=example_command,
     )
 
@@ -78,7 +69,24 @@ def _routed_rule(
 _ROUTED_DOCTOR_FIX = _routed_matcher("doctor", required_flags=frozenset({"--fix"}))
 _ROUTED_ADAPTERS_INSTALL = _routed_matcher("adapters", "install")
 _ROUTED_ADAPTERS_UNINSTALL = _routed_matcher("adapters", "uninstall")
-_ROUTED_UPDATE = _routed_matcher("update", forbidden_flags=frozenset({"--check"}))
+_ROUTED_UPDATE = AnyMatcher(
+    matchers=(
+        executable_matcher(
+            "routed",
+            "update",
+            forbidden_flags=frozenset({"--check"}),
+            global_flags=_ROUTED_GLOBAL_FLAGS,
+            global_options_with_values=_ROUTED_GLOBAL_OPTIONS,
+        ),
+        executable_matcher(
+            "routed",
+            "upgrade",
+            forbidden_flags=frozenset({"--check"}),
+            global_flags=_ROUTED_GLOBAL_FLAGS,
+            global_options_with_values=_ROUTED_GLOBAL_OPTIONS,
+        ),
+    )
+)
 
 ROUTED_COMMAND_RULES = (
     _routed_rule(
@@ -90,7 +98,6 @@ ROUTED_COMMAND_RULES = (
         risk_classes=("destructive_shell",),
         safer_alternative="Run routed doctor without --fix first to review diagnostics before repairing.",
         example_command="routed doctor --fix",
-        help_matcher=_ROUTED_DOCTOR_FIX,
     ),
     _routed_rule(
         rule_id="command.routed.adapters-install",
@@ -101,7 +108,6 @@ ROUTED_COMMAND_RULES = (
         risk_classes=("destructive_shell",),
         safer_alternative="Review detected environments with routed adapters before installing new adapters.",
         example_command="routed adapters install",
-        help_matcher=_ROUTED_ADAPTERS_INSTALL,
     ),
     _routed_rule(
         rule_id="command.routed.adapters-uninstall",
@@ -112,7 +118,6 @@ ROUTED_COMMAND_RULES = (
         risk_classes=("destructive_shell",),
         safer_alternative="Check installed adapter status with routed adapters before uninstalling.",
         example_command="routed adapters uninstall cursor",
-        help_matcher=_ROUTED_ADAPTERS_UNINSTALL,
     ),
     _routed_rule(
         rule_id="command.routed.update",
@@ -123,7 +128,6 @@ ROUTED_COMMAND_RULES = (
         risk_classes=("execution", "network_egress"),
         safer_alternative="Run routed update --check to preview available updates before installing.",
         example_command="routed update",
-        help_matcher=_ROUTED_UPDATE,
     ),
 )
 
