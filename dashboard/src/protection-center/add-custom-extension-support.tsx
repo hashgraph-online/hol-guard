@@ -17,6 +17,9 @@ export function addDialogSubmitLabel(input: {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
   }
+  if (input.busy && input.recognized.surface === "mcp" && input.step !== "confirm") {
+    return "Listing tools…";
+  }
   if (input.step !== "confirm") {
     return "Continue";
   }
@@ -90,11 +93,15 @@ export function dialogIntro(
   hasProjects: boolean,
   surface: LocalCliItem["surface"] | null,
   discovering = false,
+  mcpHasTools = true,
 ): string {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
+    if (!mcpHasTools) {
+      return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
+    }
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
   }
   if (discovering) {
@@ -104,6 +111,14 @@ export function dialogIntro(
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
+}
+
+export function listToolsAgainLabel(): string {
+  return "List tools again";
+}
+
+export function mcpListingBusyCopy(name: string): string {
+  return `Listing tools from ${name}. npx servers can take a few seconds.`;
 }
 
 export function filterCountCopy(visible: number, total: number): string {

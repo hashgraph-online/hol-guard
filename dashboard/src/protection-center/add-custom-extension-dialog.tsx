@@ -38,6 +38,8 @@ import {
   dialogIntro,
   enrollConfirmCopy,
   enrollSubmitDisabled,
+  listToolsAgainLabel,
+  mcpListingBusyCopy,
   ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
@@ -123,7 +125,12 @@ export function AddCustomExtensionWorkspace(props: {
     setReviewingScripts(false);
     setStep("review");
   }, []);
-  const runRecognize = useCallback(async (commandText: string, cliId?: string, silent = false) => {
+  const runRecognize = useCallback(async (
+    commandText: string,
+    cliId?: string,
+    silent = false,
+    keepOnError = false,
+  ) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
@@ -135,9 +142,11 @@ export function AddCustomExtensionWorkspace(props: {
       setError(null);
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
-      setRecognized(null);
-      setSummary(null);
-      setStep("pick");
+      if (!keepOnError) {
+        setRecognized(null);
+        setSummary(null);
+        setStep("pick");
+      }
       if (!silent) {
         setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
       }
@@ -162,6 +171,10 @@ export function AddCustomExtensionWorkspace(props: {
   const findTool = useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  const retryMcpListing = useCallback(() => {
+    if (recognized === null) return;
+    void runRecognize(command.trim() || recognized.example_label, recognized.cli_id, false, true);
+  }, [command, recognized, runRecognize]);
   useEffect(() => {
     if (props.discovering === true) sawDiscovering.current = true;
     if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
@@ -331,6 +344,7 @@ export function AddCustomExtensionWorkspace(props: {
                 rememberedProjects.length > 0,
                 recognized?.surface ?? null,
                 props.discovering === true && recognized === null,
+                !(showingMcpCatalog && enrollable.length === 0),
               )}
             </p>
           </header>
@@ -361,7 +375,24 @@ export function AddCustomExtensionWorkspace(props: {
               {showingCatalog && enrollable.length > 0 ? (
                 <BulkPolicyPicker value={bulkState} disabled={busy} onChange={applyBulk} />
               ) : null}
-              {showingCatalog ? (
+              {showingMcpCatalog && enrollable.length === 0 ? (
+                <div className="mt-4 max-w-xl">
+                  {busy ? (
+                    <p className="text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+                      {mcpListingBusyCopy(recognized.name)}
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={retryMcpListing}
+                      className="min-h-11 text-sm font-semibold text-brand-blue"
+                    >
+                      {listToolsAgainLabel()}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              {showingCatalog && enrollable.length > 0 ? (
                 <CatalogPreview
                   query={command}
                   showFilterCount={showingPackageCatalog}
