@@ -1,927 +1,225 @@
-# HOL Guard: Open-Source Antivirus for AI Agents
+# HOL Guard
 
 <!-- mcp-name: io.github.hashgraph-online/hol-guard -->
 
-[![HOL Guard Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
-[![Plugin Scanner Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
-[![HOL Guard Downloads](https://img.shields.io/pypi/dm/hol-guard?logo=pypi&logoColor=white)](https://pypi.org/project/hol-guard/)
-[![Plugin Scanner Downloads](https://img.shields.io/pypi/dm/plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](#install-the-package-you-need)
-[![CI](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/ci.yml)
-[![Publish](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/publish.yml?branch=main&label=Publish&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
-[![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
+**Open-source antivirus and runtime protection for AI agents.**
+
+[![PyPI](https://img.shields.io/pypi/v/hol-guard.svg)](https://pypi.org/project/hol-guard/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](./pyproject.toml)
+[![CI](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/ci.yml?branch=main)](https://github.com/hashgraph-online/hol-guard/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
-[![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
-| :--- | :--- |
+HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy.
 
-HOL Guard brings antivirus-style runtime protection to AI agents. It evaluates supported agent actions and local artifacts for secret exposure, prompt injection, unsafe commands, malicious packages, and MCP risks. Guard can allow safe work, block known threats, pause ambiguous actions for approval, and record security receipts for later review.
+Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
-Use HOL Guard locally without a cloud account. Connect Guard Cloud when you want synchronized evidence, team policies, fleet visibility, and shared approval workflows.
+[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contributing](#development)
 
 ## Install HOL Guard
+
+Requires Python 3.10 or newer and [pipx](https://pipx.pypa.io/stable/installation/).
 
 ```bash
 pipx install hol-guard
 hol-guard init
 ```
 
-`hol-guard init` discovers compatible AI agents, explains each setup change before applying it, and guides you through your first protected action.
+The first-run wizard discovers supported agents and walks you through protection setup. It asks before each setup change, including opening the dashboard, installing agent integrations, and connecting optional cloud services.
 
-Guard 3.x alphas are opt-in and do not replace the stable 2.x release selected by normal installers. To evaluate a published alpha, pin its exact version from the [GitHub prereleases](https://github.com/hashgraph-online/hol-guard/releases):
+Check your installation:
 
 ```bash
-pipx install --force "hol-guard==3.0.0a1"
+hol-guard --version
+hol-guard status
 ```
 
-Return to the stable 2.x channel with `pipx install --force "hol-guard<3"`.
+To update an existing installation:
 
-[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [GuardPolicy v1alpha1](https://github.com/hashgraph-online/hol-guard/blob/main/spec/guard-policy/v1alpha1/README.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
+```bash
+hol-guard update
+```
+
+For manual setup, see the [installation guide](docs/guard/get-started.md). Release details and prereleases are on the [releases page](https://github.com/hashgraph-online/hol-guard/releases).
 
 ## What HOL Guard Protects
 
-| Threat surface | Guard protection |
+| Surface | Protection |
 | :--- | :--- |
-| **Agent tool calls** | Evaluates supported shell, file, MCP, prompt, and tool-result events through native hooks, managed proxies, or reversible launch overlays. |
-| **Secrets and credentials** | Detects sensitive file access, credential-shaped output, staged exfiltration, and suspicious outbound commands. |
-| **AI supply chain** | Reviews package installs, plugins, skills, MCP servers, hooks, and agent configuration before trust is granted. |
-| **Prompt injection** | For adapters that expose prompt events, screens prompt and tool intent for instructions that attempt to expose secrets, evade controls, or trigger destructive behavior. |
-| **Human approval** | Routes ambiguous actions to native prompts, the local approval center, or Guard Cloud according to the active policy. |
-| **Security evidence** | Records attributable receipts and inventory changes so decisions can be reviewed, explained, and synchronized. |
+| **Shell commands and file access** | Reviews destructive operations, sensitive file access, credential exposure, and suspicious outbound commands. |
+| **Package installs** | Evaluates supported package-manager operations against supply-chain intelligence before installation. |
+| **Plugins, skills, and agent configuration** | Inventories local artifacts and reviews new or changed tools before launch. |
+| **MCP servers and tools** | Inspects server configuration and reviews tool calls through supported hooks and managed proxies. |
+| **Prompts and tool results** | Screens supported events for prompt injection and sensitive content. |
+| **Approvals and evidence** | Routes decisions to native prompts or the approval center, and records local receipts for review. |
 
-Guard prefers the strongest integration each agent exposes. Enforcement depth varies by agent and event type; see the [support matrix](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) for the exact current contract.
+Guard connects through native agent hooks, managed MCP proxies, and launch integrations. Coverage depends on the events each agent exposes; the [support matrix](docs/guard/harness-support.md) documents enforcement, approval delivery, and failure behavior per integration.
 
 ## Supported AI Agents
 
-HOL Guard currently integrates with Codex, Claude Code, GitHub Copilot CLI, Cursor, Gemini CLI, Hermes, OpenClaw, OpenCode, Antigravity, Kimi Code, Grok, Pi / oh-my-pi, and ZCode.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode.
 
-These developer agents are Guard's deepest integrations today, but the product boundary is broader: the same policy, supply-chain, approval, and evidence layers are designed to protect AI agents and their local tool ecosystems as new adapters are added.
-
-## Why HOL Guard
-
-Most security tools see only one part of an AI agent's attack surface. Code scanners run after files change. Sandboxes constrain a process but do not understand agent intent. MCP gateways see MCP traffic but not local shell commands, package installs, skills, hooks, or agent configuration.
-
-HOL Guard combines those signals at the local runtime boundary. It discovers the agent and its tools, evaluates supported actions against one policy, requests human approval only when needed, and records the resulting decision. The goal is practical protection without turning ordinary AI-assisted work into a stream of prompts.
-
-## Choose the Right Package
-
-| If you want to... | Install | Start with |
-| :--- | :--- | :--- |
-| protect AI agents and their local runtime | `hol-guard` | `hol-guard init` |
-| lint and verify plugins, skills, MCP servers, and marketplace packages in CI | `plugin-scanner` | `plugin-scanner verify .` |
-
-`hol-guard` is the end-user antivirus and runtime protection product. `plugin-scanner` is the maintainer and CI companion for analyzing agent ecosystem packages before release.
-
-## Guard Operations
-
-To update an existing pipx install from PyPI:
+For example, to set up Codex explicitly:
 
 ```bash
-pipx upgrade hol-guard
+hol-guard install codex
+hol-guard run codex --dry-run
+hol-guard run codex
 ```
 
-If you installed Guard with pipx, verify the active user command before testing local flows:
+The dry run records the current artifact state before launch. For Codex, Guard installs native pre-tool hooks and refuses a managed launch if those hooks are missing or disabled.
 
-```bash
-command -v hol-guard
-hol-guard --version
-```
+[Agent support matrix](docs/guard/harness-support.md) · [Troubleshooting](docs/guard/troubleshooting.md)
 
-For a local wheel build, install into the pipx-managed `hol-guard` environment. Do not test with `PYTHONPATH=src`; that bypasses the same package path users run.
+## Everyday Use
 
-```bash
-python3 -m build --wheel
-hol-guard update --wheel dist
-hol-guard --version
-```
+| Task | Command |
+| :--- | :--- |
+| Check protection status | `hol-guard status` |
+| Diagnose an agent integration | `hol-guard doctor codex` |
+| Inspect changes before launch | `hol-guard diff codex` |
+| Review pending approvals | `hol-guard approvals` |
+| Approve or deny a request | `hol-guard approvals approve <request-id>` / `hol-guard approvals deny <request-id>` |
+| Read decision history | `hol-guard receipts` |
+| List tracked artifacts | `hol-guard inventory` |
+| Export an AI bill of materials | `hol-guard abom --format json` |
+| Scan workspace dependencies | `hol-guard supply-chain scan` |
+| Connect optional cloud sync | `hol-guard connect` |
 
-`hol-guard update --wheel` accepts either a specific `.whl` file or a directory and picks the newest matching `hol_guard-*.whl`.
+### Understand a paused command
 
-To force a specific release, use Python package specifier syntax:
-
-```bash
-pipx install --force 'hol-guard==2.0.345'
-```
-
-Do not use `hol-guard@<version>`; pipx treats that as a separate app name, not a package version.
-
-`hol-guard init` is the first-run guided setup. It shows a progressive plan first, then gates each side effect: approve dashboard, Guard completes it, then approve app protection, Guard completes it, then approve Cloud connect and notifications. Nothing opens or changes until you approve that checkpoint. Use `hol-guard init --yes` only for automation when you already trust the plan.
-
-Manual and follow-up commands:
-
-```bash
-pipx run hol-guard bootstrap
-pipx run hol-guard hermes bootstrap
-pipx run hol-guard run codex --dry-run
-pipx run hol-guard run codex
-pipx run hol-guard approvals
-pipx run hol-guard receipts
-pipx run hol-guard status
-pipx run hol-guard connect
-pipx run hol-guard connect status
-pipx run hol-guard connect repair
-pipx run hol-guard sync
-pipx run hol-guard supply-chain sync
-pipx run hol-guard supply-chain scan
-pipx run hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
-pipx run hol-guard explain install-connect
-pipx run hol-guard command test 'git reset --hard HEAD~1'
-pipx run hol-guard command explain 'grep "rm -rf|git clean" README.md'
-pipx run hol-guard command extensions
-```
-
-What you get from Guard:
-
-- Detects supported AI agent configuration on your machine
-- Records a baseline before you trust a tool
-- Pauses cleanly on new or changed artifacts before launch
-- Queues blocked changes in a localhost approval center when the harness cannot prompt inline
-- Stores receipts locally so you can review decisions later
-- Keeps sync optional until you actually want shared history
-
-See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local flow.
-
-### Inspect command protection without running it
-
-Command safety extensions make Guard's shell, Git, filesystem, system, Windows, data-protection, container,
-Kubernetes, encoded-execution, and self-protection behavior inspectable. Required core extensions cannot be mistaken
-for optional integrations. They are built-in capability boundaries over the same parser used by harness hooks, not
-downloadable regex bundles.
-
-Each extension publishes stable rule IDs and structured rule metadata. Command inspection also returns a canonical,
-side-effect-free parse model with wrapper, pipeline, environment-override, provenance, and confidence details so
-automation can distinguish exact parsing from malformed or unsupported input.
-
-Use `command test` for a concise classification and `command explain` for the complete evaluation trace. Both are
-side-effect free: they do not execute the command, evaluate final policy, create an approval, or record a receipt.
-Use `--json` for a stable automation contract.
+Inspect the command's classification and matching rules:
 
 ```bash
 hol-guard command test 'rm -rf ./build'
-hol-guard command explain 'grep "rm -rf|git clean" README.md'
+hol-guard command explain 'git clean -ndx'
 hol-guard command extensions command.git --json
 ```
 
-[Explore built-in Extensions](docs/guard/extensions/README.md) ·
-[Contribute an Extension](docs/guard/extensions/contributing.md)
+`command test` and `command explain` inspect the command without executing it or creating an approval. Use `hol-guard approvals` to resolve a pending request and `hol-guard receipts` to review the recorded decision.
 
-Structured core rules preserve every match in a compound command. A Git preview such as `git clean -ndx` remains
-safe, while an unrelated destructive segment still produces review. New structured coverage feeds the same runtime
-artifact and policy pipeline as existing command classifications.
+The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the runtime registry. External contributions require explicit opt-in; required core protections remain enabled.
 
-<details>
-<summary>Guard commands at a glance</summary>
-
-- `hol-guard start`
-  Shows the next step for the harnesses Guard found.
-- `hol-guard init`
-  Runs first-run onboarding as approval checkpoints: local dashboard, harness discovery and install, optional Guard Cloud connect, and desktop notification setup.
-- `hol-guard bootstrap`
-  Detects the best local harness, starts the approval center, and installs Guard in front of it.
-- `hol-guard hermes bootstrap`
-  Installs the Guard-managed Hermes overlay bundle directly.
-- `hol-guard status`
-  Shows what Guard is watching now.
-- `hol-guard install <harness>`
-  Creates the launcher shim for that harness.
-- `hol-guard uninstall --self`
-  Removes Guard-managed harness wiring, package shims, local Guard state, and uninstalls the current `hol-guard` package.
-- `hol-guard update`
-  Updates the installed `hol-guard` package in the current environment.
-- `hol-guard run <harness> --dry-run`
-  Records the current state once before you trust it.
-- `hol-guard run <harness>`
-  Reviews changes before launch and hands blocked sessions to the approval center when needed.
-- `hol-guard approvals`
-  Lists pending approvals or resolves them from the terminal.
-- `hol-guard receipts`
-  Shows local approval and block history.
-
-</details>
-
-<details>
-<summary>Harness approval strategy</summary>
-
-- `claude-code`
-  Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
-- `copilot`
-  Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install Guard-managed Copilot hook wiring for documented `preToolUse` and `postToolUse` events.
-  Guard does not treat a VS Code Copilot inline permission sheet by itself as proof of Guard interception; current proof should come from Guard hook responses, Guard receipts, or an MCP client that explicitly answers Guard elicitation.
-- `codex`
-  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center only for `codex exec` or any other nonresponsive session. When Guard has the right Codex thread binding, approving or blocking in the browser resumes the same Codex thread with HOL Guard-branded continuation copy. Live app-server sessions continue in place, and headless `codex exec` sessions resume through `codex exec resume` with the exact blocked command context. If the session cannot be identified, Guard says so plainly and tells you the manual next step instead of pretending it resumed.
-- `cursor`
-  Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
-- `opencode`
-  Guard authors package-level policy while OpenCode keeps native once, always, or reject prompts for managed MCP tools.
-- `kimi`
-  Guard installs managed `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks with exit code `2` and a JSON `permissionDecision: "deny"` response, and fails open on hook crash or timeout.
-- `grok`
-  Guard installs a catch-all Grok `PreToolUse` hook plus observe-only prompt and subagent hooks under `~/.grok/hooks/`, writes permission deny rules and backup hooks in `~/.grok/managed_config.toml`, blocks tool calls with exit code `2` and a Grok-native `{"decision":"deny"}` response, never reads `~/.grok/auth`, and launches only a trusted absolute Grok executable. Custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`. After upgrading an existing Grok install, run `hol-guard apps repair grok` so the catch-all hook replaces the older per-tool matcher list.
-- `pi`
-  Guard scans `~/.pi/agent/` and project `.pi/` packages, extensions, skills, prompts, and themes; installs a managed Pi extension that reviews `input` and `tool_call` events inline; and blocks with a Pi-native `{"decision":"deny"}` response when Guard policy says no.
-- `zcode`
-  Guard detects `~/.zcode/cli/config.json`, configured MCP servers, enabled plugins, the plugin cache, and plugin manifests; installs managed `PreToolUse` and `UserPromptSubmit` hooks in the config `hooks` section without touching user `mcp` or `plugins`; and blocks with exit code `2` and a `permissionDecision: "deny"` response.
-- `hermes`
-  Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
-- `gemini`
-  Guard scans extensions and falls back to the local approval center for blocked changes.
-
-</details>
-
-## Guard: Protection
-
-HOL Guard is antivirus for AI agents. It evaluates supported runtime events and local artifacts, then applies the active policy before execution where the agent provides a pre-action boundary. Other integrations use native approval, managed proxy, launch-time, or post-action evidence surfaces according to the [support matrix](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md).
-
-Choose a protection posture with `hol-guard settings set protection protected|extra-careful|watch`:
-
-| Posture | Who it's for | What happens |
-| :--- | :--- | :--- |
-| **Protected** | Almost everyone (default) | Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers. |
-| **Extra careful** | Sensitive repos and untrusted tools | Same as Protected, and also asks the first time this project talks to a new site or installs a new tool. |
-| **Watch** | Debugging a false positive | Records what Guard would have stopped, but does not stop anything. Use only while debugging. |
-
-If you are unsure, start with **Protected**. Legacy `hol-guard settings set security-level` and `hol-guard settings set mode` still work as aliases.
-
-## Guard: Troubleshooting
-
-### Why was my command paused?
-
-Guard paused a command because one or more detectors fired. To see exactly what triggered:
+### Check a package
 
 ```bash
-hol-guard receipts          # review recent decisions
-hol-guard doctor            # run a probe and see which detectors are active
-hol-guard doctor --perf     # include per-detector timing
+hol-guard supply-chain sync
+hol-guard supply-chain scan
+hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
 ```
 
-If the block looks like a false positive, you can approve it from the receipts view or from the dashboard at `http://localhost:6174`.
+The package verdict includes the available advisory evidence and ecosystem coverage. See the [get-started guide](docs/guard/get-started.md) for package-manager interception and the [remediation guide](docs/guard/remediation.md) for handling false positives.
 
-### How do I clear approvals?
+## Plugin Scanner
 
-From the terminal:
-
-```bash
-hol-guard approvals         # list pending approvals
-hol-guard approvals clear   # clear all pending approvals (prompts for confirmation)
-```
-
-From the dashboard: open `http://localhost:6174`, go to the **Approval Center**, and use the **Clear all** button. You will be asked to confirm before any approvals are removed.
-
-### How do I require human proof before saved approvals?
-
-Enable the local approval gate when saved allow decisions, global trust, policy clears, or settings changes should require a human password before Guard persists them:
-
-```bash
-hol-guard settings approval-password enable \
-  --new-password '<password>' \
-  --confirm-password '<password>' \
-  --cooldown-seconds 900
-hol-guard settings approval-password status
-```
-
-Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. When TOTP is enabled, it replaces password proof and cooldown is disabled, so every protected action requires a current authenticator code. To unlock or lock the current password-only approval window from a terminal:
-
-```bash
-hol-guard approvals unlock --duration 15m
-hol-guard approvals lock
-```
-
-For Google Authenticator-compatible second-factor proof, enroll TOTP after the password gate is enabled:
-
-```bash
-hol-guard settings approval-totp enroll --current-password '<password>' --device-label '<device>'
-hol-guard settings approval-totp verify --current-password '<password>' --code 123456
-hol-guard settings approval-totp status
-```
-
-TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20Guard:<device>` provisioning URI. Guard stores the seed encrypted locally, rejects replayed steps, and never includes the seed in settings export, receipts, or public status. When TOTP is enabled, disabling TOTP or the password gate requires a current authenticator code instead of the password.
-
-Approval proof creates only a 30-second, transaction-local grant for the exact action, scope, subject, and session nonce being processed. The grant is never returned to the browser or reused as a general login session. Guard tracks password and authenticator failures independently and locks the active factor after five failed attempts; rotating either factor revokes outstanding grants and any saved recovery, session, or trusted-device state.
-
-## Guard: Advisory Sync Privacy
-
-Guard's advisory database updates are optional and pull-only. When you run `hol-guard advisories sync`, Guard fetches a signed advisory list from `advisories.hol.org`. No local file paths, harness configs, receipt data, or workspace identifiers are sent to any server during sync.
-
-Advisory sync requires a HOL Guard Cloud account. If you have not signed in, sync is skipped and Guard continues using the locally bundled advisory database. Run `hol-guard connect` to connect a free account, or `hol-guard connect --headless` on SSH/CI hosts.
-
-## Scanner Quickstart
+This repository also ships `plugin-scanner`, a CLI for maintainers who want security and quality checks before publishing agent plugins, skills, and MCP integrations.
 
 ```bash
 pipx install plugin-scanner
+plugin-scanner scan .
 plugin-scanner lint .
 plugin-scanner verify .
 ```
 
-```yaml
-# GitHub Actions PR gate
-- name: AI plugin quality gate
-  uses: hashgraph-online/ai-plugin-scanner-action@v1
-  with:
-    plugin_dir: "."
-    fail_on_severity: high
-    min_score: 80
-```
-
-When to add `plugin-scanner`:
-
-- You publish plugins, skills, or marketplace packages
-- You want a CI gate before release
-- You need SARIF, verification payloads, or submission artifacts
-
-If your repository uses a Codex marketplace root like `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The scanner will discover local `./plugins/...` entries automatically, scan each local plugin manifest, and skip remote marketplace entries instead of treating the repo root as a single plugin.
-
-## Need More Detail?
-
-- Contributor setup: jump to [Development](#development)
-- Local Guard docs: [docs/guard/get-started.md](docs/guard/get-started.md)
-- GitHub Action docs: [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action)
-- Registry and trust references: keep reading below
-
-<details>
-<summary>Scanner reference: trust scoring, installs, ecosystems, and CLI commands</summary>
-
-## How Trust Scoring Works
-
-The scanner now emits explicit trust provenance alongside the quality grade:
-
-- bundled skills use the published HCS-28 baseline adapter ids, weights, and denominator rules directly
-- MCP configuration trust uses the same HCS-style adapter, weight, and contribution-mode pattern locally
-- top-level Codex plugin trust uses the same HCS-style adapter, weight, and contribution-mode pattern locally
-
-Current local specs:
-
-- [Skill Trust Local Draft](docs/trust/skill-trust-local.md)
-- [MCP Trust Draft](docs/trust/mcp-trust-draft.md)
-- [Codex Plugin Trust Draft](docs/trust/plugin-trust-draft.md)
-
-This keeps the quality grade and the trust score separate. Signals like `SECURITY.md` remain visible, but their weight is now a named adapter weight rather than an inferred side effect of raw category points.
-
-## Quick Start For Contributors
-
-```bash
-git clone https://github.com/hashgraph-online/hol-guard.git
-cd hol-guard
-uv sync --extra dev --extra cisco --group cisco-mcp
-pytest -q
-```
-
-Use `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
-
-## Install The Package You Need
-
-### Lean baseline install
-
-Guard package:
-
-```bash
-pip install hol-guard
-```
-
-Scanner package:
-
-```bash
-pip install plugin-scanner
-```
-
-The lean baseline keeps Python 3.10+ support intact. It includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.14 and directly pins LiteLLM 1.93.0 so bare `pip` and `pipx` installs cannot drift to an unverified LiteLLM release.
-
-### Resolver-safe Cisco extra
-
-Install the Cisco extra on Python 3.11 through 3.14 when you want to explicitly select the Cisco dependency surface in addition to the baseline skill scanner:
-
-```bash
-pip install "hol-guard[cisco]"
-```
-
-```bash
-pip install "plugin-scanner[cisco]"
-```
-
-`cisco-ai-mcp-scanner` stays in the repo-controlled `cisco-mcp` uv dependency group and now pins Cisco's LiteLLM 1.93.0-compatible release so Docker and CI can install full Cisco coverage natively on Python 3.11.4 through 3.14. The published `cisco` extra remains resolver-safe for pip users.
-
-On Guard surfaces, the Cisco extra keeps the LiteLLM-dependent Cisco skill-scanner path on a patched resolver-safe version. Repo-controlled Docker and `uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13` installs add optional Cisco MCP evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
-
-Guard inventory snapshots can also carry Cisco MCP and skill-scanner status when a Hermes or OpenClaw inventory run explicitly enables those scanners. The Cloud evidence model records scanner source, status, redacted finding text, duration, mapped artifact ID, and risk component metadata without storing raw local paths or secrets.
-
-Guard does not add Cisco AIBOM runtime integration in this pass. If AIBOM support returns later, it should stay on evidence or export surfaces rather than Guard blocking or approval logic.
-
-### Cisco package status
-
-Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing the packages below.
-
-| Package | Status in this repo | Notes |
-| :--- | :--- | :--- |
-| `cisco-ai-skill-scanner` | shipped by default | Included in the lean baseline install. |
-| `cisco-ai-mcp-scanner` | repo-controlled CI/Docker only | Installed through the uv `cisco-mcp` group and Docker requirements with LiteLLM 1.93.0. |
-| `cisco-ai-a2a-scanner` | deferred | Requires live A2A endpoints and is not added in this pass. |
-| `cisco-aibom` | deferred | No Guard runtime integration in this pass. Revisit later only for evidence or export workflows. |
-
-If you want both tools in one shell during local development:
-
-```bash
-pipx install hol-guard
-pipx install plugin-scanner
-```
-
-Container-first environments can use the published image instead. The repo-controlled image installs a lock-derived Cisco dependency set on Python 3.13 so the container has full static Cisco coverage by default.
-
-```bash
-docker run --rm \
-  -v "$PWD:/workspace" \
-  ghcr.io/hashgraph-online/hol-guard:<version> \
-  scan /workspace --format text
-```
-
-Command names by package:
-
-```bash
-hol-guard start
-plugin-scanner verify .
-```
-
-### DevContainer / Codespaces
-
-Add HOL Guard to your `devcontainer.json` for automatic protection in VS Code Codespaces and remote dev containers:
-
-```json
-{
-    "features": {
-        "ghcr.io/hashgraph-online/hol-guard/hol-guard:1": {}
-    }
-}
-```
-
-Options:
-
-| Option | Default | Description |
-| :--- | :--- | :--- |
-| `version` | `latest` | Pin to a specific release (e.g. `2.0.1004`) |
-| `initHarness` | `auto` | Harness to configure: `auto` (detect installed), `none` (skip init), or a specific name (`codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`) — informational, Guard auto-detects regardless |
-| `strictMode` | `false` | Enable strict mode on install |
-
-See [`devcontainer-features/hol-guard/README.md`](devcontainer-features/hol-guard/README.md) for details.
-
-## Ecosystem Support
-
-| Ecosystem | Detection Surfaces |
+| Command | Purpose |
 | :--- | :--- |
-| Codex | `.codex-plugin/plugin.json`, `marketplace.json`, `.agents/plugins/marketplace.json` |
-| Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` |
-| DeepSeek Harness | `package.json` with `dsh.bundle`, declared patch file, and Cordis `apply(ctx)` runtime export |
-| Gemini CLI | `gemini-extension.json`, `commands/**/*.toml` |
-| Kimi Code | `kimi.plugin.json`, `.kimi-plugin/plugin.json`, declared skills, agents, commands, prompts, and MCP servers |
-| OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode/commands`, `.opencode/plugins` |
+| `scan` | Security findings and a quality report across detected package surfaces. |
+| `lint` | Rule-level authoring feedback. |
+| `verify` | Install-surface and runtime readiness checks. |
+| `submit` | A submission artifact for one plugin package. |
+| `doctor` | Component diagnostics and troubleshooting bundles. |
 
-Use `--ecosystem auto` (default) to scan all detected packages in a repository, or select a single ecosystem explicitly.
+The scanner detects Codex, Claude Code, DeepSeek Harness, Gemini CLI, Kimi Code, and OpenCode package formats. Use `plugin-scanner --list-ecosystems` to list them or `--ecosystem` to select one. At a Codex marketplace root, it discovers local plugin entries automatically.
 
-## What The Scanner Checks
-
-`plugin-scanner` supports a full quality suite:
-
-- `scan` for full-surface security and release analysis
-- `lint` for rule-oriented authoring feedback
-- `verify` for runtime and install-surface readiness checks
-- `submit` for artifact-backed submission gating
-- `doctor` for targeted diagnostics and troubleshooting bundles
-
-The scanner evaluates only the surfaces a plugin actually exposes, then normalizes the final score across applicable checks. A plugin is not rewarded or penalized for optional surfaces it does not ship.
-
-| Category | Max Points | Coverage |
-| :--- | :--- | :--- |
-| Manifest Validation | 31 | `plugin.json`, required fields, semver, kebab-case, recommended metadata, interface metadata, interface links and assets, safe declared paths |
-| Security | 36 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults, Cisco MCP scan status, elevated MCP findings, MCP analyzability |
-| Operational Security | 20 | SHA-pinned GitHub Actions, `write-all`, privileged untrusted checkout patterns, Dependabot, dependency lockfiles |
-| Best Practices | 15 | `README.md`, skills directory, `SKILL.md` frontmatter, committed `.env`, `.codexignore` |
-| Marketplace | 15 | `.agents/plugins/marketplace.json` validity, legacy `marketplace.json` compatibility, policy fields, safe source paths |
-| Skill Security | 15 | Cisco integration status, elevated skill findings, analyzability |
-| Code Quality | 10 | `eval`, `new Function`, shell-injection patterns |
-
-## CLI Usage
+Checks cover manifests, secrets, MCP transport and command configuration, approval defaults, skills, dependency lockfiles, and GitHub Actions permissions. Optional Cisco integrations add skill and MCP analysis. Reports support text, JSON, Markdown, and SARIF.
 
 ```bash
-# Scan a plugin directory
-plugin-scanner scan ./my-plugin
-
-# Auto-detect all supported ecosystems inside a repo (default)
-plugin-scanner scan ./plugins-repo --ecosystem auto
-
-# Scan only Claude package surfaces
-plugin-scanner scan ./plugins-repo --ecosystem claude
-
-# Scan only native Kimi Code plugin surfaces
-plugin-scanner scan ./plugins-repo --ecosystem kimi
-
-# Scan a native DeepSeek Harness (DSH/Cordis) package
-plugin-scanner scan ./dsh-plugin --ecosystem deepseek-harness
-
-# List supported ecosystems
-plugin-scanner --list-ecosystems
-
-# Output JSON
-plugin-scanner scan ./my-plugin --format json
-
-# Write a SARIF report for GitHub code scanning
-plugin-scanner scan ./my-plugin --format sarif --output plugin-scanner.sarif
-
-# Fail CI on findings at or above high severity
-plugin-scanner scan ./my-plugin --fail-on-severity high
-
-# Require Cisco skill scanning with a strict policy
-plugin-scanner scan ./my-plugin --cisco-skill-scan on --cisco-policy strict
-
-# Require optional Cisco MCP static analysis
-plugin-scanner scan ./my-plugin --cisco-mcp-scan on
+plugin-scanner scan . --format sarif --output plugin-scanner.sarif
+plugin-scanner scan . --fail-on-severity high
 ```
 
-Use the bare `plugin-scanner ./my-plugin` form only for compatibility with older automation. New scripts and docs should
-prefer explicit subcommands so `scan`, `lint`, `verify`, `submit`, and `doctor` have predictable help, flags, and output.
+Quality grades use the checks applicable to each package. Trust scoring has separate provenance and weights; see the [skill](docs/trust/skill-trust-local.md), [MCP](docs/trust/mcp-trust-draft.md), and [plugin](docs/trust/plugin-trust-draft.md) scoring references.
 
-| Need | Command | Output contract |
-| :--- | :--- | :--- |
-| Human release summary | `plugin-scanner scan ./my-plugin` | terminal summary first, optional JSON/Markdown/SARIF with `--format` |
-| Rule-level authoring feedback | `plugin-scanner lint ./my-plugin` | human findings by default, JSON with `--format json` |
-| Runtime readiness details | `plugin-scanner verify ./my-plugin` | human pass/fail by default, JSON with `--format json` |
-| Publishable quality artifact | `plugin-scanner submit ./my-plugin --attest dist/plugin-quality.json` | writes one artifact for one plugin directory |
-| Troubleshooting bundle | `plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip` | diagnostic JSON and bundle artifacts |
+### GitHub Actions
 
-## Quality Suite Commands
-
-```bash
-# Summary scan (legacy form still works)
-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
-
-# Scan a multi-plugin repo from the marketplace root
-plugin-scanner scan . --format json
-
-# Rule-oriented lint (with optional mechanical fixes)
-plugin-scanner lint ./my-plugin --list-rules
-plugin-scanner lint ./my-plugin --explain README_MISSING
-plugin-scanner lint ./my-plugin --fix --profile strict-security
-
-# Runtime readiness verification
-plugin-scanner verify ./my-plugin --format json
-plugin-scanner verify . --format json
-plugin-scanner verify ./my-plugin --online --format text
-
-# Artifact-backed submission gate
-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
-
-# Diagnostic bundle
-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
-```
-
-</details>
-
-<details>
-<summary>Advanced reference: specs, action publishing, automation, and examples</summary>
-
-## Codex Spec Alignment
-
-The scanner follows the current Codex plugin packaging conventions more closely:
-
-- local manifest paths should use `./` prefixes
-- `.agents/plugins/marketplace.json` is the preferred marketplace manifest location
-- root `marketplace.json` is still supported in compatibility mode
-- `interface` metadata no longer requires an undocumented `type` field
-- `verify` performs an MCP initialize handshake before probing declared capabilities
-
-`lint --fix` preserves or adds the documented `./` prefixes instead of stripping them away.
-
-For repo-scoped marketplaces, `scan`, `lint`, `verify`, and `doctor` can target the repository root directly. `submit` remains intentionally single-plugin so the emitted artifact points at one concrete plugin package.
-
-## Config + Baseline Example
-
-```toml
-# .plugin-scanner.toml
-[scanner]
-profile = "public-marketplace"
-baseline_file = "baseline.txt"
-ignore_paths = ["tests/*", "fixtures/*"]
-
-[rules]
-disabled = ["README_MISSING"]
-severity_overrides = { CODEXIGNORE_MISSING = "low" }
-```
-
-## Example Output
-
-```text
-🔗 Plugin Scanner v2.0.0
-Scanning: ./my-plugin
-
-── Manifest Validation (31/31) ──
-  ✅ plugin.json exists                           +4
-  ✅ Valid JSON                                   +4
-  ✅ Required fields present                      +5
-  ✅ Version follows semver                       +3
-  ✅ Name is kebab-case                           +2
-  ✅ Recommended metadata present                 +4
-  ✅ Interface metadata complete if declared      +3
-  ✅ Interface links and assets valid if declared +3
-  ✅ Declared paths are safe                      +3
-
-── Security (16/16) ──
-  ✅ SECURITY.md found                            +3
-  ✅ LICENSE found                                +3
-  ✅ No hardcoded secrets                         +7
-  ✅ No dangerous MCP commands                    +0
-  ✅ MCP remote transports are hardened           +0
-  ✅ No approval bypass defaults                  +3
-
-── Operational Security (0/0) ──
-  ✅ Third-party GitHub Actions pinned to SHAs    +0
-  ✅ No write-all GitHub Actions permissions      +0
-  ✅ No privileged untrusted checkout patterns    +0
-  ✅ Dependabot configured for automation surfaces +0
-  ✅ Dependency manifests have lockfiles          +0
-
-── Skill Security (15/15) ──
-  ✅ Cisco skill scan completed                   +3
-  ✅ No elevated Cisco skill findings             +8
-  ✅ Skills analyzable                            +4
-
-Findings: critical:0, high:0, medium:0, low:0, info:0
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Final Score: 100/100 (A - Excellent)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-## Report Formats
-
-| Format | Use Case |
-| :--- | :--- |
-| `text` | Human-readable terminal summary with category totals and findings |
-| `json` | Structured integrations and findings for tooling and dashboards |
-| `markdown` | Pull request, issue, or review-ready summaries |
-| `sarif` | GitHub code scanning uploads and security automation |
-
-## Scanner Signals
-
-The scanner currently detects or validates:
-
-- Hardcoded secrets such as AWS keys, GitHub tokens, OpenAI keys, Slack tokens, GitLab tokens, and generic password or token patterns
-- Dangerous MCP command patterns such as `rm -rf`, `sudo`, `curl|sh`, `wget|sh`, `eval`, `exec`, and PowerShell or `cmd /c` shells
-- Insecure MCP remotes, including non-HTTPS endpoints and non-loopback HTTP transports
-- Risky Codex defaults such as approval bypass and unrestricted sandbox defaults inside shipped plugin config or docs
-- Publishability issues in `interface` metadata, HTTPS links, and declared asset paths
-- Workflow hardening gaps including unpinned third-party actions, `write-all`, privileged checkout patterns, missing Dependabot, and missing lockfiles
-- Skill-level issues surfaced by Cisco `skill-scanner` when the optional integration is installed
-- Static MCP findings surfaced by Cisco `mcp-scanner` when the repo-controlled Docker image or `cisco-mcp` uv group is installed
-
-## CI And Automation
-
-Add the scanner to a plugin repository CI job:
+Add the scanner to a plugin repository:
 
 ```yaml
+name: Plugin security
+on: [push, pull_request]
+
 permissions:
   contents: read
-  security-events: write
 
 jobs:
-  scan-plugin:
+  scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
-          mode: scan
-          profile: public-marketplace
           min_score: 80
           fail_on_severity: high
-          format: sarif
-          upload_sarif: true
 ```
 
-For a multi-plugin repo, the same workflow can stay pointed at `plugin_dir: "."` as long as the repository has `.agents/plugins/marketplace.json` with local `./plugins/...` entries.
+See the [action documentation](https://github.com/hashgraph-online/ai-plugin-scanner-action) for SARIF uploads, submission workflows, and machine-readable outputs. The action source is maintained in [`action/`](action/).
 
-For repo-controlled validation in this repository, Linux jobs that target full coverage install the `cisco` extra on Python 3.12, while the baseline matrix keeps Python 3.10 compatibility explicit.
+### Optional Cisco analysis
 
-Local pre-commit style hook:
+The baseline packages work without Cisco dependencies. To add Cisco skill scanning, use Python 3.11 through 3.14 and install the extra in an isolated environment:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: plugin-scanner
-        name: Plugin Scanner
-        entry: plugin-scanner
-        language: system
-        types: [directory]
-        pass_filenames: false
-        args: ["./"]
+```bash
+pipx install 'plugin-scanner[cisco]'
 ```
 
-## GitHub Action
+For Cisco MCP analysis, use the repository's [Docker image](Dockerfile) or the `cisco-mcp` dependency group:
 
-The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
-
-The Marketplace action bundle is maintained in [`action/`](./action) and published automatically to [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action) by [`.github/workflows/publish-action-repo.yml`](./.github/workflows/publish-action-repo.yml) after each PyPI release. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
-When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11 through 3.14 for the resolver-safe Cisco skill-scanner path. Use the repo-controlled Docker image or `uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13` when you also need Cisco MCP coverage with `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on`.
-
-### Plugin Author Submission Flow
-
-The action can also handle submission intake. A plugin repository can wire the scanner into CI so a passing scan opens or reuses a submission issue in [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins).
-
-It also emits automation-friendly machine outputs:
-
-- `score`, `grade`, `grade_label`, `max_severity`, and `findings_total` as GitHub Action outputs
-- a concise markdown summary in the job summary by default
-- an optional machine-readable registry payload file for downstream registry, badge, or awesome-list automation
-
-The intended path is:
-
-1. Add the scanner action to plugin CI.
-2. Require `min_score: 80` and a severity gate such as `fail_on_severity: high`.
-3. Enable submission mode with a token that has `issues:write` on `hashgraph-online/awesome-codex-plugins`.
-4. When the plugin clears the threshold, the action opens or reuses a submission issue.
-5. The issue body includes machine-readable registry payload data, so registry automation can ingest the same submission event.
-
-Example:
-
-```yaml
-permissions:
-  contents: read
-
-jobs:
-  scan-plugin:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Scan and submit if eligible
-        id: scan
-        uses: hashgraph-online/ai-plugin-scanner-action@v1
-        with:
-          plugin_dir: "."
-          min_score: 80
-          fail_on_severity: high
-          submission_enabled: true
-          submission_score_threshold: 80
-          submission_token: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
-
-      - name: Print submission issue
-        if: steps.scan.outputs.submission_performed == 'true'
-        run: echo "${{ steps.scan.outputs.submission_issue_urls }}"
+```bash
+uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13
+uv run plugin-scanner scan . --cisco-skill-scan on --cisco-mcp-scan on
 ```
 
-`submission_token` is required when `submission_enabled: true`. This flow is idempotent. If the plugin repository was already submitted, the action reuses the existing open issue instead of opening duplicates by matching an exact hidden plugin URL marker in the existing issue body.
+The published `cisco` extra provides skill scanning; the separate `cisco-mcp` group supplies the MCP scanner. Dependency versions and Python constraints are maintained in [`pyproject.toml`](pyproject.toml).
 
-### Registry Payload For Plugin Ecosystem Automation
+## Documentation
 
-If you want to feed the same scan into a registry, badge pipeline, or another plugin ecosystem automation step, request a registry payload file directly from the action:
-
-```yaml
-permissions:
-  contents: read
-
-jobs:
-  scan-plugin:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Scan plugin
-        id: scan
-        uses: hashgraph-online/ai-plugin-scanner-action@v1
-        with:
-          plugin_dir: "."
-          format: sarif
-          output: ai-plugin-scanner.sarif
-          registry_payload_output: ai-plugin-registry-payload.json
-
-      - name: Show trust signals
-        run: |
-          echo "Score: ${{ steps.scan.outputs.score }}"
-          echo "Grade: ${{ steps.scan.outputs.grade_label }}"
-          echo "Max severity: ${{ steps.scan.outputs.max_severity }}"
-
-      - name: Upload registry payload
-        uses: actions/upload-artifact@v6
-        with:
-          name: ai-plugin-registry-payload
-          path: ${{ steps.scan.outputs.registry_payload_path }}
-```
-
-The registry payload mirrors the submission data used by HOL ecosystem automation, so one scan can drive code scanning, review summaries, awesome-list intake, and registry trust ingestion.
+| Guide | Contents |
+| :--- | :--- |
+| [Get started](docs/guard/get-started.md) | Installation, manual setup, package protection, and common commands. |
+| [Agent support](docs/guard/harness-support.md) | Integration coverage and approval behavior. |
+| [Architecture](docs/guard/architecture.md) | Runtime components and decision flow. |
+| [Policy specification](spec/guard-policy/v1alpha1/README.md) | GuardPolicy document format. |
+| [Policy recipes](docs/guard/policy-recipes.md) | Configuration examples for common workflows. |
+| [Extensions](docs/guard/extensions/README.md) | Built-in command rules and contribution guidance. |
+| [Local vs. cloud](docs/guard/local-vs-cloud.md) | Local capabilities and optional cloud services. |
+| [Troubleshooting](docs/guard/troubleshooting.md) | Diagnosis and recovery. |
+| [Security](SECURITY.md) | Vulnerability reporting and disclosure policy. |
 
 ## Development
 
+Clone the repository and install the development dependencies with uv:
+
 ```bash
-pip install -e ".[dev,cisco]"
-ruff check src tests
-ruff format --check src
-pytest -q
-python -m build
+git clone https://github.com/hashgraph-online/hol-guard.git
+cd hol-guard
+uv sync --extra dev
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pytest --tb=short
+uv build
 ```
 
-Use `pip install -e ".[dev]"` or `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
+For optional Cisco coverage, use the dependency group command above. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution requirements and the [testing matrix](docs/guard/testing-matrix.md) for integration tests.
 
-## Repository Workflows
+## Community
 
-- Matrix CI for Python `3.10` through `3.13`
-- Package publishing via the `publish.yml` workflow
-- OpenSSF Scorecard automation for repository hardening visibility
+Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
 
-## Security
-
-For disclosure and response policy, see [SECURITY.md](./SECURITY.md).
-
-## Contributing
-
-Contribution guidance lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Maintainers
-
-Maintained by HOL.
-
-## Example: HOL Registry Broker Plugin
-
-The [HOL Registry Broker Codex Plugin](https://github.com/hashgraph-online/registry-broker-codex-plugin) bridges Codex plugins with the [HOL Universal Registry](https://hol.org/registry/plugins), providing agent discovery, trust signals, and verified identity on Hedera.
-
-[![Registry Broker trust badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dhol%252Fregistry-broker-codex-plugin%26metric%3Dtrust%26style%3Dflat)](https://hol.org/registry/plugins/hol%2Fregistry-broker-codex-plugin)
-
-HOL Registry scores: **Trust 80** / **Review 83** / **Enforce 74**
-
-```text
-🔗 Plugin Scanner v2.0.0
-Scanning: ./registry-broker-codex-plugin
-
-── Manifest Validation (31/31) ──
-  ✅ plugin.json exists                           +4
-  ✅ Valid JSON                                   +4
-  ✅ Required fields present                      +5
-  ✅ Version follows semver                       +3
-  ✅ Name is kebab-case                           +2
-  ✅ Recommended metadata present                 +4
-  ✅ Interface metadata complete if declared      +3
-  ✅ Interface links and assets valid if declared +3
-  ✅ Declared paths are safe                      +3
-
-── Security (24/24) ──
-  ✅ SECURITY.md found                            +3
-  ✅ LICENSE found                                +3
-  ✅ No hardcoded secrets                         +7
-  ✅ No dangerous MCP commands                    +3
-  ✅ MCP remote transports are hardened           +3
-  ✅ No approval bypass defaults                  +5
-
-── Operational Security (20/20) ──
-  ✅ Third-party GitHub Actions pinned to SHAs    +5
-  ✅ No write-all GitHub Actions permissions      +5
-  ✅ No privileged untrusted checkout patterns    +3
-  ✅ Dependabot configured for automation surfaces +4
-  ✅ Dependency manifests have lockfiles          +3
-
-── Best Practices (15/15) ──
-  ✅ README.md found                             +5
-  ✅ Skills directory present                    +3
-  ✅ SKILL.md frontmatter valid                  +4
-  ✅ No committed .env                           +2
-  ✅ .codexignore found                          +1
-
-── Marketplace (15/15) ──
-  ✅ marketplace.json valid                      +5
-  ✅ Policy fields present                       +5
-  ✅ Marketplace sources are safe                +5
-
-── Skill Security (15/15) ──
-  ✅ Cisco skill scan completed                  +3
-  ✅ No elevated Cisco skill findings            +8
-  ✅ Skills analyzable                           +4
-
-── Code Quality (10/10) ──
-  ✅ No eval or Function constructor             +5
-  ✅ No shell injection patterns                 +5
-
-Findings: critical:0, high:0, medium:0, low:0, info:0
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Final Score: 130/130
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-Plugins that pass the scanner with a high score are candidates for listing in the [HOL Plugin Registry](https://hol.org/registry/plugins).
-
-</details>
-
-## Resources
-
-- [HOL Plugin Registry](https://hol.org/registry/plugins)
-- [HOL Plugin Security dataset on Hugging Face](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
-- [HOL Standards Documentation](https://hol.org/docs/standards)
-- [OpenAI Codex Plugin Documentation](https://developers.openai.com/codex/plugins)
-- [Model Context Protocol Documentation](https://modelcontextprotocol.io)
-- [Cisco AI Skill Scanner](https://pypi.org/project/cisco-ai-skill-scanner/)
-- [Cisco AI MCP Scanner](https://pypi.org/project/cisco-ai-mcp-scanner/)
-- [HOL GitHub Organization](https://github.com/hashgraph-online)
-
-A scan is not a safety guarantee. Runtime benchmark fixtures in the dataset are modeled, not live attacks. The dataset's ~205 scored plugins are the plugin catalog, not the Registry Broker agent catalog. Hashgraph Online's org-wide GitHub star total is not a star count for this repository.
+- [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
+- [Browse releases](https://github.com/hashgraph-online/hol-guard/releases)
+- [Explore the plugin security dataset](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
 
 ## License
 
-Apache-2.0
+Licensed under [Apache-2.0](LICENSE).
