@@ -1166,10 +1166,8 @@ class StorePolicyMixin:
         encoded_payloads = {
             state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
         }
-        managed_base_authority = None
         managed_base_snapshot: tuple[int, str] | None = None
         managed_base_snapshot_captured = False
-
         managed_base_authority = self.read_persisted_extension_control_authority()
         with self._connect() as authority_connection:
             authority_row = authority_connection.execute(
@@ -1227,9 +1225,9 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     previous_active = json.loads(str(active_row["payload_json"]))
-                    if not isinstance(previous_active, dict):
-                        raise ExtensionControlAuthorityError("invalid managed controls activation")
-                    active_catalog_digest = previous_active.get("catalogDigest")
+                    active_catalog_digest = (
+                        previous_active.get("catalogDigest") if isinstance(previous_active, dict) else None
+                    )
                     if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
                         raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
                     _, active_revision = managed_controls_layers_from_activation_state(
