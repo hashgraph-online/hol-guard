@@ -5,7 +5,7 @@ export function updateStatusLabel(status: GuardUpdateStatus | null | undefined):
     return "Checking version…";
   }
   if (status.update_available && status.latest_version) {
-    return `Version ${status.latest_version} is ready`;
+    return `${status.latest_version} is ready`;
   }
   return `Version ${status.current_version}`;
 }
@@ -66,7 +66,7 @@ export function updateHelpCopy(
     if (embeddedInDesktop) {
       return "Updates run through the HOL Guard app. Use Check for Updates in the HOL Guard menu-bar icon, and the app installs this version with its own progress screen.";
     }
-    return "This restarts Guard for a moment. Open approvals will stay saved.";
+    return "Restarts briefly. Approvals stay saved.";
   }
   if (status && !status.auto_updatable && status.recovery_reinstall_available) {
     if (embeddedInDesktop) {

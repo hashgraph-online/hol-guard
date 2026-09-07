@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { assertSimpleCopySafe, localSettingChoiceLabel, PROTECTION_TERMS, protectionCenterLoadError, simpleCopyViolations } from "./copy/protection-copy";
+import { CatalogFilterBar } from "./components/catalog-filter-bar";
 import { ProtectionModuleRow, ProtectionStatusHero, TechnicalDetails } from "./components/protection-primitives";
 import {
   CLOUD_CONNECTED_FIXTURE,
@@ -16,6 +17,7 @@ import {
   largeDeveloperModuleFixture,
   protectionModuleFixture,
 } from "./fixtures/protection-fixtures";
+import { EMPTY_CATALOG_FILTERS } from "./model/catalog-filters";
 import { groupProtectionModules, protectionCategoryIdForExtension } from "./model/protection-categories";
 import { deriveProtectionStatus } from "./model/protection-presentation";
 
@@ -160,6 +162,33 @@ const mcpRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
 assert.match(mcpRow, />MCP</);
 assert.match(mcpRow, />External</);
 assert.match(mcpRow, /Off until you turn it on/);
+
+const filterBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
+  catalog: [
+    protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
+    protectionModuleFixture({
+      extension_id: "command.mcp-filesystem",
+      name: "Filesystem MCP",
+      trust_class: "external",
+      surface: "mcp",
+      description: "Reviews official filesystem MCP tools.",
+    }),
+  ],
+  filters: EMPTY_CATALOG_FILTERS,
+  onChange: () => undefined,
+}));
+assert.match(filterBar, /data-testid="catalog-filters"/);
+assert.match(filterBar, /<legend[^>]*>Trust<\/legend>/);
+assert.match(filterBar, /<legend[^>]*>Kind<\/legend>/);
+assert.match(filterBar, /<legend[^>]*>Area<\/legend>/);
+assert.match(filterBar, />Built in</);
+assert.match(filterBar, />External</);
+assert.match(filterBar, /aria-label="External, 1 tool"/);
+assert.match(filterBar, />MCP</);
+assert.match(filterBar, />Commands</);
+assert.match(filterBar, />Source control</);
+assert.match(filterBar, /aria-pressed="false"/);
+assert.doesNotMatch(filterBar, /Clear filters/);
 
 const technical = renderToStaticMarkup(createElement(TechnicalDetails, { children: createElement("code", null, "command.git") }));
 assert.match(technical, /<details/);

@@ -2,7 +2,6 @@
 
 # The probe deliberately adds the repository root to sys.path so that it can
 # validate the installed package against the checked-in ownership contract.
-# Keep the import guard explicit instead of relying on the caller's cwd.
 # ruff: noqa: E402
 
 from __future__ import annotations
@@ -27,7 +26,10 @@ import codex_plugin_scanner
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
-from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+from codex_plugin_scanner.guard.native_resident_client import (
+    close_native_resident_clients,
+    native_resident_client_failure_code,
+)
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
@@ -112,6 +114,14 @@ def _native_state_files(guard_home: Path) -> list[Path]:
 
 
 def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    # Close scoped lease writers before stopping the resident.
+    try:
+        close_native_resident_clients(guard_home)
+    finally:
+        _stop_native_process(runtime, guard_home)
+
+
+def _stop_native_process(runtime: Path, guard_home: Path) -> None:
     try:
         result = subprocess.run(
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
@@ -398,6 +408,7 @@ def _run_native_smoke(root: Path) -> None:
 def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="hg-auto-", dir=_short_temp_parent()) as temporary:
         root = Path(temporary)
+        completed = False
         try:
             _run_native_smoke(root)
             health = native_runtime_health(root / "guard-home")
@@ -406,10 +417,20 @@ def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
             _require(health.resident_failures == 0, health)
             _require(health.oneshot_failures == 0, health)
             _require(len(_native_state_files(root / "guard-home")) == 1, "native generation was not reused")
-            return _installed_hook_corpus(root)
+            corpus = _installed_hook_corpus(root)
+            completed = True
+            return corpus
         finally:
+            cleanup_error: OSError | RuntimeError | None = None
             for guard_home in (root / "guard-home", root / "hook-home"):
-                _stop_native_runtime(identity.path, guard_home)
+                try:
+                    _stop_native_runtime(identity.path, guard_home)
+                except (OSError, RuntimeError) as exc:
+                    message = f"native_default_auto_probe_cleanup_failed: {type(exc).__name__}"
+                    print(message, file=sys.stderr)
+                    cleanup_error = cleanup_error or exc
+            if cleanup_error is not None and completed:
+                raise cleanup_error
 
 
 def _assert_native_disabled_mode() -> None:
