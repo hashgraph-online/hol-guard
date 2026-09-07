@@ -9,9 +9,9 @@ export type GuardUpdateChannelSummaryProps = {
 };
 
 // Inline channel control for the Local Guard status row: the card's 11px
-// status typography with a 24px minimum hit target.
+// status typography on a 32px target that matches the panel's action pills.
 export const GUARD_UPDATE_CHANNEL_CONTROL_CLASS =
-  "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 
 // Compact pill for panel-level actions (update, reinstall): 32px target that
 // sits inline beside the status line instead of filling the card width.
@@ -38,7 +38,7 @@ export function GuardUpdateChannelSummary(props: GuardUpdateChannelSummaryProps)
       <span className="inline-flex min-w-0 items-center gap-1">
         {props.version ? (
           <span
-            className="shrink-0 font-mono text-[10px] leading-4 text-brand-dark/70"
+            className="min-w-0 font-mono text-[10px] leading-4 text-brand-dark/70 [overflow-wrap:anywhere]"
             aria-label={`Guard version ${props.version}`}
           >
             v{props.version}

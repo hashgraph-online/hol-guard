@@ -20142,7 +20142,7 @@ function GuardModalLayer({
     overlayRoot
   );
 }
-const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-brand-blue/30 bg-white px-2.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
   let channelStatus = null;
@@ -20165,7 +20165,7 @@ function GuardUpdateChannelSummary(props) {
       props.version ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "span",
         {
-          className: "shrink-0 font-mono text-[10px] leading-4 text-brand-dark/70",
+          className: "min-w-0 font-mono text-[10px] leading-4 text-brand-dark/70 [overflow-wrap:anywhere]",
           "aria-label": `Guard version ${props.version}`,
           children: [
             "v",
