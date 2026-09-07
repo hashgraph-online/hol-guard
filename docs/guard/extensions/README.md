@@ -133,6 +133,7 @@ Protection model meanings:
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.routed` | Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI. | 4 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
