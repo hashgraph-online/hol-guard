@@ -26,6 +26,7 @@ import { GuardModalLayer } from "./guard-modal-layer";
 import {
   GuardUpdateChannelSummary,
   GUARD_UPDATE_ACTION_BUTTON_CLASS,
+  GUARD_UPDATE_CONTROL_TEXT_CLASS,
 } from "./guard-update-channel-summary";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
@@ -137,7 +138,13 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   }
 
   return (
-    <div className={props.compact ? "space-y-1" : "space-y-1.5"}>
+    <div
+      className={
+        props.compact
+          ? "space-y-1 border-t border-brand-blue/10 pt-1.5"
+          : "space-y-1.5 border-t border-brand-blue/10 pt-2"
+      }
+    >
       {updateChannelSummary}
       {props.updateStatus?.update_available ? (
         <div className="flex items-center justify-between gap-2">
@@ -152,7 +159,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
               className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
             >
               <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
-              Update
+              <span className={GUARD_UPDATE_CONTROL_TEXT_CLASS}>Update</span>
             </button>
           ) : null}
         </div>
@@ -167,7 +174,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
         >
           <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
-          Reinstall from PyPI
+          <span className={GUARD_UPDATE_CONTROL_TEXT_CLASS}>Reinstall from PyPI</span>
         </button>
       ) : null}
       {busy && (
