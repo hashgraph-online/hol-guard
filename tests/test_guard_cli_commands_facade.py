@@ -39,3 +39,28 @@ def test_commands_facade_restores_propagated_overrides(monkeypatch) -> None:
         assert generic_commands.schedule_guard_daemon_ensure is replacement
 
     assert generic_commands.schedule_guard_daemon_ensure is original
+
+
+def test_commands_facade_restores_overrides_captured_by_modules_imported_inside_window(monkeypatch) -> None:
+    import sys
+    from types import ModuleType
+
+    from codex_plugin_scanner.guard.cli import _commands_shared as shared_commands
+    from codex_plugin_scanner.guard.cli import commands_support as support_module
+
+    real_queue = support_module.queue_blocked_approvals
+
+    def replacement(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("override leaked past the scoped call")
+
+    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", replacement)
+
+    probe_name = f"{guard_commands_module.__package__}.commands_hook_probe_leak"
+    probe = ModuleType(probe_name)
+    monkeypatch.setitem(sys.modules, probe_name, probe)
+
+    with guard_commands_module._support_overrides():
+        probe.queue_blocked_approvals = shared_commands.queue_blocked_approvals
+        assert probe.queue_blocked_approvals is replacement
+
+    assert probe.queue_blocked_approvals is real_queue
