@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.where-are-we",
+  "version": "1.0.0",
+  "name": "where-are-we",
+  "description": "Reviews the where-are-we repository-map CLI where it writes outside its own map directory: an agent file or manifest in the repository, a git hook or agent configuration file, and the tracker walk that leaves the machine.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.ngavrish",
+    "displayName": "Community",
+    "url": "https://github.com/ngavrish/where-are-we"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#0F766E" },
+  "homepage": "https://github.com/ngavrish/where-are-we",
+  "license": "MIT",
+  "executables": ["where-are-we"],
+  "ecosystemIds": ["where-are-we"],
+  "riskClasses": ["local_secret_read", "destructive_shell", "network_egress", "execution"],
+  "actionClasses": [
+    "where-are-we repository file write command",
+    "where-are-we agent hook installation command",
+    "where-are-we tracker fetch command"
+  ],
+  "referenceUrls": ["https://github.com/ngavrish/where-are-we#what-writes-and-what-only-reads"],
+  "saferAlternatives": [
+    "Run the same command line with --dry-run first and read the paths it prints.",
+    "Ask the tool what a command line does before running it: `where-are-we --effects -- <command line>`."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_where_are_we_extensions"
+  }
+}
