@@ -87,7 +87,8 @@ class ConfirmationFedMatcher:
 
     The declared matcher decides what the fed segment must look like. This adds
     the one structural condition the flag matchers cannot express: the previous
-    stage of the *same* pipeline supplies the consent the prompt asks for.
+    stage of the *same* pipeline supplies the consent the prompt asks for,
+    including forwarding through bare cat stages.
     Segments joined by ``&&`` or ``;`` run in their own execution context and
     share no standard input, so they are not a feed.
     """
@@ -102,6 +103,16 @@ class ConfirmationFedMatcher:
         }
         if not fed_contexts:
             return ()
+        # Bare cat forwards stdin unchanged. File operands and transforming
+        # commands cannot establish that the earlier consent reaches the prompt.
+        for segment in sorted(command.segments, key=lambda item: item.pipeline_index):
+            if (
+                segment.executable is not None
+                and segment.executable.rsplit("/", 1)[-1] == "cat"
+                and not segment.arguments
+                and (segment.execution_context, segment.pipeline_index - 1) in fed_contexts
+            ):
+                fed_contexts.add((segment.execution_context, segment.pipeline_index))
         evidence = tuple(
             item
             for item in self.matcher.match(command)

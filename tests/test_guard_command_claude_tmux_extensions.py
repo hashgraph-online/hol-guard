@@ -218,6 +218,8 @@ def test_a_piped_yes_answers_the_prompt_the_same_way_force_does(tmp_path: Path) 
     assert _CTC_SESSION_TEARDOWN.match(parsed("printf 'y\\n' | ctc --all"))
     assert _CTC_PROCESS_PRUNE.match(parsed("yes | ctc --prune"))
     assert _CTC_PROCESS_PRUNE.match(parsed("yes yes | ctc --all --prune"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes | cat | ctc --all"))
+    assert _CTC_PROCESS_PRUNE.match(parsed("yes | cat | cat | ctc --prune"))
     # A refusal is not consent, and neither is arbitrary piped data.
     assert _CTC_SESSION_TEARDOWN.match(parsed("yes n | ctc --all")) == ()
     assert _CTC_SESSION_TEARDOWN.match(parsed("cat notes | ctc --all")) == ()
