@@ -17,7 +17,7 @@ def _workflow(name: str) -> dict:
 
 
 @pytest.mark.parametrize("filename", ["publish-mcpb.yml", "publish-mcp-registry.yml"])
-def test_downstream_publication_requires_successful_same_repository_push(filename: str) -> None:
+def test_downstream_publication_requires_successful_same_repository_release(filename: str) -> None:
     workflow = _workflow(filename)
     # PyYAML's YAML 1.1 loader parses the unquoted Actions key as True.
     trigger = workflow[True]
@@ -30,7 +30,7 @@ def test_downstream_publication_requires_successful_same_repository_push(filenam
     job = workflow["jobs"]["publish"]
     for condition in (
         "github.event.workflow_run.conclusion == 'success'",
-        "github.event.workflow_run.event == 'push'",
+        'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
         "github.event.workflow_run.run_attempt == 1",
         "github.event.workflow_run.head_repository.full_name == github.repository",
         "github.event.workflow_run.head_branch)",
@@ -49,7 +49,7 @@ def test_downstream_publication_requires_successful_same_repository_push(filenam
         for condition in (
             "github.event_name == 'pull_request'",
             "github.event.workflow_run.conclusion == 'success'",
-            "github.event.workflow_run.event == 'push'",
+            'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
             "github.event.workflow_run.run_attempt == 1",
             "github.event.workflow_run.head_repository.full_name == github.repository",
             "github.event.workflow_run.head_branch)",

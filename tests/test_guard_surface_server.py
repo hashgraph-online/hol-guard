@@ -1162,15 +1162,8 @@ class TestGuardSurfaceServer:
         assert error.value.code == 401
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "unauthorized"
-        # The unauthorized audit is persisted before the 401 is written, but the
-        # sqlite write can lag under shard load; poll briefly instead of racing it.
-        events: list[dict[str, object]] = []
-        audit_deadline = time.monotonic() + 10.0
-        while time.monotonic() < audit_deadline:
-            events = store.list_events(event_name="daemon.auth.unauthorized")
-            if events:
-                break
-            time.sleep(0.05)
+        # The handler commits the audit synchronously before writing the 401.
+        events = store.list_events(event_name="daemon.auth.unauthorized")
         assert events, "unauthorized audit event was never persisted"
         assert events[-1]["payload"]["path"] == "/v1/hooks/claude-code"
 
@@ -2742,6 +2735,7 @@ class TestGuardSurfaceServer:
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "unauthorized"
         events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert events, "unauthorized audit event was never persisted"
         assert events[-1]["payload"]["path"] == "/v1/receipts"
 
     def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:

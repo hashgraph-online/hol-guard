@@ -339,6 +339,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/sonar/cache
           key: sonar-analyzers-${{ runner.os }}-${{ hashFiles('sonar-project.properties') }}
+      - name: Initialize pinned Rust analysis toolchain
+        shell: bash
+        run: bash scripts/ci/setup_sonar_rust.sh
       - name: Cache Rust analysis dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
