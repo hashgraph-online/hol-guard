@@ -36,7 +36,8 @@ def handle_local_cli_post(handler: object, path: str, payload: dict[str, object]
         settimeout = getattr(getattr(handler, "connection", None), "settimeout", None)
         if callable(settimeout):
             settimeout(_RECOGNIZE_SOCKET_TIMEOUT_SECONDS)
-    api = getattr(daemon_server(), "local_cli_api", None)
+    daemon = daemon_server()
+    api = getattr(daemon, "local_cli_api", None)
     if api is None:
         _write_unavailable(write_json)
         return

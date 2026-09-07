@@ -64,6 +64,14 @@ def test_probe_search_path_omits_package_shim_dirs(tmp_path: Path, monkeypatch) 
     assert str(shim) not in env["PATH"].split(os.pathsep)
 
 
+def test_probe_search_path_does_not_restore_shim_only_path(tmp_path: Path, monkeypatch) -> None:
+    shim = tmp_path / "package-shims" / "bin"
+    shim.mkdir(parents=True)
+    monkeypatch.setenv("PATH", str(shim))
+    path_entries = [entry for entry in probe_search_path().split(os.pathsep) if entry]
+    assert str(shim) not in path_entries
+
+
 def test_probe_skips_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
     _shim_first_npx_path(tmp_path, monkeypatch)
     probed = probe_stdio_mcp_server(

@@ -45,7 +45,7 @@ def probe_search_path() -> str:
     for extra in ("/usr/bin", "/bin", "/opt/homebrew/bin", "/usr/local/bin"):
         if extra not in filtered and Path(extra).is_dir():
             filtered.append(extra)
-    return os.pathsep.join(filtered) if filtered else fallback
+    return os.pathsep.join(filtered)
 
 
 def is_package_shim_executable(path: str) -> bool:

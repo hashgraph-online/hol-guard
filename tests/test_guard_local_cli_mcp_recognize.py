@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
+from shutil import which
 
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_harness_mcp_servers,
@@ -16,6 +17,7 @@ from codex_plugin_scanner.guard.daemon.local_cli_http import (
 from codex_plugin_scanner.guard.daemon.local_cli_mcp_store import stored_mcp_recognition
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_search_path
 from codex_plugin_scanner.guard.store import GuardStore
 
 _FAKE_NPX_MCP = """#!/usr/bin/env python3
@@ -223,8 +225,7 @@ def test_recognize_skips_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
     commands = item["commands"]
     assert isinstance(commands, list)
     assert any(isinstance(entry, dict) and entry.get("name") == "list_pages" for entry in commands)
-    argv0 = Path(real_npx)
-    assert argv0.name == "npx"
+    assert which("npx", path=probe_search_path()) == str(real_npx)
 
 
 def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypatch) -> None:
