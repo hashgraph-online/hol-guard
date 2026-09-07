@@ -11,6 +11,12 @@ import {
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
 const catalogDigest = "a".repeat(64);
 const catalog = { schema_version: "1.0.0", catalog_digest: catalogDigest, extensions: [] };
+const emptyLocalCliList = {
+  schema_version: "guard.daemon.local-clis.v1",
+  revision: 0,
+  items: [],
+  cloud: { sync_local_only: true, summary: "This device only." },
+};
 const authority = (health: "tampered" | "protected" | "unenrolled") => ({
   schema_version: "1.0.0",
   health,
@@ -26,6 +32,8 @@ async function mountRecoveryFixture(page: Page, setup?: {
   configured: boolean;
   enabled: boolean;
   failSettings: boolean;
+  failRecovery?: boolean;
+  initialHealth?: "tampered" | "unenrolled";
 }): Promise<void> {
   let repaired = false;
   await page.route("**/v1/**", async (route) => {
@@ -54,10 +62,13 @@ async function mountRecoveryFixture(page: Page, setup?: {
       },
     };
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
+    else if (path.endsWith("/local-clis") || path.endsWith("/local-clis/discover")) body = emptyLocalCliList;
     else if (path.endsWith("/extension-controls/catalog")) body = catalog;
     else if (path.endsWith("/extension-controls/effective")) {
       const recoveryHealth = repaired ? "protected" : "tampered";
-      body = authority(setup ? "unenrolled" : recoveryHealth);
+      // Configured fixtures start unenrolled unless a failure scenario must expose tampered state.
+      const initialHealth = setup?.initialHealth ?? (setup ? "unenrolled" : recoveryHealth);
+      body = authority(initialHealth);
     }
     else if (path.endsWith("/extension-controls/recover-authority")) {
       const payload = request.postDataJSON() as { approval_totp_code?: string };
@@ -66,6 +77,14 @@ async function mountRecoveryFixture(page: Page, setup?: {
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
+      if (setup?.failRecovery) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "authority_recovery_failed" }),
+        });
+        return;
+      }
       repaired = true;
       body = authority("protected");
     }
@@ -104,13 +123,38 @@ test("authenticated extension recovery shows progress and reaches protected stat
   await mountRecoveryFixture(page);
 
   await page.goto(`/extensions?${DAEMON}`);
-  await page.getByRole("button", { name: "Repair now" }).click();
-  await expect(page.getByRole("dialog", { name: "Repair extension controls" })).toBeVisible();
+  await page.getByRole("button", { name: "Repair protection" }).click();
+  await expect(page.getByRole("dialog", { name: "Repair protection" })).toBeVisible();
   await page.getByLabel("Authenticator code").fill("123456");
-  await page.getByRole("button", { name: "Repair controls" }).click();
+  await page.getByRole("dialog", { name: "Repair protection" }).getByRole("button", { name: "Repair protection" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Repair extension controls" }).getByRole("button", { name: "Repairing…" }),
+    page.getByRole("dialog", { name: "Repair protection" }).getByRole("button", { name: "Repairing…" }),
   ).toBeDisabled();
-  await expect(page.getByText("Protected authority")).toBeVisible();
+  await expect(page.getByText("Local protection repaired and verified.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Protection needs repair" })).toHaveCount(0);
+  await expect(runtimeErrors).toEqual([]);
+});
+
+test("failed extension recovery keeps the repair banner and explains the failure", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  await mountRecoveryFixture(page, {
+    configured: true,
+    enabled: true,
+    failSettings: false,
+    failRecovery: true,
+    initialHealth: "tampered",
+  });
+
+  await page.goto(`/extensions?${DAEMON}`);
+  await page.getByRole("button", { name: "Repair protection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Repair protection" });
+  await dialog.getByLabel("Authenticator code").fill("123456");
+  await dialog.getByRole("button", { name: "Repair protection" }).click();
+  await expect(dialog.getByRole("button", { name: "Repairing…" })).toBeDisabled();
+  await expect(dialog.getByRole("alert")).toContainText("could not verify a fully protected state");
+  await expect(page.getByRole("heading", { name: "Protection needs repair" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Repair protection" })).toHaveCount(2);
+  await expect(page.getByText("Local protection repaired and verified.")).toHaveCount(0);
   await expect(runtimeErrors).toEqual([]);
 });
