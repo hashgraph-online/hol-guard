@@ -66,7 +66,7 @@ def probe_env(tmp: str) -> dict[str, str]:
 def _package_cache_env() -> dict[str, str]:
     extra: dict[str, str] = {}
     home = os.environ.get("HOME")
-    npm_cache = _first_env("NPM_CONFIG_CACHE", "npm_config_cache")
+    npm_cache = _configured_cache("NPM_CONFIG_CACHE", "npm_config_cache")
     if not npm_cache and home:
         candidate = Path(home) / ".npm"
         if candidate.is_dir():
@@ -74,14 +74,14 @@ def _package_cache_env() -> dict[str, str]:
     if npm_cache:
         extra["npm_config_cache"] = npm_cache
         extra["NPM_CONFIG_CACHE"] = npm_cache
-    uv_cache = os.environ.get("UV_CACHE_DIR")
+    uv_cache = _configured_cache("UV_CACHE_DIR")
     if not uv_cache and home:
         candidate = Path(home) / ".cache" / "uv"
         if candidate.is_dir():
             uv_cache = str(candidate)
     if uv_cache:
         extra["UV_CACHE_DIR"] = uv_cache
-    bun_cache = os.environ.get("BUN_INSTALL_CACHE_DIR")
+    bun_cache = _configured_cache("BUN_INSTALL_CACHE_DIR")
     if not bun_cache and home:
         candidate = Path(home) / ".bun" / "install" / "cache"
         if candidate.is_dir():
@@ -89,6 +89,19 @@ def _package_cache_env() -> dict[str, str]:
     if bun_cache:
         extra["BUN_INSTALL_CACHE_DIR"] = bun_cache
     return extra
+
+
+def _configured_cache(*keys: str) -> str | None:
+    raw = _first_env(*keys)
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped:
+        return None
+    path = Path(stripped)
+    if path.is_absolute():
+        return stripped
+    return str((Path.cwd() / path).resolve())
 
 
 def _first_env(*keys: str) -> str | None:
