@@ -187,7 +187,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "14dfe51da62093fc36240bd1deed75626c5931179b89b4e157c0530afb939b09"
+    assert registry.catalog_digest == "68e95619b86fdb32d5f1e5deb6f02fb7765664b7012e5c185d0e32c6065449a6"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

@@ -63,6 +63,9 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    "where-are-we repository file write command": ("local_secret_read",),
+    "where-are-we agent hook installation command": ("destructive_shell",),
+    "where-are-we tracker fetch command": ("network_egress", "execution"),
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
 }
