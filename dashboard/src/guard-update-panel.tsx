@@ -137,23 +137,28 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   }
 
   return (
-    <div className={props.compact ? "space-y-1" : "space-y-2"}>
+    <div className={props.compact ? "space-y-1" : "space-y-1.5"}>
       {updateChannelSummary}
       {props.updateStatus?.update_available ? (
-        <p className="text-[11px] leading-relaxed text-brand-dark/75">{updateStatusLabel(props.updateStatus)}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]">
+            {updateStatusLabel(props.updateStatus)}
+          </p>
+          {showUpdateButton && props.onUpdateGuard ? (
+            <button
+              type="button"
+              onClick={props.onUpdateGuard}
+              aria-label="Update Guard to the latest version"
+              className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
+            >
+              <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
+              Update
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {helpCopy ? (
-        <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
-      ) : null}
-      {showUpdateButton && props.onUpdateGuard ? (
-        <button
-          type="button"
-          onClick={props.onUpdateGuard}
-          className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
-        >
-          <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Update Guard
-        </button>
+        <p className="text-[10px] leading-4 text-brand-dark/70">{helpCopy}</p>
       ) : null}
       {showReinstallButton && props.onReinstallGuard ? (
         <button
@@ -161,13 +166,13 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           onClick={props.onReinstallGuard}
           className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
         >
-          <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
           Reinstall from PyPI
         </button>
       ) : null}
       {busy && (
-        <p className="inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue" role="status">
-          <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue" role="status">
+          <HiMiniArrowPath className="h-3 w-3 animate-spin" aria-hidden="true" />
           {phase === "updating" ? "Updating Guard…" : "Reconnecting…"}
         </p>
       )}

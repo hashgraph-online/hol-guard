@@ -1159,6 +1159,10 @@
     min-height: calc(var(--spacing) * 5);
   }
 
+  .min-h-6 {
+    min-height: calc(var(--spacing) * 6);
+  }
+
   .min-h-7 {
     min-height: calc(var(--spacing) * 7);
   }
@@ -4014,6 +4018,10 @@
     padding: calc(var(--spacing) * 8);
   }
 
+  .px-0\.5 {
+    padding-inline: calc(var(--spacing) * .5);
+  }
+
   .px-1 {
     padding-inline: var(--spacing);
   }
@@ -4451,6 +4459,10 @@
   .tracking-widest {
     --tw-tracking: var(--tracking-widest);
     letter-spacing: var(--tracking-widest);
+  }
+
+  .\[overflow-wrap\:anywhere\] {
+    overflow-wrap: anywhere;
   }
 
   .break-words {
