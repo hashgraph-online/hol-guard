@@ -261,7 +261,7 @@ from .hook_worker_responses import prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
-from .local_cli_http import handle_local_cli_list
+from .local_cli_http import dispatch_local_cli_post, handle_local_cli_list
 from .managed_controls_api import managed_policy_rows
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
@@ -322,7 +322,14 @@ _EXTENSION_CONTROL_PATHS = frozenset(
         "/v1/extension-controls/acknowledge-degraded",
     }
 )
-_LOCAL_CLI_PATHS = frozenset({"/v1/local-clis/preview", "/v1/local-clis/apply", "/v1/local-clis/recognize"})
+_LOCAL_CLI_PATHS = frozenset(
+    {
+        "/v1/local-clis/preview",
+        "/v1/local-clis/apply",
+        "/v1/local-clis/recognize",
+        "/v1/local-clis/discover",
+    }
+)
 
 
 class _HookPathValidationError(ValueError):
@@ -2710,12 +2717,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path in _LOCAL_CLI_PATHS:
             try:
-                if parsed.path.endswith("/preview"):
-                    response = self._daemon_server().local_cli_api.preview(payload)
-                elif parsed.path.endswith("/recognize"):
-                    response = self._daemon_server().local_cli_api.recognize(payload)
-                else:
-                    response = self._daemon_server().local_cli_api.apply(payload)
+                response = dispatch_local_cli_post(self._daemon_server().local_cli_api, parsed.path, payload)
             except LocalCliApiError as error:
                 self._write_json(error.to_payload(), status=error.status)
                 return
@@ -6982,9 +6984,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/recover-authority",
             "/v1/extension-controls/acknowledge-degraded",
             "/v1/local-clis",
-            "/v1/local-clis/preview",
-            "/v1/local-clis/apply",
-            "/v1/local-clis/recognize",
+            *_LOCAL_CLI_PATHS,
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",

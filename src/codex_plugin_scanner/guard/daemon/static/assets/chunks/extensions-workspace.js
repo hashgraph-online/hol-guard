@@ -1,4 +1,4 @@
-import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aU as HiMiniNoSymbol, aV as startGuardCloudConnect, aW as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aX as guardAwareHref } from "../guard-dashboard.js";
+import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ad as HiMiniAdjustmentsHorizontal, aU as HiMiniCheck, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aV as HiMiniNoSymbol, aW as startGuardCloudConnect, aX as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aY as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -2432,12 +2432,15 @@ function blockActionLabel(surface) {
   if (surface === "package-scripts") return "Block these scripts";
   return "Block this tool";
 }
-function dialogIntro(hasProjects, surface) {
+function dialogIntro(hasProjects, surface, discovering = false) {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
+  }
+  if (discovering) {
+    return "Looking for project scripts and app servers on this device.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
@@ -2471,9 +2474,10 @@ function suggestionSummary(item) {
 }
 function SuggestionPanel(props) {
   if (!props.hasSuggestions) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", children: suggestionEmptyCopy(props.query) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: suggestionEmptyCopy(props.query, props.discovering === true) });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    props.discovering === true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: "Looking for more project scripts and app servers on this device." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SuggestionGroup,
       {
@@ -2515,9 +2519,12 @@ function ProjectSwitcher(props) {
     item.cli_id
   )) });
 }
-function suggestionEmptyCopy(query) {
+function suggestionEmptyCopy(query, discovering) {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
+  }
+  if (discovering) {
+    return "Scanning this device for package scripts and app servers.";
   }
   return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }
@@ -3432,6 +3439,7 @@ function AddCustomExtensionWorkspace(props) {
   const recognizeGeneration = reactExports.useRef(0);
   const autoRecognizedCommand = reactExports.useRef("");
   const didAutoSelect = reactExports.useRef(false);
+  const sawDiscovering = reactExports.useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
   const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
   const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
@@ -3517,12 +3525,22 @@ function AddCustomExtensionWorkspace(props) {
     await runRecognize(command);
   }, [command, runRecognize]);
   reactExports.useEffect(() => {
-    if (didAutoSelect.current || recognized !== null || command.trim() !== "") return;
+    if (props.discovering === true) sawDiscovering.current = true;
+    if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
     const preferred = preferredPackageScriptExtension(props.items);
     if (preferred === null) return;
+    if (recognized !== null) {
+      if (recognized.cli_id !== preferred.cli_id) return;
+      if (recognized.identity_hash === preferred.identity_hash && recognized.commands.length === preferred.commands.length) {
+        return;
+      }
+      markRecognized(preferred, suggestionSummary(preferred));
+      return;
+    }
+    if (didAutoSelect.current) return;
     didAutoSelect.current = true;
     selectSuggestion(preferred);
-  }, [command, props.items, recognized, selectSuggestion]);
+  }, [command, markRecognized, props.discovering, props.items, recognized, selectSuggestion]);
   reactExports.useEffect(() => {
     const trimmed = command.trim();
     if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;
@@ -3660,7 +3678,11 @@ function AddCustomExtensionWorkspace(props) {
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-3 max-w-2xl pb-4", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "add-custom-extension-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: "Add a custom extension" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(rememberedProjects.length > 0, recognized?.surface ?? null) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(
+              rememberedProjects.length > 0,
+              recognized?.surface ?? null,
+              props.discovering === true && recognized === null
+            ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: commandFieldLabel(recognized?.surface ?? null) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3718,6 +3740,7 @@ function AddCustomExtensionWorkspace(props) {
             SuggestionPanel,
             {
               query: command,
+              discovering: props.discovering === true,
               hasSuggestions,
               packageScriptSuggestions,
               harnessSuggestions,
@@ -3735,6 +3758,69 @@ function AddCustomExtensionWorkspace(props) {
       ]
     }
   );
+}
+async function fetchLocalCliDiscover() {
+  const response = await fetchLocalCliApi("/v1/local-clis/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new LocalCliApiError("local_cli_request_failed", "Guard could not refresh custom extensions.");
+  }
+  return normalizeLocalCliList(payload);
+}
+function useLocalCliCatalog() {
+  const [data, setData] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [discovering, setDiscovering] = reactExports.useState(false);
+  const [catalogReady, setCatalogReady] = reactExports.useState(false);
+  const loadGeneration = reactExports.useRef(0);
+  const load = reactExports.useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    try {
+      const next = await fetchLocalCliList();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
+      setError(null);
+    } catch (caught) {
+      if (loadGeneration.current !== generation) return;
+      setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+    }
+  }, []);
+  const discover = reactExports.useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    setDiscovering(true);
+    setCatalogReady(false);
+    try {
+      const next = await fetchLocalCliDiscover();
+      if (loadGeneration.current !== generation) return;
+      setData(next);
+      setError(null);
+    } catch {
+      try {
+        const next = await fetchLocalCliList();
+        if (loadGeneration.current !== generation) return;
+        setData(next);
+        setError(null);
+      } catch (caught) {
+        if (loadGeneration.current !== generation) return;
+        setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+      }
+    } finally {
+      if (loadGeneration.current === generation) {
+        setDiscovering(false);
+        setCatalogReady(true);
+      }
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void load();
+  }, [load]);
+  return { data, error, load, discover, discovering, catalogReady };
 }
 function randomToken$1() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -4050,22 +4136,6 @@ function CustomExtensionReviewModal(props) {
     ] })
   ] }) });
 }
-function useLocalCliCatalog() {
-  const [data, setData] = reactExports.useState(null);
-  const [error, setError] = reactExports.useState(null);
-  const load = reactExports.useCallback(async () => {
-    try {
-      setData(await fetchLocalCliList());
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
-    }
-  }, []);
-  reactExports.useEffect(() => {
-    void load();
-  }, [load]);
-  return { data, error, load };
-}
 const PROTECTION_TERMS = {
   pageTitle: "Extensions"
 };
@@ -4085,6 +4155,41 @@ function protectionCenterLoadError(message) {
     title: "Extensions unavailable",
     detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
   };
+}
+function effectiveStatusKey(effective, options = {}) {
+  const managed = effective.managed_controls;
+  const approvalGate = options.approvalGate;
+  return JSON.stringify({
+    schema_version: effective.schema_version,
+    health: effective.health,
+    revision: effective.revision,
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: effective.global_lockdown,
+    cloud_policy_sync_error: options.runtime?.cloud_policy_sync_error ?? null,
+    approval_gate: approvalGate ? {
+      configured: approvalGate.configured,
+      enabled: approvalGate.enabled,
+      fail_closed: approvalGate.fail_closed,
+      strict_all_decisions: approvalGate.strict_all_decisions,
+      totp_enabled: approvalGate.totp_enabled ?? false,
+      totp_pending: approvalGate.totp_pending ?? false
+    } : null,
+    failure_codes: effective.failures.map((failure) => `${failure.layer_kind ?? ""}:${failure.code}`).sort(),
+    managed_controls: managed ? {
+      control_set_id: managed.control_set_id,
+      control_set_name: managed.control_set_name,
+      bundle_version: managed.bundle_version,
+      workspace_id: managed.workspace_id,
+      authority_mode: managed.authority_mode,
+      catalog_digest: managed.catalog_digest,
+      acknowledgement: {
+        extension_authority_revision: managed.acknowledgement.extension_authority_revision,
+        policy_revision: managed.acknowledgement.policy_revision,
+        effective_projection_digest: managed.acknowledgement.effective_projection_digest,
+        status: managed.acknowledgement.status
+      }
+    } : null
+  });
 }
 function authorityNoticeView(health, approvalGateReady) {
   switch (health) {
@@ -4178,6 +4283,10 @@ function ProtectionAuthorityNotice(props) {
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
+  const [checkPending, setCheckPending] = reactExports.useState(false);
+  const [checkComplete, setCheckComplete] = reactExports.useState(false);
+  const [checkError, setCheckError] = reactExports.useState(null);
+  const checkBaselineRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     if (props.status) setProofOpen(false);
   }, [props.status]);
@@ -4189,6 +4298,21 @@ function ProtectionAuthorityNotice(props) {
       setCopyState("copied");
     } catch {
       setCopyState("failed");
+    }
+  };
+  const checkAgain = async () => {
+    if (checkPending || props.busy) return;
+    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
+    setCheckPending(true);
+    setCheckComplete(false);
+    setCheckError(null);
+    try {
+      await props.onCheckAgain();
+      setCheckComplete(true);
+    } catch {
+      setCheckError("Guard could not refresh the current protection status. The displayed state remains in force; try again.");
+    } finally {
+      setCheckPending(false);
     }
   };
   const warning2 = view.tone === "warning";
@@ -4204,8 +4328,8 @@ function ProtectionAuthorityNotice(props) {
             "button",
             {
               type: "button",
-              "aria-busy": props.busy,
-              disabled: props.busy || gatePending,
+              "aria-busy": props.busy || checkPending,
+              disabled: props.busy || checkPending || gatePending,
               onClick: () => {
                 if (view.action.kind === "configure-approval") {
                   props.onOpenApprovalSettings();
@@ -4236,14 +4360,20 @@ function ProtectionAuthorityNotice(props) {
             "button",
             {
               type: "button",
-              disabled: props.busy,
-              onClick: props.onCheckAgain,
+              disabled: props.busy || checkPending,
+              "aria-busy": checkPending,
+              onClick: () => {
+                void checkAgain();
+              },
               className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
-              children: "Check again"
+              children: checkPending ? "Checking…" : "Check again"
             }
           )
         ] }),
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
+        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
         view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
@@ -4286,6 +4416,365 @@ function ProtectionAuthorityNotice(props) {
         }
       }
     ) : null
+  ] });
+}
+const PROTECTION_CATEGORIES = [
+  { id: "source-control", label: "Source control", description: "Protect repository history, branches, and source-control operations.", searchAliases: ["git", "github", "repository", "source"] },
+  { id: "packages", label: "Packages and dependencies", description: "Protect dependency installs, package managers, and supply-chain changes.", searchAliases: ["npm", "pnpm", "yarn", "pip", "package", "dependency"] },
+  { id: "files-secrets", label: "Files and secrets", description: "Protect sensitive files, credentials, and secret-bearing operations.", searchAliases: ["file", "secret", "credential", "environment"] },
+  { id: "cloud-infrastructure", label: "Cloud and infrastructure", description: "Protect infrastructure, cloud resources, and administrative actions.", searchAliases: ["aws", "gcp", "azure", "terraform", "cloud", "infrastructure"] },
+  { id: "network-downloads", label: "Network and downloads", description: "Protect downloads, remote access, and network-facing operations.", searchAliases: ["curl", "wget", "ssh", "network", "download", "remote"] },
+  { id: "data-databases", label: "Data and databases", description: "Protect databases, storage, backups, and destructive data operations.", searchAliases: ["database", "sql", "postgres", "mysql", "redis", "data", "backup"] },
+  { id: "deployments-ci", label: "Deployments and CI", description: "Protect deployment, build, release, and CI/CD operations.", searchAliases: ["deploy", "release", "ci", "cd", "workflow", "pipeline"] },
+  { id: "messaging-collaboration", label: "Messaging and collaboration", description: "Protect actions in messaging, search, and collaboration tools.", searchAliases: ["slack", "message", "collaboration", "search"] },
+  { id: "system-shell", label: "System and shell actions", description: "Protect high-impact local shell, process, and system operations.", searchAliases: ["shell", "system", "bash", "terminal", "process"] },
+  { id: "ai-workflows", label: "AI tools and agent workflows", description: "Protect AI-agent, tool, and automated workflow actions.", searchAliases: ["ai", "agent", "mcp", "tool", "workflow"] }
+];
+new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
+function searchableExtensionText(extension2) {
+  return [
+    extension2.extension_id,
+    extension2.name,
+    extension2.description,
+    ...extension2.ecosystem_ids,
+    ...extension2.executables,
+    ...extension2.action_classes,
+    ...extension2.risk_classes
+  ].join(" ").toLowerCase();
+}
+function protectionCategoryIdForExtension(extension2) {
+  const text2 = searchableExtensionText(extension2);
+  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text2)) return "source-control";
+  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text2)) return "packages";
+  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text2)) return "files-secrets";
+  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text2)) return "cloud-infrastructure";
+  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text2)) return "network-downloads";
+  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text2)) return "data-databases";
+  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text2)) return "deployments-ci";
+  if (/slack|discord|message|collaboration|search|email/.test(text2)) return "messaging-collaboration";
+  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text2)) return "ai-workflows";
+  return "system-shell";
+}
+const EMPTY_CATALOG_FILTERS = {
+  trusts: [],
+  kinds: [],
+  areas: []
+};
+const CATALOG_TRUST_FILTERS = [
+  "first-party",
+  "trusted-library",
+  "external"
+];
+const CATALOG_KIND_FILTERS = ["commands", "mcp"];
+function catalogFiltersActive(filters) {
+  return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
+}
+function catalogTrustLabel(trust) {
+  if (trust === "first-party") return "Built in";
+  if (trust === "trusted-library") return "Trusted";
+  return "External";
+}
+function catalogKindLabel(kind) {
+  if (kind === "mcp") return "MCP";
+  return "Commands";
+}
+function catalogItemKind(extension2) {
+  if (extension2.surface === "mcp") return "mcp";
+  return "commands";
+}
+function toggleCatalogFilterValue(selected, value) {
+  if (selected.includes(value)) return selected.filter((item) => item !== value);
+  return [...selected, value];
+}
+function catalogItemMatchesFilters(extension2, filters) {
+  if (filters.trusts.length > 0 && !filters.trusts.includes(extension2.trust_class)) return false;
+  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension2))) return false;
+  if (filters.areas.length > 0) {
+    const area = protectionCategoryIdForExtension(extension2);
+    if (!filters.areas.includes(area)) return false;
+  }
+  return true;
+}
+function filterCatalogExtensions(extensions, filters) {
+  if (!catalogFiltersActive(filters)) return [...extensions];
+  return extensions.filter((extension2) => catalogItemMatchesFilters(extension2, filters));
+}
+function customItemMatchesKind(item, kinds) {
+  if (kinds.length === 0) return true;
+  if (item.surface === "mcp") return kinds.includes("mcp");
+  return kinds.includes("commands");
+}
+function customItemMatchesFilters(item, filters) {
+  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
+  return customItemMatchesKind(item, filters.kinds);
+}
+function sameFilterValues(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+function catalogFiltersEqual(left, right) {
+  return sameFilterValues(left.trusts, right.trusts) && sameFilterValues(left.kinds, right.kinds) && sameFilterValues(left.areas, right.areas);
+}
+function pruneCatalogFilters(filters, extensions) {
+  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
+  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentAreas = new Set(populatedCatalogAreas(extensions));
+  return {
+    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
+    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
+    areas: filters.areas.filter((area) => presentAreas.has(area))
+  };
+}
+function catalogToolUnit(count) {
+  if (count === 1) return "tool";
+  return "tools";
+}
+function catalogFilterCountCopy(visible, total, filtering) {
+  if (!filtering) return `${total} ${catalogToolUnit(total)}`;
+  return `${visible} of ${total} ${catalogToolUnit(total)}`;
+}
+function catalogFilterChipAriaLabel(label, count) {
+  return `${label}, ${count} ${catalogToolUnit(count)}`;
+}
+function populatedCatalogAreas(extensions) {
+  const present = /* @__PURE__ */ new Set();
+  for (const extension2 of extensions) {
+    present.add(protectionCategoryIdForExtension(extension2));
+  }
+  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id2) => present.has(id2));
+}
+function populatedCatalogAreaOptions(extensions) {
+  const present = new Set(populatedCatalogAreas(extensions));
+  return PROTECTION_CATEGORIES.filter((category) => present.has(category.id)).map((category) => ({ id: category.id, label: category.label }));
+}
+function catalogFilterChipCount(extensions, filters, patch) {
+  return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
+}
+function CatalogFilterOption(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-pressed": props.pressed,
+      "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
+      disabled: props.disabled,
+      onClick: props.onToggle,
+      className: "group flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-[rgba(63,65,116,0.16)] bg-white px-2.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-4 shrink-0 place-items-center text-brand-blue", children: props.pressed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4", "aria-hidden": "true" }) : null }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.label })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
+      ]
+    }
+  );
+}
+function ActiveFilterToken(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-label": `Remove ${props.valueLabel} ${props.groupLabel.toLowerCase()} filter`,
+      onClick: props.onRemove,
+      className: "group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-blue/45 bg-brand-blue/10 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-dark transition-colors hover:border-brand-blue hover:bg-brand-blue/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-dark/65", children: [
+          props.groupLabel,
+          ":"
+        ] }),
+        props.valueLabel,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3.5 shrink-0 text-brand-dark/55 group-hover:text-brand-dark", "aria-hidden": "true" })
+      ]
+    }
+  );
+}
+function CatalogFilterGroup(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: `min-w-0 ${props.className ?? ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold text-brand-dark/55", children: props.legend }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-col gap-1.5", children: props.children })
+  ] });
+}
+function TrustFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogTrustLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function KindFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogKindLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function AreaFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: props.label,
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function CatalogFilterBar(props) {
+  const [panelOpen, setPanelOpen] = reactExports.useState(false);
+  const panelId = reactExports.useId();
+  const triggerRef = reactExports.useRef(null);
+  const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
+  const filtering = catalogFiltersActive(props.filters);
+  const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
+  const handleToggleTrust = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      trusts: toggleCatalogFilterValue(props.filters.trusts, value)
+    });
+  }, [props]);
+  const handleToggleKind = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      kinds: toggleCatalogFilterValue(props.filters.kinds, value)
+    });
+  }, [props]);
+  const handleToggleArea = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      areas: toggleCatalogFilterValue(props.filters.areas, value)
+    });
+  }, [props]);
+  const handleClear = reactExports.useCallback(() => {
+    props.onChange(EMPTY_CATALOG_FILTERS);
+  }, [props]);
+  const handleKeyDown = reactExports.useCallback((event) => {
+    if (event.key !== "Escape" || !panelOpen) return;
+    event.stopPropagation();
+    setPanelOpen(false);
+    triggerRef.current?.focus();
+  }, [panelOpen]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 scroll-mt-28", "data-testid": "catalog-filters", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          ref: triggerRef,
+          "aria-expanded": panelOpen,
+          "aria-controls": panelId,
+          onClick: () => setPanelOpen((open) => !open),
+          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+            "Filters",
+            activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: activeCount }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniChevronDown,
+              {
+                className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`,
+                "aria-hidden": "true"
+              }
+            )
+          ]
+        }
+      ),
+      props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Trust",
+          valueLabel: catalogTrustLabel(trust),
+          onRemove: () => handleToggleTrust(trust)
+        },
+        `trust-${trust}`
+      )),
+      props.filters.kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Kind",
+          valueLabel: catalogKindLabel(kind),
+          onRemove: () => handleToggleKind(kind)
+        },
+        `kind-${kind}`
+      )),
+      props.filters.areas.map((areaId) => {
+        const area = areas.find((option) => option.id === areaId);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveFilterToken,
+          {
+            groupLabel: "Area",
+            valueLabel: area?.label ?? areaId,
+            onRemove: () => handleToggleArea(areaId)
+          },
+          `area-${areaId}`
+        );
+      }),
+      filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+        "Clear filters"
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden text-xs text-brand-dark/70 sm:inline", children: "Narrow by trust, kind, or area." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: panelId,
+        hidden: !panelOpen,
+        className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TrustFilterOption,
+            {
+              value: trust,
+              count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
+              pressed: props.filters.trusts.includes(trust),
+              onToggle: handleToggleTrust
+            },
+            trust
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            KindFilterOption,
+            {
+              value: kind,
+              count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
+              pressed: props.filters.kinds.includes(kind),
+              onToggle: handleToggleKind
+            },
+            kind
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            AreaFilterOption,
+            {
+              value: area.id,
+              label: area.label,
+              count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
+              pressed: props.filters.areas.includes(area.id),
+              onToggle: handleToggleArea
+            },
+            area.id
+          )) }) })
+        ] })
+      }
+    )
   ] });
 }
 const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
@@ -4689,7 +5178,17 @@ function ManagedControlsPrimaryAction(props) {
     ] });
   }
   if (props.action.action === "refresh") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onRefresh, className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: props.action.label });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onRefresh,
+        disabled: props.checking,
+        "aria-busy": props.checking,
+        className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-60",
+        children: props.checking ? "Checking…" : props.action.label
+      }
+    );
   }
   if (props.action.action === "connect-cloud") {
     if (props.connectHref) {
@@ -4779,7 +5278,7 @@ function recoveryNotice(recovery) {
   if (recovery === "degraded") {
     return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
   }
-  return "Cloud sync is stale. Guard keeps the last verified authority fail-safe until a fresh acknowledgement succeeds.";
+  return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
 function extensionLocalProtectionInput(extension2, effective, runtime) {
   const managed = effective.managed_controls;
@@ -4813,13 +5312,26 @@ function ExtensionManagedControlsPanel(props) {
   const [connecting, setConnecting] = reactExports.useState(false);
   const [connectHref, setConnectHref] = reactExports.useState(null);
   const [connectMessage, setConnectMessage] = reactExports.useState(null);
+  const [refreshState, setRefreshState] = reactExports.useState("idle");
+  const [refreshError, setRefreshError] = reactExports.useState(null);
+  const refreshBaselineRef = reactExports.useRef(null);
   const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
   const view = buildLocalProtectionView(input);
   const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
   const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
-  const refresh = () => {
-    void props.onRefresh();
-  };
+  const refresh = reactExports.useCallback(async () => {
+    if (refreshState === "checking") return;
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
+    setRefreshState("checking");
+    setRefreshError(null);
+    try {
+      await props.onRefresh();
+      setRefreshState("complete");
+    } catch {
+      setRefreshState("error");
+      setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
+    }
+  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
   const connect = reactExports.useCallback(() => {
     setConnecting(true);
     setConnectMessage(null);
@@ -4858,12 +5370,16 @@ function ExtensionManagedControlsPanel(props) {
         {
           action: view.primaryAction,
           connecting,
+          checking: refreshState === "checking",
           connectHref,
           onConnect: connect,
           onRefresh: refresh
         }
       ) }),
-      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null
+      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
+      refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
+      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
+      refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
     ] }),
     !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
     hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
@@ -4898,10 +5414,36 @@ function CatalogExtensionRow(props) {
     }
   );
 }
+function CatalogFilterEmpty(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Remove a filter or start over to see the full catalog again." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
+  ] });
+}
 function ExtensionsOverview(props) {
   const [query, setQuery] = reactExports.useState("");
+  const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
+  reactExports.useEffect(() => {
+    setFilters((current) => {
+      const next = pruneCatalogFilters(current, props.catalogExtensions);
+      if (catalogFiltersEqual(current, next)) return current;
+      return next;
+    });
+  }, [props.catalogExtensions]);
   const searching = query.trim().length > 0;
-  const addedCustomCount = addedCustomExtensions(props.localCliItems).length;
+  const filtering = catalogFiltersActive(filters);
+  const visibleCatalog = reactExports.useMemo(
+    () => filterCatalogExtensions(props.catalogExtensions, filters),
+    [filters, props.catalogExtensions]
+  );
+  const handleClearFilters = reactExports.useCallback(() => {
+    setFilters(EMPTY_CATALOG_FILTERS);
+  }, []);
+  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter(
+    (item) => customItemMatchesFilters(item, filters)
+  );
+  const addedCustomCount = addedCustomItems.length;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -4926,7 +5468,7 @@ function ExtensionsOverview(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PatternSearchConsole,
       {
-        catalog: props.catalogExtensions,
+        catalog: visibleCatalog,
         effective: props.effective,
         active: props.active,
         query,
@@ -4936,11 +5478,19 @@ function ExtensionsOverview(props) {
         actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }) : null
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CatalogFilterBar,
+      {
+        catalog: props.catalogExtensions,
+        filters,
+        onChange: setFilters
+      }
+    ),
     searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       addedCustomCount ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionsSection,
         {
-          items: props.localCliItems,
+          items: addedCustomItems,
           onOpen: props.onOpenLocalCli,
           onAdd: props.onAddCustom
         }
@@ -4949,17 +5499,14 @@ function ExtensionsOverview(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
             addedCustomCount ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/70", children: [
-              props.catalogExtensions.length,
-              " tools"
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: props.catalogExtensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           CatalogExtensionRow,
           {
             extension: extension2,
@@ -4967,7 +5514,7 @@ function ExtensionsOverview(props) {
             onOpen: props.onOpenExtension
           },
           extension2.extension_id
-        )) })
+        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
       ] })
     ] })
   ] });
@@ -5833,27 +6380,50 @@ function ProtectionCenterWorkspace(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
+  const loadInFlightRef = reactExports.useRef(null);
+  const refreshInFlightRef = reactExports.useRef(null);
   const localClis = useLocalCliCatalog();
-  const load = reactExports.useCallback(async () => {
-    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
-    try {
-      const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
-      setState({ kind: "ready", catalog, effective });
-      return effective;
-    } catch (error) {
-      setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
-      return null;
-    }
+  const load = reactExports.useCallback(() => {
+    if (loadInFlightRef.current !== null) return loadInFlightRef.current;
+    const request2 = (async () => {
+      setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+      try {
+        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        setState({ kind: "ready", catalog, effective });
+        return effective;
+      } catch (error) {
+        setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+        return null;
+      }
+    })();
+    loadInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      },
+      () => {
+        if (loadInFlightRef.current === request2) loadInFlightRef.current = null;
+      }
+    );
+    return request2;
   }, []);
   reactExports.useEffect(() => {
     void load();
   }, [load]);
   reactExports.useEffect(() => {
-    const onPopState = () => setRouteState(currentExtensionRouteState());
+    const onPopState = () => {
+      const next = currentExtensionRouteState();
+      if (next.route.kind === "add-custom") void localClis.discover();
+      setRouteState(next);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [localClis.discover]);
+  reactExports.useEffect(() => {
+    if (routeState.route.kind !== "add-custom") return;
+    void localClis.discover();
+  }, [localClis.discover, routeState.route.kind]);
   const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
   const canonicalSelected = reactExports.useMemo(() => canonicalExtensionId(catalogExtensions, requestedExtensionId), [catalogExtensions, requestedExtensionId]);
@@ -5888,10 +6458,11 @@ function ProtectionCenterWorkspace(props) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const openAddCustom = reactExports.useCallback(() => {
+    void localClis.discover();
     pushExtensionHistory(addCustomExtensionHref());
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, []);
+  }, [localClis.discover]);
   const handleCustomExtensionAdded = reactExports.useCallback((cliId) => {
     void localClis.load();
     openLocalCliDetail(cliId);
@@ -5902,9 +6473,25 @@ function ProtectionCenterWorkspace(props) {
   const retryLoad = reactExports.useCallback(() => {
     void load();
   }, [load]);
-  const refreshProtection = reactExports.useCallback(async () => {
-    await load();
-  }, [load]);
+  const refreshProtection = reactExports.useCallback(() => {
+    if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
+    const request2 = (async () => {
+      const [refreshed] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null) {
+        throw new Error("Protection status could not be refreshed.");
+      }
+    })();
+    refreshInFlightRef.current = request2;
+    void request2.then(
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      },
+      () => {
+        if (refreshInFlightRef.current === request2) refreshInFlightRef.current = null;
+      }
+    );
+    return request2;
+  }, [load, props.onRefreshRuntime]);
   const handleCancelPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -5971,13 +6558,17 @@ function ProtectionCenterWorkspace(props) {
   const handleAuthorityAction = reactExports.useCallback((kind, credentials) => {
     void runAuthorityAction(kind, credentials);
   }, [runAuthorityAction]);
-  const handleCheckAgain = reactExports.useCallback(() => {
-    void load();
+  const handleCheckAgain = reactExports.useCallback(async () => {
     setRecoveryError(null);
-    void refreshApprovalGate({ failClosed: true }).catch(() => {
+    const [protectionResult, approvalResult] = await Promise.allSettled([
+      refreshProtection(),
+      refreshApprovalGate({ failClosed: true })
+    ]);
+    if (approvalResult.status === "rejected") {
       setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
-    });
-  }, [load, refreshApprovalGate]);
+    }
+    if (protectionResult.status === "rejected") throw protectionResult.reason;
+  }, [refreshApprovalGate, refreshProtection]);
   const handleOpenApprovalSettings = reactExports.useCallback(() => {
     props.onNavigate("/settings?section=approval");
   }, [props.onNavigate]);
@@ -6053,6 +6644,7 @@ function ProtectionCenterWorkspace(props) {
       {
         items: localClis.data?.items ?? [],
         revision: localClis.data?.revision ?? 0,
+        discovering: localClis.discovering || !localClis.catalogReady,
         onBack: closeExtension,
         onAdded: handleCustomExtensionAdded
       }

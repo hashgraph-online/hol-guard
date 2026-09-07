@@ -993,7 +993,7 @@ export function App() {
       extensionsContent={
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
-            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onNavigate={navigate} />
+            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onRefreshRuntime={refreshStateAfterAction} onNavigate={navigate} />
           </Suspense>
         </ErrorBoundary>
       }

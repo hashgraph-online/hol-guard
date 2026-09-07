@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HiMiniClipboard, HiMiniClipboardDocumentCheck, HiMiniExclamationTriangle, HiMiniInformationCircle } from "react-icons/hi2";
 
 import { ApprovalProofModal } from "../../approval-proof-modal";
 import type { EffectiveExtensionControls } from "../../extension-controls-api";
+import { effectiveStatusKey } from "../effective-status-key";
 
 export type AuthorityNoticeAction =
   | { kind: "repair" }
@@ -125,7 +126,7 @@ export function ProtectionAuthorityNotice(props: {
   status?: string | null;
   approvalGate: Parameters<typeof ApprovalProofModal>[0]["approvalGate"];
   onAction: (kind: "repair" | "acknowledge", credentials: { approval_password?: string; approval_totp_code?: string }) => void;
-  onCheckAgain: () => void;
+  onCheckAgain: () => Promise<void> | void;
   onOpenApprovalSettings: () => void;
 }) {
   const health = props.effective.health;
@@ -136,6 +137,10 @@ export function ProtectionAuthorityNotice(props: {
   const [proofOpen, setProofOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"repair" | "acknowledge" | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [checkPending, setCheckPending] = useState(false);
+  const [checkComplete, setCheckComplete] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const checkBaselineRef = useRef<string | null>(null);
   // A success status means the action completed and the workspace reloaded;
   // close the proof modal so the confirmation is visible on the page.
   useEffect(() => {
@@ -150,6 +155,22 @@ export function ProtectionAuthorityNotice(props: {
       setCopyState("copied");
     } catch {
       setCopyState("failed");
+    }
+  };
+
+  const checkAgain = async () => {
+    if (checkPending || props.busy) return;
+    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
+    setCheckPending(true);
+    setCheckComplete(false);
+    setCheckError(null);
+    try {
+      await props.onCheckAgain();
+      setCheckComplete(true);
+    } catch {
+      setCheckError("Guard could not refresh the current protection status. The displayed state remains in force; try again.");
+    } finally {
+      setCheckPending(false);
     }
   };
 
@@ -169,8 +190,8 @@ export function ProtectionAuthorityNotice(props: {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {view.actionLabel && view.action.kind !== "none" ? <button
             type="button"
-            aria-busy={props.busy}
-            disabled={props.busy || gatePending}
+            aria-busy={props.busy || checkPending}
+            disabled={props.busy || checkPending || gatePending}
             onClick={() => {
               if (view.action.kind === "configure-approval") {
                 props.onOpenApprovalSettings();
@@ -188,12 +209,22 @@ export function ProtectionAuthorityNotice(props: {
           >{copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}{copyState === "copied" ? "Command copied" : view.copyButtonLabel}</button> : null}
           <button
             type="button"
-            disabled={props.busy}
-            onClick={props.onCheckAgain}
+            disabled={props.busy || checkPending}
+            aria-busy={checkPending}
+            onClick={() => { void checkAgain(); }}
             className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60"
-          >Check again</button>
+          >{checkPending ? "Checking…" : "Check again"}</button>
         </div>
         {props.busy ? <p role="status" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>{pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…"}</p> : null}
+        {checkPending ? <p role="status" aria-live="polite" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>Checking current protection status…</p> : null}
+        {checkComplete ? (
+          <p role="status" aria-live="polite" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>
+            {effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current
+              ? "Check complete. No change detected; local protection remains in its current fail-safe state."
+              : "Check complete. Protection status updated."}
+          </p>
+        ) : null}
+        {checkError ? <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{checkError}</p> : null}
         {props.error ? <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{props.error}</p> : null}
         {props.status ? <p role="status" className="mt-3 text-sm font-medium text-brand-dark">{props.status}</p> : null}
         {view.command ? <details className="mt-4">
