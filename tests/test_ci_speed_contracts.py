@@ -44,6 +44,17 @@ def test_downstream_publication_requires_successful_same_repository_push(filenam
     assert release["env"]["SOURCE_SHA"] == "${{ github.event.workflow_run.head_sha }}"
     assert release["env"]["SOURCE_REF"] == "refs/heads/${{ github.event.workflow_run.head_branch }}"
     assert 'git tag --points-at "$SOURCE_SHA"' in release["run"]
+    if filename == "publish-mcpb.yml":
+        validation = workflow["jobs"]["validate"]
+        for condition in (
+            "github.event_name == 'pull_request'",
+            "github.event.workflow_run.conclusion == 'success'",
+            "github.event.workflow_run.event == 'push'",
+            "github.event.workflow_run.run_attempt == 1",
+            "github.event.workflow_run.head_repository.full_name == github.repository",
+            "github.event.workflow_run.head_branch)",
+        ):
+            assert condition in validation["if"]
 
 
 @pytest.mark.parametrize(

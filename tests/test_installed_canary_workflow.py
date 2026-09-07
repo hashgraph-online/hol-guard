@@ -96,6 +96,8 @@ def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
     assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
     assert steps.index(setup_python) < steps.index(checkout)
     assert not any("cache" in str(step.get("uses", "")) for step in steps)
+    setup_python_inputs = _mapping(setup_python["with"])
+    assert not {"cache", "cache-dependency-path", "pip-install"} & setup_python_inputs.keys()
     commands = "\n".join(str(step.get("run", "")) for step in steps)
     assert "pip install" not in commands
     assert "uv sync" not in commands
