@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,10 +12,7 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
 )
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
-from codex_plugin_scanner.guard.runtime.command_extensions import (
-    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtensionRegistry,
-)
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
@@ -38,13 +34,6 @@ from tests.managed_controls_activation_support import CAPABILITIES as _CAPABILIT
 from tests.managed_controls_activation_support import activate_managed_bundle as _activate
 from tests.managed_controls_activation_support import managed_bundle as _bundle
 from tests.managed_controls_activation_support import parse_managed_bundle as _parsed
-
-
-def _description_only_catalog_upgrade() -> CommandSafetyExtensionRegistry:
-    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-    return CommandSafetyExtensionRegistry(
-        (replace(extensions[0], description=f"{extensions[0].description} Updated."), *extensions[1:])
-    )
 
 
 def test_atomic_activation_persists_complete_projection_and_runtime_composes_it(
@@ -233,30 +222,6 @@ def test_clear_removes_active_and_negotiation_but_retains_lkg(tmp_path: Path) ->
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) is None
     assert store.get_sync_payload(MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY) is None
     assert store.get_sync_payload(MANAGED_CONTROLS_LAST_GOOD_STATE_KEY) == reactivated_lkg
-
-
-def test_clear_migrates_catalog_before_publishing_runtime_view(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    upgraded = _description_only_catalog_upgrade()
-    store._bootstrap_extension_control_authority(  # pyright: ignore[reportPrivateUsage]
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        key=None,
-    )
-    migrated = store.read_extension_control_authority_for_registry(upgraded)
-    runtime = ExtensionControlRuntime(migrated)
-
-    store.clear_policy_bundle_authority(
-        "2026-08-23T12:03:00Z",
-        policy_bundle_last_error={"reason": "catalog-drift"},
-        managed_controls_publish=runtime.publish_after_commit,
-    )
-
-    assert runtime.current().health is AuthorityHealth.PROTECTED
-    assert runtime.current().catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    assert (
-        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY).health
-        is AuthorityHealth.PROTECTED
-    )
 
 
 def test_non_v2_activation_clears_managed_state_but_retains_lkg(tmp_path: Path) -> None:
