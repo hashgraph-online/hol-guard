@@ -124,8 +124,9 @@ MAX_SECRET_MATCHES_PER_FILE = 10_000
 MAX_SCAN_DEPTH = 64
 
 # A bounded TypeScript field-name dictionary is metadata, not credential values.
-# Require a typed, multi-entry map whose every value is the upper-snake spelling
-# of its key. Arbitrary uppercase strings and ordinary credential objects do not
+# The safety invariant is that EVERY value is derivable from its key by case
+# conversion (or the inverse); the type/count checks only constrain scope.
+# Arbitrary uppercase strings and ordinary credential objects do not
 # qualify. Compute spans once per file rather than rescanning for every match.
 FIELD_NAME_MAP_RE = re.compile(
     r"(?m)^[ \t]*const [A-Za-z_$][\w$]*[ \t]*:[ \t]*Record<[^;\n{}]{1,160}>"
@@ -164,7 +165,8 @@ def _is_generated_token_expression(relative_path: Path, content: str, match: re.
     start = match.start(1)
     # Single-quoted shell values are literal; arbitrary substitutions may carry
     # credentials. Accept only the complete double-quoted random generator.
-    return start > 0 and content[start - 1] == '"' and GENERATED_TOKEN_RE.match(content, start) is not None
+    generated = GENERATED_TOKEN_RE.match(content, start)
+    return start > 0 and content[start - 1] == '"' and generated is not None and match.end(1) <= generated.end()
 
 
 BINARY_EXTS = {
@@ -484,8 +486,11 @@ def _should_skip_secret_match(
     if detector.kind == "generic" and _provider_payload(candidate) is None:
         if _is_generated_token_expression(relative_path, content, match):
             return True
-        if any(start <= match.start() < end for start, end in field_name_spans):
-            return True
+        span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
+        if span_index >= 0:
+            start, end = field_name_spans[span_index]
+            if start <= match.start() and match.end() <= end:
+                return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):

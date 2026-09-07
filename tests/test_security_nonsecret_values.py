@@ -1,10 +1,16 @@
 """Non-secret token expressions must not hide adjacent or embedded credentials."""
 
+import re
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
+from codex_plugin_scanner.checks.security import (
+    SecretPattern,
+    _field_name_map_spans,
+    _first_hardcoded_secret_line,
+    _should_skip_secret_match,
+)
 
 FIELD_MAP = """const SUFFIX_BY_FIELD: Record<Field, string> = {
   publicationUrl: "PUBLICATION_URL",
@@ -41,8 +47,14 @@ def test_generated_expression_in_non_shell_source_remains_a_literal():
     assert _first_hardcoded_secret_line(Path("src/config.py"), content) == 1
 
 
-def test_typed_field_name_map_is_not_a_credential_assignment():
-    assert _first_hardcoded_secret_line(Path("src/config.ts"), FIELD_MAP) is None
+@pytest.mark.parametrize("path", ["src/config.ts", "src/config.tsx"])
+def test_typed_field_name_map_is_not_a_credential_assignment(path):
+    assert _first_hardcoded_secret_line(Path(path), FIELD_MAP) is None
+
+
+@pytest.mark.parametrize("path", ["src/config.js", "README.md"])
+def test_field_name_maps_outside_typescript_still_fire(path):
+    assert _first_hardcoded_secret_line(Path(path), FIELD_MAP) is not None
 
 
 def test_reverse_field_name_map_is_not_a_credential_assignment():
@@ -73,3 +85,19 @@ def test_provider_secret_is_not_exempted_by_a_generated_token_line():
     provider_value = "ghp_" + "Q7vN2mL9rT5xB8cD1fG6hJ3kP4sW0zY2uA9b"
     content = f'MCP_HTTP_TOKEN="$(openssl rand -hex 32)" # {provider_value}'
     assert _first_hardcoded_secret_line(Path("README.md"), content) == 1
+
+
+@pytest.mark.parametrize(
+    ("path", "content", "pattern"),
+    [
+        ("src/config.ts", FIELD_MAP + '\nconst password = "actual-pass-937";', r'Token: "(.+)"'),
+        ("README.md", 'TOKEN="$(openssl rand -hex 32)"\npassword="actual-pass-937"', r'TOKEN="(.+)"'),
+    ],
+)
+def test_future_broader_detector_cannot_cross_an_exempted_region(path, content, pattern):
+    detector = SecretPattern(re.compile(pattern, re.DOTALL), kind="generic", value_group=1)
+    match = detector.pattern.search(content)
+    assert match is not None
+    assert not _should_skip_secret_match(
+        Path(path), content, detector, match, field_name_spans=_field_name_map_spans(Path(path), content)
+    )
