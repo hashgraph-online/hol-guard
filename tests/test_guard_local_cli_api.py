@@ -137,6 +137,131 @@ def test_list_items_returns_stored_grants_when_discovery_fails(tmp_path: Path, m
     assert listed["state"] == "allowed"
 
 
+def test_discover_items_refreshes_package_scripts_from_cwd(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    project = home / "demo-app"
+    project.mkdir()
+    (project / "package.json").write_text(
+        '{"name":"demo-app","scripts":{"guard:audit":"echo audit","build":"echo build"}}\n',
+        encoding="utf-8",
+    )
+    (project / "pnpm-lock.yaml").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    monkeypatch.chdir(project)
+    service = LocalCliApiService(store=GuardStore(home))
+    listed = service.list_items()["items"]
+    assert isinstance(listed, list)
+    assert listed == []
+    discovered = service.discover_items()["items"]
+    assert isinstance(discovered, list)
+    package_items = [item for item in discovered if isinstance(item, dict) and item.get("surface") == "package-scripts"]
+    assert package_items
+    names = {
+        str(command.get("name"))
+        for item in package_items
+        for command in item.get("commands", [])
+        if isinstance(command, dict)
+    }
+    assert "guard:audit" in names
+
+
+def test_discover_items_falls_back_to_store_when_refresh_fails(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    store = GuardStore(home)
+    store.record_local_cli_observation(identity, seen_at="2026-08-25T16:00:00Z")
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-08-25T16:00:00Z",
+    )
+    service = LocalCliApiService(store=store)
+
+    def fail_refresh(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        fail_refresh,
+    )
+    payload = service.discover_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert len(items) == 1
+    listed = items[0]
+    assert isinstance(listed, dict)
+    assert listed["cli_id"] == identity.cli_id
+    assert listed["state"] == "allowed"
+
+
+def test_discover_items_rereads_store_after_partial_refresh_failure(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    existing = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    persisted = UnlistedCliIdentity(
+        cli_id="local-cli.mcp-abcdef123456",
+        name="github",
+        kind="executable",
+        identity_hash="b" * 64,
+        example_label="npx -y @modelcontextprotocol/server-github",
+    )
+    store = GuardStore(home)
+    store.record_local_cli_observation(existing, seen_at="2026-08-25T16:00:00Z")
+    store.upsert_local_cli_grant(
+        identity=existing,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-08-25T16:00:00Z",
+    )
+    service = LocalCliApiService(store=store)
+
+    def persist_then_fail_refresh(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        store.record_local_cli_observation(
+            persisted,
+            seen_at="2026-08-25T16:05:00Z",
+            surface="mcp",
+        )
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda: {})
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        persist_then_fail_refresh,
+    )
+    payload = service.discover_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    ids = {item["cli_id"] for item in items if isinstance(item, dict)}
+    assert existing.cli_id in ids
+    assert persisted.cli_id in ids
+
+
 def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
     tmp_path: Path,
     monkeypatch,

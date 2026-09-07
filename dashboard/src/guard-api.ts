@@ -988,7 +988,7 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
