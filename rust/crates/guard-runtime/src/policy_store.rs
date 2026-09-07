@@ -93,8 +93,6 @@ fn persistence_fault(boundary: PersistBoundary) -> Result<(), String> {
     Ok(())
 }
 
-/// One atomically replaced record durably binds the accepted generation floor and snapshot.
-/// Legacy files are read only during migration; push never writes either independently.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PolicyAuthorityRecordV3 {
@@ -118,8 +116,6 @@ struct PolicyState {
     pub(super) snapshot: Option<Arc<PolicySnapshotV3>>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
-    /// Digest authenticated with `generation_floor`; it survives floor-only restart recovery.
-    /// Typed, bounded recovery ACKs never trust incoming snapshots as authority.
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
 }
@@ -134,14 +130,11 @@ struct LoadedAuthority {
 }
 
 pub(crate) struct PolicySnapshotStore {
-    /// The authority record lives at the historical snapshot path so older
-    /// launchers still recognize that native policy state exists.
     authority_path: PathBuf,
     expected_runtime_identity: String,
     expected_rule_digest: String,
     expected_guard_home: String,
     expected_scope_digest: String,
-    // Managed resident startup generation; zero for direct store tests.
     resident_generation: u64,
     verifier_key: [u8; VERIFIER_KEY_BYTES],
     approval_authority: Option<ApprovalAuthority>,
@@ -326,6 +319,17 @@ impl PolicySnapshotStore {
             // generation rather than silently reusing the floor.
             return encode_requires_new_generation(&state, self.resident_generation);
         }
+        let mut observed = match self.authority_observed.lock() {
+            Ok(observed) => observed,
+            Err(_) => {
+                self.authority_changed.store(true, Ordering::SeqCst);
+                return Err("native_policy_snapshot_context_mismatch".to_owned());
+            }
+        };
+        // The watcher samples the authority while holding this same lock. Keep
+        // it across the atomic replacement and expected-fingerprint publication
+        // so a legitimate push never presents a new file with an old expected
+        // identity to the watcher.
         persist_authority(
             &self.authority_path,
             request.snapshot.generation,
@@ -338,11 +342,8 @@ impl PolicySnapshotStore {
         state.snapshot = Some(Arc::new(request.snapshot.clone()));
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
-        if let Ok(mut observed) = self.authority_observed.lock() {
-            *observed = authority_fingerprint(&self.authority_path);
-        } else {
-            self.authority_changed.store(true, Ordering::SeqCst);
-        }
+        *observed = authority_fingerprint(&self.authority_path);
+        drop(observed);
         self.authority_changed.store(
             !policy_store_authority::authorities_unchanged(self),
             Ordering::SeqCst,

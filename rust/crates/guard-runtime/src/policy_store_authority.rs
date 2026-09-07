@@ -73,19 +73,36 @@ pub(super) fn start_authority_watcher(
     observed: Arc<Mutex<Option<String>>>,
     changed: Weak<AtomicBool>,
 ) {
+    start_authority_watcher_with_sample_hook(path, observed, changed, || {});
+}
+
+fn start_authority_watcher_with_sample_hook<F>(
+    path: PathBuf,
+    observed: Arc<Mutex<Option<String>>>,
+    changed: Weak<AtomicBool>,
+    after_sample: F,
+) where
+    F: Fn() + Send + 'static,
+{
     let _ = thread::Builder::new()
         .name("hol-guard-policy-authority-watch".to_owned())
         .spawn(move || loop {
             let Some(changed) = changed.upgrade() else {
                 break;
             };
-            let current = authority_fingerprint(&path);
-            let different = observed
-                .lock()
-                .map(|expected| *expected != current)
-                .unwrap_or(true);
-            if different {
-                changed.store(true, Ordering::SeqCst);
+            // Internal authority updates take this same lock while publishing
+            // the new expected fingerprint. Capture the durable fingerprint
+            // only after acquiring it so a stale pre-push sample cannot be
+            // compared after the push and re-raise the tamper flag.
+            match observed.lock() {
+                Ok(expected) => {
+                    let current = authority_fingerprint(&path);
+                    after_sample();
+                    if *expected != current {
+                        changed.store(true, Ordering::SeqCst);
+                    }
+                }
+                Err(_) => changed.store(true, Ordering::SeqCst),
             }
             thread::sleep(AUTHORITY_WATCH_INTERVAL);
         });
@@ -434,3 +451,7 @@ pub(super) fn load_combined_authority(
         migrate: false,
     })
 }
+
+#[cfg(test)]
+#[path = "policy_store_authority_tests.rs"]
+mod tests;
