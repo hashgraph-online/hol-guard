@@ -5,7 +5,6 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
@@ -188,7 +187,7 @@ def test_wait_for_route_corpus_rejects_empty_inventory(expected: int) -> None:
         wait_for_route_corpus(object(), expected=expected)
 
 
-@pytest.mark.parametrize("outcome", ["success", "failure", "timeout"])
+@pytest.mark.parametrize("outcome", ["success", "failure", "timeout", "client_failure"])
 def test_probe_closes_scoped_clients_before_stopping_resident(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -203,6 +202,8 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
 
     def close_clients(home: Path) -> None:
         events.append(("close", home))
+        if outcome == "client_failure":
+            raise RuntimeError("client close failed")
 
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         assert events == [("close", guard_home)]
@@ -215,28 +216,48 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
 
     monkeypatch.setattr(probe, "close_native_resident_clients", close_clients)
     monkeypatch.setattr(probe.subprocess, "run", stop_resident)
-    probe._stop_native_runtime(runtime, guard_home)
+    if outcome == "client_failure":
+        with pytest.raises(RuntimeError, match="client close failed"):
+            probe._stop_native_runtime(runtime, guard_home)
+    else:
+        probe._stop_native_runtime(runtime, guard_home)
 
     assert events == [("close", guard_home), ("stop", guard_home)]
     expected_error = {
         "success": "",
         "failure": "native_default_auto_probe_cleanup_failed: returncode=1\n",
         "timeout": "native_default_auto_probe_cleanup_timeout\n",
+        "client_failure": "",
     }
     assert capsys.readouterr().err == expected_error[outcome]
 
 
-def test_probe_cleans_both_homes_when_smoke_check_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("smoke_fails", [False, True])
+@pytest.mark.parametrize("client_fails", [False, True])
+def test_probe_cleans_both_homes_without_masking_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    smoke_fails: bool,
+    client_fails: bool,
+) -> None:
     from ci.native_runtime import probe_native_default_auto as probe
 
     roots: list[Path] = []
     closed: list[Path] = []
     stopped: list[Path] = []
 
-    def failed_smoke(root: Path) -> None:
+    def smoke(root: Path) -> None:
         roots.append(root)
         (root / "guard-home").mkdir()
-        raise RuntimeError("smoke check failed")
+        (root / "hook-home").mkdir()
+        if smoke_fails:
+            raise RuntimeError("smoke check failed")
+
+    def close_clients(home: Path) -> None:
+        closed.append(home)
+        if client_fails:
+            raise RuntimeError("client close failed")
 
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         home = Path(command[-1]).parent
@@ -244,14 +265,24 @@ def test_probe_cleans_both_homes_when_smoke_check_fails(tmp_path: Path, monkeypa
         stopped.append(home)
         return subprocess.CompletedProcess(command, returncode=0)
 
+    health = SimpleNamespace(state="healthy", reason="native_ready", resident_failures=0, oneshot_failures=0)
     monkeypatch.setattr(probe, "_short_temp_parent", lambda: str(tmp_path))
-    monkeypatch.setattr(probe, "_run_native_smoke", failed_smoke)
-    monkeypatch.setattr(probe, "close_native_resident_clients", closed.append)
+    monkeypatch.setattr(probe, "_run_native_smoke", smoke)
+    monkeypatch.setattr(probe, "native_runtime_health", lambda home: health)
+    monkeypatch.setattr(probe, "_native_state_files", lambda home: [tmp_path / "generation.json"])
+    monkeypatch.setattr(probe, "_installed_hook_corpus", lambda root: {"route_count": 21})
+    monkeypatch.setattr(probe, "close_native_resident_clients", close_clients)
     monkeypatch.setattr(probe.subprocess, "run", stop_resident)
-    identity = cast(probe.NativeRuntimeIdentity, SimpleNamespace(path=tmp_path / "hol-guard-runtime"))
-    with pytest.raises(RuntimeError, match="smoke check failed"):
-        probe._run_temporary_probe(identity)
+    identity = probe.NativeRuntimeIdentity(path=tmp_path / "hol-guard-runtime", size=0, mtime_ns=0, sha256="0" * 64)
+    expected_error = "smoke check failed" if smoke_fails else "client close failed" if client_fails else None
+    if expected_error is not None:
+        with pytest.raises(RuntimeError, match=expected_error):
+            probe._run_temporary_probe(identity)
+    else:
+        assert probe._run_temporary_probe(identity) == {"route_count": 21}
 
     assert len(roots) == 1
     assert closed == stopped == [roots[0] / "guard-home", roots[0] / "hook-home"]
     assert not roots[0].exists()
+    diagnostic = "native_default_auto_probe_cleanup_failed: RuntimeError\n"
+    assert capsys.readouterr().err == (diagnostic * 2 if client_fails else "")
