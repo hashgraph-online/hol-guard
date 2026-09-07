@@ -17,7 +17,7 @@ on:
       - docs/guard/extensions/**
       - scripts/export_extension_directory.py
       - scripts/render_command_extension_directory.py
-      - tests/test_guard_extension_directory_export.py
+      - tests/test_guard_extension_directory*.py
       - tests/fixtures/extension-listings/**
       - docs/guard/extension-builder/**
       - tests/*extension_builder*.py
@@ -81,7 +81,7 @@ jobs:
         run: |
           mkdir -p builder-evidence
           uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
-            tests/test_guard_extension_directory_export.py \
+            tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \

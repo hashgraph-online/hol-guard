@@ -13,7 +13,9 @@ import pytest
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from tests.extension_builder_support import REPOSITORY
 
-spec = importlib.util.spec_from_file_location("guard_directory_io_export", REPOSITORY / "scripts/export_extension_directory.py")
+spec = importlib.util.spec_from_file_location(
+    "guard_directory_io_export", REPOSITORY / "scripts/export_extension_directory.py"
+)
 assert spec and spec.loader
 exporter = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = exporter
@@ -36,7 +38,9 @@ def symlink(target: Path, link: Path, *, directory: bool = False) -> None:
         pytest.skip("This host does not permit unprivileged symlink creation")
 
 
-def test_source_is_read_once_and_digest_matches_validated_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_source_is_read_once_and_digest_matches_validated_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path, content = one_source(tmp_path)
     original = exporter.validate_contribution
 
