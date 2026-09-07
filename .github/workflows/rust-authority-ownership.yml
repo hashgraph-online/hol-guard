@@ -35,6 +35,12 @@ jobs:
         run: |
           rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
           rustup default 1.88.0
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        with:
+          workspaces: rust
+          shared-key: authority
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Enforce permanent source ownership
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
