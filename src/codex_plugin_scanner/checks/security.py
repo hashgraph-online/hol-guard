@@ -225,10 +225,18 @@ def _normalize_secret_candidate(value: str) -> str:
     return normalized
 
 
+_PURE_SHELL_EXPANSION_RE = re.compile(
+    r"^\$\{[A-Za-z_][A-Za-z0-9_]*"
+    r"(?:(?::-|-|:=|=|:\?|\?|:\+|\+)(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*)?)?"
+    r"\}$"
+)
+_PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
+
+
 def _looks_like_interpolated_secret(value: str) -> bool:
-    """Env and template expansions are references, not embedded credentials."""
+    """True only for complete env/template references with no literal payload."""
     normalized = _normalize_secret_candidate(value)
-    return normalized.startswith(("${", "{{"))
+    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
 
 
 def _looks_like_placeholder_secret(value: str) -> bool:
