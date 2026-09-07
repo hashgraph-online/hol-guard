@@ -2475,6 +2475,34 @@ function SettingsSelectRow({
     )
   ] });
 }
+function resolveApprovalPasswordSectionCopy(wasConfigured, enabled = true) {
+  if (wasConfigured) {
+    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
+  }
+  if (!enabled) {
+    return "Enable the approval gate above before setting an approval password.";
+  }
+  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
+}
+function ApprovalPasswordSetupAction(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onClick, variant: "outline", children: "Set up approval password" });
+}
+function ApprovalPasswordSection(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: resolveApprovalPasswordSectionCopy(props.wasConfigured, props.enabled) }),
+    props.wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => props.onOpenPasswordChangeModal(),
+        className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
+        children: "Change password"
+      }
+    ) }) : null,
+    !props.wasConfigured && props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
+  ] });
+}
 const PRESENTATION_SCHEMA_VERSION = 1;
 const LEGACY = {
   simple: "everyday",
@@ -2706,12 +2734,6 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
     return false;
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
-}
-function resolveApprovalPasswordSectionCopy(wasConfigured) {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
 }
 function resolveTotpSetupModalTitle(isConfirmStep) {
   if (isConfirmStep) {
@@ -3246,7 +3268,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setPendingProofAction(null);
     setProofModalError(null);
   }, [proofModalPending]);
-  const executeSave = reactExports.useCallback(async (proof) => {
+  const executeSave = reactExports.useCallback(async (proof, scope = "all") => {
     if (draft === null) {
       return;
     }
@@ -3273,12 +3295,21 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         ...proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {},
         ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
       };
-      const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
-      const settingsToSave = presentationOnlyPayload !== null ? presentationOnlyPayload : {
-        ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate
-      };
+      let settingsToSave;
+      if (scope === "approval-gate") {
+        settingsToSave = { approval_gate: approvalGateUpdate };
+      } else {
+        const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+        if (presentationOnlyPayload !== null) {
+          settingsToSave = presentationOnlyPayload;
+        } else {
+          settingsToSave = {
+            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+            approval_gate: approvalGateUpdate
+          };
+        }
+      }
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -3444,7 +3475,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setProofModalError(null);
     try {
       if (pendingProofAction.kind === "save") {
-        await executeSave(proof);
+        await executeSave(proof, pendingProofAction.scope);
       } else if (pendingProofAction.action === "import-settings") {
         if (pendingProofAction.importExport === void 0) {
           throw new Error("Missing settings import payload.");
@@ -3479,8 +3510,8 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
-  const handleOpenPasswordChangeModal = reactExports.useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
+  const handleOpenPasswordChangeModal = reactExports.useCallback((mode = "change-password") => {
+    openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
   }, [openProofModal]);
   const handleRequestRevokeCooldown = reactExports.useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
@@ -4350,19 +4381,14 @@ function ApprovalGateCard(props) {
     ] }) }),
     failClosed && props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard needs your approval setup fixed before trust or policy changes can continue." }) }),
     showGateDetails ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: resolveApprovalPasswordSectionCopy(wasConfigured) }),
-        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: props.onOpenPasswordChangeModal,
-            className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
-            children: "Change password"
-          }
-        ) }) : null
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ApprovalPasswordSection,
+        {
+          wasConfigured,
+          enabled: props.enabled,
+          onOpenPasswordChangeModal: props.onOpenPasswordChangeModal
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Extra checks" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [

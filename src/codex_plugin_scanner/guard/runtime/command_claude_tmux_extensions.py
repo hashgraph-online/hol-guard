@@ -86,7 +86,7 @@ class ConfirmationFedMatcher:
     """Match a segment whose confirmation prompt is answered by an earlier pipe.
 
     The declared matcher decides what the fed segment must look like. This adds
-    the one structural condition the flag matchers cannot express: an earlier
+    the one structural condition the flag matchers cannot express: the previous
     stage of the *same* pipeline supplies the consent the prompt asks for.
     Segments joined by ``&&`` or ``;`` run in their own execution context and
     share no standard input, so they are not a feed.
@@ -107,7 +107,7 @@ class ConfirmationFedMatcher:
             for item in self.matcher.match(command)
             if any(
                 context == command.segments[item.segment_index].execution_context
-                and index < command.segments[item.segment_index].pipeline_index
+                and index + 1 == command.segments[item.segment_index].pipeline_index
                 for context, index in fed_contexts
             )
         )

@@ -8,10 +8,10 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from .github_request import REQUEST_TIMEOUT_SECONDS, github_request_json
 from .markdown_support import escape_markdown_text
 from .models import GRADE_LABELS, Finding, ScanResult, max_severity
 
-REQUEST_TIMEOUT_SECONDS = 30
 PR_COMMENT_MARKER = "<!-- hol-guard-pr-comment -->"
 VALID_PR_COMMENT_MODES = frozenset({"auto", "always", "off"})
 VALID_PR_COMMENT_STYLES = frozenset({"concise", "detailed"})
@@ -226,15 +226,7 @@ def _request_json(
     token: str,
     payload: dict[str, object] | None = None,
 ) -> dict[str, object] | list[dict[str, object]]:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = Request(url, data=data, method=method)
-    request.add_header("Accept", "application/vnd.github+json")
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("User-Agent", "hol-guard")
-    if data is not None:
-        request.add_header("Content-Type", "application/json")
-    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return github_request_json(method, url, token, payload, user_agent="hol-guard")
 
 
 def _request_json_with_headers(

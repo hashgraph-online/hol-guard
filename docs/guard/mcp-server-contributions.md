@@ -1,5 +1,10 @@
 # MCP server contributions
 
+For exported command metadata or MCP tool inventories, start with the
+[offline Extension Builder](extension-builder/README.md). It generates native
+files and an integration plan while keeping every contribution External and off.
+Semantic review and the activation requirements below still apply.
+
 Community MCP servers can ship in the Guard catalog the same way command-safety extensions do: a reviewed JSON file, an External badge, and **off until you turn it on**.
 
 Operators can still add an unlisted MCP server with **Add custom extension**. Custom this-device grants override contributed defaults.

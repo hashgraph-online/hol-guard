@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
-from .install_commands import _resolve_targets, build_harness_setup_plan
+from .install_commands import build_harness_setup_plan
+from .install_targets import _resolve_targets
 
 
 def build_managed_install_plan(
-    requested_harness: str | None,
+    requested_harness: str | Sequence[str] | None,
     install_all: bool,
     context: HarnessContext,
     store: GuardStore,
@@ -18,7 +21,7 @@ def build_managed_install_plan(
     payload: dict[str, object] = {
         "dry_run": True,
         "setup_plans": plans,
-        "auto_detected": requested_harness is None or install_all,
+        "auto_detected": not requested_harness or install_all,
     }
     if len(plans) == 1:
         payload["setup_plan"] = plans[0]

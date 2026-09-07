@@ -37,6 +37,7 @@ from ..config import load_guard_config
 from ..native_hook_edge import review_raw_hook_native
 from ..native_mode import python_oracle_enabled, python_oracle_surface_enabled
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
+from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
 from ..native_pretool import review_pre_tool_native
 from ..native_route_receipt import record_python_semantic_hook_route
@@ -115,10 +116,12 @@ class HookWorker(HookWorkerNativeMixin):
         store: GuardStore,
         activity_writer: CommandActivityWriter | None = None,
         wait_for_native_policy: bool = True,
+        publish_native_policy: bool = True,
     ):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
+        self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
         self._python_oracle: Callable[[HookReviewRequest], HookReviewResponse] | None = None
         self._python_oracle_object: PythonOracle | None = None
@@ -135,7 +138,8 @@ class HookWorker(HookWorkerNativeMixin):
                     self._python_oracle = cast(Callable[[HookReviewRequest], HookReviewResponse], review)
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         mode = native_mode()
-        if mode in {"auto", "force", "shadow"}:
+        self._owns_policy_snapshot_publisher = publish_native_policy and mode in {"auto", "force", "shadow"}
+        if self._owns_policy_snapshot_publisher:
             self.policy_snapshot_publisher.start()
         if wait_for_native_policy and mode in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
@@ -198,9 +202,10 @@ class HookWorker(HookWorkerNativeMixin):
         return native_runtime_status()
 
     def close(self) -> None:
-        """Stop the asynchronous native policy publisher with the worker."""
+        """Stop the publisher only when this worker started publication."""
 
-        self.policy_snapshot_publisher.close()
+        if self._owns_policy_snapshot_publisher:
+            self.policy_snapshot_publisher.close()
 
     def prepare_workspace_policy(
         self,
@@ -212,32 +217,39 @@ class HookWorker(HookWorkerNativeMixin):
 
         Workspace overlays are published asynchronously, so the first hook
         for a workspace must complete this same barrier used by normal hook
-        evaluation.         The barrier is always capped at the native readiness
-        budget; a timeout returns ``None``. Callers then admit emergency-safe
-        inspection or pause high-impact actions.
+        evaluation. The barrier is always capped at the native readiness
+        budget. Publishing workers fail closed when readiness is unavailable;
+        non-publishing workers may reuse a still-valid resident-accepted snapshot.
         """
 
         if native_mode() not in {"auto", "force", "shadow"}:
             return None
-        register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
-        if callable(register_workspace):
-            _ = register_workspace(workspace)
-        self.policy_snapshot_publisher.start()
-        if native_mode() in {"auto", "force"}:
-            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
-            last_error = getattr(self.policy_snapshot_publisher, "last_error", None)
-            if callable(wait_until_ready) and not (isinstance(last_error, str) and last_error.strip()):
-                readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
-                if deadline is not None:
-                    readiness_deadline = min(readiness_deadline, deadline)
-                if not wait_until_ready(readiness_deadline):
-                    return None
+        if self._publish_native_policy:
+            register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
+            if callable(register_workspace):
+                _ = register_workspace(workspace)
+            self.policy_snapshot_publisher.start()
+            if native_mode() in {"auto", "force"}:
+                wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
+                last_error = getattr(self.policy_snapshot_publisher, "last_error", None)
+                if callable(wait_until_ready) and not (isinstance(last_error, str) and last_error.strip()):
+                    readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
+                    if deadline is not None:
+                        readiness_deadline = min(readiness_deadline, deadline)
+                    _ = wait_until_ready(readiness_deadline)
         current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
         if callable(current_snapshot_binding):
             snapshot = current_snapshot_binding()
-            return snapshot if isinstance(snapshot, dict) else None
-        snapshot = self.policy_snapshot_publisher.current_snapshot()
-        return snapshot if isinstance(snapshot, dict) else None
+            if isinstance(snapshot, dict):
+                return snapshot
+        current_snapshot = getattr(self.policy_snapshot_publisher, "current_snapshot", None)
+        if callable(current_snapshot):
+            snapshot = current_snapshot()
+            if isinstance(snapshot, dict):
+                return snapshot
+        if self._publish_native_policy:
+            return None
+        return acked_snapshot_binding_for_store(self.store)
 
     def _native_policy_snapshot(
         self,

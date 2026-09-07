@@ -22,7 +22,8 @@ from .connect_flow import (
     CONNECT_STATUS_COMMAND,
     _int_payload_value,
     connect_recovery_command,
-    connect_retry_refresh_race_from_reason,
+    connect_retry_refresh_race_from_state,
+    connect_retry_required_from_state,
     connect_state_requires_oauth,
     normalize_connect_state_for_missing_oauth,
     resolve_guard_cloud_repair_detail,
@@ -279,8 +280,8 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
             cloud_profile=cloud_profile,
         ),
     )
-    connect_retry_required = _connect_retry_required(latest_connect_state)
-    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
+    connect_retry_required = connect_retry_required_from_state(latest_connect_state)
+    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy)
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -555,20 +556,6 @@ def _cloud_state_detail(
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
-
-
-def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None:
-        return False
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    return status == "retry_required" or milestone == "first_sync_failed"
-
-
-def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None or not _connect_retry_required(latest_state):
-        return False
-    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:

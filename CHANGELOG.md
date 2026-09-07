@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Claude marketplace scans treat `strict` as an optional boolean on each
+  `plugins[]` entry (default `true`) instead of requiring a root-level field
+  that Claude Code rejects.
+- `HARDCODED_SECRET` no longer treats pure `${VAR}` or `{{var}}` expansions as
+  embedded credentials outside docs and tests. Non-empty defaults and suffixes
+  still fail.
+
 ### Changed
 
 - Added the HOL Guard 3.0 Managed Controls user, operator, migration, recovery,

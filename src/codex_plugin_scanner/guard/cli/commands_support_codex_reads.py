@@ -4,9 +4,14 @@
 
 from __future__ import annotations
 
+import shlex
+from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .commands_support_codex_commands import (
         _CODEX_READ_ONLY_PIPE_FILTERS,
         _CODEX_READ_ONLY_SEARCH_COMMANDS,
@@ -40,7 +45,9 @@ from ..runtime.shell_execution_context import (
     validate_shell_execution_segment,
 )
 from ._commands_shared import *
+from .codex_output_safety import source_name_stem_has_compound_secret_segment
 from .commands_parser_helpers import *
+from .commands_support_codex_paths import _codex_search_target_is_source_like
 
 
 def _codex_literal_home_workspace_target(tokens: tuple[str, ...], *, home_dir: Path) -> Path | None:
@@ -269,6 +276,79 @@ def _codex_contextual_source_inspection_is_read_only(
         saw_source_inspection = True
         pipeline_open = segment.control_operator in {"|", "|&"}
     return saw_source_inspection and not pipeline_open
+
+
+_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
+    {
+        "auth",
+        "credential",
+        "credentials",
+        "passwd",
+        "password",
+        "private-key",
+        "private_key",
+        "secret",
+        "secrets",
+        "token",
+    }
+)
+
+
+_codex_source_name_stem_has_compound_secret_segment = partial(
+    source_name_stem_has_compound_secret_segment,
+    secret_like_stems=_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS,
+)
+
+
+def codex_scan_targets_secret_like_source_name(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    recurse: Callable[[str], bool],
+) -> bool:
+    """Scan one command for secret-like source name targets.
+
+    Chain and pipeline splits recurse through the caller's own wrapper so each
+    review path keeps its execution-context policy; the token scan itself is
+    shared because both review paths must flag the same file names.
+    """
+
+    chained_segments = _split_codex_safe_read_only_chain(command_text)
+    if chained_segments is not None:
+        return any(recurse(segment) for segment in chained_segments)
+    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
+    if pipeline_segments:
+        return recurse(pipeline_segments[0])
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    for part in _codex_source_inspection_target_tokens(parts):
+        stripped = part.strip().strip("'\"")
+        if not stripped:
+            continue
+        name = Path(stripped).name.lower().lstrip(".")
+        stem = Path(name).stem or name
+        exact_secret_like = stem.lower() in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
+        compound_secret_like = _codex_source_name_stem_has_compound_secret_segment(
+            stem,
+            split_compound=cwd is not None,
+        )
+        if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
+            continue
+        if (
+            compound_secret_like
+            and cwd is not None
+            and _codex_search_target_is_source_like(
+                stripped,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+        ):
+            continue
+        return True
+    return False
 
 
 def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:

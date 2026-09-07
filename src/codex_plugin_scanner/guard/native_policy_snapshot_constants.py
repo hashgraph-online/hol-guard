@@ -35,7 +35,10 @@ POLICY_SNAPSHOT_INTEGRITY_ALGORITHM = "hmac-sha256"
 # HMAC helper authenticates ``domain || message`` rather than using a second
 # HMAC field, so the Python functions below do the same concatenation.
 POLICY_SNAPSHOT_INTEGRITY_DOMAIN = b"hol-guard-native-policy-snapshot-v3\0"
+POLICY_SNAPSHOT_FLOOR_DOMAIN = b"hol-guard-native-policy-floor-v1\0"
 POLICY_SNAPSHOT_VERIFIER_DERIVATION_DOMAIN = b"hol-guard-native-policy-verifier-v1\0"
+POLICY_SNAPSHOT_AUTHORITY_SCHEMA = "guard-policy-snapshot-authority.v3"
+POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES = POLICY_SNAPSHOT_MAX_BYTES + 16 * 1024
 
 NATIVE_RUNTIME_STATE_DIRECTORY = "native-runtime"
 NATIVE_POLICY_VERIFIER_KEY_NAME = "policy-verifier.key"

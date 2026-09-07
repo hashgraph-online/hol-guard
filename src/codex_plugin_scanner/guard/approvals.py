@@ -32,6 +32,8 @@ from .approval_scope_support import (
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
+    connect_retry_refresh_race_from_state,
+    connect_retry_required_from_state,
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
@@ -1869,8 +1871,8 @@ def _build_runtime_cloud_context(
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
-    connect_retry_required = _connect_retry_required(latest_connect_state)
-    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
+    connect_retry_required = connect_retry_required_from_state(latest_connect_state)
+    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
@@ -2120,20 +2122,6 @@ def _runtime_proof_status_detail(state: str) -> str:
         "not_connected": "Connect Guard Cloud to sync this device proof.",
     }
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
-
-
-def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None:
-        return False
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    return status == "retry_required" or milestone == "first_sync_failed"
-
-
-def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None or not _connect_retry_required(latest_state):
-        return False
-    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _build_cloud_sync_health(

@@ -447,14 +447,10 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Install pinned uv without cache
-        shell: bash
-        run: python -m pip install --disable-pip-version-check --no-cache-dir uv==0.9.26
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
-      - run: uv sync --frozen --extra dev --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -464,7 +460,7 @@ jobs:
         env:
           HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
           HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
-        run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
+        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
         shell: bash
         env:
@@ -512,7 +508,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+          python scripts/build_native_hol_guard_wheel.py \
             --wheel "base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$RUNTIME" \
             --output-dir native-dist \

@@ -379,34 +379,7 @@ class HermesHarnessAdapter(HarnessAdapter):
 
         # Discover skills in ~/.hermes/skills/<category>/<skill>/
         skills_dir = hermes_home / "skills"
-        if skills_dir.is_dir():
-            try:
-                category_dirs = sorted(skills_dir.iterdir())
-            except (PermissionError, OSError):
-                category_dirs = []
-            for category_dir in category_dirs:
-                if not category_dir.is_dir():
-                    continue
-                try:
-                    skill_dirs = sorted(category_dir.iterdir())
-                except (PermissionError, OSError):
-                    continue
-                for skill_dir in skill_dirs:
-                    if not skill_dir.is_dir():
-                        continue
-                    skill_md = skill_dir / "SKILL.md"
-                    if not skill_md.is_file():
-                        continue
-                    found_paths.append(str(skill_md))
-                    artifacts.extend(
-                        self._scan_skill(
-                            category_dir,
-                            skill_dir,
-                            skill_md,
-                            identity_scope_root=skills_dir,
-                            warnings=warnings,
-                        )
-                    )
+        artifacts.extend(self._scan_skills_dir(skills_dir, found_paths, warnings))
 
         # Discover MCP servers from both config.yaml and mcp_servers.json.
         artifacts.extend(
@@ -443,6 +416,44 @@ class HermesHarnessAdapter(HarnessAdapter):
     # ------------------------------------------------------------------
     # Skill scanning
     # ------------------------------------------------------------------
+
+    def _scan_skills_dir(
+        self,
+        skills_dir: Path,
+        found_paths: list[str],
+        warnings: list[str],
+    ) -> list[GuardArtifact]:
+        """Discover skills under <home>/skills/<category>/<skill>/SKILL.md."""
+        artifacts: list[GuardArtifact] = []
+        if skills_dir.is_dir():
+            try:
+                category_dirs = sorted(skills_dir.iterdir())
+            except (PermissionError, OSError):
+                category_dirs = []
+            for category_dir in category_dirs:
+                if not category_dir.is_dir():
+                    continue
+                try:
+                    skill_dirs = sorted(category_dir.iterdir())
+                except (PermissionError, OSError):
+                    continue
+                for skill_dir in skill_dirs:
+                    if not skill_dir.is_dir():
+                        continue
+                    skill_md = skill_dir / "SKILL.md"
+                    if not skill_md.is_file():
+                        continue
+                    found_paths.append(str(skill_md))
+                    artifacts.extend(
+                        self._scan_skill(
+                            category_dir,
+                            skill_dir,
+                            skill_md,
+                            identity_scope_root=skills_dir,
+                            warnings=warnings,
+                        )
+                    )
+        return artifacts
 
     def _scan_skill(
         self,
@@ -652,34 +663,7 @@ class HermesHarnessAdapter(HarnessAdapter):
 
         # Discover skills from the host's skills directory.
         skills_dir = host_home / "skills"
-        if skills_dir.is_dir():
-            try:
-                category_dirs = sorted(skills_dir.iterdir())
-            except (PermissionError, OSError):
-                category_dirs = []
-            for category_dir in category_dirs:
-                if not category_dir.is_dir():
-                    continue
-                try:
-                    skill_dirs = sorted(category_dir.iterdir())
-                except (PermissionError, OSError):
-                    continue
-                for skill_dir in skill_dirs:
-                    if not skill_dir.is_dir():
-                        continue
-                    skill_md = skill_dir / "SKILL.md"
-                    if not skill_md.is_file():
-                        continue
-                    found_paths.append(str(skill_md))
-                    artifacts.extend(
-                        self._scan_skill(
-                            category_dir,
-                            skill_dir,
-                            skill_md,
-                            identity_scope_root=skills_dir,
-                            warnings=warnings,
-                        )
-                    )
+        artifacts.extend(self._scan_skills_dir(skills_dir, found_paths, warnings))
 
         # Discover MCP servers from the host's config files.
         artifacts.extend(self._scan_mcp_servers(host_home, found_paths, warnings))

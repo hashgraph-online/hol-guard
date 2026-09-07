@@ -222,6 +222,9 @@ def test_a_piped_yes_answers_the_prompt_the_same_way_force_does(tmp_path: Path) 
     assert _CTC_SESSION_TEARDOWN.match(parsed("yes n | ctc --all")) == ()
     assert _CTC_SESSION_TEARDOWN.match(parsed("cat notes | ctc --all")) == ()
     assert _CTC_SESSION_TEARDOWN.match(parsed("echo | ctc --all")) == ()
+    # An intervening command owns the consumer's stdin; earlier consent is not proof.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes | printf n | ctc --all")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("yes | cat notes | ctc --all")) == ()
     # `&&` and `;` start their own execution context and share no stdin.
     assert _CTC_SESSION_TEARDOWN.match(parsed("yes && ctc --all")) == ()
     assert _CTC_SESSION_TEARDOWN.match(parsed("yes ; ctc --all")) == ()

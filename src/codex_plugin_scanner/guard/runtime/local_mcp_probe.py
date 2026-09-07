@@ -2,15 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
-import json
-import os
 import shutil
-import signal
-import subprocess
-import tempfile
-import threading
-import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,15 +15,19 @@ from .local_cli_identity import (
     identify_unlisted_cli,
     unlisted_cli_invocation_is_safe,
 )
+from .local_mcp_stdio import (
+    MAX_MCP_PROBE_TOOLS,
+    MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
+    MCP_PROBE_TIMEOUT_SECONDS,
+    is_package_shim_executable,
+    probe_search_path,
+    run_mcp_tools_list,
+)
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 McpProbeStatus = Literal["ok", "empty", "failed"]
 McpToolsRunner = Callable[[Sequence[str]], list[dict[str, object]] | None]
 
-_PROTOCOL = "2024-11-05"
-_TIMEOUT_SECONDS = 6.0
-_OUTPUT_LIMIT = 64_000
-_MAX_TOOLS = 80
 _PACKAGE_LAUNCHERS = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
 _STRICT_PACKAGE_LAUNCHERS = frozenset({"bunx", "npx", "pipx", "uvx"})
 
@@ -103,7 +99,7 @@ def probe_stdio_mcp_server(
     cwd: Path,
     home_dir: Path | None,
     runner: McpToolsRunner | None = None,
-    timeout: float = _TIMEOUT_SECONDS,
+    timeout: float | None = None,
 ) -> McpProbeResult | None:
     """Launch a stdio MCP server and list tools, or return None when it is not MCP."""
 
@@ -119,7 +115,8 @@ def probe_stdio_mcp_server(
     argv = _resolve_launch_argv(tokens, cwd=cwd)
     if argv is None:
         return None
-    raw_tools = runner(argv) if runner is not None else run_mcp_tools_list(argv, timeout=timeout)
+    resolved_timeout = _timeout_for(tokens, timeout)
+    raw_tools = runner(argv) if runner is not None else run_mcp_tools_list(argv, timeout=resolved_timeout)
     if raw_tools is None:
         return None
     tools = _tools_from_payload(raw_tools, server_name=_display_name(server_identity, tokens))
@@ -141,178 +138,24 @@ def probe_stdio_mcp_server(
     )
 
 
-def run_mcp_tools_list(
-    argv: Sequence[str],
-    *,
-    timeout: float = _TIMEOUT_SECONDS,
-) -> list[dict[str, object]] | None:
-    """Run initialize + tools/list against argv and return tool objects."""
-
-    if not argv or any(not isinstance(part, str) or not part or "\x00" in part for part in argv):
-        return None
-    try:
-        with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
-            return _exchange_tools_list(list(argv), tmp, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
-        return None
-
-
-def _exchange_tools_list(argv: list[str], tmp: str, *, timeout: float) -> list[dict[str, object]] | None:
-    process = subprocess.Popen(
-        argv,
-        cwd=tmp,
-        env=_probe_env(tmp),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    session = _RpcSession(process)
-    try:
-        session.write({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _initialize_params()})
-        initialize = session.read(timeout=timeout)
-        if initialize is None or initialize.get("error") is not None:
-            return None
-        session.write({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        collected: list[dict[str, object]] = []
-        cursor: str | None = None
-        request_id = 2
-        for _ in range(8):
-            params: dict[str, object] = {} if cursor is None else {"cursor": cursor}
-            session.write({"jsonrpc": "2.0", "id": request_id, "method": "tools/list", "params": params})
-            listed = session.read(timeout=timeout)
-            if listed is None or listed.get("error") is not None:
-                return collected if collected else None
-            result = listed.get("result")
-            if not isinstance(result, dict):
-                return collected if collected else None
-            tools = result.get("tools")
-            if not isinstance(tools, list):
-                return collected if collected else None
-            collected.extend(item for item in tools if isinstance(item, dict))
-            if len(collected) >= _MAX_TOOLS:
-                return collected[:_MAX_TOOLS]
-            next_cursor = result.get("nextCursor")
-            if not isinstance(next_cursor, str) or not next_cursor.strip():
-                return collected
-            cursor = next_cursor.strip()
-            request_id += 1
-        return collected
-    finally:
-        _stop(process, session)
-
-
-def _initialize_params() -> dict[str, object]:
-    return {
-        "protocolVersion": _PROTOCOL,
-        "capabilities": {},
-        "clientInfo": {"name": "hol-guard", "version": "3.0"},
-    }
-
-
-class _RpcSession:
-    def __init__(self, process: subprocess.Popen[bytes]) -> None:
-        self._process = process
-        self._buffer = ""
-        self._messages: list[dict[str, object]] = []
-        self._lock = threading.Lock()
-        self._closed = threading.Event()
-        self._thread = threading.Thread(target=self._drain, daemon=True)
-        self._thread.start()
-
-    def write(self, message: dict[str, object]) -> None:
-        stdin = self._process.stdin
-        if stdin is None:
-            return
-        payload = (json.dumps(message, separators=(",", ":")) + "\n").encode("utf-8")
-        os.write(stdin.fileno(), payload)
-
-    def read(self, *, timeout: float) -> dict[str, object] | None:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            with self._lock:
-                if self._messages:
-                    return self._messages.pop(0)
-            if self._process.poll() is not None:
-                with self._lock:
-                    return self._messages.pop(0) if self._messages else None
-            time.sleep(0.01)
-        return None
-
-    def close(self) -> None:
-        self._closed.set()
-        stdout = self._process.stdout
-        if stdout is not None:
-            with contextlib.suppress(OSError):
-                stdout.close()
-        self._thread.join(1)
-
-    def _drain(self) -> None:
-        stdout = self._process.stdout
-        if stdout is None:
-            return
-        fd = stdout.fileno()
-        while not self._closed.is_set():
-            try:
-                chunk = os.read(fd, 4096)
-            except OSError:
-                return
-            if chunk == b"":
-                return
-            with self._lock:
-                self._buffer += chunk.decode("utf-8", errors="replace")
-                if len(self._buffer) > _OUTPUT_LIMIT:
-                    self._buffer = ""
-                    return
-                while True:
-                    parsed = _pop_json_message(self._buffer)
-                    if parsed is None:
-                        break
-                    message, rest = parsed
-                    self._buffer = rest
-                    if message is not None and ("result" in message or "error" in message):
-                        self._messages.append(message)
-
-
-def _pop_json_message(buffer: str) -> tuple[dict[str, object] | None, str] | None:
-    if buffer.startswith("Content-Length:"):
-        header, sep, rest = buffer.partition("\r\n\r\n")
-        if not sep:
-            header, sep, rest = buffer.partition("\n\n")
-        if not sep:
-            return None
-        try:
-            length = int(header.split(":", 1)[1].strip().splitlines()[0])
-        except ValueError:
-            return None
-        raw = rest.encode("utf-8")
-        if len(raw) < length:
-            return None
-        try:
-            payload = json.loads(raw[:length].decode("utf-8"))
-        except json.JSONDecodeError:
-            return (None, raw[length:].decode("utf-8"))
-        leftover = raw[length:].decode("utf-8")
-        return (payload if isinstance(payload, dict) else None, leftover)
-    line, sep, rest = buffer.partition("\n")
-    if not sep:
-        return None
-    stripped = line.strip()
-    if not stripped:
-        return _pop_json_message(rest) if rest else None
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return (None, rest)
-    return (payload if isinstance(payload, dict) else None, rest)
+def _timeout_for(tokens: Sequence[str], timeout: float | None) -> float:
+    if timeout is not None:
+        return timeout
+    return MCP_PACKAGE_PROBE_TIMEOUT_SECONDS if is_package_mcp_launcher(tokens) else MCP_PROBE_TIMEOUT_SECONDS
 
 
 def _resolve_launch_argv(tokens: Sequence[str], *, cwd: Path) -> tuple[str, ...] | None:
     first = tokens[0]
-    if Path(first).is_absolute():
+    search_path = probe_search_path()
+    if is_package_shim_executable(first):
+        found = shutil.which(Path(first).name, path=search_path)
+        if found is None:
+            return None
+        resolved = found
+    elif Path(first).is_absolute():
         resolved = first
     else:
-        found = shutil.which(first)
+        found = shutil.which(first, path=search_path)
         if found is None:
             candidate = cwd / first
             if not candidate.is_file():
@@ -369,7 +212,7 @@ def _tools_from_payload(raw_tools: Sequence[dict[str, object]], *, server_name: 
                 description=description.strip()[:240] if isinstance(description, str) else "",
             )
         )
-        if len(discovered) >= _MAX_TOOLS - 1:
+        if len(discovered) >= MAX_MCP_PROBE_TOOLS - 1:
             break
     discovered.append(
         LocalCliCommand(
@@ -382,49 +225,8 @@ def _tools_from_payload(raw_tools: Sequence[dict[str, object]], *, server_name: 
     return tuple(discovered)
 
 
-def _probe_env(tmp: str) -> dict[str, str]:
-    env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin"),
-        "HOME": tmp,
-        "TMPDIR": tmp,
-        "LANG": "C",
-        "LC_ALL": "C",
-        "TERM": "dumb",
-        "NO_COLOR": "1",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "npm_config_update_notifier": "false",
-        "npm_config_fund": "false",
-        "NPM_CONFIG_UPDATE_NOTIFIER": "false",
-    }
-    if os.name == "nt":
-        system_root = os.environ.get("SYSTEMROOT")
-        if system_root:
-            env["SYSTEMROOT"] = system_root
-    return env
-
-
 def _executable_basename(value: str) -> str:
     name = Path(value).name.lower()
     if name.endswith(".exe") or name.endswith(".cmd"):
         return name.rsplit(".", 1)[0]
     return name
-
-
-def _stop(process: subprocess.Popen[bytes], session: _RpcSession | None = None) -> None:
-    if session is not None:
-        session.close()
-    if process.poll() is not None:
-        return
-    try:
-        if os.name != "nt" and process.pid:
-            os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
-    except (ProcessLookupError, PermissionError, OSError):
-        try:
-            process.kill()
-        except (ProcessLookupError, PermissionError, OSError):
-            return
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        process.wait(timeout=1)

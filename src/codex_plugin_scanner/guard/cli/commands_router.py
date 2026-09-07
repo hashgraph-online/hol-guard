@@ -136,6 +136,10 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     "Execute a Guard subcommand."
+    if args.guard_command == "extensions":
+        from .extension_builder_commands import run_extension_builder_command
+
+        return run_extension_builder_command(args, output_stream=output_stream)
     handler = _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(
