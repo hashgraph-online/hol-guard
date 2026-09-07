@@ -46,15 +46,17 @@ Example for `command.blitcp`:
 }
 ```
 
-The schema is [`listing.v1.schema.json`](../../../contracts/extensions/listing.v1.schema.json).
-Validation rejects unknown fields, control characters, excessive lengths, duplicate
-values, unsafe links, identity mismatches, symlinks, and orphaned listings. URLs are
-references only; validation never fetches them. Use a public HTTPS hostname without
-credentials, a nonstandard port, or a literal IP address.
+The [`JSON Schema`](../../../contracts/extensions/listing.v1.schema.json) checks
+field shapes, bounds, enumerated values, and duplicate array members. The Python
+listing validator additionally checks plain text, public URL policy, symlinked
+paths, and filename identity. The exporter checks that each sidecar belongs to a
+native contribution. These filesystem and source checks are not JSON Schema
+capabilities. URLs are references only; validation never fetches them.
 
-Do not include policy, executable code, activation state, trust classes, private
-email addresses, secrets, or commands. Native contribution contracts remain the
-only source of runtime behavior.
+Use a public HTTPS hostname without credentials, a nonstandard port, or a literal
+IP address. Do not include policy, executable code, activation state, trust classes,
+private email addresses, secrets, or commands. Native contribution contracts remain
+the only source of runtime behavior.
 
 ### Reviewed delegation
 
@@ -93,10 +95,13 @@ It carries contribution IDs and digests, runtime IDs, coverage counts, MCP
 inheritance, native trust classes, and presentation fields. It carries no activation
 decisions, installation counts, ratings, certification claims, or secrets.
 
-Contribution files use LF checkout semantics so digests match canonical Git blobs
-on Windows, macOS, and Linux. Consumers pin an immutable source commit and verify
-provenance independently. A source merge is not evidence of release availability
-or enabled protection on a device.
+The exporter reads each contribution once through the bounded regular-file reader,
+validates that payload, and hashes the same bytes. Catalog writes stage a complete
+file and check output paths before replacement instead of truncating through a
+symlink. Contribution files use LF checkout semantics so digests match canonical
+Git blobs on Windows, macOS, and Linux. Consumers pin an immutable source commit
+and verify provenance independently. A source merge does not prove release
+availability or enabled protection on a device.
 
 ## Cloud availability
 

@@ -6,10 +6,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
+import tempfile
 from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.io import checked_path
+from codex_plugin_scanner.guard.extension_builder.io import checked_path, object_value, parse_json, read_bytes
 from codex_plugin_scanner.guard.extension_builder.listing import (
     DEFAULT_LIMITATIONS,
     MAX_TAGLINE_LENGTH,
@@ -17,38 +20,38 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
     load_listing,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution_file
+from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
-    validate_mcp_contribution_file,
+    validate_mcp_contribution,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/guard/extensions/catalog.v1.json"
 MAX_ENTRIES = 512
 MAX_SOURCE_BYTES = 1_048_576
+MAX_CATALOG_BYTES = 1_048_576
 
 
 def _sources(root: Path) -> dict[str, tuple[str, dict[str, object], str]]:
     result: dict[str, tuple[str, dict[str, object], str]] = {}
     for directory, validate in (
-        ("extensions", validate_contribution_file),
-        ("mcp-servers", validate_mcp_contribution_file),
+        ("extensions", validate_contribution),
+        ("mcp-servers", validate_mcp_contribution),
     ):
         parent = checked_path(root / "contributions" / directory)
         for path in sorted(parent.glob("*.json")):
-            _ = checked_path(path)
-            if not path.is_file() or path.stat().st_size > MAX_SOURCE_BYTES:
-                raise ValueError("Contribution is not a bounded regular source file")
-            payload = validate(path)
+            content = read_bytes(path, limit=MAX_SOURCE_BYTES)
+            payload = object_value(parse_json(content))
+            validate(payload, filename=path.name)
             extension_id = str(payload["id"])
             if path.name != f"{extension_id}.json" or extension_id in result:
                 raise ValueError("Contribution identity is duplicated or does not match its filename")
             result[extension_id] = (
                 path.relative_to(root).as_posix(),
                 payload,
-                "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest(),
+                "sha256:" + hashlib.sha256(content).hexdigest(),
             )
             if len(result) > MAX_ENTRIES:
                 raise ValueError("Public directory source count exceeds its budget")
@@ -131,7 +134,40 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
 
 
 def render_directory(root: Path = ROOT) -> str:
-    return json.dumps(export_directory(root), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
+    rendered = json.dumps(export_directory(root), ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
+    if len(rendered.encode("utf-8")) > MAX_CATALOG_BYTES:
+        raise ValueError("Public directory exceeds its byte budget")
+    return rendered
+
+
+def write_catalog(path: Path, rendered: str) -> None:
+    """Stage complete bytes and replace a checked regular output, never truncate through a link."""
+    target = checked_path(path)
+    parent = checked_path(target.parent)
+    if not parent.is_dir():
+        raise ValueError("The catalog output parent must be an existing directory")
+    if target.exists() and not stat.S_ISREG(target.lstat().st_mode):
+        raise ValueError("The catalog output must be a regular file")
+    content = rendered.encode("utf-8")
+    if len(content) > MAX_CATALOG_BYTES:
+        raise ValueError("Public directory exceeds its byte budget")
+    descriptor, name = tempfile.mkstemp(prefix=".guard-catalog-", dir=parent)
+    staged = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            _ = stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(staged, 0o644)
+        _ = checked_path(parent)
+        _ = checked_path(staged)
+        _ = checked_path(target)
+        if target.exists() and not stat.S_ISREG(target.lstat().st_mode):
+            raise ValueError("The catalog output changed to a non-regular file")
+        os.replace(staged, target)
+    finally:
+        if staged.exists():
+            checked_path(staged).unlink()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -140,14 +176,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         rendered = render_directory()
+        if args.check:
+            if read_bytes(OUTPUT, limit=MAX_CATALOG_BYTES) != rendered.encode("utf-8"):
+                parser.error("Extension catalog is stale; run python scripts/export_extension_directory.py")
+        else:
+            write_catalog(OUTPUT, rendered)
     except (BuilderError, OSError, ValueError) as error:
         parser.error(str(error))
-    if args.check:
-        if not OUTPUT.is_file() or OUTPUT.read_text(encoding="utf-8") != rendered:
-            parser.error("Extension catalog is stale; run python scripts/export_extension_directory.py")
-    else:
-        OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-        _ = OUTPUT.write_text(rendered, encoding="utf-8", newline="\n")
     return 0
 
 
