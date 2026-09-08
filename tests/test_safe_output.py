@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,29 @@ def test_atomic_output_creates_missing_parents_without_path_based_mkdir(
     monkeypatch.setattr(Path, "mkdir", reject_path_mkdir)
     write_text_atomic_no_follow(output, "safe")
 
+    assert output.read_text(encoding="utf-8") == "safe"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="descriptor-relative directory creation is POSIX-only")
+def test_atomic_output_tolerates_concurrent_parent_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "missing" / "nested" / "report.json"
+    original_mkdir = os.mkdir
+    raced = False
+
+    def racing_mkdir(path, mode=0o777, *, dir_fd=None):
+        nonlocal raced
+        if not raced:
+            original_mkdir(path, mode=mode, dir_fd=dir_fd)
+            raced = True
+            raise FileExistsError(path)
+        return original_mkdir(path, mode=mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "mkdir", racing_mkdir)
+    write_text_atomic_no_follow(output, "safe")
+
+    assert raced is True
     assert output.read_text(encoding="utf-8") == "safe"
 
 
