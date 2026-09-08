@@ -151,6 +151,12 @@ assert.match(totpRecoveryMarkup, /Authenticator code/);
 assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
 assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
 assert.match(totpRecoveryMarkup, /role="alert"/);
+assert.match(totpRecoveryMarkup, /<form/);
+assert.match(totpRecoveryMarkup, /id="approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /for="approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /type="submit"/);
+assert.match(totpRecoveryMarkup, /autoComplete="one-time-code"/);
+assert.match(totpRecoveryMarkup, /enterKeyHint="done"/);
 
 const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
   settings: { approval_gate: {

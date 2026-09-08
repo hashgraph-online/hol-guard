@@ -9,10 +9,14 @@ type ApprovalProofFieldInputsProps = {
   approvalPassword: string;
   approvalTotpCode: string;
   passwordRef?: RefObject<HTMLInputElement | null>;
+  totpRef?: RefObject<HTMLInputElement | null>;
   requireFreshTotp?: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
+
+export const APPROVAL_PROOF_PASSWORD_FIELD_ID = "approval-proof-password";
+export const APPROVAL_PROOF_TOTP_FIELD_ID = "approval-proof-totp";
 
 export function approvalProofRecentlySatisfied(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
@@ -71,28 +75,35 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
   return (
     <div className="space-y-3">
       {needsPassword ? (
-        <label className="block">
+        <label className="block" htmlFor={APPROVAL_PROOF_PASSWORD_FIELD_ID}>
         <span className="text-sm font-semibold text-brand-dark">Approval password</span>
         <input
           ref={props.passwordRef}
+          id={APPROVAL_PROOF_PASSWORD_FIELD_ID}
           type="password"
           autoComplete="current-password"
+          name="password"
+          enterKeyHint="done"
           value={props.approvalPassword}
           onChange={props.onApprovalPasswordChange}
           className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
         </label>
       ) : (
-        <label className="block">
+        <label className="block" htmlFor={APPROVAL_PROOF_TOTP_FIELD_ID}>
           <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
           <input
+            ref={props.totpRef}
+            id={APPROVAL_PROOF_TOTP_FIELD_ID}
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
             autoComplete="one-time-code"
             name="one-time-code"
+            enterKeyHint="done"
             autoFocus
+            aria-required="true"
             value={props.approvalTotpCode}
             onChange={handleTotpChange}
             className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"

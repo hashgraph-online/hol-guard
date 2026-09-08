@@ -19706,6 +19706,8 @@ function TabBar(props) {
     tab.value
   )) });
 }
+const APPROVAL_PROOF_PASSWORD_FIELD_ID = "approval-proof-password";
+const APPROVAL_PROOF_TOTP_FIELD_ID = "approval-proof-totp";
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
@@ -19743,31 +19745,38 @@ function ApprovalProofFieldInputs(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: APPROVAL_PROOF_PASSWORD_FIELD_ID, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
         ref: props.passwordRef,
+        id: APPROVAL_PROOF_PASSWORD_FIELD_ID,
         type: "password",
         autoComplete: "current-password",
+        name: "password",
+        enterKeyHint: "done",
         value: props.approvalPassword,
         onChange: props.onApprovalPasswordChange,
         className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       }
     )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: APPROVAL_PROOF_TOTP_FIELD_ID, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
+        ref: props.totpRef,
+        id: APPROVAL_PROOF_TOTP_FIELD_ID,
         type: "text",
         inputMode: "numeric",
         pattern: "[0-9]*",
         maxLength: 6,
         autoComplete: "one-time-code",
         name: "one-time-code",
+        enterKeyHint: "done",
         autoFocus: true,
+        "aria-required": "true",
         value: props.approvalTotpCode,
         onChange: handleTotpChange,
         className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
