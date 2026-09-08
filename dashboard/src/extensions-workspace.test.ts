@@ -157,6 +157,8 @@ assert.match(totpRecoveryMarkup, /for="approval-proof-totp"/);
 assert.match(totpRecoveryMarkup, /type="submit"/);
 assert.match(totpRecoveryMarkup, /autoComplete="one-time-code"/);
 assert.match(totpRecoveryMarkup, /enterKeyHint="done"/);
+const trapSource = readFileSync(new URL("./use-focus-trap.ts", import.meta.url), "utf8");
+assert.match(trapSource, /function handleKeyDown\(event: KeyboardEvent\) \{\n      if \(event.key !== "Tab"\) return;\n      const focusable = getFocusableElements\(container\);/);
 
 const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
   settings: { approval_gate: {

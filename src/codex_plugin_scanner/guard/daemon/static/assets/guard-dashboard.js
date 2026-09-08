@@ -20044,14 +20044,15 @@ function useFocusTrap(active, containerRef) {
     const container2 = containerRef.current;
     if (!container2) return;
     previouslyFocusedRef.current = document.activeElement;
-    const focusable = getFocusableElements(container2);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (first) {
-      first.focus();
+    const initial = getFocusableElements(container2);
+    if (initial[0]) {
+      initial[0].focus();
     }
     function handleKeyDown(event) {
       if (event.key !== "Tab") return;
+      const focusable = getFocusableElements(container2);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (focusable.length === 0) {
         event.preventDefault();
         return;
@@ -20061,11 +20062,9 @@ function useFocusTrap(active, containerRef) {
           event.preventDefault();
           last?.focus();
         }
-      } else {
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     }
     container2.addEventListener("keydown", handleKeyDown);
