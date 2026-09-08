@@ -305,9 +305,9 @@ def managed_urlopen(
     ):
         context = build_default_ssl_context()
         if reject_redirects:
-            return urllib.request.build_opener(
-                RejectRedirects(), urllib.request.HTTPSHandler(context=context)
-            ).open(request, timeout=timeout)
+            return urllib.request.build_opener(RejectRedirects(), urllib.request.HTTPSHandler(context=context)).open(
+                request, timeout=timeout
+            )
         return urllib.request.urlopen(request, timeout=timeout, context=context)
     return managed_opener(
         resolved,

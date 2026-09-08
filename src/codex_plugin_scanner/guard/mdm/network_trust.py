@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import ssl
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 import requests.certs as requests_certs
@@ -20,7 +21,9 @@ def build_default_ssl_context() -> ssl.SSLContext:
     """Keep platform trust and explicit CA overrides usable in bundled runtimes."""
     context = ssl.create_default_context()
     if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
-        context.load_verify_locations(cafile=str(_requests_ca_bundle()))
+        # Preserve platform trust; an empty context still fails TLS verification.
+        with suppress(ManagedTrustError, OSError):
+            context.load_verify_locations(cafile=str(_requests_ca_bundle()))
     return context
 
 

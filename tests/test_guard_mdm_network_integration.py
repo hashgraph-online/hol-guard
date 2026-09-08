@@ -229,6 +229,28 @@ def test_unmanaged_bundled_runtime_loads_public_roots(network_lab, monkeypatch, 
     assert context.verify_mode == ssl.CERT_REQUIRED
 
 
+@pytest.mark.parametrize("platform_trusted", [False, True])
+def test_missing_bundle_preserves_platform_trust(network_lab, monkeypatch, platform_trusted):
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    monkeypatch.setattr(transport_module, "resolved_network_policy", lambda _: (ManagedNetworkPolicy(), False))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    if platform_trusted:
+        context.load_verify_locations(cafile=str(network_lab.ca_bundle))
+    monkeypatch.setattr(ssl, "create_default_context", lambda: context)
+
+    def missing_bundle():
+        raise trust_module.ManagedTrustError("managed_system_trust_invalid")
+
+    monkeypatch.setattr(trust_module, "_requests_ca_bundle", missing_bundle)
+    if platform_trusted:
+        with managed_urlopen(network_lab.target_url, timeout=5) as response:
+            assert response.read() == b"guard-network-ok"
+    else:
+        with pytest.raises(urllib.error.URLError):
+            managed_urlopen(network_lab.target_url, timeout=5)
+
+
 def test_explicit_untrusted_ca_does_not_fall_back(network_lab, monkeypatch):
     monkeypatch.setattr(transport_module, "resolved_network_policy", lambda _: (ManagedNetworkPolicy(), False))
     monkeypatch.setenv("SSL_CERT_FILE", "explicit-ca.pem")
