@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: fix/everyday-mode-live-release-3.2-20260908
-          fetch-depth: 0
+          fetch-depth: 1
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -36,7 +36,7 @@ jobs:
       - name: Format and lint refactor
         run: |
           uv run --no-sync ruff format src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
-          uv run --no-sync ruff check src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
+          uv run --no-sync ruff check --output-format concise src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
           git diff --check
       - name: Verify Everyday behavior and structural quality
         run: |
