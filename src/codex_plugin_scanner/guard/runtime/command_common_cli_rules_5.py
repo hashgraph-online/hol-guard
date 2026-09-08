@@ -68,7 +68,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.platform.railway",
         suffix="runner-alias-change",
         title="Railway runner-alias production operation",
-        description="Identifies deploy, restart, down, variable, and shell operations through the Railway binary alias.",
+        description=(
+            "Identifies deploy, restart, down, variable, and shell operations through the Railway binary alias."
+        ),
         matcher=_RAILWAY_WRAPPER_CHANGE,
         action_class="Railway production command",
         risk_classes=("execution", "network_egress", "local_secret_read"),
@@ -97,7 +99,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         matcher=_PACKAGE_PUBLICATION_GAPS,
         action_class="package publication command",
         risk_classes=("supply_chain", "network_egress", "destructive_shell"),
-        safer_alternative="Verify package identity, version, registry, provenance, and signing before publication changes.",
+        safer_alternative=(
+            "Verify package identity, version, registry, provenance, and signing before publication changes."
+        ),
         severity="critical",
         safe_variants=help_variants(_PACKAGE_PUBLICATION_GAPS),
         example_command="pnpm unpublish example-package@1.0.0",
@@ -130,7 +134,10 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.container-runtime",
         suffix="alternate-runtime-execution",
         title="Alternate container runtime execution",
-        description="Identifies ordinary Podman and nerdctl run or exec operations that can mutate container or host-adjacent state.",
+        description=(
+            "Identifies ordinary Podman and nerdctl run or exec operations that can mutate container or "
+            "host-adjacent state."
+        ),
         matcher=_ALT_CONTAINER_EXECUTION,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell", "network_egress"),
@@ -187,7 +194,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.platform.firebase",
         suffix="secret-mutation",
         title="Firebase secret mutation",
-        description="Identifies Firebase Functions secret set and destroy operations across direct and Node-runner forms.",
+        description=(
+            "Identifies Firebase Functions secret set and destroy operations across direct and Node-runner forms."
+        ),
         matcher=_FIREBASE_SECRET_CHANGE,
         action_class="Firebase production command",
         risk_classes=("execution", "network_egress"),
