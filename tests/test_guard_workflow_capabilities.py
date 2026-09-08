@@ -320,7 +320,7 @@ def test_concurrent_claims_never_exceed_exact_use_limit(tmp_path) -> None:
     claim = _claim(capability_id="wc-concurrent", max_uses=8)
     _issue(store, claim)
 
-    # Initialize each independent store before measuring concurrent claims.
+    # Initialize connections before measuring concurrent capability claims.
     contenders = [_store(tmp_path) for _ in range(32)]
 
     def attempt(index: int) -> str:

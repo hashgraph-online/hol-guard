@@ -848,7 +848,7 @@ export function GuardHero(props: {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           {props.cta}
           {props.secondaryCta}
         </div>
