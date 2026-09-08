@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_path_set_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_path_set_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule
 
 _COMMON_OPTIONS = frozenset(
     {
@@ -78,6 +78,19 @@ def _paths(executable: str, paths: tuple[tuple[str, ...], ...], *, node_wrapped:
     return AnyMatcher(matchers=tuple(matchers))
 
 
+def _root(executable: str) -> AnyMatcher:
+    return AnyMatcher(
+        matchers=(
+            executable_matcher(
+                executable,
+                global_options_with_values=_COMMON_OPTIONS,
+                global_flags=_COMMON_FLAGS,
+                fail_secure_unknown_options=True,
+            ),
+        )
+    )
+
+
 def _rule(
     *,
     extension_id: str,
@@ -86,7 +99,7 @@ def _rule(
     action_class: str,
     risk_classes: tuple[str, ...],
     safer_alternative: str,
-    severity: str = "critical",
+    severity: CommandRuleSeverity = "critical",
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=f"{extension_id}.high-impact",
@@ -204,47 +217,19 @@ _FLUX = _paths(
         ("uninstall",),
     ),
 )
-_BIGQUERY = _paths(
-    "bq",
-    (
-        ("rm",),
-        ("remove",),
-        ("load",),
-        ("query",),
-    ),
+_BIGQUERY = _paths("bq", (("rm",), ("remove",)))
+_FLY_PATHS = (
+    ("apps", "destroy"),
+    ("machines", "destroy"),
+    ("machine", "destroy"),
+    ("volumes", "destroy"),
+    ("volume", "destroy"),
+    ("deploy",),
+    ("releases", "rollback"),
+    ("secrets", "set"),
+    ("secrets", "unset"),
 )
-_FLY = AnyMatcher(
-    matchers=(
-        *_paths(
-            "fly",
-            (
-                ("apps", "destroy"),
-                ("machines", "destroy"),
-                ("machine", "destroy"),
-                ("volumes", "destroy"),
-                ("volume", "destroy"),
-                ("deploy",),
-                ("releases", "rollback"),
-                ("secrets", "set"),
-                ("secrets", "unset"),
-            ),
-        ).matchers,
-        *_paths(
-            "flyctl",
-            (
-                ("apps", "destroy"),
-                ("machines", "destroy"),
-                ("machine", "destroy"),
-                ("volumes", "destroy"),
-                ("volume", "destroy"),
-                ("deploy",),
-                ("releases", "rollback"),
-                ("secrets", "set"),
-                ("secrets", "unset"),
-            ),
-        ).matchers,
-    )
-)
+_FLY = AnyMatcher(matchers=(*_paths("fly", _FLY_PATHS).matchers, *_paths("flyctl", _FLY_PATHS).matchers))
 _RAILWAY = _paths(
     "railway",
     (
@@ -263,9 +248,9 @@ _RAILWAY = _paths(
 )
 _ANSIBLE = AnyMatcher(
     matchers=(
-        *_paths("ansible", (("all",),)).matchers,
-        *_paths("ansible-playbook", ((),)).matchers,
-        *_paths("ansible-pull", ((),)).matchers,
+        *_root("ansible").matchers,
+        *_root("ansible-playbook").matchers,
+        *_root("ansible-pull").matchers,
         *_paths("ansible-vault", (("view",), ("decrypt",), ("edit",), ("rekey",))).matchers,
     )
 )
@@ -360,7 +345,7 @@ FIRST_CLASS_CLI_COMMAND_RULES = (
         matcher=_BIGQUERY,
         action_class="BigQuery destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Inspect the exact dataset/table destination and use a disposable destination for replacement work.",
+        safer_alternative="Inspect the exact dataset/table destination before deletion.",
     ),
     _rule(
         extension_id="command.platform.fly",
@@ -435,7 +420,7 @@ FIRST_CLASS_CLI_COMMAND_EXTENSION_SPECS = (
     _spec("command.platform.firebase", "Firebase command protection", "Reviews production deploy, destructive hosting/function/data operations, and secret mutation.", "Firebase production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the active Firebase project and exact deployment target first.", ("https://firebase.google.com/docs/cli",)),
     _spec("command.gitops.argocd", "Argo CD command protection", "Reviews application synchronization, rollback, patch, and deletion operations.", "Argo CD production command", ("destructive_shell", "network_egress", "execution"), "Inspect application diff and target revision before reconciliation.", ("https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/",)),
     _spec("command.gitops.flux", "Flux command protection", "Reviews GitOps reconciliation, suspend/resume, deletion, and uninstall operations.", "Flux production command", ("destructive_shell", "network_egress", "execution"), "Inspect source and reconciliation status before mutation.", ("https://fluxcd.io/flux/cmd/",)),
-    _spec("command.database.bigquery", "BigQuery command protection", "Reviews bq data and resource operations that can delete or replace remote data.", "BigQuery destructive command", ("destructive_shell", "network_egress"), "Inspect the exact dataset or destination before destructive operations.", ("https://cloud.google.com/bigquery/docs/reference/bq-cli-reference",)),
+    _spec("command.database.bigquery", "BigQuery command protection", "Reviews bq resource deletion that can remove remote datasets and data objects.", "BigQuery destructive command", ("destructive_shell", "network_egress"), "Inspect the exact dataset or destination before destructive operations.", ("https://cloud.google.com/bigquery/docs/reference/bq-cli-reference",)),
     _spec("command.platform.fly", "Fly.io command protection", "Reviews app, machine, volume, deployment, release, and secret mutations through fly/flyctl.", "Fly.io production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the active Fly app and attached state first.", ("https://fly.io/docs/flyctl/",)),
     _spec("command.platform.railway", "Railway command protection", "Reviews project, service, volume, deployment, shell, and variable mutations through Railway CLI.", "Railway production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the linked Railway project and environment first.", ("https://docs.railway.com/guides/cli",)),
     _spec("command.configuration-management.ansible", "Ansible command protection", "Reviews remote Ansible execution and ansible-vault secret access/mutation.", "Ansible remote execution command", ("execution", "network_egress", "local_secret_read", "destructive_shell"), "Limit inventory scope and inspect playbooks and vault inputs first.", ("https://docs.ansible.com/ansible/latest/command_guide/",)),
