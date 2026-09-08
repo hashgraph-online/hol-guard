@@ -1,0 +1,202 @@
+"""Metadata for first-class common CLI Extensions."""
+
+from __future__ import annotations
+
+from .command_common_cli_rule_support import spec
+from .command_extension_specs import CommandExtensionSpec
+
+COMMON_CLI_COMMAND_EXTENSION_SPECS: tuple[CommandExtensionSpec, ...] = (
+    spec(
+            "command.platform.cloudflare",
+            "Cloudflare Wrangler command protection",
+            "Reviews Cloudflare deployment, resource deletion, and secret mutation through Wrangler.",
+            ("Cloudflare destructive command", "Cloudflare production command"),
+            ("destructive_shell", "network_egress", "execution"),
+            "Confirm account, environment, resource, and deployment scope before remote changes.",
+            ("https://developers.cloudflare.com/workers/wrangler/commands/",),
+        ),
+    spec(
+            "command.gitlab",
+            "GitLab command protection",
+            "Reviews GitLab deletion, merge/rebase, and CI/CD variable access through glab.",
+            ("GitLab destructive command", "GitLab merge command", "GitLab variable command"),
+            ("destructive_shell", "network_egress", "execution", "local_secret_read"),
+            "Inspect the exact project, merge request, and variable scope before remote changes.",
+            ("https://docs.gitlab.com/cli/",),
+        ),
+    spec(
+            "command.secrets.vault",
+            "HashiCorp Vault command protection",
+            "Reviews Vault secret reads, destructive secret mutation, and security administration.",
+            ("Vault secret read command", "Vault secret mutation command", "Vault security administration command"),
+            ("local_secret_read", "network_egress", "destructive_shell"),
+            "Use the narrowest path, version, token, and mount required for the operation.",
+            ("https://developer.hashicorp.com/vault/docs/commands",),
+        ),
+    spec(
+            "command.database.prisma",
+            "Prisma command protection",
+            "Reviews destructive resets, direct SQL, data-loss pushes, and production migrations.",
+            ("Prisma destructive command", "Prisma production migration command"),
+            ("destructive_shell", "network_egress", "execution"),
+            "Review schema and migration diffs and verify the selected database before mutation.",
+            ("https://www.prisma.io/docs/orm/reference/prisma-cli-reference",),
+        ),
+    spec(
+            "command.platform.firebase",
+            "Firebase command protection",
+            "Reviews production deployment and destructive Firebase application and data operations.",
+            ("Firebase production command", "Firebase destructive command"),
+            ("execution", "network_egress", "destructive_shell"),
+            "Confirm the active Firebase project, target, and recovery path before remote changes.",
+            ("https://firebase.google.com/docs/cli",),
+        ),
+    spec(
+            "command.gitops.argocd",
+            "Argo CD command protection",
+            "Reviews destructive GitOps administration and live reconciliation mutations through argocd.",
+            ("Argo CD destructive command", "Argo CD reconciliation command"),
+            ("destructive_shell", "network_egress", "execution"),
+            "Inspect application diff, health, ownership, and cascade behavior before mutation.",
+            ("https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd/",),
+        ),
+    spec(
+            "command.gitops.flux",
+            "Flux command protection",
+            "Reviews destructive Flux administration and forced reconciliation state changes.",
+            ("Flux destructive command", "Flux reconciliation command"),
+            ("destructive_shell", "network_egress", "execution"),
+            "Inspect source revision, prune behavior, and reconciliation status before mutation.",
+            ("https://fluxcd.io/flux/cmd/",),
+        ),
+    spec(
+            "command.package.dotnet",
+            ".NET and NuGet package command protection",
+            "Reviews package dependency ingress plus NuGet publication and deletion.",
+            (".NET package mutation command", ".NET package publication command"),
+            ("supply_chain", "network_egress", "execution", "destructive_shell"),
+            "Use locked dependencies and verify package/feed identity before installation or publication.",
+            (
+                "https://learn.microsoft.com/dotnet/core/tools/",
+                "https://learn.microsoft.com/nuget/reference/nuget-exe-cli-reference",
+            ),
+        ),
+    spec(
+            "command.database.bigquery",
+            "BigQuery command protection",
+            "Reviews bq operations that remove resources or replace destination data.",
+            ("BigQuery destructive command",),
+            ("destructive_shell", "network_egress"),
+            "Inspect the exact project, dataset, table, and load destination before destructive changes.",
+            ("https://cloud.google.com/bigquery/docs/reference/bq-cli-reference",),
+        ),
+    spec(
+            "command.platform.fly",
+            "Fly.io command protection",
+            "Reviews Fly.io production deploys, destructive resource operations, and secret mutation.",
+            ("Fly.io destructive command", "Fly.io production command"),
+            ("destructive_shell", "network_egress", "execution"),
+            "Confirm app, organization, resource, and secret scope before remote changes.",
+            ("https://fly.io/docs/flyctl/",),
+        ),
+    spec(
+            "command.platform.railway",
+            "Railway command protection",
+            "Reviews Railway deployment, deletion, variable mutation, and secret-populated shell access.",
+            ("Railway destructive command", "Railway production command"),
+            ("destructive_shell", "network_egress", "execution", "local_secret_read"),
+            "Confirm project, service, environment, and variable scope before remote changes.",
+            ("https://docs.railway.com/reference/cli-api",),
+        ),
+    spec(
+            "command.configuration-management.ansible",
+            "Ansible command protection",
+            "Reviews remote Ansible execution and access to encrypted Ansible Vault material.",
+            ("Ansible remote execution command", "Ansible Vault secret command"),
+            ("execution", "network_egress", "destructive_shell", "local_secret_read"),
+            "Limit inventory and hosts and inspect playbook changes and Vault scope before execution.",
+            ("https://docs.ansible.com/ansible/latest/command_guide/",),
+        ),
+    spec(
+            "command.cloud.digitalocean",
+            "DigitalOcean command protection",
+            "Reviews destructive DigitalOcean control-plane operations through doctl.",
+            ("DigitalOcean destructive command",),
+            ("destructive_shell", "network_egress"),
+            "Inspect context, resource dependencies, and backups before deletion.",
+            ("https://docs.digitalocean.com/reference/doctl/reference/",),
+        ),
+    spec(
+            "command.secrets.1password",
+            "1Password command protection",
+            "Reviews secret reads, secret injection, and destructive object deletion through op.",
+            ("1Password secret read command", "1Password secret injection command", "1Password destructive command"),
+            ("local_secret_read", "network_egress", "execution", "destructive_shell"),
+            "Use the narrowest secret reference and subprocess scope required for the task.",
+            ("https://developer.1password.com/docs/cli/",),
+        ),
+    spec(
+            "command.package-publication",
+            "Package registry publication protection",
+            "Reviews publish, upload, unpublish, and yank operations across common package ecosystems.",
+            ("package publication command",),
+            ("supply_chain", "network_egress", "destructive_shell"),
+            "Verify package identity, version, registry, provenance, and signing before publication changes.",
+            (
+                "https://docs.npmjs.com/cli/commands/npm-publish",
+                "https://doc.rust-lang.org/cargo/commands/cargo-publish.html",
+                "https://twine.readthedocs.io/",
+            ),
+        ),
+    spec(
+            "command.cloud-secrets",
+            "Cloud secret and credential protection",
+            "Reviews secret retrieval and credential lifecycle mutations across AWS, Google Cloud, and Azure CLIs.",
+            ("cloud secret read command", "cloud credential mutation command"),
+            ("local_secret_read", "network_egress", "destructive_shell"),
+            "Use the narrowest principal, secret, and credential scope required for the task.",
+            (
+                "https://docs.aws.amazon.com/cli/latest/reference/secretsmanager/get-secret-value.html",
+                "https://cloud.google.com/sdk/gcloud/reference/secrets/versions/access",
+                "https://learn.microsoft.com/cli/azure/keyvault/secret",
+            ),
+        ),
+    spec(
+            "command.kubernetes-operations",
+            "Kubernetes and OpenShift operation protection",
+            "Reviews destructive Kubernetes/OpenShift operations plus OpenShift execution, tunnels, and file transfer.",
+            (
+                "Kubernetes destructive command",
+                "Kubernetes remote execution command",
+                "Kubernetes network tunnel command",
+                "Kubernetes remote file transfer command",
+            ),
+            ("destructive_shell", "network_egress", "execution"),
+            "Use explicit projects and the narrowest remote operation required before cluster mutation.",
+            (
+                "https://kubernetes.io/docs/reference/kubectl/",
+                (
+                    "https://docs.redhat.com/en/documentation/openshift_container_platform/latest/"
+                    "html/cli_tools/openshift-cli-oc"
+                ),
+            ),
+        ),
+    spec(
+            "command.infrastructure-as-code",
+            "Infrastructure-as-code protection",
+            "Reviews teardown through Terraform, OpenTofu, Pulumi, AWS CDK, AWS SAM, and Serverless Framework.",
+            ("infrastructure destructive command",),
+            ("destructive_shell", "network_egress"),
+            "Create and inspect a plan or preview and confirm stack, stage, account, and region before teardown.",
+            (
+                "https://developer.hashicorp.com/terraform/cli/commands/destroy",
+                "https://opentofu.org/docs/cli/commands/destroy/",
+                "https://www.pulumi.com/docs/iac/cli/commands/pulumi_destroy/",
+                "https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-destroy.html",
+                (
+                    "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/"
+                    "sam-cli-command-reference-sam-delete.html"
+                ),
+            ),
+        ),
+)
