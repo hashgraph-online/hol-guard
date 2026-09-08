@@ -17,7 +17,6 @@ _COMMON_OPTIONS = frozenset(
         "--environment",
         "--host",
         "--hostname",
-        "--json",
         "--namespace",
         "--org",
         "--organization",
@@ -39,7 +38,7 @@ _COMMON_OPTIONS = frozenset(
         "-R",
     }
 )
-_COMMON_FLAGS = frozenset({"--debug", "--help", "--quiet", "--verbose", "-h", "-q"})
+_COMMON_FLAGS = frozenset({"--debug", "--help", "--json", "--quiet", "--verbose", "-q"})
 _NODE_RUNNER_OPTIONS = frozenset({"--package", "--cache", "--dir", "--filter", "--workspace", "-C", "-F"})
 _NODE_RUNNER_FLAGS = frozenset({"--yes", "-y", "--silent"})
 
@@ -110,10 +109,7 @@ def _rule(
         action_classes=(action_class,),
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
-        safe_variants=(
-            safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(matcher, variant_id="short-help", title="Command help", flag="-h"),
-        ),
+        safe_variants=(safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),),
     )
 
 
@@ -413,17 +409,121 @@ def _spec(
 
 
 FIRST_CLASS_CLI_COMMAND_EXTENSION_SPECS = (
-    _spec("command.platform.cloudflare", "Cloudflare command protection", "Reviews high-impact Wrangler deploy, delete, storage, queue, database, and secret operations.", "Cloudflare production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the selected account and resource before mutation.", ("https://developers.cloudflare.com/workers/wrangler/commands/",)),
-    _spec("command.gitlab", "GitLab command protection", "Reviews high-impact GitLab repository, merge, release, and CI variable operations.", "GitLab administrative command", ("destructive_shell", "network_egress", "local_secret_read"), "Inspect the selected GitLab resource before remote mutation.", ("https://docs.gitlab.com/cli/",)),
-    _spec("command.secrets.vault", "HashiCorp Vault command protection", "Reviews remote Vault secret access and destructive policy/auth administration.", "Vault secret administration command", ("local_secret_read", "destructive_shell", "network_egress"), "Scope Vault operations to the narrowest secret or policy path.", ("https://developer.hashicorp.com/vault/docs/commands",)),
-    _spec("command.database.prisma", "Prisma command protection", "Reviews Prisma schema and migration operations that can alter or discard database state.", "Prisma database command", ("destructive_shell", "network_egress"), "Inspect migration state and back up the selected database first.", ("https://www.prisma.io/docs/orm/reference/prisma-cli-reference",)),
-    _spec("command.platform.firebase", "Firebase command protection", "Reviews production deploy, destructive hosting/function/data operations, and secret mutation.", "Firebase production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the active Firebase project and exact deployment target first.", ("https://firebase.google.com/docs/cli",)),
-    _spec("command.gitops.argocd", "Argo CD command protection", "Reviews application synchronization, rollback, patch, and deletion operations.", "Argo CD production command", ("destructive_shell", "network_egress", "execution"), "Inspect application diff and target revision before reconciliation.", ("https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/",)),
-    _spec("command.gitops.flux", "Flux command protection", "Reviews GitOps reconciliation, suspend/resume, deletion, and uninstall operations.", "Flux production command", ("destructive_shell", "network_egress", "execution"), "Inspect source and reconciliation status before mutation.", ("https://fluxcd.io/flux/cmd/",)),
-    _spec("command.database.bigquery", "BigQuery command protection", "Reviews bq resource deletion that can remove remote datasets and data objects.", "BigQuery destructive command", ("destructive_shell", "network_egress"), "Inspect the exact dataset or destination before destructive operations.", ("https://cloud.google.com/bigquery/docs/reference/bq-cli-reference",)),
-    _spec("command.platform.fly", "Fly.io command protection", "Reviews app, machine, volume, deployment, release, and secret mutations through fly/flyctl.", "Fly.io production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the active Fly app and attached state first.", ("https://fly.io/docs/flyctl/",)),
-    _spec("command.platform.railway", "Railway command protection", "Reviews project, service, volume, deployment, shell, and variable mutations through Railway CLI.", "Railway production command", ("destructive_shell", "network_egress", "local_secret_read", "execution"), "Inspect the linked Railway project and environment first.", ("https://docs.railway.com/guides/cli",)),
-    _spec("command.configuration-management.ansible", "Ansible command protection", "Reviews remote Ansible execution and ansible-vault secret access/mutation.", "Ansible remote execution command", ("execution", "network_egress", "local_secret_read", "destructive_shell"), "Limit inventory scope and inspect playbooks and vault inputs first.", ("https://docs.ansible.com/ansible/latest/command_guide/",)),
-    _spec("command.cloud.digitalocean", "DigitalOcean command protection", "Reviews destructive doctl operations across major DigitalOcean resource families.", "DigitalOcean destructive command", ("destructive_shell", "network_egress"), "Inspect resource identity and dependencies before deletion.", ("https://docs.digitalocean.com/reference/doctl/",)),
-    _spec("command.secrets.1password", "1Password command protection", "Reviews 1Password secret reads, injection/execution, and destructive vault/item operations.", "1Password secret command", ("local_secret_read", "network_egress", "execution", "destructive_shell"), "Request only the required field and avoid broad secret injection.", ("https://developer.1password.com/docs/cli/",)),
+    _spec(
+        "command.platform.cloudflare",
+        "Cloudflare command protection",
+        "Reviews high-impact Wrangler deploy, delete, storage, queue, database, and secret operations.",
+        "Cloudflare production command",
+        ("destructive_shell", "network_egress", "local_secret_read", "execution"),
+        "Inspect the selected account and resource before mutation.",
+        ("https://developers.cloudflare.com/workers/wrangler/commands/",),
+    ),
+    _spec(
+        "command.gitlab",
+        "GitLab command protection",
+        "Reviews high-impact GitLab repository, merge, release, and CI variable operations.",
+        "GitLab administrative command",
+        ("destructive_shell", "network_egress", "local_secret_read"),
+        "Inspect the selected GitLab resource before remote mutation.",
+        ("https://docs.gitlab.com/cli/",),
+    ),
+    _spec(
+        "command.secrets.vault",
+        "HashiCorp Vault command protection",
+        "Reviews remote Vault secret access and destructive policy/auth administration.",
+        "Vault secret administration command",
+        ("local_secret_read", "destructive_shell", "network_egress"),
+        "Scope Vault operations to the narrowest secret or policy path.",
+        ("https://developer.hashicorp.com/vault/docs/commands",),
+    ),
+    _spec(
+        "command.database.prisma",
+        "Prisma command protection",
+        "Reviews Prisma schema and migration operations that can alter or discard database state.",
+        "Prisma database command",
+        ("destructive_shell", "network_egress"),
+        "Inspect migration state and back up the selected database first.",
+        ("https://www.prisma.io/docs/orm/reference/prisma-cli-reference",),
+    ),
+    _spec(
+        "command.platform.firebase",
+        "Firebase command protection",
+        "Reviews production deploy, destructive hosting/function/data operations, and secret mutation.",
+        "Firebase production command",
+        ("destructive_shell", "network_egress", "local_secret_read", "execution"),
+        "Inspect the active Firebase project and exact deployment target first.",
+        ("https://firebase.google.com/docs/cli",),
+    ),
+    _spec(
+        "command.gitops.argocd",
+        "Argo CD command protection",
+        "Reviews application synchronization, rollback, patch, and deletion operations.",
+        "Argo CD production command",
+        ("destructive_shell", "network_egress", "execution"),
+        "Inspect application diff and target revision before reconciliation.",
+        ("https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/",),
+    ),
+    _spec(
+        "command.gitops.flux",
+        "Flux command protection",
+        "Reviews GitOps reconciliation, suspend/resume, deletion, and uninstall operations.",
+        "Flux production command",
+        ("destructive_shell", "network_egress", "execution"),
+        "Inspect source and reconciliation status before mutation.",
+        ("https://fluxcd.io/flux/cmd/",),
+    ),
+    _spec(
+        "command.database.bigquery",
+        "BigQuery command protection",
+        "Reviews bq resource deletion that can remove remote datasets and data objects.",
+        "BigQuery destructive command",
+        ("destructive_shell", "network_egress"),
+        "Inspect the exact dataset or destination before destructive operations.",
+        ("https://cloud.google.com/bigquery/docs/reference/bq-cli-reference",),
+    ),
+    _spec(
+        "command.platform.fly",
+        "Fly.io command protection",
+        "Reviews app, machine, volume, deployment, release, and secret mutations through fly/flyctl.",
+        "Fly.io production command",
+        ("destructive_shell", "network_egress", "local_secret_read", "execution"),
+        "Inspect the active Fly app and attached state first.",
+        ("https://fly.io/docs/flyctl/",),
+    ),
+    _spec(
+        "command.platform.railway",
+        "Railway command protection",
+        "Reviews project, service, volume, deployment, shell, and variable mutations through Railway CLI.",
+        "Railway production command",
+        ("destructive_shell", "network_egress", "local_secret_read", "execution"),
+        "Inspect the linked Railway project and environment first.",
+        ("https://docs.railway.com/guides/cli",),
+    ),
+    _spec(
+        "command.configuration-management.ansible",
+        "Ansible command protection",
+        "Reviews remote Ansible execution and ansible-vault secret access/mutation.",
+        "Ansible remote execution command",
+        ("execution", "network_egress", "local_secret_read", "destructive_shell"),
+        "Limit inventory scope and inspect playbooks and vault inputs first.",
+        ("https://docs.ansible.com/ansible/latest/command_guide/",),
+    ),
+    _spec(
+        "command.cloud.digitalocean",
+        "DigitalOcean command protection",
+        "Reviews destructive doctl operations across major DigitalOcean resource families.",
+        "DigitalOcean destructive command",
+        ("destructive_shell", "network_egress"),
+        "Inspect resource identity and dependencies before deletion.",
+        ("https://docs.digitalocean.com/reference/doctl/",),
+    ),
+    _spec(
+        "command.secrets.1password",
+        "1Password command protection",
+        "Reviews 1Password secret reads, injection/execution, and destructive vault/item operations.",
+        "1Password secret command",
+        ("local_secret_read", "network_egress", "execution", "destructive_shell"),
+        "Request only the required field and avoid broad secret injection.",
+        ("https://developer.1password.com/docs/cli/",),
+    ),
 )
