@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from .command_common_cli_matchers import _OC_FLAGS, _OC_OPTIONS
 from .command_common_cli_matchers_extra import (
-    ALT_CONTAINER_RESOURCE_REMOVAL,
     DOTNET_POSITIONAL_PACKAGE,
     MONGOSH_MUTATION,
-    OPENSHIFT_MUTATION,
     SQLITE_MUTATION,
     _ARGO_ADDITIONAL_RECONCILE,
     _CDK_ALIAS_DESTROY,
@@ -30,6 +28,10 @@ _RAILWAY_WRAPPER_DESTRUCTIVE = AnyMatcher(matchers=_RAILWAY_ALIAS_DESTRUCTIVE.ma
 _RAILWAY_WRAPPER_CHANGE = AnyMatcher(matchers=_RAILWAY_ALIAS_CHANGE.matchers[1:])
 _IAC_RUNNER_ALIAS_TEARDOWN = AnyMatcher(
     matchers=(*_CDK_ALIAS_DESTROY.matchers[1:], *_SLS_ALIAS_REMOVE.matchers[1:])
+)
+_ALT_CONTAINER_RESOURCE_REMOVAL = _path_bundle(
+    ("podman", "nerdctl"),
+    (("rm",), ("container", "rm"), ("image", "rm"), ("volume", "rm"), ("network", "rm")),
 )
 _ALT_CONTAINER_EXECUTION = AnyMatcher(
     matchers=tuple(
@@ -116,12 +118,12 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         suffix="alternate-runtime-resource-removal",
         title="Alternate container runtime resource removal",
         description="Identifies Podman and nerdctl container, image, volume, and network removal operations.",
-        matcher=ALT_CONTAINER_RESOURCE_REMOVAL,
+        matcher=_ALT_CONTAINER_RESOURCE_REMOVAL,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell",),
         safer_alternative="List exact container runtime resources before removing the narrowest target set.",
         severity="critical",
-        safe_variants=help_variants(ALT_CONTAINER_RESOURCE_REMOVAL),
+        safe_variants=help_variants(_ALT_CONTAINER_RESOURCE_REMOVAL),
         example_command="podman volume rm production-data",
     ),
     rule(
