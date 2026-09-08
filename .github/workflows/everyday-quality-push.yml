@@ -35,9 +35,9 @@ jobs:
         run: uv sync --frozen --extra dev --python 3.12
       - name: Format and lint refactor
         run: |
-          uv run --no-sync ruff check --fix src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
-          uv run --no-sync ruff format src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
-          uv run --no-sync ruff check --output-format concise src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
+          uv run --no-sync ruff check --fix src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py src/codex_plugin_scanner/guard/runtime/action_explanation_rule_kinds.py tests/test_guard_action_explanation_projection.py
+          uv run --no-sync ruff format src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py src/codex_plugin_scanner/guard/runtime/action_explanation_rule_kinds.py tests/test_guard_action_explanation_projection.py
+          uv run --no-sync ruff check --output-format concise src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py src/codex_plugin_scanner/guard/runtime/action_explanation_rule_kinds.py tests/test_guard_action_explanation_projection.py
           git diff --check
       - name: Verify Everyday behavior and structural quality
         run: |
@@ -49,7 +49,7 @@ jobs:
           uv run --no-sync python tests/guard_command_decision_diff.py --check
       - name: Commit verified refactor
         run: |
-          git add src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py tests/fixtures/guard-command-corpus/decision-diff-report.json .github/everyday_quality_fix.py .github/workflows/everyday-quality-fix.yml .github/workflows/everyday-quality-push.yml
+          git add src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py src/codex_plugin_scanner/guard/runtime/action_explanation_rule_kinds.py tests/test_guard_action_explanation_projection.py tests/fixtures/guard-command-corpus/decision-diff-report.json .github/everyday_quality_fix.py .github/workflows/everyday-quality-fix.yml .github/workflows/everyday-quality-push.yml
           git diff --cached --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
