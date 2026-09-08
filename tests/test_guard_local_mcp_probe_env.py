@@ -142,6 +142,8 @@ def test_discover_keeps_harness_env_for_listing(tmp_path: Path, monkeypatch) -> 
     extra = extra_env_for_mcp_launch(discovered, command="npx -y @z_ai/mcp-server")
     assert extra["Z_AI_API_KEY"] == "config-key"
     assert extra["Z_AI_MODE"] == "ZAI"
+    quoted = extra_env_for_mcp_launch(discovered, command="npx -y '@z_ai/mcp-server'")
+    assert quoted["Z_AI_API_KEY"] == "config-key"
 
 
 def test_conflicting_harness_env_is_not_forwarded(tmp_path: Path, monkeypatch) -> None:

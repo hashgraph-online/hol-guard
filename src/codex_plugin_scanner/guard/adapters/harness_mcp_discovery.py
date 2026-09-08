@@ -11,7 +11,8 @@ from pathlib import Path
 
 from ..models import HarnessDetection
 from ..runtime.local_cli_identity import UnlistedCliIdentity
-from ..runtime.mcp_protection import McpServerIdentity
+from ..runtime.local_mcp_probe import mcp_launch_tokens
+from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .contracts import display_name_for
 from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_process_env
 
@@ -152,11 +153,19 @@ def extra_env_for_mcp_launch(
 
     matched = discovered_server_for_observation(servers, cli_id=cli_id)
     if matched is None:
-        wanted = command.strip()
-        for server in servers:
-            if server.launch_command.strip() == wanted:
-                matched = server
-                break
+        tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
+        if tokens is not None:
+            identity = build_mcp_server_identity(
+                config_path="",
+                command=tokens[0],
+                args=tuple(tokens[1:]),
+                transport="stdio",
+            )
+            matched = discovered_server_for_observation(
+                servers,
+                server_command=identity.command,
+                args_hash=identity.args_hash,
+            )
     if matched is None:
         return {}
     extra = dict(matched.env)
