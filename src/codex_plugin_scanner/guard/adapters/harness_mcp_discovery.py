@@ -63,12 +63,16 @@ def discover_harness_mcp_servers(
                 continue
             if label not in current.labels:
                 current.labels.append(label)
+            if env:
+                if current.env and current.env != env:
+                    current.env = ()
+                elif not current.env:
+                    current.env = env
             if len(server_identity.env_keys) > current.env_key_count:
                 current.identity = identity
                 current.server_identity = server_identity
                 current.launch_command = launch_command
                 current.env_key_count = len(server_identity.env_keys)
-                current.env = env
     ranked = sorted(
         groups.values(),
         key=lambda group: (

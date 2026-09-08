@@ -198,7 +198,7 @@ class LocalCliApiService:
         extra_env = extra_env_for_mcp_launch(self._discovered_servers(), command=command, cli_id=cli_id)
         try:
             probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir, extra_env=extra_env)
-        except (OSError, RuntimeError, TimeoutError):
+        except (OSError, RuntimeError, TimeoutError, ValueError):
             probed = None
         if probed is None:
             stored = stored_mcp_recognition(

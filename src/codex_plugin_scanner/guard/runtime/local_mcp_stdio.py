@@ -46,7 +46,7 @@ def run_mcp_tools_list(
     try:
         with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
             return _exchange_tools_list(list(argv), tmp, timeout=timeout, extra_env=extra_env)
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
         return None
 
 
@@ -97,6 +97,8 @@ def probe_env(tmp: str, extra: Mapping[str, str] | None = None) -> dict[str, str
         for key, value in extra.items():
             name = key.strip()
             if not name or name.upper() in _PROBE_ENV_LOCKED:
+                continue
+            if "=" in name or "\x00" in name or "\x00" in value:
                 continue
             env[name] = value
     return env

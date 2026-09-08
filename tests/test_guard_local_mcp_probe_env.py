@@ -87,10 +87,21 @@ for line in sys.stdin:
 
 
 def test_probe_env_merges_harness_values_without_replacing_path(tmp_path: Path) -> None:
-    env = probe_env(str(tmp_path), {"Z_AI_API_KEY": "probe-key", "PATH": "evil-path", "HOME": "evil-home"})
+    env = probe_env(
+        str(tmp_path),
+        {
+            "Z_AI_API_KEY": "probe-key",
+            "PATH": "evil-path",
+            "HOME": "evil-home",
+            "BAD=NAME": "x",
+            "NULL": "a\x00b",
+        },
+    )
     assert env["Z_AI_API_KEY"] == "probe-key"
     assert env["PATH"] != "evil-path"
     assert env["HOME"] == str(tmp_path)
+    assert "BAD=NAME" not in env
+    assert "NULL" not in env
 
 
 def test_probe_lists_tools_when_harness_env_is_supplied(tmp_path: Path) -> None:
@@ -131,6 +142,39 @@ def test_discover_keeps_harness_env_for_listing(tmp_path: Path, monkeypatch) -> 
     extra = extra_env_for_mcp_launch(discovered, command="npx -y @z_ai/mcp-server")
     assert extra["Z_AI_API_KEY"] == "config-key"
     assert extra["Z_AI_MODE"] == "ZAI"
+
+
+def test_conflicting_harness_env_is_not_forwarded(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("Z_AI_API_KEY", raising=False)
+    detections = (
+        _detection(
+            "opencode",
+            _artifact(
+                harness="opencode",
+                name="zai-mcp-server",
+                command="npx",
+                args=("-y", "@z_ai/mcp-server"),
+                env={"Z_AI_API_KEY": "opencode-secret"},
+            ),
+        ),
+        _detection(
+            "codex",
+            _artifact(
+                harness="codex",
+                name="zai-mcp-server",
+                command="npx",
+                args=("-y", "@z_ai/mcp-server"),
+                env={"Z_AI_API_KEY": "codex-secret"},
+            ),
+        ),
+    )
+    discovered = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        detections=detections,
+    )
+    extra = extra_env_for_mcp_launch(discovered, command="npx -y @z_ai/mcp-server")
+    assert extra.get("Z_AI_API_KEY") not in {"opencode-secret", "codex-secret"}
 
 
 def test_unresolved_harness_env_falls_back_to_process(tmp_path: Path, monkeypatch) -> None:
