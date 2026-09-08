@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
+    ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
     authenticated_record,
     layers_from_json,
@@ -203,6 +204,29 @@ def test_catalog_upgrade_disables_managed_allow_when_target_contract_changes(
         surface=ControlSurface.COMMAND_EVALUATION,
     )
     assert resolution.blocked is True
+
+
+def test_managed_projection_requires_current_manifest_for_catalog_rebind(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets, enroll=False)
+    legacy = _upgraded_registry()
+    monkeypatch.setattr(command_extensions, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", legacy)
+    monkeypatch.setattr(activation_support, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", legacy)
+    store._bootstrap_extension_control_authority(legacy.catalog_digest, key=None)  # pyright: ignore[reportPrivateUsage]
+    assert activation_support.activate_managed_bundle(store, activation_support.managed_bundle()) is True
+
+    monkeypatch.setattr(command_extensions, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    monkeypatch.setattr(activation_support, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    view = store.read_extension_control_authority_for_registry(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        include_managed_controls=False,
+    )
+
+    with pytest.raises(ExtensionControlAuthorityError, match="current catalog manifest is missing"):
+        store._with_managed_controls_activation(view)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_catalog_upgrade_does_not_overwrite_replaced_managed_controls(
