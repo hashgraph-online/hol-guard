@@ -105,7 +105,7 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         example_command="pnpm unpublish example-package@1.0.0",
     ),
     rule(
-        extension_id="command.package.dotnet",
+        extension_id="command.package-dotnet",
         suffix="positional-project-package",
         title=".NET positional-project package mutation",
         description="Identifies `dotnet add <PROJECT> package <PACKAGE>` dependency ingress.",
