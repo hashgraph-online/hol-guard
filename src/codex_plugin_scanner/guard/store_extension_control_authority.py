@@ -178,34 +178,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             raise ExtensionControlAuthorityError("managed controls require protected local authority")
         if revision_state is None or revision_state == {}:
             raise ExtensionControlAuthorityError("managed controls revision state is missing")
-        if isinstance(active, dict) and active.get("catalogDigest") != view.catalog_digest:
-            key = self._authority_key(required=True)
-            assert key is not None
-            activation_digest = active.get("catalogDigest")
-            if not isinstance(activation_digest, str):
-                raise ExtensionControlAuthorityError("incomplete managed controls activation state")
-            # Authenticate the leftover activation against its own catalog. A
-            # trusted package update rebinds local controls first, so the stored
-            # Cloud snapshot is stale but still must verify. Invalid MACs stay
-            # fail-closed; only a catalog-bound mismatch drops Cloud layers.
-            _, managed_revision = managed_controls_layers_from_activation_state(
-                active,
-                catalog_digest=activation_digest,
-                authority_key=key,
-            )
-            durable_revision = managed_controls_revision_from_state(
-                revision_state,
-                authority_key=key,
-            )
-            if managed_revision != durable_revision:
-                raise ExtensionControlAuthorityError("managed controls activation revision mismatch")
-            return ExtensionControlAuthorityView(
-                view.health,
-                view.revision,
-                view.catalog_digest,
-                local_layers,
-                durable_revision,
-            )
         key = self._authority_key(required=True)
         assert key is not None
         if not isinstance(active, dict):

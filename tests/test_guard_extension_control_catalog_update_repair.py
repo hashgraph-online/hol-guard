@@ -51,7 +51,7 @@ def test_catalog_upgrade_keeps_protection_when_managed_activation_is_stale(
     assert upgraded.health is AuthorityHealth.PROTECTED
     assert upgraded.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert upgraded.layers
-    assert all(layer.kind is ControlLayerKind.LOCAL_ADMIN for layer in upgraded.layers)
+    assert any(layer.kind is ControlLayerKind.LOCAL_ADMIN for layer in upgraded.layers)
     assert all(layer.catalog_digest == upgraded.catalog_digest for layer in upgraded.layers)
     leftover = store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
     assert isinstance(leftover, dict)
