@@ -5,6 +5,7 @@ from __future__ import annotations
 from .command_backup_extensions import BACKUP_COMMAND_EXTENSION_SPECS, BACKUP_COMMAND_RULES
 from .command_cicd_extensions import CICD_COMMAND_EXTENSION_SPECS, CICD_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_EXTENSION_SPECS, CLOUD_COMMAND_RULES
+from .command_common_cli_extensions import COMMON_CLI_COMMAND_EXTENSION_SPECS, COMMON_CLI_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_EXTENSION_SPECS, DATABASE_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_EXTENSION_SPECS, DOMAIN_COMMAND_RULES
 from .command_extension_specs import CommandExtensionValues, command_extension_values
@@ -37,8 +38,20 @@ _DIRECT_EXTENSION_CATALOGS = (
     (NOODLE_COMMAND_EXTENSION_SPECS, NOODLE_COMMAND_RULES),
     (SKILL_SUNSET_COMMAND_EXTENSION_SPECS, SKILL_SUNSET_COMMAND_RULES),
     (GITHUB_COMMAND_EXTENSION_SPECS, GITHUB_COMMAND_RULES),
+    (COMMON_CLI_COMMAND_EXTENSION_SPECS, COMMON_CLI_COMMAND_RULES),
 )
 
+# Later catalogs may deliberately replace metadata for an existing stable ID while
+# all rule tuples remain additive. This lets a release expand one capability
+# boundary without creating a duplicate registry identity.
+_DIRECT_EXTENSION_SPEC_BY_ID = {
+    spec.extension_id: spec
+    for specs, _rules in _DIRECT_EXTENSION_CATALOGS
+    for spec in specs
+}
+_DIRECT_COMMAND_RULES = tuple(rule for _specs, rules in _DIRECT_EXTENSION_CATALOGS for rule in rules)
+
 DIRECT_COMMAND_EXTENSION_VALUES: tuple[CommandExtensionValues, ...] = tuple(
-    command_extension_values(spec, rules) for specs, rules in _DIRECT_EXTENSION_CATALOGS for spec in specs
+    command_extension_values(_DIRECT_EXTENSION_SPEC_BY_ID[extension_id], _DIRECT_COMMAND_RULES)
+    for extension_id in sorted(_DIRECT_EXTENSION_SPEC_BY_ID)
 )
