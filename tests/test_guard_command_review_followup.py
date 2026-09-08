@@ -1,4 +1,4 @@
-"""Follow-up regressions for release/3.2 command review findings."""
+"""Regression coverage for the remaining release/3.2 command review findings."""
 
 from __future__ import annotations
 
