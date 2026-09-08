@@ -38,6 +38,20 @@ REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("wrangler.cmd deploy", "Cloudflare production command", "command.platform.cloudflare.high-impact"),
     ("argocd.exe app delete web", "Argo CD production command", "command.gitops.argocd.high-impact"),
     ("flyctl.cmd apps destroy web", "Fly.io production command", "command.platform.fly.high-impact"),
+    ("podman system prune", "docker-sensitive command", "command.container-runtime.system-prune"),
+    ("nerdctl rm -f web", "docker-sensitive command", "command.container-runtime.forced-container-removal"),
+    ("podman run --privileged alpine", "docker-sensitive command", "command.container-runtime.privileged-run"),
+    ("oc delete deployment web -n prod", "Kubernetes destructive command", "command.kubernetes-operations.delete-resources"),
+    ("oc adm drain node-1", "Kubernetes destructive command", "command.kubernetes-operations.drain-node"),
+    ("oc rollout restart deployment/web", "Kubernetes destructive command", "command.kubernetes-operations.openshift-mutation"),
+    ("cdk destroy --all", "infrastructure destructive command", "command.infrastructure-as-code.destroy"),
+    ("sam delete --stack-name web", "infrastructure destructive command", "command.infrastructure-as-code.destroy"),
+    ("serverless remove --stage prod", "infrastructure destructive command", "command.infrastructure-as-code.destroy"),
+    ("cdk deploy WebStack", "infrastructure destructive command", "command.infrastructure-as-code.production-change"),
+    ("psql -d app -c 'DROP TABLE users'", "PostgreSQL destructive command", "command.database.postgresql.direct-client-mutation"),
+    ("mysql app -e 'TRUNCATE users'", "MySQL destructive command", "command.database.mysql.direct-client-mutation"),
+    ("mongosh app --eval 'db.users.deleteMany({})'", "MongoDB destructive command", "command.database.mongodb.direct-client-mutation"),
+    ("sqlite3 app.db 'DROP TABLE users'", "SQLite destructive command", "command.database.sqlite.direct-client-mutation"),
 )
 
 
@@ -60,10 +74,20 @@ SAFE_CASES: tuple[str, ...] = (
     "ansible-vault view --help",
     "doctl compute droplet delete --help",
     "op read --help",
+    "podman system prune --help",
+    "nerdctl rm --help",
+    "oc delete deployment web --dry-run=client",
+    "helm uninstall web --dry-run",
+    "cdk destroy --help",
+    "pulumi destroy --preview-only",
+    "psql -d app -c 'SELECT * FROM users'",
+    "mysql app -e 'SELECT 1'",
+    "mongosh app --eval 'db.users.findOne({})'",
+    "sqlite3 app.db 'SELECT * FROM users'",
 )
 
 
-def test_first_class_cli_help_variants_remain_safe(tmp_path: Path) -> None:
+def test_first_class_cli_help_and_preview_variants_remain_safe(tmp_path: Path) -> None:
     assert_safe_command_cases(SAFE_CASES, tmp_path)
 
 
