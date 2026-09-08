@@ -164,6 +164,25 @@ def test_copy_keeps_rows_read_before_source_failure(tmp_path: Path) -> None:
     assert granted["state"] == "allowed"
 
 
+def test_copy_rejects_command_grant_insert_error(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    source.upsert_local_cli_command_states(_identity().cli_id, {"navigate": "block", "other": "block"})
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
+        original = dst.execute
+        inserts = {"count": 0}
+
+        class _Destination:
+            def execute(self, sql: str, parameters: object = ()) -> object:
+                if sql.strip().lower().startswith("insert"):
+                    inserts["count"] += 1
+                    if inserts["count"] >= 2:
+                        raise sqlite3.DatabaseError("constraint")
+                return original(sql, parameters)
+
+        assert _copy_allowlisted_table(src, _Destination(), "local_cli_command_grant") is False
+
+
 def test_copy_rejects_partial_command_grant_scan(tmp_path: Path) -> None:
     source = _grant_store(tmp_path / "src", with_commands=True)
     source.upsert_local_cli_command_states(_identity().cli_id, {"navigate": "block", "other": "block"})

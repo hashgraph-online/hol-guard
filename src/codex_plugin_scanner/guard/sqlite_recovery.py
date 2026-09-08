@@ -277,6 +277,8 @@ def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, ta
                 _ = dst.execute(statement, row)
                 inserted = True
             except sqlite3.Error:
+                if table not in _PARTIAL_COPY_OK_TABLES:
+                    return False
                 continue
     except sqlite3.Error:
         # Partial command or command-grant copies can drop block rows and
