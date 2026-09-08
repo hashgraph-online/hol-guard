@@ -243,10 +243,14 @@ def test_non_ascii_and_duplicate_github_ids_fail_closed() -> None:
 
 def test_worker_authority_constants_match_public_schema() -> None:
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    assert MODULE.LISTING_REQUIRED_KEYS == frozenset(schema["required"])
-    assert MODULE.LISTING_ALLOWED_KEYS == frozenset(schema["properties"])
-    assert MODULE.LISTING_CATEGORIES == frozenset(schema["properties"]["category"]["enum"])
-    assert MODULE.GITHUB_ID_RE.pattern == schema["properties"]["maintainerGithubIds"]["items"]["pattern"]
+    required = frozenset(schema["required"])
+    allowed = frozenset(schema["properties"])
+    categories = frozenset(schema["properties"]["category"]["enum"])
+    github_id_pattern = schema["properties"]["maintainerGithubIds"]["items"]["pattern"]
+    assert required == MODULE.LISTING_REQUIRED_KEYS
+    assert allowed == MODULE.LISTING_ALLOWED_KEYS
+    assert categories == MODULE.LISTING_CATEGORIES
+    assert github_id_pattern == MODULE.GITHUB_ID_RE.pattern
 
 
 def test_unresolved_numeric_id_stays_visible_without_guessing_a_username() -> None:
