@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import re
+
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+
+_OPAQUE_ACTION_ID = re.compile(r"^act_[0-9a-f]{64}$")
 
 
 def _request(*, command: str | None) -> GuardApprovalRequest:
@@ -31,34 +35,45 @@ def _request(*, command: str | None) -> GuardApprovalRequest:
     )
 
 
-def test_live_store_reads_attach_persisted_identity_bound_explanations(tmp_path) -> None:
+def test_live_store_reads_attach_opaque_identity_bound_explanations(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request(command="read private environment file"), "2026-09-08T12:00:00+00:00")
+    store.add_approval_request(
+        _request(command="read private environment file"),
+        "2026-09-08T12:00:00+00:00",
+    )
 
     detail = store.get_approval_request("req-everyday-live")
     assert detail is not None
-    identity = detail["action_identity"]
+    internal_identity = detail["action_identity"]
     explanation = detail["action_explanation"]
-    assert isinstance(identity, str) and identity
+    assert isinstance(internal_identity, str) and internal_identity
     assert isinstance(explanation, dict)
-    assert explanation["action_identity"] == identity
+    public_identity = explanation["action_identity"]
+    assert isinstance(public_identity, str)
+    assert _OPAQUE_ACTION_ID.fullmatch(public_identity)
+    assert public_identity != internal_identity
+    assert explanation["technical"]["action_id"] == public_identity
     assert explanation["kind"] == "file_read"
     assert explanation["technical"]["command_display"] is None
     serialized = str(explanation)
+    assert internal_identity not in serialized
     assert "/Users/alice/private/project" not in serialized
     assert "read private environment file" not in serialized
 
     listed = store.list_approval_requests(limit=10)
-    assert listed[0]["action_explanation"]["action_identity"] == identity
+    assert listed[0]["action_explanation"]["action_identity"] == public_identity
     page = store.list_pending_approval_summaries(limit=10)
     summary = page["items"][0]
-    assert summary["action_explanation"]["action_identity"] == identity
+    assert summary["action_explanation"]["action_identity"] == public_identity
     assert summary["action_explanation"]["technical"]["command_display"] is None
 
 
 def test_review_command_does_not_make_stopped_action_look_retained(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request(command=None), "2026-09-08T12:00:00+00:00")
+    store.add_approval_request(
+        _request(command=None),
+        "2026-09-08T12:00:00+00:00",
+    )
 
     detail = store.get_approval_request("req-everyday-live")
     assert detail is not None
