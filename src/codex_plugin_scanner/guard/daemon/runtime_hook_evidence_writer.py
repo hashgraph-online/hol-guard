@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
 from collections import OrderedDict, deque
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict, cast, final
@@ -314,12 +316,29 @@ class RuntimeHookEvidenceWriter:
                                 and record.policy_action is not None
                                 and record.occurred_at is not None
                             ):
+                                correlation = record.correlation
+                                # A prevented attempt cannot produce a post event. Keep its
+                                # evidence separate from a later approved retry of the same call.
+                                if correlation is not None and record.policy_action not in ("allow", "warn"):
+                                    digest = hashlib.sha256(
+                                        json.dumps(
+                                            [
+                                                "native-prevented-attempt-v1",
+                                                correlation.digest,
+                                                record.policy_action,
+                                                record.receipt_id,
+                                                record.prompted,
+                                                record.approval_reuse_status,
+                                            ]
+                                        ).encode("utf-8")
+                                    ).hexdigest()
+                                    correlation = replace(correlation, digest=digest)
                                 evidence = build_native_pre_hook_evidence(
                                     activity_id=record.record_id,
                                     occurred_at=datetime.fromisoformat(record.occurred_at),
                                     harness=record.harness,
                                     policy_action=cast(GuardAction, record.policy_action),
-                                    request_correlation=record.correlation,
+                                    request_correlation=correlation,
                                     receipt_id=record.receipt_id,
                                     prompted=record.prompted,
                                     approval_reuse_status=ActivityApprovalReuseStatus(record.approval_reuse_status),

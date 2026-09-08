@@ -26392,13 +26392,19 @@ function CommandRow(props) {
     props.onSelect(props.item.activity_id);
   }, [props.item.activity_id, props.onSelect]);
   const firstRule = props.item.matches[0];
+  let ruleLabel = "Rule evidence unavailable";
+  if (firstRule) {
+    ruleLabel = safeEvidenceId(firstRule.rule_id);
+  } else if (props.item.decision_reason_code === "no_match") {
+    ruleLabel = "No rule match";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [
-      firstRule ? safeEvidenceId(firstRule.rule_id) : props.item.decision_reason_code === "no_match" ? "No rule match" : "Rule evidence unavailable",
+      ruleLabel,
       props.item.match_count > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
         "+",
         props.item.match_count - 1

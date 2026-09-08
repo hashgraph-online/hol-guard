@@ -6080,19 +6080,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if review.receipt is not None:
                 with suppress(Exception):
                     _ = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(review.receipt)
-                    activity_action = review.payload.get("policy_action")
-                    if review.receipt.get("event_name") == "PreToolUse" and isinstance(activity_action, str):
-                        _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
-                            harness=harness,
-                            event="PreToolUse",
-                            payload=payload,
-                            succeeded=True,
-                            policy_action=activity_action,
-                            receipt_id=self._optional_string(review.receipt.get("decision_id")),
-                            prompted=review.payload.get("prompted") is True,
-                            approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
-                            or "not-applicable",
-                        )
+            with suppress(Exception):
+                activity_action = review.payload.get("policy_action")
+                event = payload.get("hook_event_name", payload.get("hookEventName"))
+                if (
+                    isinstance(event, str)
+                    and event.replace("_", "").lower() == "pretooluse"
+                    and _native_mode_requires_rust()
+                    and isinstance(activity_action, str)
+                ):
+                    _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
+                        harness=harness,
+                        event="PreToolUse",
+                        payload=payload,
+                        succeeded=True,
+                        policy_action=activity_action,
+                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id")),
+                        prompted=review.payload.get("prompted") is True,
+                        approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
+                        or "not-applicable",
+                    )
             self._write_json(review.payload)
             return
         reason_code = (

@@ -79,7 +79,7 @@ class _CommandActivityRecord:
                     "policy_action": self.policy_action,
                     "occurred_at": self.occurred_at,
                     "receipt_id": self.receipt_id,
-                    "prompted": self.prompted,
+                    "interaction_observed": self.prompted,
                     "approval_reuse_status": self.approval_reuse_status,
                 },
                 separators=(",", ":"),
@@ -114,7 +114,7 @@ class _CommandActivityRecord:
         if policy_action is not None and (event != "PreToolUse" or occurred_at is None):
             return None
         receipt_id = fields.get("receipt_id")
-        prompted = fields.get("prompted", False)
+        prompted = fields.get("interaction_observed", False)
         reuse = fields.get("approval_reuse_status", "not-applicable")
         if receipt_id is not None and (not isinstance(receipt_id, str) or not _SAFE_IDENTIFIER.fullmatch(receipt_id)):
             return None

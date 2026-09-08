@@ -57,6 +57,37 @@ def test_native_pre_and_post_keep_authoritative_decision(
     assert writer.stats()["failures"] == 0
 
 
+def test_approved_retry_preserves_prevented_attempt(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    writer = RuntimeHookEvidenceWriter(store=store)
+    payload = {"toolUseId": "call_test_0123456789abcdef", "toolInput": {"command": "echo example"}}
+    try:
+        for action in ("review", "review", "allow"):
+            assert writer.submit_command_activity(
+                harness="grok",
+                event="PreToolUse",
+                payload=payload,
+                succeeded=True,
+                policy_action=action,
+                prompted=action == "review",
+                approval_reuse_status="accepted" if action == "allow" else "not-applicable",
+            )
+        assert writer.submit_command_activity(
+            harness="grok",
+            event="PostToolUse",
+            payload=payload,
+            succeeded=True,
+        )
+    finally:
+        assert writer.stop(timeout_seconds=5)
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        rows = connection.execute(
+            "SELECT policy_action, execution_status FROM command_activity ORDER BY policy_action"
+        ).fetchall()
+    assert rows == [("allow", "confirmed_success"), ("review", "prevented")]
+    assert writer.stats()["failures"] == 0
+
+
 def test_pre_without_decision_never_becomes_execution(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     writer = RuntimeHookEvidenceWriter(store=store)
