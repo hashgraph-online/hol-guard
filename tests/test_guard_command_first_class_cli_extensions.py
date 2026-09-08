@@ -40,6 +40,10 @@ REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("flyctl.cmd apps destroy web", "Fly.io production command", "command.platform.fly.high-impact"),
     ("podman system prune", "docker-sensitive command", "command.container-runtime.system-prune"),
     ("nerdctl rm -f web", "docker-sensitive command", "command.container-runtime.forced-container-removal"),
+    ("podman volume rm data", "docker-sensitive command", "command.container-runtime.resource-removal"),
+    ("nerdctl network rm private", "docker-sensitive command", "command.container-runtime.resource-removal"),
+    ("podman exec web sh", "docker-sensitive command", "command.container-runtime.execution"),
+    ("nerdctl run alpine true", "docker-sensitive command", "command.container-runtime.execution"),
     ("podman run --privileged alpine", "docker-sensitive command", "command.container-runtime.privileged-run"),
     ("oc delete deployment web -n prod", "Kubernetes destructive command", "command.kubernetes-operations.delete-resources"),
     ("oc adm drain node-1", "Kubernetes destructive command", "command.kubernetes-operations.drain-node"),
@@ -52,6 +56,9 @@ REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("mysql app -e 'TRUNCATE users'", "MySQL destructive command", "command.database.mysql.direct-client-mutation"),
     ("mongosh app --eval 'db.users.deleteMany({})'", "MongoDB destructive command", "command.database.mongodb.direct-client-mutation"),
     ("sqlite3 app.db 'DROP TABLE users'", "SQLite destructive command", "command.database.sqlite.direct-client-mutation"),
+    ("dotnet package add Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
+    ("dotnet add package Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
+    ("nuget install Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
 )
 
 
@@ -71,12 +78,17 @@ SAFE_CASES: tuple[str, ...] = (
     "bq rm --help",
     "fly apps destroy --help",
     "railway delete --help",
+    "ansible --version",
+    "ansible all --list-hosts",
+    "ansible-playbook deploy.yml --syntax-check",
+    "ansible-playbook deploy.yml --list-tasks",
     "ansible-vault view --help",
     "doctl compute droplet delete --help",
     "op read --help",
     "podman system prune --help",
     "nerdctl rm --help",
     "oc delete deployment web --dry-run=client",
+    "oc apply -f deployment.yaml --dry-run=client",
     "helm uninstall web --dry-run",
     "cdk destroy --help",
     "pulumi destroy --preview-only",
@@ -84,6 +96,8 @@ SAFE_CASES: tuple[str, ...] = (
     "mysql app -e 'SELECT 1'",
     "mongosh app --eval 'db.users.findOne({})'",
     "sqlite3 app.db 'SELECT * FROM users'",
+    "dotnet package add --help",
+    "nuget install --help",
 )
 
 
@@ -106,6 +120,7 @@ def test_first_class_cli_extensions_publish_references() -> None:
         "command.configuration-management.ansible",
         "command.cloud.digitalocean",
         "command.secrets.1password",
+        "command.package.dotnet",
     )
     for extension_id in extension_ids:
         extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(extension_id)
@@ -114,8 +129,9 @@ def test_first_class_cli_extensions_publish_references() -> None:
         assert all(url.startswith("https://") for url in extension.reference_urls)
 
 
-def test_dotnet_package_extension_is_delegated_to_package_firewall() -> None:
+def test_dotnet_package_extension_is_directly_enforced() -> None:
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.package.dotnet")
     assert extension is not None
-    assert extension.delegated_protection == "package-firewall"
+    assert extension.delegated_protection is None
     assert set(extension.executables) == {"dotnet", "nuget"}
+    assert extension.rules[0].rule_id == "command.package.dotnet.install"
