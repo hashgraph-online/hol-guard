@@ -133,6 +133,7 @@ Protection model meanings:
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.where-are-we` | Reviews the where-are-we repository-map CLI where it writes outside its own map directory: an agent file or manifest in the repository, a git hook or agent configuration file, and the tracker walk that leaves the machine. Map queries and map-directory writes stay non-reviewable. | 3 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
