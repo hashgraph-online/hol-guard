@@ -129,8 +129,28 @@ availability, publisher authority, or enabled protection on a device.
 
 ## Cloud availability
 
-The directory and metadata contract can be used independently of Guard Cloud.
-Extension Studio is a separate rollout. This helper deliberately includes no
-sign-in instruction or claim notification. The Cloud entry point must be deployed
-and verified before contributor invitations are enabled. A maintainer profile is
-not a security certification or an upstream endorsement.
+Extension Studio is available at `https://hol.org/guard/extension-studio`. A deep
+link may select an extension with `?extension=<contribution-id>`. Signing in or
+opening that link never grants authority by itself; Cloud re-reads canonical source
+and verifies the current numeric GitHub ID before accepting a claim.
+
+The post-merge `Extension Claim Notice` workflow runs only after a pull request is
+merged into the repository's default branch and only for native contribution or
+publisher-listing changes. It compares the merged source with the pull request's
+recorded pre-merge base revision, verifies both ancestry and canonical-branch
+membership, reads the accepted sidecar at the merged source SHA, and notifies only
+newly accepted `maintainerGithubIds`. For a newly introduced native contribution,
+all accepted IDs in its merged sidecar are eligible for the notice. Pull-request
+authorship is never substituted for missing authority.
+
+Rename-affected contributions and publisher listings are never invited
+automatically. After maintainers review the renamed identity and claimant mapping,
+they can use the manual backfill with `allow_renames` enabled. This keeps rename
+handling behind an explicit maintainer decision instead of treating a new filename
+as a new source of authority.
+
+Notices are idempotent on each merged PR and can be backfilled with the workflow's
+manual `pr_number` input. A removed, non-canonical, malformed, or authority-free
+listing produces no claim invitation. The notice is only an onboarding link; the
+publisher profile remains separate from runtime trust, activation, security
+certification, and upstream ownership.
