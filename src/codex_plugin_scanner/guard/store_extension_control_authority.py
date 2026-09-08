@@ -747,16 +747,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
                 pending = self._pending_transition(revision + 1)
                 if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
-                    pending_layers = layers_from_json(_row_str(pending, "layers_json"))
-                    previous_target_ids = {
-                        control.target.target_id
-                        for layer in layers_from_json(str(row["layers_json"]))
-                        for control in layer.controls
-                    }
-                    pending_target_ids = {
-                        control.target.target_id for layer in pending_layers for control in layer.controls
-                    }
-                    retired_targets = tuple(sorted(previous_target_ids - pending_target_ids))
                     with self._connect() as connection:
                         resumed = self._resume_idempotent_transition(
                             connection,
@@ -776,14 +766,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             key=key,
                         )
                     if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
-                        self._record_catalog_migrated_event_once(
-                            previous_revision=revision,
-                            revision=_row_int(pending, "revision"),
-                            previous_catalog_digest=stored_catalog_digest,
-                            catalog_digest=catalog_digest,
-                            layers=pending_layers,
-                            retired_targets=retired_targets,
-                        )
                         return resumed
                 previous = self._read_extension_control_authority_locked(stored_catalog_digest)
                 if previous.health is not AuthorityHealth.PROTECTED:
@@ -831,6 +813,11 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 revision,
                 current_snapshot_digest=_row_str(row, "snapshot_digest"),
                 key=key,
+            )
+            self._ensure_catalog_migrated_event(
+                revision=revision,
+                catalog_digest=catalog_digest,
+                layers=layers,
             )
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, revision, catalog_digest, layers)
         except ExtensionControlAuthorityError:
@@ -966,6 +953,48 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             raise ExtensionControlAuthorityError("invalid extension control catalog manifest")
         return value
 
+    def _ensure_catalog_migrated_event(
+        self,
+        *,
+        revision: int,
+        catalog_digest: str,
+        layers: tuple[ExtensionControlLayer, ...],
+    ) -> None:
+        if revision < 1:
+            return
+        with self._connect() as connection:
+            current = connection.execute(
+                "select previous_revision, catalog_digest, layers_json from extension_control_authority_transition "
+                "where revision = ?",
+                (revision,),
+            ).fetchone()
+            if current is None or _row_str(current, "catalog_digest") != catalog_digest:
+                return
+            previous_revision = _row_int(current, "previous_revision")
+            previous = connection.execute(
+                "select catalog_digest, layers_json from extension_control_authority_transition where revision = ?",
+                (previous_revision,),
+            ).fetchone()
+            if previous is None:
+                return
+            previous_catalog_digest = _row_str(previous, "catalog_digest")
+            if previous_catalog_digest == catalog_digest:
+                return
+            previous_target_ids = {
+                control.target.target_id
+                for layer in layers_from_json(_row_str(previous, "layers_json"))
+                for control in layer.controls
+            }
+        current_target_ids = {control.target.target_id for layer in layers for control in layer.controls}
+        self._record_catalog_migrated_event_once(
+            previous_revision=previous_revision,
+            revision=revision,
+            previous_catalog_digest=previous_catalog_digest,
+            catalog_digest=catalog_digest,
+            layers=layers,
+            retired_targets=tuple(sorted(previous_target_ids - current_target_ids)),
+        )
+
     def _record_catalog_migrated_event_once(
         self,
         *,
@@ -995,8 +1024,13 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 "select payload_json from guard_events where event_name = ?",
                 ("extension_control_authority_catalog_migrated",),
             ).fetchall()
-            if any(str(row["payload_json"]) == payload for row in existing):
-                return
+            for row in existing:
+                try:
+                    recorded = json.loads(str(row["payload_json"]))
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(recorded, dict) and recorded.get("revision") == revision:
+                    return
             connection.execute(
                 "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
                 ("extension_control_authority_catalog_migrated", payload, _now()),

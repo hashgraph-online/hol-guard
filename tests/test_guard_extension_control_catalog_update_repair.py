@@ -158,3 +158,49 @@ def test_catalog_upgrade_resumes_anchored_pending_migration_without_repair(tmp_p
     assert payload["previous_revision"] == 1
     assert payload["revision"] == 2
     assert payload["catalog_digest"] == upgraded_registry.catalog_digest
+
+
+def test_catalog_upgrade_records_migrated_event_on_later_protected_read(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    _commit(store)
+    original_anchor = store._write_and_verify_anchor
+    interrupted = False
+
+    def interrupt_after_anchor(anchor, *, key):
+        nonlocal interrupted
+        original_anchor(anchor, key=key)
+        if not interrupted and anchor.phase is AuthorityPhase.ANCHORED:
+            interrupted = True
+            raise RuntimeError("injected catalog migration interrupt")
+
+    store._write_and_verify_anchor = interrupt_after_anchor  # pyright: ignore[reportAttributeAccessIssue]
+    upgraded_registry = _upgraded_registry()
+    first = store.read_extension_control_authority_for_registry(upgraded_registry)
+    assert first.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
+
+    original_record = store._record_catalog_migrated_event_once
+    attempts = 0
+
+    def fail_first_record(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("injected catalog event failure")
+        return original_record(*args, **kwargs)
+
+    store._record_catalog_migrated_event_once = fail_first_record  # pyright: ignore[reportAttributeAccessIssue]
+    second = store.read_extension_control_authority_for_registry(upgraded_registry)
+    assert second.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
+
+    recovered = store.read_extension_control_authority_for_registry(upgraded_registry)
+    assert recovered.health is AuthorityHealth.PROTECTED
+    assert recovered.catalog_digest == upgraded_registry.catalog_digest
+    with store._connect() as connection:
+        events = connection.execute(
+            "select payload_json from guard_events where event_name = ?",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchall()
+    assert len(events) == 1
+    assert json.loads(events[0]["payload_json"])["revision"] == 2
