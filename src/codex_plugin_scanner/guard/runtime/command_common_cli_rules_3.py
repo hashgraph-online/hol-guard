@@ -16,7 +16,18 @@ from .command_common_cli_matchers import (
 )
 from .command_common_cli_matchers_extra import ANSIBLE_EXECUTION_REFINED
 from .command_common_cli_rule_support import help_variants, rule
-from .command_rules import CommandSafetyRule
+from .command_rules import AnyMatcher, CommandSafetyRule
+
+_CLOUD_CREDENTIAL_MUTATION_REFINED = AnyMatcher(
+    matchers=tuple(
+        matcher
+        for matcher in _CLOUD_CREDENTIAL_MUTATION.matchers
+        if not (
+            "gcloud" in matcher.executables
+            and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
+        )
+    )
+)
 
 COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
     rule(
@@ -133,13 +144,13 @@ COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
         extension_id="command.cloud-secrets",
         suffix="credential-mutation",
         title="Cloud credential mutation",
-        description="Identifies access-key or service-account credential creation, deletion, or reset.",
-        matcher=_CLOUD_CREDENTIAL_MUTATION,
+        description="Identifies access-key or service-account credential creation, deletion, or reset without stealing provider-owned deletion operations.",
+        matcher=_CLOUD_CREDENTIAL_MUTATION_REFINED,
         action_class="cloud credential mutation command",
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternative="Confirm principal scope, active credentials, and rotation plan before mutation.",
         severity="critical",
-        safe_variants=help_variants(_CLOUD_CREDENTIAL_MUTATION),
+        safe_variants=help_variants(_CLOUD_CREDENTIAL_MUTATION_REFINED),
         example_command="aws iam create-access-key --user-name deployer",
     ),
     rule(
