@@ -5,3 +5,5 @@ c8b599fa1a262de4751062063677b74e915344c8:tests/test_final_release_evidence.py:ge
 # The test helper was renamed after this commit changed the flagged signature.
 41109cbe4130f4f2c1f8da28e1a3b6e0128f64f7:tests/test_final_release_evidence.py:generic-api-key:77
 ecab2b4949aa53c67014ad06b5162dde273266d6:tests/test_final_release_evidence.py:generic-api-key:77
+# Synthetic unsigned JWT fixture used to verify snapshot redaction; not a credential.
+17ae53502be5db5d9e7e1d00719b7a733992211e:tests/fixtures/guard_snapshot_corpus.py:generic-api-key:24
