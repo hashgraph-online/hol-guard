@@ -1,4 +1,4 @@
-"""Public metadata preserves native identity bounds and supplemental delegation."""
+"""Public metadata preserves native identity bounds and explicit claim authority."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def test_directory_rejects_unbounded_dependent_fields() -> None:
             )
 
 
-def test_omitted_and_empty_delegates_preserve_automatic_provenance(tmp_path: Path) -> None:
+def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Path) -> None:
     specification = importlib.util.spec_from_file_location(
         "publisher_contract_export", REPOSITORY / "scripts/export_extension_directory.py"
     )
@@ -87,15 +87,20 @@ def test_omitted_and_empty_delegates_preserve_automatic_provenance(tmp_path: Pat
     listings = tmp_path / "contributions/extension-listings"
     listings.mkdir()
     path = listings / "command.blitcp.json"
-    row = json.loads(listing_template(metadata()))
-    row["extensionId"] = "command.blitcp"
-    for delegates in (None, [], ["6068672"]):
-        if delegates is not None:
-            row["maintainerGithubIds"] = delegates
+    base = json.loads(listing_template(metadata()))
+    base["extensionId"] = "command.blitcp"
+    for claimants in (None, [], ["6068672"]):
+        row = dict(base)
+        if claimants is not None:
+            row["maintainerGithubIds"] = claimants
         path.write_text(json.dumps(row))
         payload = exporter.export_directory(tmp_path)
         entry = next(item for item in payload["entries"] if item["id"] == "command.blitcp")
         assert entry["claimPolicy"] == "provenance"
-        assert entry["maintainerGithubIds"] == (delegates or [])
+        assert entry["maintainerGithubIds"] == (claimants or [])
         assert entry["trustClass"] == "external"
         assert entry["protectionModel"] == "external-opt-in"
+
+    description = directory_schema()["properties"]["entries"]["items"]["properties"]["maintainerGithubIds"]["description"]
+    assert "only IDs in this accepted array" in description
+    assert "Pull-request authorship is attribution evidence only" in description
