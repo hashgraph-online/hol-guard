@@ -81,9 +81,6 @@ class GuardArtifact:
     transport: str | None = None
     publisher: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
-    # Ephemeral values needed to enforce a request (for example, an exact
-    # signed archive URL) must never enter receipts, API payloads, logs, reprs,
-    # or persistent artifact metadata.
     runtime_private_metadata: dict[str, object] = field(default_factory=dict, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, object]:
@@ -244,6 +241,19 @@ class GuardApprovalRequest:
         payload["changed_fields"] = list(self.changed_fields)
         payload["risk_signals"] = list(self.risk_signals)
         payload["scanner_evidence"] = [dict(item) for item in self.scanner_evidence]
+        if self.action_envelope_json is not None:
+            from .runtime.action_explanation_projection import project_action_explanation
+
+            explanation = project_action_explanation(
+                self.action_envelope_json,
+                action_identity=self.action_identity or self.request_id,
+                actor_label=self.harness,
+                exact_details_authorized=False,
+                retained=bool(self.review_command or self.raw_command_text),
+            )
+            payload["action_explanation"] = explanation.to_dict() if explanation is not None else None
+        else:
+            payload["action_explanation"] = None
         return payload
 
 
