@@ -55,7 +55,11 @@ def project_action_explanation(
         "uncertainty_reasons": [
             _safe_text(reason, 128) for reason in semantics.uncertainty_reasons[:32]
         ],
-        "everyday": _everyday_projection(semantics, actor_label=safe_actor),
+        "everyday": _everyday_projection(
+            semantics,
+            actor_label=safe_actor,
+            action_envelope=action_envelope,
+        ),
         "technical": _technical_projection(
             semantics,
             raw_command=raw_command,
@@ -66,6 +70,7 @@ def project_action_explanation(
         ),
         "redaction": _redaction_projection(
             semantics,
+            action_envelope=action_envelope,
             raw_command=raw_command,
             retained=retained,
             exact_details_authorized=exact_details_authorized,
@@ -88,6 +93,7 @@ def _everyday_projection(
     semantics: ActionExplanationSemantics,
     *,
     actor_label: str,
+    action_envelope: Mapping[str, object],
 ) -> dict[str, object]:
     kind = semantics.kind
     consequences = [
@@ -125,18 +131,41 @@ def _everyday_projection(
         "recommendation_message_id": f"guard.everyday.{kind}.recommendation",
         "recommendation": _safe_text(semantics.recommendation, 800),
         "actor_label": actor_label,
-        "targets": [
-            {
-                "kind": _safe_identifier(target.kind, fallback="action"),
-                "label": _safe_text(target.label, TARGET_LABEL_MAX_LENGTH),
-                "scope": None,
-                "sensitivity": target.sensitivity,
-            }
-            for target in semantics.targets[:16]
-        ],
+        "targets": _everyday_targets(
+            semantics,
+            action_envelope=action_envelope,
+        ),
         "consequences": consequences,
         "safer_alternatives": alternatives,
     }
+
+
+
+def _everyday_targets(
+    semantics: ActionExplanationSemantics,
+    *,
+    action_envelope: Mapping[str, object],
+) -> list[dict[str, object]]:
+    if semantics.action_type == "network_request":
+        hosts = _string_sequence(action_envelope.get("network_hosts"))
+        if hosts:
+            return [
+                {
+                    "kind": "network_host",
+                    "label": _safe_text(f"the service {hosts[0]}", TARGET_LABEL_MAX_LENGTH),
+                    "scope": None,
+                    "sensitivity": "normal",
+                }
+            ]
+    return [
+        {
+            "kind": _safe_identifier(target.kind, fallback="action"),
+            "label": _safe_text(target.label, TARGET_LABEL_MAX_LENGTH),
+            "scope": None,
+            "sensitivity": target.sensitivity,
+        }
+        for target in semantics.targets[:16]
+    ]
 
 
 def _technical_projection(
@@ -230,6 +259,7 @@ def _exact_command_projection(
 def _redaction_projection(
     semantics: ActionExplanationSemantics,
     *,
+    action_envelope: Mapping[str, object],
     raw_command: str | None,
     retained: bool,
     exact_details_authorized: bool,
@@ -243,6 +273,12 @@ def _redaction_projection(
         "technical.arguments_display",
         "technical.segments",
     ]
+    truncated = _truncated_fields(
+        semantics,
+        action_envelope=action_envelope,
+        raw_command=raw_command,
+        exact_details_authorized=authorized,
+    )
     return {
         "level": (
             "redacted"
@@ -251,9 +287,41 @@ def _redaction_projection(
         ),
         "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
         "omitted_fields": omitted,
-        "truncated_fields": [],
+        "truncated_fields": truncated,
         "secret_like_values_removed": bool(command_redaction and command_redaction.count),
     }
+
+
+
+def _truncated_fields(
+    semantics: ActionExplanationSemantics,
+    *,
+    action_envelope: Mapping[str, object],
+    raw_command: str | None,
+    exact_details_authorized: bool,
+) -> list[str]:
+    fields: list[str] = []
+    if any(len(target.label) > TARGET_LABEL_MAX_LENGTH for target in semantics.targets):
+        fields.append("everyday.targets.label")
+    if semantics.action_type == "network_request":
+        hosts = _string_sequence(action_envelope.get("network_hosts"))
+        if hosts and len(f"the service {hosts[0]}") > TARGET_LABEL_MAX_LENGTH:
+            fields.append("everyday.targets.label")
+    if exact_details_authorized and raw_command:
+        redacted_command = redact_text(raw_command).text
+        if len(redacted_command) > COMMAND_DISPLAY_MAX_LENGTH:
+            fields.append("technical.command_display")
+        command = semantics.canonical_command
+        if command is not None:
+            if len(redact_text(command.normalized_text).text) > COMMAND_DISPLAY_MAX_LENGTH:
+                fields.append("technical.normalized_command_display")
+            if any(
+                len(redact_text(argument).text) > _ARGUMENT_DISPLAY_MAX_LENGTH
+                for segment in command.segments[:128]
+                for argument in segment.arguments[:128]
+            ):
+                fields.append("technical.arguments_display")
+    return fields
 
 
 def _technical_unavailable_reason(
@@ -300,6 +368,16 @@ def _safe_text(value: str, limit: int) -> str:
         .replace("\x1b", "")
     )
     return redacted[:limit]
+
+
+def _string_sequence(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(
+        item.strip()
+        for item in value
+        if isinstance(item, str) and item.strip()
+    )[:32]
 
 
 def _text(value: object) -> str | None:
