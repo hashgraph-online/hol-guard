@@ -67,7 +67,7 @@
       }
     },
     "maintainerGithubIds": {
-      "description": "Additional reviewed profile claimants only; never runtime or upstream ownership. Omitted or empty means no extra delegates and does not remove introducing-PR author eligibility.",
+      "description": "Reviewed numeric GitHub IDs authorized to manage this extension's publisher profile. Omitted or empty means no automatic claimant. Pull-request authorship is attribution evidence only and never grants publisher authority.",
       "type": "array",
       "maxItems": 8,
       "uniqueItems": true,
