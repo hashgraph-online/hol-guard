@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
 import subprocess
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
@@ -19,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
+from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
@@ -315,6 +317,97 @@ def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     ].permission_id
 
 
+def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index
+        for index, rule in enumerate(extension.rules)
+        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
+    )
+    rule = extension.rules[rule_index]
+    assert isinstance(rule.matcher, AnyMatcher)
+    leaf_index = next(
+        index
+        for index, matcher in enumerate(rule.matcher.matchers)
+        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
+    )
+    leaf = rule.matcher.matchers[leaf_index]
+    assert isinstance(leaf, ExecutableMatcher)
+    changed_leaf = replace(leaf, required_flags=leaf.required_flags | {"--catalog-migration-identity"})
+    changed_matcher = replace(
+        rule.matcher,
+        matchers=(*rule.matcher.matchers[:leaf_index], changed_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
+    )
+    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),
+    )
+    permission_id = next(
+        permission.permission_id for permission in extension.permissions if permission.rule_ids == (rule.rule_id,)
+    )
+    return (
+        CommandSafetyExtensionRegistry((changed_extension, *(item for item in extensions if item is not extension))),
+        permission_id,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _LegacyRegistryView:
+    extensions: tuple[object, ...]
+    catalog_digest: str
+
+
+def _legacy_catalog_digest(registry: CommandSafetyExtensionRegistry) -> str:
+    payload = []
+    for extension in registry.extensions:
+        extension_payload = extension.to_dict()
+        rule_payloads = cast(list[dict[str, object]], extension_payload["rules"])
+        for rule_payload in rule_payloads:
+            rule_payload.pop("family", None)
+            rule_payload.pop("matcher_contract_digest", None)
+            for variant_payload in cast(list[dict[str, object]], rule_payload["safe_variants"]):
+                variant_payload.pop("matcher_contract_digest", None)
+        payload.append(extension_payload)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _legacy_format_registry() -> _LegacyRegistryView:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index
+        for index, rule in enumerate(extension.rules)
+        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
+    )
+    rule = extension.rules[rule_index]
+    assert isinstance(rule.matcher, AnyMatcher)
+    leaf_index = next(
+        index
+        for index, matcher in enumerate(rule.matcher.matchers)
+        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
+    )
+    leaf = rule.matcher.matchers[leaf_index]
+    assert isinstance(leaf, ExecutableMatcher)
+    legacy_leaf = replace(leaf, required_option_values=())
+    legacy_matcher = replace(
+        rule.matcher,
+        matchers=(*rule.matcher.matchers[:leaf_index], legacy_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
+    )
+    legacy_rule = replace(rule, matcher=legacy_matcher)
+    legacy_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], legacy_rule, *extension.rules[rule_index + 1 :]),
+    )
+    legacy_source = CommandSafetyExtensionRegistry(
+        (legacy_extension, *(item for item in extensions if item is not extension))
+    )
+    legacy_digest = _legacy_catalog_digest(legacy_source)
+    return _LegacyRegistryView(extensions=legacy_source.extensions, catalog_digest=legacy_digest)
+
+
 def _proof(
     store: GuardStore,
     layers: tuple[ExtensionControlLayer, ...],
@@ -454,8 +547,14 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    store.read_extension_control_authority(catalog_digest=original_digest)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     _commit(store)
+    with store._connect() as connection:
+        legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+    assert legacy_manifest is not None
     upgraded_registry = _upgraded_registry()
     upgraded_digest = upgraded_registry.catalog_digest
 
@@ -475,6 +574,16 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
             "select previous_revision, catalog_digest, phase from extension_control_authority_transition "
             "where revision = 2"
         ).fetchone()
+        persisted_legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+        persisted_upgraded_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (upgraded_digest,),
+        ).fetchone()
+    assert dict(persisted_legacy_manifest) == dict(legacy_manifest)
+    assert persisted_upgraded_manifest is not None
     assert event is not None
     assert json.loads(event["payload_json"]) == {
         "previous_revision": 1,
@@ -586,6 +695,51 @@ def test_catalog_upgrade_retires_enabled_target_when_rule_version_changes(tmp_pa
 
     assert upgraded.health is AuthorityHealth.PROTECTED
     assert upgraded.layers[0].controls == ()
+
+
+def test_catalog_upgrade_retires_enabled_target_when_matcher_contract_changes(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded_registry, permission_id = _matcher_contract_registry()
+    _commit_enabled_permission(store, permission_id, key="enable-before-matcher-contract-change")
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls == ()
+
+
+def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migration(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets, enroll=False)
+    legacy_registry = _legacy_format_registry()
+    assert legacy_registry.catalog_digest != BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    bootstrapped = store._bootstrap_extension_control_authority(  # pyright: ignore[reportPrivateUsage]
+        legacy_registry.catalog_digest,
+        key=None,
+    )
+    assert bootstrapped.health is AuthorityHealth.PROTECTED
+    legacy = store.read_extension_control_authority_for_registry(legacy_registry)
+    assert legacy.health is AuthorityHealth.PROTECTED
+
+    same_digest_current_manifest = _LegacyRegistryView(
+        extensions=BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions,
+        catalog_digest=legacy_registry.catalog_digest,
+    )
+    conflict = store.read_extension_control_authority_for_registry(same_digest_current_manifest)
+    assert conflict.health is AuthorityHealth.TAMPERED
+
+    migrated = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    assert migrated.health is AuthorityHealth.PROTECTED
+    assert migrated.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    with store._connect() as connection:
+        manifests = connection.execute(
+            "select catalog_digest from extension_control_catalog_manifest order by catalog_digest"
+        ).fetchall()
+    assert [str(row["catalog_digest"]) for row in manifests] == sorted(
+        (legacy_registry.catalog_digest, BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    )
 
 
 def test_catalog_manifest_tamper_is_detected_immediately(tmp_path: Path) -> None:

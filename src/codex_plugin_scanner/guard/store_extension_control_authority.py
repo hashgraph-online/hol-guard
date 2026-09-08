@@ -9,8 +9,7 @@ import hashlib
 import json
 import secrets
 from collections.abc import Mapping
-from dataclasses import is_dataclass, replace
-from enum import Enum
+from dataclasses import replace
 from typing import cast
 
 from .managed_controls_policy_bundle import (
@@ -21,6 +20,7 @@ from .managed_controls_policy_bundle import (
     managed_controls_revision_from_state,
 )
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
+from .runtime.command_matcher_contracts import MatcherContractError, canonical_contract_value
 from .runtime.extension_control_authority import (
     SNAPSHOT_PURPOSE,
     TRANSITION_PURPOSE,
@@ -64,29 +64,10 @@ from .store_extension_control_authority_transitions import _ExtensionControlAuth
 
 
 def _canonical_contract_value(value: object) -> object:
-    if value is None or type(value) in {bool, int, float, str}:
-        return value
-    if isinstance(value, Enum):
-        return value.value
-    if is_dataclass(value) and not isinstance(value, type):
-        dataclass_fields = cast(Mapping[str, object], value.__dataclass_fields__)
-        return {
-            "type": type(value).__qualname__,
-            "fields": {
-                field_name: _canonical_contract_value(getattr(value, field_name)) for field_name in dataclass_fields
-            },
-        }
-    if isinstance(value, Mapping):
-        return {
-            str(key): _canonical_contract_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
-    if isinstance(value, (set, frozenset)):
-        normalized = [_canonical_contract_value(item) for item in value]
-        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
-    if isinstance(value, (tuple, list)):
-        return [_canonical_contract_value(item) for item in value]
-    raise ExtensionControlAuthorityError(f"unsupported catalog contract value: {type(value).__qualname__}")
+    try:
+        return canonical_contract_value(value)
+    except MatcherContractError as exc:
+        raise ExtensionControlAuthorityError(str(exc)) from exc
 
 
 class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMixin):

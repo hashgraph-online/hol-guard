@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import cast
 
 import pytest
@@ -55,39 +56,47 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
 )
 
 
+@dataclass(frozen=True, slots=True)
 class _FailingMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         raise RuntimeError("private matcher detail")
 
 
+@dataclass(frozen=True, slots=True)
 class _MalformedMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return cast(tuple[MatcherEvidence, ...], ("not-evidence",))
 
 
+@dataclass(frozen=True, slots=True)
 class _EmptyMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return ()
 
 
+@dataclass(frozen=True, slots=True)
 class _LeakingMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return (MatcherEvidence(0, "/private/path/test-tool", "private matcher-provided detail"),)
 
 
+@dataclass(frozen=True, slots=True)
 class _OutOfBoundsMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return (MatcherEvidence(99, "test-tool", "invalid index"),)
 
 
+@dataclass(frozen=True, slots=True, init=False)
 class _SegmentMatcher:
+    _segment_indexes: tuple[int, ...]
+
     def __init__(self, *segment_indexes: int) -> None:
-        self._segment_indexes: tuple[int, ...] = segment_indexes
+        object.__setattr__(self, "_segment_indexes", segment_indexes)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
