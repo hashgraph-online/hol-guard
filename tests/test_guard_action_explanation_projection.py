@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.action_explanation_projection import project_action_explanation
 
 
@@ -23,6 +25,7 @@ def test_typed_file_projection_uses_safe_basename_and_never_prompt_text() -> Non
     assert "secret prompt" not in str(explanation.to_dict())
     assert explanation.technical.available is False
     assert explanation.technical.unavailable_reason
+    assert explanation.action_identity.startswith("act_")
 
 
 def test_command_projection_requires_deliberate_local_exact_disclosure() -> None:
@@ -56,6 +59,57 @@ def test_command_projection_requires_deliberate_local_exact_disclosure() -> None
     assert visible.redaction.secret_like_values_removed is True
 
 
+@pytest.mark.parametrize(
+    ("command", "required_rule", "expected_kind"),
+    [
+        ("rm -rf ./build", "command.filesystem.recursive-delete", "file_delete"),
+        ("chmod -R go-w vendor/", "command.filesystem.recursive-permission-change", "permission_change"),
+        ("git reset --hard HEAD~1", "command.git.hard-reset", "git_history_rewrite"),
+        ("git push origin main --force", "command.git.force-push", "git_remote_change"),
+        ("docker --context prod system prune", "command.container-runtime.system-prune", "container_change"),
+        ("kubectl get secret db-credentials -o yaml", "command.kubernetes-secrets.secret-read", "secret_read"),
+    ],
+)
+def test_shell_projection_reuses_core_command_semantics(
+    command: str,
+    required_rule: str,
+    expected_kind: str,
+) -> None:
+    explanation = project_action_explanation(
+        {
+            "schema_version": 1,
+            "action_type": "shell_command",
+            "command": command,
+        },
+        action_identity=f"internal:{command}",
+        actor_label="Codex",
+    )
+    assert explanation is not None
+    assert explanation.kind == expected_kind
+    assert required_rule in explanation.technical.rule_ids
+    assert explanation.canonical_identity
+    assert explanation.catalog_digest
+    assert explanation.technical.command_display is None
+    assert command not in str(explanation.everyday.to_dict())
+    assert explanation.technical.unavailable_reason
+
+
+def test_safe_variant_cannot_erase_risky_sibling_from_explanation() -> None:
+    explanation = project_action_explanation(
+        {
+            "schema_version": 1,
+            "action_type": "shell_command",
+            "command": "git clean -nfdx && rm -rf ./build",
+        },
+        action_identity="internal:compound-safe-sibling",
+        actor_label="Codex",
+    )
+    assert explanation is not None
+    assert "command.filesystem.recursive-delete" in explanation.technical.rule_ids
+    assert explanation.kind != "unknown_action"
+    assert "./build" not in str(explanation.everyday.to_dict())
+
+
 def test_network_and_mcp_projections_use_typed_targets_only() -> None:
     network_input = {
         "action_id": "network:1",
@@ -68,7 +122,12 @@ def test_network_and_mcp_projections_use_typed_targets_only() -> None:
         actor_label="Claude Code",
     )
     mcp = project_action_explanation(
-        {"action_id": "mcp:1", "action_type": "mcp_tool", "mcp_server": "github", "mcp_tool": "create_issue"},
+        {
+            "action_id": "mcp:1",
+            "action_type": "mcp_tool",
+            "mcp_server": "github",
+            "mcp_tool": "create_issue",
+        },
         action_identity="mcp:1",
         actor_label="Codex",
     )
