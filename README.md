@@ -377,48 +377,30 @@ The action may need approval under your active policy, or its tools or artifacts
 
 Use the **Extension Builder CLI** to turn exported command metadata or an MCP tool inventory into contribution files and tests. It works offline: it reads the export without importing or running the target tool.
 
-### 1. Propose the coverage
-
-Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+**1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
 
-### 2. Generate a contribution kit
-
-This example uses the checked-in, synthetic `samplectl` inventory. For your own contribution, replace the input and metadata with your tool's export and public publisher details.
+**2. Generate a contribution kit.** This example uses the checked-in, synthetic `samplectl` inventory. For your own contribution, replace the input and metadata with your tool's export and public publisher details.
 
 ```bash
-uv run --no-sync hol-guard extensions generate \
-  --from cli \
+uv run --no-sync hol-guard extensions generate --from cli \
   --input docs/guard/extension-builder/examples/cli-surface.json \
-  --slug samplectl \
-  --executable samplectl \
-  --name 'Sample CLI' \
-  --publisher community.example \
-  --publisher-name 'Example Maintainer' \
+  --slug samplectl --executable samplectl --name 'Sample CLI' \
+  --publisher community.example --publisher-name 'Example Maintainer' \
   --homepage https://example.test/samplectl \
-  --upstream-version 1.0.0 \
-  --output samplectl-kit
+  --upstream-version 1.0.0 --output samplectl-kit
 
 uv run --no-sync hol-guard extensions validate samplectl-kit
 ```
 
 The output directory must be new, with an existing parent directory. The kit includes `discovery.json`, `review.json`, `report.json`, contribution metadata, a native detector, generated tests, and a file manifest.
 
-| Input format | Generator option |
-| :--- | :--- |
-| Normalized `guard.cli-surface.v1` JSON | `--from cli` |
-| Saved command help text | `--from help` |
-| Click `Context.to_info_dict()` export | `--from click` |
-| `oclif.manifest.json` | `--from oclif` |
-| Complete exported MCP `tools/list` result | `--from mcp` |
-| Previously generated `discovery.json` | `--from snapshot` |
+Other inputs: `--from help` reads saved command help; `--from click` reads a Click `Context.to_info_dict()` export; `--from oclif` reads `oclif.manifest.json`; `--from mcp` reads a complete exported `tools/list` result; and `--from snapshot` replays `discovery.json`. The `cli` example above uses normalized `guard.cli-surface.v1` JSON.
 
 For MCP contributions, the generator uses `--launcher` and `--package` instead of `--executable`. See the [MCP kit example](docs/guard/extension-builder/README.md#generate-an-mcp-kit) for a complete command and pagination requirements.
 
-### 3. Review the operations and regenerate
-
-Read `report.json` and compare the discovered operations with the upstream implementation. Copy the review file before editing:
+**3. Review the operations and regenerate.** Read `report.json` and compare the discovered operations with the upstream implementation. Copy the review file before editing:
 
 ```bash
 cp samplectl-kit/review.json samplectl-review.json
@@ -429,11 +411,9 @@ Edit `samplectl-review.json`, keeping its discovery binding and operation IDs in
 Recompile from the saved snapshot rather than editing generated detectors or manifests:
 
 ```bash
-uv run --no-sync hol-guard extensions generate \
-  --from snapshot \
+uv run --no-sync hol-guard extensions generate --from snapshot \
   --input samplectl-kit/discovery.json \
-  --review samplectl-review.json \
-  --output samplectl-reviewed
+  --review samplectl-review.json --output samplectl-reviewed
 
 uv run --no-sync hol-guard extensions validate samplectl-reviewed
 uv run --no-sync hol-guard extensions diff samplectl-kit samplectl-reviewed
@@ -441,9 +421,7 @@ uv run --no-sync hol-guard extensions diff samplectl-kit samplectl-reviewed
 
 `diff` exits `0` for equal kits and `1` when valid kits differ. If the upstream export changes, generate and review a new snapshot.
 
-### 4. Preview and apply the integration
-
-On your contribution branch, preview the changes to the current checkout:
+**4. Preview and apply the integration.** On your contribution branch, preview the changes to the current checkout:
 
 ```bash
 uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo .
@@ -452,17 +430,14 @@ uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo .
 Inspect the listed paths and generated files. Copy the printed plan digest into the following command before running it:
 
 ```bash
-uv run --no-sync hol-guard extensions apply samplectl-reviewed \
-  --repo . \
+uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo . \
   --expected-plan THE_PRINTED_PLAN_DIGEST \
   --write
 ```
 
 The write applies the reviewed plan to contribution files, the external trust map, catalog registration, packaging, and authoring ownership records. Existing IDs or conflicting files stop integration for review.
 
-### 5. Test and submit a pull request
-
-For the `samplectl` example:
+**5. Test and submit a pull request.** For the `samplectl` example:
 
 ```bash
 uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
