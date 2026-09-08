@@ -6,12 +6,16 @@ from typing import Final
 
 from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import rules_for_extension
+from .command_common_cli_extensions import COMMON_CLI_COMMAND_RULES
 from .command_extension_specs import CommandExtensionSpec, CommandExtensionValues, command_extension_values
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
 
 
 def _core_values(spec: CommandExtensionSpec) -> CommandExtensionValues:
-    return command_extension_values(spec, rules_for_extension(spec.extension_id))
+    return command_extension_values(
+        spec,
+        (*rules_for_extension(spec.extension_id), *COMMON_CLI_COMMAND_RULES),
+    )
 
 
 def _package_values(spec: PackageCommandExtensionSpec) -> CommandExtensionValues:
@@ -98,7 +102,10 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
     CommandExtensionSpec(
         extension_id="command.container-runtime",
         name="Container runtime protection",
-        description="Reviews container operations that can expose credentials, publish data, or mutate host state.",
+        description=(
+            "Reviews container operations across Docker-compatible runtimes that can expose credentials, "
+            "publish data, or mutate host state."
+        ),
         action_classes=("docker-sensitive command", "Docker client config access"),
         risk_classes=("network_egress", "destructive_shell", "local_secret_read"),
         safer_alternatives=(
@@ -109,6 +116,8 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
             "https://docs.docker.com/reference/cli/docker/system/prune/",
             "https://docs.docker.com/reference/cli/docker/container/rm/",
             "https://docs.docker.com/reference/cli/docker/container/run/",
+            "https://docs.podman.io/en/latest/Commands.html",
+            "https://github.com/containerd/nerdctl",
         ),
     ),
     CommandExtensionSpec(
