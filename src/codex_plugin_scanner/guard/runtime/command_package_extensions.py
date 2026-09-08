@@ -131,27 +131,6 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
         example_command="composer require monolog/monolog",
     ),
     PackageCommandExtensionSpec(
-        extension_id="command.package.dotnet",
-        name=".NET package protection",
-        description="Routes .NET and NuGet package installation requests through Guard's package firewall.",
-        ecosystem_ids=("nuget",),
-        executables=("dotnet", "nuget"),
-        project_markers=(
-            "*.csproj",
-            "*.fsproj",
-            "*.vbproj",
-            "Directory.Packages.props",
-            "packages.config",
-            "packages.lock.json",
-            "nuget.config",
-        ),
-        reference_urls=(
-            "https://learn.microsoft.com/dotnet/core/tools/dotnet-package-add",
-            "https://learn.microsoft.com/nuget/reference/cli-reference/cli-ref-install",
-        ),
-        example_command="dotnet package add Newtonsoft.Json",
-    ),
-    PackageCommandExtensionSpec(
         extension_id="command.package.system",
         name="System package protection",
         description="Routes operating-system package installation requests through Guard's package firewall.",
