@@ -7,3 +7,5 @@ c8b599fa1a262de4751062063677b74e915344c8:tests/test_final_release_evidence.py:ge
 ecab2b4949aa53c67014ad06b5162dde273266d6:tests/test_final_release_evidence.py:generic-api-key:77
 # Synthetic unsigned JWT fixture used to verify snapshot redaction; not a credential.
 17ae53502be5db5d9e7e1d00719b7a733992211e:tests/fixtures/guard_snapshot_corpus.py:generic-api-key:24
+# SHA-256 source digest recorded in Sonar review evidence; not a credential.
+b81cb35213f4a0cf8d5fb0e87ef8cda60ba0ddc0:docs/guard/security/sonar-audit-origin-review.json:generic-api-key:11

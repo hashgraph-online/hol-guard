@@ -148,7 +148,6 @@ jobs:
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
           --no-banner
           --redact
-          --verbose
           --exit-code 1
           "${{ steps.gitleaks-range.outputs.repository }}"
       - name: Run Gitleaks on working tree
