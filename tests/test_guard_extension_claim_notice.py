@@ -88,9 +88,7 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
         {"status": "added", "filename": f"contributions/extensions/{extension_id}.json"},
         {"status": "added", "filename": f"contributions/extension-listings/{extension_id}.json"},
     ]
-    client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {
-        "schemaVersion": "v1"
-    }
+    client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, f"contributions/extension-listings/{extension_id}.json")] = listing(
         extension_id, ["200", "100"]
     )
@@ -112,9 +110,7 @@ def test_pr_authorship_never_creates_claim_authority() -> None:
     client = FakeGitHub()
     extension_id = "command.no-authority"
     client.files = [{"status": "added", "filename": f"contributions/extensions/{extension_id}.json"}]
-    client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {
-        "schemaVersion": "v1"
-    }
+    client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {"schemaVersion": "v1"}
 
     assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []

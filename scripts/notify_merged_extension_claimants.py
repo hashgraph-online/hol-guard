@@ -228,10 +228,7 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     ]
     for item in items:
         link = f"{studio_url}?{urllib.parse.urlencode({'extension': item.extension_id})}"
-        identities = [
-            f"@{login}" if login else f"GitHub ID `{account_id}`"
-            for account_id, login in item.identities
-        ]
+        identities = [f"@{login}" if login else f"GitHub ID `{account_id}`" for account_id, login in item.identities]
         identity_text = ", ".join(identities) if identities else "accepted maintainer identity"
         lines.append(f"- `{item.extension_id}`: {identity_text} · [Open Extension Studio]({link})")
     lines.extend(
@@ -247,9 +244,7 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     return "\n".join(lines)
 
 
-def _resolve_identities(
-    client: GitHubApi, github_ids: tuple[str, ...]
-) -> tuple[tuple[str, str | None], ...]:
+def _resolve_identities(client: GitHubApi, github_ids: tuple[str, ...]) -> tuple[tuple[str, str | None], ...]:
     return tuple((account_id, client.user_login(account_id)) for account_id in github_ids)
 
 
