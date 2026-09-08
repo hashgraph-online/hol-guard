@@ -6,6 +6,7 @@ from .command_common_cli_rules_1 import COMMON_CLI_COMMAND_RULES_1
 from .command_common_cli_rules_2 import COMMON_CLI_COMMAND_RULES_2
 from .command_common_cli_rules_3 import COMMON_CLI_COMMAND_RULES_3
 from .command_common_cli_rules_4 import COMMON_CLI_COMMAND_RULES_4
+from .command_common_cli_rules_5 import COMMON_CLI_COMMAND_RULES_5
 from .command_common_cli_specs import COMMON_CLI_COMMAND_EXTENSION_SPECS
 
 COMMON_CLI_COMMAND_RULES = (
@@ -13,6 +14,7 @@ COMMON_CLI_COMMAND_RULES = (
     *COMMON_CLI_COMMAND_RULES_2,
     *COMMON_CLI_COMMAND_RULES_3,
     *COMMON_CLI_COMMAND_RULES_4,
+    *COMMON_CLI_COMMAND_RULES_5,
 )
 
 __all__ = ("COMMON_CLI_COMMAND_EXTENSION_SPECS", "COMMON_CLI_COMMAND_RULES")
