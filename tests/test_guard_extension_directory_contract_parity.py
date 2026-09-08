@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.listing import listing_template, validate_listing
+from codex_plugin_scanner.guard.extension_builder.listing import listing_schema, listing_template, validate_listing
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
 
@@ -73,6 +73,18 @@ def test_directory_rejects_unbounded_dependent_fields() -> None:
                     "entries": [{**entry, field: value}],
                 }
             )
+
+
+def test_listing_contract_distinguishes_presentation_from_claim_authority() -> None:
+    schema = listing_schema()
+    assert schema["title"] == "HOL Guard extension publisher listing metadata"
+    assert "maintainerGithubIds is reviewed claim-authority input" in schema["description"]
+    assert "Validation does not itself grant authority" in schema["description"]
+    packaged = json.loads(
+        (REPOSITORY / "src/codex_plugin_scanner/guard/extension_builder/listing.v1.schema.json").read_text()
+    )
+    public = json.loads((REPOSITORY / "contracts/extensions/listing.v1.schema.json").read_text())
+    assert packaged == public
 
 
 def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Path) -> None:
