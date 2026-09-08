@@ -59,6 +59,10 @@ REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("dotnet package add Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
     ("dotnet add package Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
     ("nuget install Newtonsoft.Json", ".NET package installation command", "command.package.dotnet.install"),
+    ("npm publish", "package publication command", "command.package-publication.remote-mutation"),
+    ("cargo yank serde@1.0.0", "package publication command", "command.package-publication.remote-mutation"),
+    ("twine upload dist/pkg.whl", "package publication command", "command.package-publication.remote-mutation"),
+    ("dotnet nuget push package.nupkg", "package publication command", "command.package-publication.remote-mutation"),
 )
 
 
@@ -98,6 +102,8 @@ SAFE_CASES: tuple[str, ...] = (
     "sqlite3 app.db 'SELECT * FROM users'",
     "dotnet package add --help",
     "nuget install --help",
+    "npm publish --help",
+    "cargo publish --help",
 )
 
 
@@ -121,6 +127,7 @@ def test_first_class_cli_extensions_publish_references() -> None:
         "command.cloud.digitalocean",
         "command.secrets.1password",
         "command.package.dotnet",
+        "command.package-publication",
     )
     for extension_id in extension_ids:
         extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(extension_id)
