@@ -178,6 +178,7 @@ for (const width of [390, 1440]) {
     await hero.getByRole("button", { name: "Connect this machine" }).click();
     await expect(hero.getByText(/Guard could not verify the secure connection/)).toBeVisible();
     await expect(hero.getByText(/CERTIFICATE_VERIFY_FAILED/)).toHaveCount(0);
+    await expect(hero.getByRole("button", { name: "Retry connection" })).toBeVisible();
     const home = hero.getByRole("button", { name: "Open Home" });
     await expect(home).toBeVisible();
     const box = await home.boundingBox();
