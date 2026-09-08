@@ -261,6 +261,26 @@ def test_matcher_contract_rejects_unsupported_values() -> None:
         canonical_contract_digest(object())
 
 
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        {1: "integer-key"},
+        {"1": "string-key", 1: "integer-key"},
+        {1: "integer-key", "1": "string-key"},
+    ],
+)
+def test_matcher_contract_rejects_non_string_mapping_keys(mapping: dict[object, str]) -> None:
+    with pytest.raises(MatcherContractError, match="catalog contract mappings require string keys"):
+        canonical_contract_digest(mapping)
+
+
+def test_matcher_contract_string_mapping_order_is_deterministic() -> None:
+    first = {"beta": "two", "alpha": "one"}
+    second = {"alpha": "one", "beta": "two"}
+
+    assert canonical_contract_digest(first) == canonical_contract_digest(second)
+
+
 def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_references() -> None:
     base = CommandPermissionSpec(
         permission_id="command.test.permission.base",

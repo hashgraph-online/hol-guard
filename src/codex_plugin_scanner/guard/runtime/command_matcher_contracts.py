@@ -61,9 +61,10 @@ def canonical_contract_value(value: object) -> object:
             },
         }
     if isinstance(value, Mapping):
+        if any(type(key) is not str for key in value):
+            raise MatcherContractError("catalog contract mappings require string keys")
         return {
-            str(key): canonical_contract_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            key: canonical_contract_value(item) for key, item in sorted(value.items())
         }
     if isinstance(value, (set, frozenset)):
         normalized = [canonical_contract_value(item) for item in value]
