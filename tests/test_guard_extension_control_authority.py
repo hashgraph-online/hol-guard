@@ -710,9 +710,44 @@ def test_catalog_upgrade_retires_enabled_target_when_matcher_contract_changes(tm
     assert upgraded.layers[0].controls == ()
 
 
-def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migration(tmp_path: Path) -> None:
+def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets, enroll=False)
+    record_calls: list[str] = []
+    record_failures: list[str] = []
+    original_record = store._record_catalog_manifest  # pyright: ignore[reportPrivateUsage]
+    record_function = getattr(original_record, "__func__", original_record)
+    record_code_names = tuple(
+        name
+        for name in (
+            "_load_catalog_manifest",
+            "_catalog_target_manifest",
+            "ExtensionControlAuthorityError",
+        )
+        if name in record_function.__code__.co_names
+    )
+
+    def record_probe(registry: CommandSafetyExtensionRegistry | _LegacyRegistryView, *, key: bytes) -> None:
+        record_calls.append(registry.catalog_digest)
+        try:
+            original_record(registry, key=key)  # type: ignore[arg-type]
+        except ExtensionControlAuthorityError as exc:
+            record_failures.append(str(exc))
+            raise
+
+    tampered_health: list[str] = []
+    original_tampered = store._tampered_view  # pyright: ignore[reportPrivateUsage]
+
+    def tampered_probe(catalog_digest: str) -> ExtensionControlAuthorityView:
+        result = original_tampered(catalog_digest)
+        tampered_health.append(result.health.value)
+        return result
+
+    monkeypatch.setattr(store, "_record_catalog_manifest", record_probe)
+    monkeypatch.setattr(store, "_tampered_view", tampered_probe)
     legacy_registry = _legacy_format_registry()
     assert legacy_registry.catalog_digest != BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     bootstrapped = store._bootstrap_extension_control_authority(  # pyright: ignore[reportPrivateUsage]
@@ -743,7 +778,13 @@ def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migrat
         catalog_digest=legacy_registry.catalog_digest,
     )
     conflict = store.read_extension_control_authority_for_registry(same_digest_current_manifest)
-    assert conflict.health is AuthorityHealth.TAMPERED
+    assert conflict.health.__class__ is AuthorityHealth
+    assert conflict.health is AuthorityHealth.TAMPERED, {
+        "record_calls": record_calls,
+        "record_failures": record_failures,
+        "tampered_health": tampered_health,
+        "record_code_names": record_code_names,
+    }
 
     migrated = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     assert migrated.health is AuthorityHealth.PROTECTED
