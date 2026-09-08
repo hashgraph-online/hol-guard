@@ -218,11 +218,12 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
             # A missing prior manifest must not act as an implicit fingerprint
             # match: stale managed allows remain disabled until cloud refresh.
-            prior_manifest = (
-                previous_manifest
-                if fingerprint_refresh
-                else (self._load_catalog_manifest(active_catalog_digest, key=key) or {})
-            )
+            if fingerprint_refresh:
+                if previous_manifest is None:
+                    raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
+                prior_manifest: Mapping[str, str] = previous_manifest
+            else:
+                prior_manifest = self._load_catalog_manifest(active_catalog_digest, key=key) or {}
             managed_layers = tuple(
                 replace(
                     layer,
