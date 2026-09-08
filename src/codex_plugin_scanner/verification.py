@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .checks.manifest_support import safe_manifest_path
-from .deepseek_harness_support import validate_dsh_package
+from .deepseek_harness_support import dsh_runtime_verify_message, validate_dsh_package
 from .ecosystems.detect import detect_packages
 from .ecosystems.registry import get_default_adapters
 from .ecosystems.types import Ecosystem, PackageCandidate
@@ -765,13 +765,7 @@ def _verify_deepseek_harness_candidate(candidate: PackageCandidate) -> Verificat
             "runtime",
             "Cordis apply(ctx) export",
             validation.runtime_ok,
-            (
-                "Patch-only DSH bundle does not declare an executable runtime"
-                if validation.runtime_ok and not validation.runtime_required
-                else "Runtime entry point exports apply(ctx)"
-                if validation.runtime_ok
-                else "Runtime entry point is missing a detectable apply(ctx) export"
-            ),
+            dsh_runtime_verify_message(validation),
             "runtime" if not validation.runtime_ok else "pass",
         ),
     ]

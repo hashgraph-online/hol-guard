@@ -345,3 +345,19 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
         except (OSError, UnicodeError):
             runtime_ok = False
     return DshValidation(metadata_ok, bundle_ok, patch_ok, runtime_ok, runtime_path, runtime_required)
+
+
+def dsh_runtime_scan_message(validation: DshValidation) -> str:
+    if not validation.runtime_ok:
+        return "DSH runtime entry point must export apply(ctx)"
+    if validation.runtime_required:
+        return "DSH runtime exports apply(ctx)"
+    return "Patch-only DSH bundle does not require apply(ctx)"
+
+
+def dsh_runtime_verify_message(validation: DshValidation) -> str:
+    if not validation.runtime_ok:
+        return "Runtime entry point is missing a detectable apply(ctx) export"
+    if validation.runtime_required:
+        return "Runtime entry point exports apply(ctx)"
+    return "Patch-only DSH bundle does not declare an executable runtime"
