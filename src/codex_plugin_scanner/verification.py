@@ -765,9 +765,13 @@ def _verify_deepseek_harness_candidate(candidate: PackageCandidate) -> Verificat
             "runtime",
             "Cordis apply(ctx) export",
             validation.runtime_ok,
-            "Runtime entry point exports apply(ctx)"
-            if validation.runtime_ok
-            else "Runtime entry point is missing a detectable apply(ctx) export",
+            (
+                "Patch-only DSH bundle does not declare an executable runtime"
+                if validation.runtime_ok and not validation.runtime_required
+                else "Runtime entry point exports apply(ctx)"
+                if validation.runtime_ok
+                else "Runtime entry point is missing a detectable apply(ctx) export"
+            ),
             "runtime" if not validation.runtime_ok else "pass",
         ),
     ]

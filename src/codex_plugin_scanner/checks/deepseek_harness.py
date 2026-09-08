@@ -61,9 +61,13 @@ def run_deepseek_harness_checks(package: NormalizedPackage) -> tuple[CheckResult
         _result(
             "DSH Cordis runtime entry point",
             validation.runtime_ok,
-            "DSH runtime exports apply(ctx)"
-            if validation.runtime_ok
-            else "DSH runtime entry point must export apply(ctx)",
+            (
+                "Patch-only DSH bundle does not require apply(ctx)"
+                if validation.runtime_ok and not validation.runtime_required
+                else "DSH runtime exports apply(ctx)"
+                if validation.runtime_ok
+                else "DSH runtime entry point must export apply(ctx)"
+            ),
             "DSH_RUNTIME_APPLY_MISSING",
             "package.json main/exports must reference a regular in-package module exporting Cordis apply(ctx).",
         ),
