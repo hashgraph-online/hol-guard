@@ -200,6 +200,80 @@ def test_storage_maintenance_uses_bounded_batches(tmp_path: Path) -> None:
     assert second.completed is False
 
 
+def test_storage_maintenance_prunes_native_decision_receipts(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    now = datetime(2026, 7, 25, tzinfo=timezone.utc)
+    old = (now - timedelta(days=120)).isoformat()
+    recent = now.isoformat()
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+        for index in range(4):
+            connection.execute(
+                """
+                insert into native_hook_decision_receipts (
+                  decision_id, schema, version, authority, request_id,
+                  request_digest, harness, event_name, payload_kind,
+                  policy_generation, policy_digest, rule_digest,
+                  runtime_identity, decision, model_output_action,
+                  policy_action, observed_policy_action, reason_code,
+                  workspace_bound, source_ref_external_allowed,
+                  reviewed_output_sha256, observe_mode, deadline_budget_ms,
+                  recorded_at
+                ) values (?, 'guard-native-hook-decision-receipt.v1', 1, 'rust', ?,
+                  ?, 'codex', 'PreToolUse', 'command', 1, ?, ?, ?,
+                  'allow', 'allow_original', 'allow', null, 'native_clean',
+                  1, 0, null, 0, 750, ?)
+                """,
+                (
+                    f"native-old-{index}",
+                    f"request-old-{index}",
+                    "a" * 64,
+                    "b" * 64,
+                    "c" * 64,
+                    "d" * 64,
+                    old,
+                ),
+            )
+        for index in range(2):
+            connection.execute(
+                """
+                insert into native_hook_decision_receipts (
+                  decision_id, schema, version, authority, request_id,
+                  request_digest, harness, event_name, payload_kind,
+                  policy_generation, policy_digest, rule_digest,
+                  runtime_identity, decision, model_output_action,
+                  policy_action, observed_policy_action, reason_code,
+                  workspace_bound, source_ref_external_allowed,
+                  reviewed_output_sha256, observe_mode, deadline_budget_ms,
+                  recorded_at
+                ) values (?, 'guard-native-hook-decision-receipt.v1', 1, 'rust', ?,
+                  ?, 'codex', 'PreToolUse', 'command', 1, ?, ?, ?,
+                  'allow', 'allow_original', 'allow', null, 'native_clean',
+                  1, 0, null, 0, 750, ?)
+                """,
+                (
+                    f"native-recent-{index}",
+                    f"request-recent-{index}",
+                    "a" * 64,
+                    "b" * 64,
+                    "c" * 64,
+                    "d" * 64,
+                    recent,
+                ),
+            )
+
+    result = store.maintain_storage(
+        now=now,
+        detail_retain_days=30,
+        receipt_detail_limit=2,
+        batch_size=10,
+    )
+
+    assert result.native_decision_receipts_deleted == 4
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+        remaining = connection.execute("select count(*) from native_hook_decision_receipts").fetchone()[0]
+    assert remaining == 2
+
+
 def test_fresh_store_uses_incremental_auto_vacuum(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     with sqlite3.connect(store.path) as connection:

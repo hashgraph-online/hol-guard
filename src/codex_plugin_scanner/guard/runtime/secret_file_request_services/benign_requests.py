@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shlex
 from pathlib import Path
 
@@ -17,16 +16,14 @@ from ..direct_vitest import direct_local_typescript_execution_context, direct_lo
 from ..extension_control_contract import ControlSurface, ExtensionControlLayer
 from ..extension_control_resolver import resolve_extension_controls
 from ..extension_control_runtime import current_extension_control_snapshot
-from ..false_positive_rules import KNOWN_AGENT_DOC_SUFFIXES, target_is_known_skill_doc_path
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..github_capability_contract import GitHubCommandAssessment
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
-from ..shell_execution_context import model_shell_execution_context
 from .agent_guidance_reads import is_benign_agent_guidance_read
-from .constants_core import _SHELL_TOOL_NAMES
+from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS, _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
 from .developer_routines import (
     _looks_like_safe_cli_metadata_command,
@@ -65,6 +62,39 @@ from .shell_stdin_sources import (
     _printf_stdout_payloads,
 )
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
+
+
+def is_explicitly_benign_native_file_read_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
+    """Recognize one existing, non-sensitive native ``Read`` target."""
+
+    if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
+        return False
+    typed_arguments: dict[str, object] = {key: value for key, value in arguments.items() if isinstance(key, str)}
+    if any(key in typed_arguments for key in _PATH_LIST_KEYS):
+        return False
+    candidates = [
+        value.strip() for key in _PATH_KEYS if isinstance((value := typed_arguments.get(key)), str) and value.strip()
+    ]
+    if len(candidates) != 1:
+        return False
+    target = candidates[0]
+    if not target or any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&", "\x00")):
+        return False
+
+    from ..source_paths import source_path_is_allowed
+
+    decision = source_path_is_allowed(target, cwd=cwd, home_dir=home_dir)
+    resolved = decision.resolved_path
+    try:
+        return decision.allowed and resolved is not None and resolved.is_file()
+    except OSError:
+        return False
 
 
 def is_explicitly_benign_tool_action_request(
@@ -233,75 +263,6 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
-
-
-def _is_bounded_agent_guidance_read_chain(
-    command_text: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path,
-) -> bool:
-    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
-        return False
-    context = model_shell_execution_context(
-        command_text,
-        cwd=cwd,
-        workspace_root=cwd,
-        home_dir=home_dir,
-    )
-    if not context.complete or not 1 <= len(context.segments) <= 8:
-        return False
-    for segment in context.segments:
-        controls = (*segment.control_before, *segment.control_after)
-        if any(operator != "&&" for operator in controls) or segment.directory_operation is not None:
-            return False
-        parts = list(segment.tokens)
-        target = _bounded_sed_read_target(parts)
-        if target is None:
-            return False
-        if _is_approved_agent_guidance_target(target, home_dir=home_dir):
-            continue
-        if _is_guard_safety_doc_target(target, home_dir=home_dir):
-            continue
-        return False
-    return True
-
-
-def _bounded_sed_read_target(parts: list[str]) -> str | None:
-    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
-        return None
-    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
-    if match is None:
-        return None
-    start, end = map(int, match.groups())
-    return parts[3] if start <= end and end - start + 1 <= 500 else None
-
-
-def _is_approved_agent_guidance_target(target: str, *, home_dir: Path) -> bool:
-    if not target_is_known_skill_doc_path(target, home_dir=home_dir):
-        return False
-    normalized = target.replace("\\", "/").rstrip("/")
-    return normalized.endswith("/SKILL.md") or any(normalized.endswith(suffix) for suffix in KNOWN_AGENT_DOC_SUFFIXES)
-
-
-def _is_guard_safety_doc_target(target: str, *, home_dir: Path) -> bool:
-    expected = home_dir / ".hol-support" / "SAFETY.md"
-    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
-    try:
-        resolved_home = home_dir.resolve(strict=True)
-        resolved_support = (home_dir / ".hol-support").resolve(strict=True)
-        resolved_expected = expected.resolve(strict=True)
-        return (
-            candidate.absolute() == expected.absolute()
-            and not home_dir.is_symlink()
-            and not (home_dir / ".hol-support").is_symlink()
-            and not expected.is_symlink()
-            and resolved_support == resolved_home / ".hol-support"
-            and resolved_expected == resolved_support / "SAFETY.md"
-            and resolved_expected.is_file()
-        )
-    except (OSError, RuntimeError):
-        return False
 
 
 def _quote_aware_direct_github_read_is_safe(
@@ -546,5 +507,6 @@ __all__ = [
     "_shell_stdout_uses_local_file",
     "_skip_shell_wrapper_options",
     "build_tool_action_request_artifact",
+    "is_explicitly_benign_native_file_read_request",
     "is_explicitly_benign_tool_action_request",
 ]

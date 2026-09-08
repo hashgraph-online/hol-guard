@@ -29,17 +29,24 @@ class ConfigError(ValueError):
     """Raised when config or baseline parsing fails."""
 
 
-def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> ScannerConfig:
+def load_scanner_config(
+    plugin_dir: Path,
+    config_path: str | None = None,
+    *,
+    auto_discover: bool = True,
+) -> ScannerConfig:
     if config_path:
         candidate = Path(config_path)
         if not candidate.is_absolute():
             candidate = plugin_dir / candidate
         if not candidate.exists():
             raise ConfigError(f"Config file '{candidate}' does not exist.")
-    else:
+    elif auto_discover:
         candidate = next((plugin_dir / name for name in DEFAULT_CONFIG_FILES if (plugin_dir / name).exists()), None)
         if candidate is None:
             return ScannerConfig()
+    else:
+        return ScannerConfig()
 
     try:
         payload = tomllib.loads(candidate.read_text(encoding="utf-8"))

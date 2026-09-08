@@ -53,7 +53,10 @@ from ..codex_hook_manifest import (
 )
 from ..codex_hook_registration import (
     exact_legacy_hook_bindings,
+    finalize_codex_doctor_setup_status,
+    finalize_codex_doctor_warnings,
     install_managed_codex_hook_groups,
+    overlay_live_owned_event_matches,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -67,7 +70,8 @@ from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resol
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
+from ..stable_guard_cli import resolve_frozen_guard_cli
+from .base import HarnessAdapter, HarnessContext, _command_available
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -78,8 +82,7 @@ from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
     managed_stdio_servers,
-    proxy_cli_args,
-    proxy_process_env,
+    proxy_launcher_entry,
     skipped_stdio_server_names,
 )
 from .workspace_overrides import should_skip_workspace_override
@@ -195,6 +198,7 @@ _MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
+_CODEX_GUARD_POST_TOOL_MATCHER = "Bash|Read|mcp__.*"
 _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
@@ -240,8 +244,10 @@ def _local_hook_command_parts_for_home_mode(
 
 
 def _guard_python_executable() -> str:
-    """Use an absolute interpreter invocation while preserving virtualenv identity."""
+    """Use a prune-safe frozen launcher, else the current interpreter identity."""
 
+    if bool(getattr(sys, "frozen", False)):
+        return resolve_frozen_guard_cli()
     return str(Path(sys.executable).expanduser().absolute())
 
 
@@ -391,7 +397,7 @@ def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
 
 def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
-        "matcher": "Bash",
+        "matcher": _CODEX_GUARD_POST_TOOL_MATCHER,
         "hooks": [
             _managed_hook_entry(
                 context,
@@ -869,8 +875,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     json_hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
     hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
-    event_matches_value = integrity.get("event_matches")
-    event_matches = event_matches_value if isinstance(event_matches_value, dict) else {}
+    event_matches = overlay_live_owned_event_matches(integrity, hooks)
     pre_tool_hook_installed = event_matches.get("PreToolUse") is True
     permission_hook_installed = event_matches.get("PermissionRequest") is True
     prompt_hook_installed = event_matches.get("UserPromptSubmit") is True
@@ -1358,22 +1363,10 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload = super().diagnostics(context)
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
-        warnings = (
-            [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
-        )
-        if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
-            warnings.append(
-                "Codex config was found, but native hooks are disabled. Run `hol-guard install codex` or "
-                "`hol-guard update` to repair protection."
-            )
-        if bool(hook_state["config_present"]) and not bool(hook_state["managed_hook_installed"]):
-            warnings.append(
-                "Codex config was found, but Guard's managed Codex hooks are missing. Run "
-                "`hol-guard install codex` or `hol-guard update` to repair protection."
-            )
+        items = warning_items if isinstance(warning_items, list) else []
+        warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
-        if payload.get("setup_status") == "active" and _warnings_include_setup_failure(warnings):
-            payload["setup_status"] = "broken"
+        payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
         payload["native_hook_state"] = hook_state
         return payload
 
@@ -1392,21 +1385,11 @@ class CodexHarnessAdapter(HarnessAdapter):
         return context.guard_home / "managed" / "codex" / f"{digest}.backup.toml"
 
     def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-        args = proxy_cli_args(
+        return proxy_launcher_entry(
             proxy_command="codex-mcp-proxy",
-            guard_home=str(context.guard_home),
+            context=context,
             server=server,
-            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         )
-        entry: dict[str, object] = {
-            "command": sys.executable,
-            "args": args,
-        }
-        env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-        if env:
-            entry["env"] = env
-        return entry
 
     @staticmethod
     def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:

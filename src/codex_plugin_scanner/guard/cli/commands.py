@@ -66,12 +66,43 @@ def _support_overrides() -> Iterator[None]:
             if name not in module_export_names[module] or name in override_names
         }
         targets.append((module, affected_names))
+    # The compatibility hook modules are intentionally lazy and therefore are
+    # not members of ``commands_support._SOURCE_MODULES``.  When an explicit
+    # oracle test has imported one, propagate facade monkeypatches into that
+    # already-loaded module for the duration of the scoped call.  Do not
+    # import the compatibility surface here: production hook startup must
+    # remain independent of the Python evaluator.
+    compatibility_prefix = f"{__package__}.commands_hook_"
+    known_targets = {id(module) for module, _ in targets}
+
+    def _compatibility_targets(skip: set[int]) -> list[tuple[ModuleType, set[str]]]:
+        found: list[tuple[ModuleType, set[str]]] = []
+        for module in tuple(sys.modules.values()):
+            if module is None or id(module) in skip:
+                continue
+            module_name = getattr(module, "__name__", "")
+            if not module_name.startswith(compatibility_prefix):
+                continue
+            affected_names = {name for name in override_names if hasattr(module, name)}
+            if affected_names:
+                found.append((module, affected_names))
+        return found
+
+    for module, affected_names in _compatibility_targets(known_targets):
+        targets.append((module, affected_names))
     snapshots = [
         (module, {name: getattr(module, name, missing) for name in affected_names})
         for module, affected_names in targets
     ]
     try:
         _support._apply_overrides(overrides)
+        # ``_apply_overrides`` knows only about the eager support registry;
+        # apply the same scoped values to any lazy compatibility modules we
+        # discovered above.
+        for module, affected_names in targets:
+            for name in affected_names:
+                if name in export_map:
+                    setattr(module, name, export_map[name])
         yield
     finally:
         for module, bindings in snapshots:
@@ -81,6 +112,15 @@ def _support_overrides() -> Iterator[None]:
                         delattr(module, name)
                 else:
                     setattr(module, name, value)
+        # A compatibility module imported for the first time inside the scoped
+        # window bound the override values at import time and is absent from
+        # the entry snapshots, so its captured bindings would outlive the
+        # window. Reset only the names still bound to an override value.
+        snapshotted = {id(module) for module, _ in snapshots}
+        for module, affected_names in _compatibility_targets(snapshotted):
+            for name in affected_names:
+                if getattr(module, name, missing) is export_map[name]:
+                    setattr(module, name, getattr(_support, name))
 
 
 def _support_attr(name: str) -> Any:

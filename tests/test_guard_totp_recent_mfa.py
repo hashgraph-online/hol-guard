@@ -231,3 +231,17 @@ def test_cli_prompt_skips_interaction_when_recent_totp_is_satisfied(
     monkeypatch.setattr(approval_gate_prompt_module.sys.stdin, "isatty", lambda: False)
 
     assert approval_gate_prompt_module.prompt_for_approval_gate(guard_home) is None
+
+
+def test_cli_prompt_collects_totp_when_fresh_code_is_required(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _enable_gate(guard_home)
+    _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
+    monkeypatch.setattr(approval_gate_prompt_module, "recent_totp_satisfied", lambda _guard_home: True)
+    monkeypatch.setattr(approval_gate_prompt_module.sys.stdin, "isatty", lambda: False)
+
+    with pytest.raises(ApprovalGateError, match="interactive terminal"):
+        approval_gate_prompt_module.prompt_for_approval_gate(guard_home, require_fresh_totp=True)

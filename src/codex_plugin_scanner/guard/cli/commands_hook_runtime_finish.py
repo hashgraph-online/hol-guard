@@ -1,11 +1,15 @@
 """Guard CLI runtime artifact hook final response flow."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: E402, F403, F405, I001
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 if TYPE_CHECKING:
     from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
@@ -256,7 +260,7 @@ def _finalize_runtime_artifact_hook(
                 approval_context,
                 _embedded_script_remediation(state),
             )
-        if _canonical_harness_name(args.harness) == "kimi":
+        if _canonical_harness_name(args.harness) in {"kimi", "hermes"}:
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,

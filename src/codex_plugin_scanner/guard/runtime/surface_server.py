@@ -66,6 +66,7 @@ class GuardSurfaceRuntime:
         surface: str,
         capabilities: tuple[str, ...],
         supported_protocol_versions: tuple[str, ...] = (),
+        include_sessions: bool = True,
     ) -> dict[str, object]:
         negotiated_version = _negotiate_protocol_version(supported_protocol_versions)
         client_id = uuid.uuid4().hex
@@ -75,7 +76,7 @@ class GuardSurfaceRuntime:
             {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
         )
         protocol_bundle["negotiated_version"] = negotiated_version
-        return {
+        response: dict[str, object] = {
             "protocol_version": negotiated_version,
             "schema_version": SCHEMA_VERSION,
             "schema": contract,
@@ -93,8 +94,10 @@ class GuardSurfaceRuntime:
                 "surface": surface,
                 "capabilities": list(capabilities),
             },
-            "sessions": self.store.list_guard_sessions(limit=20),
         }
+        if include_sessions:
+            response["sessions"] = self.store.list_guard_sessions(limit=20)
+        return response
 
     def start_session(
         self,

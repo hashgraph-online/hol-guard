@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
@@ -18,7 +19,13 @@ from types import ModuleType
 from typing import Protocol, TypeGuard, TypeVar
 
 from ..models import Finding, Severity, severity_from_value
-from .cisco_skill_scanner import CiscoIntegrationStatus
+from ..path_support import read_text_file_within_root
+from .cisco_skill_scanner import CiscoIntegrationStatus, _is_safe_sys_path_entry
+from .scanner_subprocess import (
+    MAX_SCANNER_OUTPUT_BYTES,
+    run_bounded_scanner_process,
+    scrubbed_scanner_env,
+)
 
 _EXCLUDED_DIRS = {
     ".codex-plugin",
@@ -34,6 +41,8 @@ _EXCLUDED_DIRS = {
 _SOURCE_SUFFIXES = {".cjs", ".js", ".json", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
 _MAX_TARGET_SIZE_BYTES = 1_000_000
 _MAX_STATIC_TARGETS = 512
+DEFAULT_CISCO_MCP_TIMEOUT_SECONDS = 30.0
+_CISCO_MCP_SECRET_ENV_NAMES = frozenset({"MCP_SCANNER_API_KEY", "MCP_SCANNER_LLM_API_KEY"})
 T = TypeVar("T")
 
 
@@ -102,6 +111,139 @@ def _build_summary(
         total_findings=len(findings),
         findings_by_severity=counts,
     )
+
+
+def _summary_payload(summary: CiscoMcpScanSummary) -> dict[str, object]:
+    return {
+        "status": summary.status.value,
+        "message": summary.message,
+        "targets_scanned": summary.targets_scanned,
+        "analyzers_used": list(summary.analyzers_used),
+        "findings": [
+            {
+                "rule_id": finding.rule_id,
+                "severity": finding.severity.value,
+                "category": finding.category,
+                "title": finding.title,
+                "description": finding.description,
+                "remediation": finding.remediation,
+                "file_path": finding.file_path,
+                "line_number": finding.line_number,
+                "source": finding.source,
+            }
+            for finding in summary.findings
+        ],
+    }
+
+
+def _summary_from_payload(payload: object) -> CiscoMcpScanSummary:
+    if not isinstance(payload, dict):
+        raise ValueError("Cisco MCP scanner returned an invalid result")
+    raw_findings = payload.get("findings")
+    if not isinstance(raw_findings, list):
+        raise ValueError("Cisco MCP scanner result omitted findings")
+    findings: list[Finding] = []
+    for item in raw_findings:
+        if not isinstance(item, dict):
+            raise ValueError("Cisco MCP scanner returned an invalid finding")
+        line_number = item.get("line_number")
+        findings.append(
+            Finding(
+                rule_id=str(item.get("rule_id") or "CISCO-MCP-SCANNER"),
+                severity=severity_from_value(str(item.get("severity") or "info")),
+                category=str(item.get("category") or "mcp-security"),
+                title=str(item.get("title") or "Cisco MCP scanner finding"),
+                description=str(item.get("description") or "Cisco MCP scanner reported a potential issue."),
+                remediation=str(item["remediation"]) if item.get("remediation") is not None else None,
+                file_path=str(item["file_path"]) if item.get("file_path") is not None else None,
+                line_number=line_number if isinstance(line_number, int) else None,
+                source=str(item.get("source") or "cisco-mcp-scanner"),
+            )
+        )
+    status = CiscoIntegrationStatus(str(payload.get("status") or CiscoIntegrationStatus.FAILED.value))
+    analyzers = payload.get("analyzers_used")
+    return _build_summary(
+        status=status,
+        message=str(payload.get("message") or "Cisco MCP scanner completed without a message."),
+        findings=tuple(findings),
+        targets_scanned=int(payload.get("targets_scanned") or 0),
+        analyzers_used=tuple(str(item) for item in analyzers) if isinstance(analyzers, list) else (),
+    )
+
+
+_CISCO_MCP_SUBPROCESS_SNIPPET = """
+from pathlib import Path
+import json
+import sys
+from codex_plugin_scanner.integrations.cisco_mcp_scanner import _run_cisco_mcp_scan_in_process, _summary_payload
+
+config_path = Path(sys.argv[3]) if sys.argv[3] else None
+summary = _run_cisco_mcp_scan_in_process(
+    Path(sys.argv[1]), mode=sys.argv[2], timeout_seconds=None, config_path=config_path
+)
+Path(sys.argv[4]).write_text(json.dumps(_summary_payload(summary)), encoding="utf-8")
+""".strip()
+
+
+def _run_cisco_mcp_scan_isolated(
+    plugin_dir: Path,
+    *,
+    mode: str,
+    timeout_seconds: float,
+    config_path: Path | None,
+) -> CiscoMcpScanSummary:
+    descriptor, output_name = tempfile.mkstemp(prefix="cisco-mcp-scan-", suffix=".json")
+    os.close(descriptor)
+    output_path = Path(output_name)
+    safe_path_entries = [str(path) for path in sys.path if isinstance(path, str) and _is_safe_sys_path_entry(path)]
+    env = scrubbed_scanner_env(
+        explicit={
+            "PYTHONPATH": os.pathsep.join(safe_path_entries),
+            "PYTHONSAFEPATH": "1",
+        },
+        allowed_secret_names=_CISCO_MCP_SECRET_ENV_NAMES,
+    )
+    try:
+        result = run_bounded_scanner_process(
+            [
+                sys.executable,
+                "-P",
+                "-c",
+                _CISCO_MCP_SUBPROCESS_SNIPPET,
+                str(plugin_dir),
+                mode,
+                str(config_path) if config_path is not None else "",
+                str(output_path),
+            ],
+            env=env,
+            timeout_seconds=timeout_seconds,
+        )
+        if result.timed_out:
+            return _build_summary(
+                status=CiscoIntegrationStatus.TIMED_OUT,
+                message="Cisco MCP scanner timed out before it could finish.",
+            )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+            return _build_summary(
+                status=CiscoIntegrationStatus.FAILED,
+                message=f"Cisco MCP scanner failed in its isolated process: {detail[:512]}",
+            )
+        payload = json.loads(
+            read_text_file_within_root(
+                output_path.parent,
+                output_path,
+                max_bytes=MAX_SCANNER_OUTPUT_BYTES,
+            )
+        )
+        return _summary_from_payload(payload)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"Cisco MCP scanner isolation failed: {exc}",
+        )
+    finally:
+        output_path.unlink(missing_ok=True)
 
 
 def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, _CiscoAnalyzerFactory]:
@@ -365,6 +507,8 @@ def _append_static_source_targets_from_tree(
             targets=targets,
             seen_targets=seen_targets,
         )
+        if len(targets) >= _MAX_STATIC_TARGETS:
+            return
 
 
 def _append_static_source_targets(
@@ -466,7 +610,7 @@ def _safe_resolved_static_target(plugin_dir: Path, target: Path) -> Path | None:
     return resolved_target
 
 
-def _run_awaitable(awaitable: Awaitable[T]) -> T:
+def _run_awaitable(awaitable: Awaitable[T], *, timeout_seconds: float | None = None) -> T:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
@@ -481,9 +625,11 @@ def _run_awaitable(awaitable: Awaitable[T]) -> T:
         except BaseException as exc:
             errors.append(exc)
 
-    thread = Thread(target=_runner)
+    thread = Thread(target=_runner, daemon=True)
     thread.start()
-    thread.join()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        raise TimeoutError("Cisco MCP scanner timed out")
     if errors:
         raise errors[0]
     if result:
@@ -555,10 +701,10 @@ async def _scan_targets_multi(
     return tuple(findings), targets_scanned, ordered_successful, failed_only
 
 
-def run_cisco_mcp_scan(
+def _run_cisco_mcp_scan_in_process(
     plugin_dir: Path,
     mode: str = "auto",
-    timeout_seconds: float | None = None,
+    timeout_seconds: float | None = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS,
     config_path: Path | None = None,
 ) -> CiscoMcpScanSummary:
     """Run Cisco MCP scanner static analysis when available."""
@@ -582,7 +728,6 @@ def run_cisco_mcp_scan(
             status=CiscoIntegrationStatus.UNAVAILABLE,
             message=runtime_message,
         )
-
     try:
         try:
             components = _load_mcp_scanner_components(blocked_root=plugin_dir)
@@ -615,7 +760,10 @@ def run_cisco_mcp_scan(
         scan_awaitable = _scan_targets_multi(plugin_dir, targets, tuple(analyzers))
         if timeout_seconds is not None:
             scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
-        findings, targets_scanned, successful_analyzers, analyzer_errors = _run_awaitable(scan_awaitable)
+        findings, targets_scanned, successful_analyzers, analyzer_errors = _run_awaitable(
+            scan_awaitable,
+            timeout_seconds=timeout_seconds,
+        )
     except (TimeoutError, asyncio.TimeoutError):
         return _build_summary(
             status=CiscoIntegrationStatus.TIMED_OUT,
@@ -662,4 +810,27 @@ def run_cisco_mcp_scan(
         findings=findings,
         targets_scanned=targets_scanned,
         analyzers_used=analyzer_names,
+    )
+
+
+def run_cisco_mcp_scan(
+    plugin_dir: Path,
+    mode: str = "auto",
+    timeout_seconds: float | None = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS,
+    config_path: Path | None = None,
+) -> CiscoMcpScanSummary:
+    """Run Cisco MCP analysis in a resource-bounded child process."""
+    if mode == "off":
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="Cisco MCP scanning disabled by configuration.",
+        )
+    resolved_plugin_dir = plugin_dir.resolve()
+    resolved_config_path = config_path.resolve() if config_path is not None else None
+    effective_timeout = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+    return _run_cisco_mcp_scan_isolated(
+        resolved_plugin_dir,
+        mode=mode,
+        timeout_seconds=effective_timeout,
+        config_path=resolved_config_path,
     )

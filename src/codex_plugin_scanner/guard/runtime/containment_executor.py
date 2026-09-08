@@ -390,7 +390,7 @@ def _linux_argv(
 
 def _kill_process_group(process_group_id: int) -> None:
     try:
-        _ = os.killpg(process_group_id, signal.SIGKILL)
+        os.killpg(process_group_id, signal.SIGKILL)
     except ProcessLookupError:
         return
 

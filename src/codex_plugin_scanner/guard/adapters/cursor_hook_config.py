@@ -3,24 +3,101 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import stat
+import sys
+from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 
+from ..models import GuardArtifact
 from .base import HarnessContext
+from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
+FROZEN_CURSOR_HOOK_COMMAND = "__guard-cursor-hook"
 _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
     "beforeReadFile",
+    "beforeWriteFile",
 )
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
+
+
+def _frozen_cursor_hook_launcher() -> str:
+    return resolve_frozen_cursor_hook_launcher()
+
+
+def _managed_hook_command(
+    *,
+    python_executable: Path | None,
+    script_path: Path,
+    event_name: str,
+) -> str:
+    script = str(script_path.resolve())
+    event_args = ["--cursor-hook-event", event_name]
+    if python_executable is not None:
+        return shlex.join([str(python_executable), script, *event_args])
+    if bool(getattr(sys, "frozen", False)):
+        return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
+    return shlex.join([sys.executable, script, *event_args])
+
+
+def _is_managed_cursor_hook_script(path: Path) -> bool:
+    parts = [part.lower() for part in path.parts]
+    if not parts or parts[-1] != HOOK_SCRIPT_NAME.lower() or ".." in parts:
+        return False
+    if len(parts) >= 3 and parts[-3:-1] == [".cursor", "hooks"]:
+        return True
+    return len(parts) >= 3 and parts[-3:-1] == ["managed", "cursor"]
+
+
+def _cursor_hook_path_contains_symlink(path: Path) -> bool:
+    parts = path.parts
+    if not parts:
+        return True
+    current = Path(parts[0])
+    try:
+        if current.is_symlink():
+            return True
+    except OSError:
+        return True
+    for part in parts[1:]:
+        current = current / part
+        try:
+            if current.is_symlink():
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
+    """Execute the installed Cursor hook script from a frozen Guard binary."""
+
+    if not argv:
+        return 2
+    script = Path(argv[0])
+    if not _is_managed_cursor_hook_script(script) or not script.is_file() or _cursor_hook_path_contains_symlink(script):
+        return 3
+    import runpy
+
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as error:
+        code = error.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        return 1
+    return 0
 
 
 def _managed_hook_entry(
@@ -28,10 +105,15 @@ def _managed_hook_entry(
     *,
     script_path: Path,
     event_name: str,
+    python_executable: Path | None = None,
 ) -> dict[str, object]:
     del context
     entry: dict[str, object] = {
-        "command": str(script_path.resolve()),
+        "command": _managed_hook_command(
+            python_executable=python_executable,
+            script_path=script_path,
+            event_name=event_name,
+        ),
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
@@ -68,6 +150,8 @@ def _is_managed_hook_command(command: object) -> bool:
     lowered = command.lower()
     if "hol-guard-cursor-hook" in lowered:
         return True
+    if FROZEN_CURSOR_HOOK_COMMAND in lowered:
+        return True
     if HOOK_SCRIPT_NAME.lower() in lowered:
         return True
     if "hol_guard_hook_argv" not in lowered.replace("-", "_"):
@@ -83,8 +167,26 @@ def _is_managed_hook_command(command: object) -> bool:
     return Path(tokens[0]).name.lower().startswith("python") if tokens else False
 
 
+_MANAGED_CURSOR_HOOK_DOCSTRING = (
+    '"""Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""'
+)
+
+
 def _is_managed_hook_script(source: str) -> bool:
-    return "Managed by HOL Guard" in source and HOOK_SCRIPT_NAME in source
+    """Return whether *source* was written by Guard's Cursor installer.
+
+    Installed scripts use a Cursor-specific module docstring and bake
+    ``GUARD_CLI``. They do not embed ``HOOK_SCRIPT_NAME``, so requiring that
+    filename would treat every live Guard hook as unmanaged and skip
+    prune-safe rebind. A mention of ``Managed by HOL Guard`` alone is not
+    ownership.
+    """
+
+    return (
+        _MANAGED_CURSOR_HOOK_DOCSTRING in source
+        and "\nGUARD_CLI =" in source
+        and "\nGUARD_RECOVERY_COMMAND =" in source
+    )
 
 
 def _managed_hooks_payload(payload: dict[str, object]) -> dict[str, object]:
@@ -134,5 +236,163 @@ def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
 _backup_payload = load_backup_payload
 
 
+def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
+    rest = list(tokens)
+    while rest and rest[0].startswith("-") and rest[0] != "-c":
+        rest = rest[1:]
+    return rest
+
+
+def _accepted_live_cursor_hook_script(path: Path) -> Path | None:
+    if not _is_managed_cursor_hook_script(path) or _cursor_hook_path_contains_symlink(path):
+        return None
+    return path
+
+
+def _live_cursor_hook_script_path(command: str) -> Path | None:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return None
+    first = Path(tokens[0]).name
+    if first == HOOK_SCRIPT_NAME:
+        return _accepted_live_cursor_hook_script(Path(tokens[0]))
+    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        return _accepted_live_cursor_hook_script(Path(tokens[2]))
+    if first.lower().startswith("python"):
+        payload = _skip_leading_flags(tokens[1:])
+        if not payload or payload[0] == "-c":
+            return None
+        return _accepted_live_cursor_hook_script(Path(payload[0]))
+    return None
+
+
+def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
+    """Return whether live Cursor config still routes Guard blocking hooks.
+
+    Exact attested CLI/script identity stays repair work. Extra third-party
+    hook entries must not fail machine-wide protection health while Guard still
+    intercepts shell, MCP, file-read, and file-write events.
+    """
+
+    if not isinstance(hooks, dict):
+        return False
+    for event_name in _BLOCKING_MANAGED_HOOK_EVENTS:
+        entries = hooks.get(event_name)
+        if not isinstance(entries, list):
+            return False
+        matched = False
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = entry.get("command")
+            if not isinstance(command, str) or not command.strip():
+                continue
+            script_path = _live_cursor_hook_script_path(command)
+            if script_path is None or not script_path.is_file():
+                continue
+            matched = True
+            break
+        if not matched:
+            return False
+    return True
+
+
+_FROZEN_CURSOR_LAUNCHERS = {
+    "current-hol-guard",
+    "current-hol-guard.cmd",
+    "current-hol-guard.exe",
+    "hol-guard",
+    "hol-guard.exe",
+}
+
+
+def _is_structured_managed_cursor_hook_command(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return False
+    first = Path(tokens[0]).name.lower()
+    if first == HOOK_SCRIPT_NAME.lower():
+        return True
+    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        return first in _FROZEN_CURSOR_LAUNCHERS and Path(tokens[2]).name.lower() == HOOK_SCRIPT_NAME.lower()
+    if first.startswith("python"):
+        payload = _skip_leading_flags(tokens[1:])
+        return bool(payload) and Path(payload[0]).name.lower() == HOOK_SCRIPT_NAME.lower()
+    return False
+
+
+def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
+    """Return structured Guard-owned Cursor hook commands from a live hooks payload."""
+
+    if not isinstance(hooks, dict):
+        return ()
+    commands: list[str] = []
+    seen: set[str] = set()
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = entry.get("command")
+            if (
+                not isinstance(command, str)
+                or command in seen
+                or entry.get("enabled") is False
+                or entry.get("disabled") is True
+                or not _is_structured_managed_cursor_hook_command(command)
+            ):
+                continue
+            script_path = _live_cursor_hook_script_path(command)
+            if script_path is None or not script_path.is_file():
+                continue
+            seen.add(command)
+            commands.append(command)
+    return tuple(commands)
+
+
+def detect_managed_cursor_hook_artifact(hooks_path: Path, payload: object) -> GuardArtifact | None:
+    """Return a Guard hook artifact when Cursor still routes a structured Guard command."""
+
+    if not isinstance(payload, dict):
+        return None
+    nested = payload.get("hooks")
+    commands = managed_cursor_hook_commands(nested if isinstance(nested, dict) else payload)
+    if not commands:
+        return None
+    return GuardArtifact(
+        artifact_id="cursor:global:managed-hooks",
+        name="HOL Guard Cursor hooks",
+        harness="cursor",
+        artifact_type="guard_hook",
+        source_scope="global",
+        config_path=str(hooks_path),
+        command=commands[0],
+    )
+
+
 def _make_executable(path: Path) -> None:
-    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode):
+        raise OSError("refusing to change permissions on a non-regular Cursor hook")
+    if os.name == "nt":
+        return
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise OSError("Cursor hook changed before its permission update")
+        # Cursor launches this user-owned hook through its configured interpreter;
+        # only the owner execute bit is needed, and the writer keeps its content owner-only.
+        os.fchmod(descriptor, opened.st_mode | stat.S_IXUSR)
+    finally:
+        os.close(descriptor)

@@ -2,11 +2,12 @@
 
 import hashlib
 import json
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from .home_path_text import expand_home, normalize_path
 
 SecretSensitivity = Literal["high", "critical"]
 SecretContentSensitivity = Literal["medium", "high", "critical"]
@@ -90,11 +91,23 @@ _SENSITIVE_PATH_REASONS = {
         "Guard treats wallet and private-key files as sensitive because they can authorize account control."
     ),
 }
-_SECRET_ASSIGNMENT_VALUE_PATTERN = r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
+_INERT_CODE_EXPRESSION_VALUE_PATTERN = (
+    r"(?:get_secret\([^\)\r\n]*\)"
+    r"|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}"
+    r"|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))"
+)
+_SECRET_ASSIGNMENT_VALUE_PATTERN = (
+    rf"(?:{_INERT_CODE_EXPRESSION_VALUE_PATTERN}\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}}]+)"
+)
 _HEDERA_PRIVATE_KEY_VALUE_PATTERN = r"(?:\"(?:0x)?[0-9a-f]{64,96}\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\b)"
 _SAMPLE_SECRET_VALUE_PATTERN = re.compile(r"(?i)\b(?:example|fake|dummy|invalid|test|canary)\b")
 _DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN = re.compile(
     r"(?i)^(?:fixture|placeholder)(?:[-_.]?(?:only|value|secret|credential|token|key|example|dummy|fake|test|sample|\d{1,4}))*$"
+)
+_CODE_EXPRESSION_SECRET_VALUE_PATTERNS = (
+    re.compile(r"^get_secret\([^\)\r\n]*\)$"),
+    re.compile(r"^\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}$"),
+    re.compile(r"""^[fF](["'])\{[A-Za-z_][A-Za-z0-9_.]*\}\1$"""),
 )
 _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS = frozenset({"credential-assignment", "generic-bearer-token"})
 _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
@@ -216,8 +229,8 @@ def classify_secret_path(
     requested_path = path.strip().strip("'").strip('"')
     if not requested_path:
         return None
-    expanded_home = _expand_home(requested_path, home_dir)
-    normalized_path = _normalize_path(expanded_home, cwd)
+    expanded_home = expand_home(requested_path, home_dir)
+    normalized_path = normalize_path(expanded_home, cwd)
     lowered_segments = tuple(segment for segment in normalized_path.replace("\\", "/").lower().split("/") if segment)
     if not lowered_segments:
         return None
@@ -360,7 +373,15 @@ def _secret_content_match_is_sample(
     enabled: bool,
     documentation_sample_context: bool,
 ) -> bool:
-    if not enabled or classifier not in _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS:
+    if classifier not in _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS:
+        return False
+    if classifier == "credential-assignment":
+        value = _extract_secret_assignment_value(text)
+        if value is not None and any(
+            pattern.fullmatch(value) is not None for pattern in _CODE_EXPRESSION_SECRET_VALUE_PATTERNS
+        ):
+            return True
+    if not enabled:
         return False
     if classifier == "generic-bearer-token":
         token = text.rsplit(None, 1)[-1]
@@ -382,7 +403,7 @@ def _extract_secret_assignment_value(text: str) -> str | None:
     if not separator_indexes:
         return None
     value = text[min(separator_indexes) + 1 :]
-    stripped = value.strip().rstrip(",}").strip()
+    stripped = value.strip().rstrip(",").strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
         stripped = stripped[1:-1]
     return stripped or None
@@ -416,20 +437,3 @@ def _match(
         reason=_SENSITIVE_PATH_REASONS[family],
         requested_path=requested_path,
     )
-
-
-def _expand_home(value: str, home_dir: Path | None) -> str:
-    if value == "~":
-        return str(home_dir or Path.home())
-    if value.startswith("~/") or value.startswith("~\\"):
-        base = home_dir or Path.home()
-        return str(base / value[2:])
-    return value
-
-
-def _normalize_path(value: str, cwd: Path | None) -> str:
-    if os.path.isabs(value):
-        return os.path.normpath(value)
-    if cwd is not None:
-        return os.path.normpath(os.path.join(str(cwd), value))
-    return os.path.normpath(value)

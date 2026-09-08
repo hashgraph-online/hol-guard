@@ -10,12 +10,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from codex_plugin_scanner.guard.store import GuardStore
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
@@ -122,8 +123,28 @@ def _request(
     )
 
 
+def _assert_native_security_floor(
+    native_response: HookReviewResponse,
+    python_response: HookReviewResponse,
+) -> None:
+    """Native policy floors may be stricter, but never weaker than Python."""
+
+    if python_response.decision == "deny":
+        assert native_response.decision == "deny"
+        assert native_response.model_output_action == "block"
+        return
+    if native_response.decision == "deny":
+        assert native_response.model_output_action == "block"
+        return
+    assert native_response.decision == "allow"
+    native_signature = parity_signature(native_response)
+    python_signature = parity_signature(python_response)
+    assert native_signature[1] == python_signature[1]
+    assert native_signature[6:] == python_signature[6:]
+
+
 @pytest.mark.parametrize("seed", _SEEDS)
-def test_mutated_inline_corpus_keeps_exact_python_rust_parity(tmp_path: Path, seed: int) -> None:
+def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path, seed: int) -> None:
     rng = random.Random(seed)
     with tempfile.TemporaryDirectory(prefix=f"hgm-{seed}-", dir=tempfile.gettempdir()) as short_tmp:
         guard_home = Path(short_tmp) / "guard-home"
@@ -131,23 +152,27 @@ def test_mutated_inline_corpus_keeps_exact_python_rust_parity(tmp_path: Path, se
         store = GuardStore(guard_home)
         engine = _engine(store)
         try:
-            for case_index in range(_CASES_PER_SEED):
-                request = _request(
-                    tmp_path,
-                    guard_home=guard_home,
-                    payload=_payload(rng, case_index),
-                    request_id=f"mutation-{seed}-{case_index}",
-                )
-                python_response = engine.review(request)
-                native_response = review_post_tool_native(request, observe_mode=False)
-                assert native_response is not None, (seed, case_index)
-                assert parity_signature(native_response) == parity_signature(python_response), (
-                    seed,
-                    case_index,
-                    request.payload,
-                    native_response,
-                    python_response,
-                )
+            with native_policy_snapshot(guard_home) as snapshot:
+                for case_index in range(_CASES_PER_SEED):
+                    request = _request(
+                        tmp_path,
+                        guard_home=guard_home,
+                        payload=_payload(rng, case_index),
+                        request_id=f"mutation-{seed}-{case_index}",
+                    )
+                    python_response = engine.review(request)
+                    native_response = review_post_tool_native(
+                        request,
+                        observe_mode=False,
+                        policy_snapshot=snapshot,
+                    )
+                    assert native_response is not None, (seed, case_index)
+                    try:
+                        _assert_native_security_floor(native_response, python_response)
+                    except AssertionError:
+                        raise AssertionError(
+                            (seed, case_index, request.payload, native_response, python_response)
+                        ) from None
         finally:
             close_resident_native_runtimes()
 

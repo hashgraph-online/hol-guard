@@ -13,12 +13,13 @@ import os
 import statistics
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import (
-    native_runtime_status,
     review_post_tool_native,
 )
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
@@ -130,6 +131,7 @@ def _bench_native_warm(
     workspace: Path,
     guard_home: Path,
     iterations: int,
+    policy_snapshot: Mapping[str, object],
 ) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
@@ -142,7 +144,7 @@ def _bench_native_warm(
             }
         )
         started = time.perf_counter()
-        response = review_post_tool_native(request, observe_mode=False)
+        response = review_post_tool_native(request, observe_mode=False, policy_snapshot=policy_snapshot)
         elapsed = (time.perf_counter() - started) * 1_000.0
         if response is None or response.decision != "allow":
             raise RuntimeError("Native resident runtime did not return the expected allow decision")
@@ -221,6 +223,65 @@ def _bind_native_runtime(runtime: Path) -> None:
     os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
 
 
+def _collect_measurements(
+    runtime: Path,
+    *,
+    warm_iterations: int,
+    cold_iterations: int,
+) -> tuple[list[float], list[float], list[float], list[float], float]:
+    with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
+        workspace = Path(temp_dir)
+        guard_home = workspace / "guard-home"
+        guard_home.mkdir(mode=0o700)
+        python_runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
+        python_runner.start()
+        try:
+            _ = _bench_python_warm(
+                runner=python_runner,
+                workspace=workspace,
+                guard_home=guard_home,
+                iterations=2,
+            )
+            close_resident_native_runtimes()
+            first_native_started = time.perf_counter()
+            with native_policy_snapshot(guard_home) as snapshot:
+                first_native = review_post_tool_native(
+                    _native_request(workspace=workspace, guard_home=guard_home),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
+                )
+                native_readiness_ms = (time.perf_counter() - first_native_started) * 1_000.0
+                if first_native is None or first_native.decision != "allow":
+                    raise RuntimeError("Native resident runtime readiness probe failed")
+                python_warm = _bench_python_warm(
+                    runner=python_runner,
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=warm_iterations,
+                )
+                native_warm = _bench_native_warm(
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=warm_iterations,
+                    policy_snapshot=snapshot,
+                )
+        finally:
+            python_runner.close()
+            close_resident_native_runtimes()
+        python_cold = _bench_python_cold(
+            workspace=workspace,
+            guard_home=guard_home,
+            iterations=cold_iterations,
+        )
+        native_oneshot = _bench_native_oneshot(
+            runtime=runtime,
+            workspace=workspace,
+            guard_home=guard_home,
+            iterations=cold_iterations,
+        )
+    return python_warm, native_warm, python_cold, native_oneshot, native_readiness_ms
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark Python versus Rust full hook paths")
     parser.add_argument("--runtime", type=Path, required=True)
@@ -233,56 +294,11 @@ def main() -> int:
         parser.error("benchmark iteration counts are too small")
 
     runtime = _validate_runtime(args.runtime)
-    with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
-        workspace = Path(temp_dir)
-        guard_home = workspace / "guard-home"
-        guard_home.mkdir(mode=0o700)
-
-        python_runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
-        python_runner.start()
-        try:
-            _ = _bench_python_warm(
-                runner=python_runner,
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=2,
-            )
-            close_resident_native_runtimes()
-            first_native_started = time.perf_counter()
-            first_native = review_post_tool_native(
-                _native_request(workspace=workspace, guard_home=guard_home),
-                observe_mode=False,
-            )
-            native_readiness_ms = (time.perf_counter() - first_native_started) * 1_000.0
-            if first_native is None or first_native.decision != "allow":
-                raise RuntimeError("Native resident runtime readiness probe failed")
-
-            python_warm = _bench_python_warm(
-                runner=python_runner,
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=args.warm_iterations,
-            )
-            native_warm = _bench_native_warm(
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=args.warm_iterations,
-            )
-        finally:
-            python_runner.close()
-            close_resident_native_runtimes()
-
-        python_cold = _bench_python_cold(
-            workspace=workspace,
-            guard_home=guard_home,
-            iterations=args.cold_iterations,
-        )
-        native_oneshot = _bench_native_oneshot(
-            runtime=runtime,
-            workspace=workspace,
-            guard_home=guard_home,
-            iterations=args.cold_iterations,
-        )
+    python_warm, native_warm, python_cold, native_oneshot, native_readiness_ms = _collect_measurements(
+        runtime,
+        warm_iterations=args.warm_iterations,
+        cold_iterations=args.cold_iterations,
+    )
 
     python_warm_summary = _summary(python_warm)
     native_warm_summary = _summary(native_warm)

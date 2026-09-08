@@ -10,6 +10,30 @@ import argparse
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _configure_run_parsers(
+    guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    run_parser = guard_subparsers.add_parser("run", help="Evaluate local policy, then launch the harness")
+    run_parser.add_argument("harness")
+    _add_guard_common_args(run_parser)
+    run_parser.add_argument("--json", action="store_true")
+    run_parser.add_argument("--dry-run", action="store_true")
+    run_parser.add_argument("--default-action", choices=GUARD_ACTION_VALUES)
+    run_parser.add_argument(
+        "--grok-executable",
+        help=(
+            "Select and register an absolute Grok executable path. Required once for trusted custom "
+            "installations that are not in a standard install root."
+        ),
+    )
+    run_parser.add_argument("--arg", dest="passthrough_args", action="append", default=[])
+
+    run_shim_parser = guard_subparsers.add_parser("run-shim", help=argparse.SUPPRESS)
+    _add_guard_common_args(run_shim_parser)
+    run_shim_parser.add_argument("harness")
+    run_shim_parser.add_argument("passthrough_args", nargs=argparse.REMAINDER)
+    run_shim_parser.set_defaults(json=False, dry_run=False, default_action=None, grok_executable=None)
+
 def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -114,7 +138,7 @@ def _configure_guard_local_parsers(
     detect_parser.add_argument("--json", action="store_true")
 
     install_parser = guard_subparsers.add_parser("install", help="Enable Guard management for one or more harnesses")
-    install_parser.add_argument("harness", nargs="?")
+    install_parser.add_argument("harness", nargs="*", help="One or more harness names to manage together")
     install_parser.add_argument("--all", action="store_true")
     install_parser.add_argument("--dry-run", action="store_true")
     _add_guard_common_args(install_parser)
@@ -175,23 +199,7 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(package_shims_parser)
     package_shims_parser.add_argument("--json", action="store_true")
 
-    run_parser = guard_subparsers.add_parser("run", help="Evaluate local policy, then launch the harness")
-    run_parser.add_argument("harness")
-    _add_guard_common_args(run_parser)
-    run_parser.add_argument("--json", action="store_true")
-    run_parser.add_argument("--dry-run", action="store_true")
-    run_parser.add_argument(
-        "--default-action",
-        choices=GUARD_ACTION_VALUES,
-    )
-    run_parser.add_argument(
-        "--grok-executable",
-        help=(
-            "Select and register an absolute Grok executable path. Required once for trusted custom "
-            "installations that are not in a standard install root."
-        ),
-    )
-    run_parser.add_argument("--arg", dest="passthrough_args", action="append", default=[])
+    _configure_run_parsers(guard_subparsers)
 
     protect_parser = guard_subparsers.add_parser(
         "protect",

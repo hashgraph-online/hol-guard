@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.blitcp",
+  "version": "1.0.0",
+  "name": "Blitcp",
+  "description": "Reviews blitcp copies that leave the host, elevate privileges, or skip verification.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.gekap",
+    "displayName": "Community",
+    "url": "https://github.com/gekap/blitcp"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F766E" },
+  "homepage": "https://blitcp.dev/docs/",
+  "license": "MIT",
+  "executables": ["blitcp"],
+  "ecosystemIds": ["blitcp"],
+  "riskClasses": ["destructive_shell", "execution", "network_egress"],
+  "actionClasses": [
+    "Blitcp remote destination command",
+    "Blitcp privilege escalation command",
+    "Blitcp self-update command",
+    "Blitcp unverified copy command"
+  ],
+  "referenceUrls": ["https://blitcp.dev/docs/", "https://github.com/gekap/blitcp"],
+  "saferAlternatives": ["Use --dry-run to print the plan, and keep verification enabled on real copies."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_blitcp_extensions"
+  }
+}

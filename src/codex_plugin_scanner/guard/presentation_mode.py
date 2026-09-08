@@ -9,6 +9,7 @@ GuardPresentationMode = Literal["everyday", "technical"]
 GuardPresentationSource = Literal[
     "default",
     "local-explicit",
+    "migrated",
     "session-preview",
     "cloud-profile",
     "read-error",
@@ -16,7 +17,11 @@ GuardPresentationSource = Literal[
 
 PRESENTATION_SCHEMA_VERSION = 1
 PRESENTATION_MODE_VALUES = frozenset({"everyday", "technical"})
-UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC = "unsupported_presentation_schema_fell_back_to_everyday"
+LEGACY_PRESENTATION_MODE_MAP: dict[str, GuardPresentationMode] = {
+    "simple": "everyday",
+    "advanced": "technical",
+    "developer": "technical",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +68,7 @@ def coerce_persisted_presentation_mode(
             explicit=False,
             source="default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
-            diagnostic=UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
+            diagnostic="unsupported_presentation_schema_fell_back_to_everyday",
         )
     if isinstance(value, str) and value in PRESENTATION_MODE_VALUES:
         return PersistedPresentationMode(
@@ -71,6 +76,14 @@ def coerce_persisted_presentation_mode(
             explicit=is_explicit,
             source="local-explicit" if is_explicit else "default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
+        )
+    if isinstance(value, str) and value in LEGACY_PRESENTATION_MODE_MAP:
+        return PersistedPresentationMode(
+            value=LEGACY_PRESENTATION_MODE_MAP[value],
+            explicit=True,
+            source="migrated",
+            schema_version=PRESENTATION_SCHEMA_VERSION,
+            diagnostic=f"migrated_legacy_{value}_presentation_mode",
         )
     if value is None or value == "":
         return PersistedPresentationMode(
@@ -124,7 +137,7 @@ def resolve_presentation_mode(
         explicit=local_explicit,
         schema_version=local_schema_version,
     )
-    if local.explicit:
+    if local.explicit or local.source == "migrated":
         return ResolvedPresentationMode(
             value=local.value,
             source=local.source,
@@ -140,7 +153,6 @@ def resolve_presentation_mode(
             explicit=False,
             writable=writable,
             revision=safe_revision,
-            diagnostic=local.diagnostic,
         )
     return ResolvedPresentationMode(
         value=local.value,

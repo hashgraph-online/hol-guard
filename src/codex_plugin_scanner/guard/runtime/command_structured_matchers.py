@@ -235,6 +235,16 @@ class EnvironmentNameMatcher:
 def structured_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
     """Return conservative registry hints for matchers in this module."""
 
+    from .command_operand_matchers import operand_matcher_index_hints
+
+    operand_hints = operand_matcher_index_hints(matcher)
+    if operand_hints is not None:
+        return operand_hints
+    from .command_framework_extensions import framework_matcher_index_hints
+
+    framework_hints = framework_matcher_index_hints(matcher)
+    if framework_hints is not None:
+        return framework_hints
     if isinstance(matcher, LeadingOperandCountMatcher):
         return matcher.executables, frozenset()
     if isinstance(matcher, SubcommandOperandPrefixMatcher):

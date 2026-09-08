@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
-HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home() -> bool:
+HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home(workspace: str | None = None) -> bool:
     try:
         from codex_plugin_scanner.guard.config import load_guard_config
         from codex_plugin_scanner.guard.protection_posture import protection_is_off
 
-        config = load_guard_config(Path(GUARD_HOME))
+        workspace_path = Path(workspace) if workspace else None
+        config = load_guard_config(Path(GUARD_HOME), workspace=workspace_path)
         return protection_is_off(posture=config.protection_posture, mode=config.mode)
     except Exception:
         return False
 
 
-def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
-    del guard_payload
-    if _recording_only_from_guard_home():
+def _cursor_permission(policy_action: str, guard_payload: dict[str, object], workspace: str | None = None) -> str:
+    if _recording_only_from_guard_home(workspace):
         return "allow"
+    reason_code = str(guard_payload.get("reason_code") or "")
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_reason_continues_session
+
+        if hook_reason_continues_session(reason_code):
+            return "allow"
+    except Exception:
+        pass
     if policy_action not in GUARD_ACTIONS:
         return "deny"
     if policy_action in {"block", "sandbox-required"}:
@@ -31,8 +39,9 @@ def _emit_cursor_response(
     hook_event_name: str,
     policy_action: str,
     guard_payload: dict[str, object],
+    workspace: str | None = None,
 ) -> tuple[dict[str, object], int]:
-    permission = _cursor_permission(policy_action, guard_payload)
+    permission = _cursor_permission(policy_action, guard_payload, workspace)
     reason = _cursor_reason(guard_payload)
     if hook_event_name.strip().lower() == "beforereadfile":
         read_permission = "deny" if permission in {"deny", "ask"} else "allow"
@@ -234,21 +243,93 @@ def _compute_cursor_after_observer_proof(
     return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
+def _cursor_availability_response(
+    payload: Mapping[str, object],
+    *,
+    hook_event_name: str,
+    workspace: str | None,
+) -> tuple[dict[str, object], int]:
+    workspace_path = Path(workspace) if workspace else None
+    recording_only = _recording_only_from_guard_home(workspace)
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
+
+        return cursor_fallback_permission(
+            payload,
+            hook_event_name=hook_event_name,
+            workspace=workspace_path,
+            guard_home=Path(GUARD_HOME),
+            recording_only=recording_only,
+        )
+    except Exception:
+        compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact in {"aftershellexecution", "aftermcpexecution"}:
+            return {}, 0
+        return {"permission": "allow"}, 0
+
+
+_LAST_HOOK_EVENT_NAME = ""
+
+
+def _cursor_hook_event_from_argv() -> str:
+    args = sys.argv
+    try:
+        index = args.index("--cursor-hook-event")
+    except ValueError:
+        return ""
+    if index + 1 >= len(args):
+        return ""
+    value = str(args[index + 1]).strip()
+    return value
+
+
+def _exit_unparseable_cursor_input() -> int:
+    event_name = _cursor_hook_event_from_argv() or _LAST_HOOK_EVENT_NAME
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+            cursor_unparseable_input_permission,
+        )
+
+        response, code = cursor_unparseable_input_permission(
+            event_name,
+            recording_only=_recording_only_from_guard_home(),
+        )
+    except Exception:
+        compact = event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact in {"aftershellexecution", "aftermcpexecution"}:
+            print("{}")
+            return 0
+        allow = _recording_only_from_guard_home() or compact in {"beforereadfile", ""}
+        print(json.dumps({"permission": "allow" if allow else "deny"}))
+        return 0 if allow else 2
+    print("{}" if not response else json.dumps(response))
+    return code
+
+
 def main() -> int:
+    try:
+        return _main_inner()
+    except Exception:
+        return _exit_unparseable_cursor_input()
+
+
+def _main_inner() -> int:
+    global _LAST_HOOK_EVENT_NAME
+    argv_event = _cursor_hook_event_from_argv()
+    if argv_event:
+        _LAST_HOOK_EVENT_NAME = argv_event
     raw = sys.stdin.read()
     if not raw.strip():
-        print(json.dumps({"permission": "deny", "user_message": "HOL Guard received empty Cursor hook input."}))
-        return 2
+        return _exit_unparseable_cursor_input()
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        print(json.dumps({"permission": "deny", "user_message": "HOL Guard could not parse Cursor hook input."}))
-        return 2
+        return _exit_unparseable_cursor_input()
     if not isinstance(payload, dict):
-        print(json.dumps({"permission": "deny", "user_message": "HOL Guard received invalid Cursor hook input."}))
-        return 2
+        return _exit_unparseable_cursor_input()
     inferred = _infer_cursor_hook_event_name(payload)
     hook_event_name = str(inferred.get("hook_event_name") or inferred.get("hookEventName") or "preToolUse")
+    _LAST_HOOK_EVENT_NAME = hook_event_name
     prepared = _prepare_cursor_hook_payload(inferred)
     workspace = _workspace_from_cursor_input(prepared)
     guard_argv = list(GUARD_HOOK_ARGV)
@@ -276,22 +357,52 @@ def main() -> int:
         workspace=workspace,
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
-    if daemon_result is None and daemon_failure_kind not in {None, "overload"}:
-        _run_guard_recovery(
-            daemon_failure_kind,
-            guard_env=guard_env,
-            deadline_monotonic=deadline_monotonic,
-        )
-        daemon_result, _retry_failure_kind = _daemon_hook_result(
-            payload_json,
-            deadline_monotonic=deadline_monotonic,
-            workspace=workspace,
-            hook_env_overlay=_daemon_hook_env_overlay(guard_env),
-        )
+    if daemon_result is None:
+        recover_kind = daemon_failure_kind or "transport-failure"
+        if _recording_only_from_guard_home(workspace):
+            availability, availability_code = _cursor_availability_response(
+                prepared,
+                hook_event_name=hook_event_name,
+                workspace=workspace,
+            )
+            print(json.dumps(availability))
+            return availability_code
+        compact_event = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact_event == "beforereadfile":
+            try:
+                from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
+
+                workspace_path = Path(workspace) if workspace else None
+                check_payload = dict(prepared)
+                check_payload["hook_event_name"] = "PreToolUse"
+                check_payload.setdefault("tool_name", "Read")
+                safe_read = hook_action_is_emergency_safe(check_payload, workspace=workspace_path)
+            except Exception:
+                safe_read = False
+            if safe_read:
+                availability, availability_code = _cursor_availability_response(
+                    prepared,
+                    hook_event_name=hook_event_name,
+                    workspace=workspace,
+                )
+                print(json.dumps(availability))
+                return availability_code
+        if recover_kind != "overload":
+            _run_guard_recovery(
+                recover_kind,
+                guard_env=guard_env,
+                deadline_monotonic=deadline_monotonic,
+            )
+            daemon_result, _retry_failure_kind = _daemon_hook_result(
+                payload_json,
+                deadline_monotonic=deadline_monotonic,
+                workspace=workspace,
+                hook_env_overlay=_daemon_hook_env_overlay(guard_env),
+            )
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(
-                [*GUARD_CLI, *guard_argv],
+                [*_resolved_guard_cli(), *guard_argv],
                 daemon_result[0],
                 stdout=daemon_result[1],
                 stderr=daemon_result[2],
@@ -303,29 +414,14 @@ def main() -> int:
                 guard_env=guard_env,
                 deadline_monotonic=deadline_monotonic,
             )
-    except subprocess.TimeoutExpired:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": (
-                        f"HOL Guard hook timed out after {GUARD_HOOK_TIMEOUT_SECONDS}s. "
-                        "Open the Guard approval center or native Cursor prompt, resolve pending requests, then retry."
-                    ),
-                }
-            )
+    except (subprocess.TimeoutExpired, Exception):
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
-    except Exception as exc:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": f"HOL Guard hook execution failed: {exc}",
-                }
-            )
-        )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     guard_payload: dict[str, object] = {}
     if proc.stdout.strip():
         try:
@@ -339,34 +435,30 @@ def main() -> int:
         return 0
     raw_policy_action = guard_payload.get("policy_action")
     if not isinstance(raw_policy_action, str) or raw_policy_action not in GUARD_ACTIONS:
-        if _recording_only_from_guard_home():
+        if _recording_only_from_guard_home(workspace):
             print(json.dumps({"permission": "allow"}))
             return 0
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": "HOL Guard returned an invalid policy action and failed closed.",
-                }
-            )
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     policy_action = raw_policy_action
     if proc.returncode != 0 and not guard_payload:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": (proc.stderr or "HOL Guard hook failed.").strip()
-                    or "HOL Guard hook failed.",
-                }
-            )
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     response, exit_code = _emit_cursor_response(
         hook_event_name=hook_event_name,
         policy_action=policy_action,
         guard_payload=guard_payload,
+        workspace=workspace,
     )
     print(json.dumps(response))
     return exit_code

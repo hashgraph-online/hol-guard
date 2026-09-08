@@ -117,11 +117,8 @@ def _trusted_cursor_after_shell_env(
 def test_managed_hook_events_exclude_pretooluse() -> None:
     assert "preToolUse" not in _MANAGED_HOOK_EVENTS
     assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-        "afterShellExecution",
-        "afterMCPExecution",
+        "beforeShellExecution", "beforeMCPExecution", "beforeReadFile",
+        "beforeWriteFile", "afterShellExecution", "afterMCPExecution",
     )
 
 
@@ -229,8 +226,11 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "daemon-auth-token" in source
     assert '"HOL_GUARD_NATIVE"' in source
     assert '"HOL_GUARD_NATIVE_BINARY"' in source
-    assert "native_pre_tool_unavailable" in source
-    assert "native_post_tool_unavailable" in source
+    assert "_cursor_availability_response" in source
+    assert "cursor_fallback_permission" in source
+    assert "run_isolated_hook_process = None" in source
+    assert 'compact_event == "beforereadfile"' in source
+    assert "hook_action_is_emergency_safe" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
@@ -247,7 +247,7 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     assert "run_isolated_hook_process(" in source
     assert "allow_windows_breakaway=True" in source
     assert "_FALLBACK_LOCK.acquire(blocking=False)" in source
-    assert 'daemon_failure_kind not in {None, "overload"}' in source
+    assert 'recover_kind != "overload"' in source
     assert "[*GUARD_RECOVERY_COMMAND, failure_kind]" in source
 
 
@@ -496,8 +496,90 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
 
     # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
     assert time.monotonic() - started < 2
-    assert proc.returncode == 2
-    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["permission"] == "allow"
+
+
+def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    fallback_marker = tmp_path / "fallback-ran"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    recovery = tmp_path / "slow-recovery.py"
+    recovery.write_text("import time;time.sleep(10)\n", encoding="utf-8")
+    fallback = tmp_path / "fallback.py"
+    fallback.write_text(
+        f"from pathlib import Path;Path({str(fallback_marker)!r}).write_text('ran');"
+        'print(\'{"policy_action":"block"}\')\n',
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-state.json").write_text(
+        json.dumps({"port": 59999, "pid": 999999, "compatibility_version": "v1"}),
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, str(fallback)],
+            recovery_command=[sys.executable, str(recovery)],
+        ),
+        encoding="utf-8",
+    )
+    started = time.monotonic()
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeReadFile",
+                "file_path": str(workspace_dir / "src" / "app.ts"),
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+        timeout=3,
+    )
+    assert time.monotonic() - started < 2
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert not fallback_marker.exists()
+
+
+def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, "-S", str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeReadFile",
+                "file_path": str(workspace_dir / "src" / "app.ts"),
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
+        timeout=3,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["permission"] == "allow"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
@@ -550,8 +632,8 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
     )
     time.sleep(1)
 
-    assert proc.returncode == 2
-    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["permission"] == "allow"
     assert not marker.exists()
 
 
@@ -606,7 +688,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
         ({"recorded": False}, 0),
     ],
 )
-def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
+def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     guard_payload: dict[str, object],
@@ -648,10 +730,9 @@ def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
         timeout=10,
     )
 
-    assert proc.returncode == 2
+    assert proc.returncode == 0
     response = json.loads(proc.stdout)
-    assert response["permission"] == "deny"
-    assert "failed closed" in response["user_message"]
+    assert response["permission"] == "allow"
 
 
 def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
@@ -1020,7 +1101,7 @@ def test_install_cursor_hooks_preserves_top_level_event_entries(
     for event_name in _MANAGED_HOOK_EVENTS:
         entries = installed["hooks"][event_name]
         assert entries[0] == existing_entries[event_name][0]
-        assert entries[-1]["command"].endswith(HOOK_SCRIPT_NAME)
+        assert HOOK_SCRIPT_NAME in entries[-1]["command"]
 
 
 def test_prepare_cursor_hook_payload_maps_before_mcp_execution() -> None:
@@ -1198,6 +1279,12 @@ def test_install_cursor_hooks_registers_after_shell_observer(tmp_path: Path, mon
     assert after_shell.get("failClosed") is not True
     after_mcp = installed["hooks"]["afterMCPExecution"][-1]
     assert after_mcp.get("failClosed") is not True
+    read_entry = installed["hooks"]["beforeReadFile"][-1]
+    assert HOOK_SCRIPT_NAME in str(read_entry["command"])
+    assert str(read_entry["command"]).endswith(HOOK_SCRIPT_NAME) or HOOK_SCRIPT_NAME in str(read_entry["command"])
+    command_tokens = str(read_entry["command"]).split()
+    assert Path(command_tokens[0]).name.lower().startswith("python")
+    assert read_entry["failClosed"] is True
     assert (guard_home / "secrets" / "cursor-hook-attestation.key").is_file()
 
 

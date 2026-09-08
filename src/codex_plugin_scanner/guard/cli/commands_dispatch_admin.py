@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
+from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
@@ -308,7 +309,10 @@ def _run_guard_doctor_command(
         }
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)
-    package_shims_payload = package_shim_status(context)
+    # Doctor is a user-facing posture view.  A daemon cannot source an
+    # interactive shell profile, so use the projected dashboard status rather
+    # than reporting profile-staged shims as a runtime failure.
+    package_shims_payload = package_shim_dashboard_status(context)
     manager_details = package_shims_payload.get("manager_details")
     package_shim_issues = [
         {

@@ -28,6 +28,7 @@ _DECISIONS = {"allow", "deny", "ask", "block", "warn", "error"}
 _CACHE_STATUSES = {"hit", "miss", "bypass", "disabled", "error"}
 _FALLBACK_KINDS = {"none", "fail_closed", "local", "cache", "error"}
 _EVENTS = {"pretooluse", "posttooluse", "permissionrequest", "userpromptsubmit"}
+_ROUTES = {"native_resident", "native_oneshot", "native_fail_safe", "native_degraded", "python_semantic"}
 
 
 def _bounded_dimension(value: str, allowed: set[str]) -> str:
@@ -69,6 +70,7 @@ class HookMetricsRecorder:
         self._lock = threading.Lock()
         self._counters: dict[str, int] = defaultdict(int)
         self._latencies: list[float] = []
+        self._routes: dict[str, int] = defaultdict(int)
         self._max_items = 10_000
 
     def _increment(self, key: str) -> None:
@@ -130,7 +132,14 @@ class HookMetricsRecorder:
                 "latency_p95_ms": round(p95, 2),
                 "latency_p99_ms": round(p99, 2),
                 "total_decisions": len(self._latencies),
+                "routes": dict(self._routes),
             }
+
+    def record_route(self, route: str) -> None:
+        """Record bounded decision-route provenance without request data."""
+        safe_route = route if route in _ROUTES else "native_fail_safe"
+        with self._lock:
+            self._routes[safe_route] += 1
 
     def record_failure(self, *, stage: str, exception_type: str) -> None:
         """Record only a bounded failure stage and exception class."""
@@ -157,9 +166,11 @@ class HookMetricsRecorder:
                     sorted(self._latencies)[int(len(self._latencies) * 0.95)] if self._latencies else 0.0, 2
                 ),
                 "total_decisions": len(self._latencies),
+                "routes": dict(self._routes),
             }
             self._counters.clear()
             self._latencies.clear()
+            self._routes.clear()
 
         from datetime import datetime, timezone
 

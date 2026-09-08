@@ -4,11 +4,13 @@ import { performance } from "node:perf_hooks";
 import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission, ExtensionRule } from "./extension-controls-api";
 import {
   canonicalExtensionId,
+  catalogRowSecondLine,
   groupPermissionsByFamily,
   DEFAULT_EXTENSION_DETAIL_URL_STATE,
   extensionDetailHref,
   extensionDetailSearch,
   extensionDisplayName,
+  extensionEffectiveState,
   extensionStateLabel,
   filterDetailPermissions,
   filterDetailRules,
@@ -74,6 +76,10 @@ const extension: ExtensionCatalogItem = {
   description: "Protects Git commands.",
   enabled: true,
   required: false,
+  trust_class: "first-party",
+  activation: "default-on",
+  publisher: { id: "hol", displayName: "Hashgraph Online" },
+  icon: { kind: "none" },
   source: "built-in",
   version: "1.2.3",
   aliases: ["command.scm"],
@@ -111,6 +117,13 @@ assert.equal(readExtensionDetailUrlState("?tab=evil&risk=maximum&sort=random&rul
 assert.equal(readExtensionDetailUrlState(`?q=${"x".repeat(300)}`).query.length, 160);
 
 assert.equal(extensionStateLabel(effective, extension), "Allowed");
+const noodle = { ...extension, extension_id: "command.noodle", enabled: false, trust_class: "external" as const, activation: "opt-in" as const, executables: ["noodle"] };
+assert.equal(extensionEffectiveState(effective, noodle), "disabled");
+assert.equal(extensionStateLabel(effective, noodle), "Blocked");
+assert.equal(catalogRowSecondLine(noodle, "Blocked"), "Off until you turn it on");
+assert.equal(catalogRowSecondLine(noodle, "Allowed"), "noodle");
+const filesystem = { ...extension, extension_id: "command.mcp-filesystem", enabled: false, trust_class: "external" as const, activation: "opt-in" as const, executables: ["npx"], surface: "mcp" as const };
+assert.equal(catalogRowSecondLine(filesystem, "Blocked"), "Off until you turn it on");
 assert.equal(permissionStateLabel(effective, extension, permissions[1]!), "Inherited");
 assert.equal(extensionStateLabel({ ...effective, global_lockdown: true }, extension), "Lockdown");
 assert.equal(extensionStateLabel({ ...effective, health: "tampered" }, extension), "Unavailable");

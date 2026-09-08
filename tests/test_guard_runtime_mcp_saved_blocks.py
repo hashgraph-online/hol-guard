@@ -35,7 +35,6 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 
-pytest_plugins = ["tests.bundle_first_cloud"]
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 

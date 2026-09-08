@@ -239,7 +239,7 @@ class TestHookWorkerException:
         def broken_review_inner(request, *, start):
             raise RuntimeError("engine crashed")
 
-        monkeypatch.setattr(worker.engine, "_review_inner", broken_review_inner)
+        monkeypatch.setattr(worker.test_oracle, "_review_inner", broken_review_inner)
 
         payload = {
             "hook_event_name": "PostToolUse",
@@ -568,7 +568,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["continue"] is False
+        assert result["continue"] is True
         assert result["stopReason"] == result["reason"]
         assert result["policy_action"] == "block"
         assert result["model_output_action"] == "block"
@@ -690,7 +690,31 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["continue"] is False
+        assert result["continue"] is True
+        assert result["policy_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
+    def test_codex_native_read_secret_output_remains_blocked(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """The Codex Read post-hook blocks high-confidence file content."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/config.py"},
+            "tool_response": "token: ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "block"
         assert result["policy_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
 

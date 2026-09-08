@@ -105,8 +105,31 @@ class TestEnrichmentQueueSecurity:
             reason_code="source_full_scan_allow",
         )
 
-        expected_keys = {"harness", "event_name", "decision", "reason_code", "reason", "workspace"}
+        expected_keys = {
+            "schema",
+            "harness",
+            "event_name",
+            "decision",
+            "reason_code",
+            "workspace_bound",
+        }
         assert set(task.payload.keys()) == expected_keys
+
+    def test_receipt_task_redacts_reason_and_workspace_path(self) -> None:
+        queue = HookEnrichmentQueue(max_items=10)
+        task = queue.make_receipt_task(
+            task_id="test-1",
+            harness="pi",
+            event_name="PostToolUse",
+            decision="allow",
+            reason_code="source_full_scan_allow",
+            reason="cat /Users/alice/private/source.py",
+            workspace="/Users/alice/private/project",
+        )
+
+        assert "reason" not in task.payload
+        assert task.payload["workspace_bound"] is True
+        assert "/Users" not in str(task.payload)
 
     def test_dropped_tasks_increment_counter(self) -> None:
         queue = HookEnrichmentQueue(max_items=1)

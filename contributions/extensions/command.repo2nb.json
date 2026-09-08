@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.repo2nb",
+  "version": "1.0.0",
+  "name": "repo2nb",
+  "description": "Reviews repo2nb commands that can overwrite a destination directory or drop untracked notebook cells.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.repo2nb",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#4338CA" },
+  "license": "MIT",
+  "executables": ["repo2nb"],
+  "ecosystemIds": ["repo2nb"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "repo2nb forced directory overwrite command",
+    "repo2nb notebook sync command"
+  ],
+  "saferAlternatives": [
+    "Run repo2nb reverse without --force first to see what it reports.",
+    "Review the manifest before syncing to catch untracked manual edits."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_repo2nb_extensions"
+  }
+}

@@ -9,6 +9,7 @@ type ApprovalProofFieldInputsProps = {
   approvalPassword: string;
   approvalTotpCode: string;
   passwordRef?: RefObject<HTMLInputElement | null>;
+  requireFreshTotp?: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
@@ -25,11 +26,12 @@ export function isApprovalProofSubmitDisabled(
   gate: GuardApprovalGatePublicConfig | null | undefined,
   credentials: { approvalPassword: string; approvalTotpCode: string },
   busy: boolean,
+  requireFreshTotp = false,
 ): boolean {
   if (busy) {
     return true;
   }
-  if (approvalProofRecentlySatisfied(gate)) {
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return false;
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -41,8 +43,9 @@ export function isApprovalProofSubmitDisabled(
 export function buildApprovalProofCredentials(
   gate: GuardApprovalGatePublicConfig | null | undefined,
   credentials: { approvalPassword: string; approvalTotpCode: string },
+  requireFreshTotp = false,
 ): { approval_password?: string; approval_totp_code?: string } {
-  if (approvalProofRecentlySatisfied(gate)) {
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return {};
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -57,7 +60,7 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
     event.target.value = digits;
     props.onApprovalTotpCodeChange(event);
   }, [props]);
-  if (approvalProofRecentlySatisfied(props.approvalGate)) {
+  if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return (
       <p className="text-sm leading-6 text-brand-dark/75">
         Recently confirmed with your authenticator. A new code is not needed yet.

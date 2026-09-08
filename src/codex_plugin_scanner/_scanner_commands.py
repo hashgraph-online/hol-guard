@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ from .reporting import format_json as _format_scan_json
 from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .rules import get_rule_spec, list_rule_specs
 from .rules.specs import RuleSpec
+from .safe_output import write_bytes_atomic_no_follow, write_text_atomic_no_follow
 from .scanner import scan_plugin
 from .suppressions import apply_severity_overrides, apply_suppressions, compute_effective_score
 from .verification import build_doctor_report, build_verification_payload, verify_plugin
@@ -62,10 +64,16 @@ def _resolve_baseline_path(plugin_dir: Path, baseline_path: str | None) -> Path 
 
 
 def _resolve_policy_profile(args: argparse.Namespace, plugin_dir: Path):
-    config_path = _resolve_scanner_config_path(plugin_dir, getattr(args, "config", None))
+    trust_repository_policy = bool(getattr(args, "trust_repository_policy", True))
+    requested_config = getattr(args, "config", None) if trust_repository_policy else None
+    config_path = _resolve_scanner_config_path(plugin_dir, requested_config) if trust_repository_policy else None
     try:
-        config = load_scanner_config(plugin_dir, getattr(args, "config", None))
-        baseline_path = getattr(args, "baseline", None) or config.baseline_file
+        config = load_scanner_config(
+            plugin_dir,
+            requested_config,
+            auto_discover=trust_repository_policy,
+        )
+        baseline_path = (getattr(args, "baseline", None) or config.baseline_file) if trust_repository_policy else None
         baseline_ids = load_baseline_rule_ids(plugin_dir, baseline_path)
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
@@ -140,7 +148,7 @@ def run_scan(args: argparse.Namespace) -> int:
         print(output)
 
     if args.output:
-        Path(args.output).write_text(output, encoding="utf-8")
+        write_text_atomic_no_follow(Path(args.output), output)
         print(f"Report written to {args.output}")
     elif output_format != "text":
         print(output)
@@ -281,8 +289,8 @@ def run_doctor(args: argparse.Namespace) -> int:
     rendered = json.dumps(report, indent=2)
     if args.bundle:
         bundle_path = Path(args.bundle)
-        bundle_path.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("doctor-report.json", rendered)
             zf.writestr("environment.txt", f"cwd={resolved}\npython={sys.version}\nos={os.name}\n")
             zf.writestr(
@@ -296,6 +304,7 @@ def run_doctor(args: argparse.Namespace) -> int:
             zf.writestr("stdout.log", str(report.get("stdout_log", "")))
             zf.writestr("stderr.log", str(report.get("stderr_log", "")))
             zf.writestr("timeout-markers.txt", str(report.get("timeout_markers", "none\n")))
+        write_bytes_atomic_no_follow(bundle_path, buffer.getvalue())
         print(f"Doctor bundle written to {bundle_path}")
     else:
         print(rendered)

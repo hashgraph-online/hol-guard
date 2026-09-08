@@ -33,7 +33,7 @@ A device setting can preserve or tighten protection. It cannot lower an immutabl
 
 ## Understand the sources
 
-- **Built into HOL Guard** owns canonical Extension and permission identities and detector facts.
+- **Built into HOL Guard** owns canonical Extension and permission identities and detector facts. First-party floors and HOL-curated libraries stay on. Community contributions are **External** and stay off until you turn them on. See [Extension contributions](extension-contributions.md).
 - **On this device** is the local-admin layer.
 - **Synced from Guard Cloud** identifies a negotiated signed shared layer when one is delivered by a supported implementation.
 - **Managed by a workspace** identifies a negotiated non-weakenable `managed-restrictive` floor when one is delivered by a supported implementation.

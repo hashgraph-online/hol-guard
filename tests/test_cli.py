@@ -19,7 +19,7 @@ from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 def test_internal_bounded_hook_dispatches_before_argument_parser(monkeypatch: pytest.MonkeyPatch) -> None:

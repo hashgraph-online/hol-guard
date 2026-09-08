@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 pub const RULE_CONTRACT_SCHEMA: &str = "hol-guard-native-rule-contract.v2";
 const RULE_CONTRACT_DOMAIN: &[u8] = b"hol-guard-native-rule-contract.v2\0";
 
-const COMPONENTS: [(&str, &[u8]); 4] = [
+const COMPONENTS: [(&str, &[u8]); 16] = [
     (
         "guard-rules",
         include_bytes!("../../guard-rules/src/lib.rs"),
@@ -22,6 +22,54 @@ const COMPONENTS: [(&str, &[u8]); 4] = [
     (
         "guard-hook-core",
         include_bytes!("../../guard-hook-core/src/lib.rs"),
+    ),
+    (
+        "guard-contracts",
+        include_bytes!("../../guard-contracts/src/lib.rs"),
+    ),
+    (
+        "guard-command-pretool",
+        include_bytes!("../../guard-command/src/pretool.rs"),
+    ),
+    (
+        "guard-command-pretool-generic",
+        include_bytes!("../../guard-command/src/pretool/generic.rs"),
+    ),
+    (
+        "guard-command-pretool-result",
+        include_bytes!("../../guard-command/src/pretool/generic_result.rs"),
+    ),
+    (
+        "guard-command-pretool-extract",
+        include_bytes!("../../guard-command/src/pretool/generic_extract.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement",
+        include_bytes!("../../guard-runtime/src/policy_enforcement.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-facts",
+        include_bytes!("../../guard-runtime/src/policy_enforcement_facts.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-facts-tools",
+        include_bytes!("../../guard-runtime/src/policy_enforcement_facts_tools.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-policy",
+        include_bytes!("../../guard-runtime/src/policy_enforcement_policy.rs"),
+    ),
+    (
+        "guard-policy-snapshot",
+        include_bytes!("../../guard-policy-snapshot/src/lib.rs"),
+    ),
+    (
+        "guard-policy-snapshot-canonical",
+        include_bytes!("../../guard-policy-snapshot/src/policy_snapshot_canonical.rs"),
+    ),
+    (
+        "guard-policy-snapshot-crypto",
+        include_bytes!("../../guard-policy-snapshot/src/policy_snapshot_crypto.rs"),
     ),
 ];
 
@@ -92,6 +140,18 @@ mod tests {
                 "guard-scanner",
                 "guard-secure-fs",
                 "guard-hook-core",
+                "guard-contracts",
+                "guard-command-pretool",
+                "guard-command-pretool-generic",
+                "guard-command-pretool-result",
+                "guard-command-pretool-extract",
+                "guard-runtime-policy-enforcement",
+                "guard-runtime-policy-enforcement-facts",
+                "guard-runtime-policy-enforcement-facts-tools",
+                "guard-runtime-policy-enforcement-policy",
+                "guard-policy-snapshot",
+                "guard-policy-snapshot-canonical",
+                "guard-policy-snapshot-crypto",
             ]
         );
         assert!(first

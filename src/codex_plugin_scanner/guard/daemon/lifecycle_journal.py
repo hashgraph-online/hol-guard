@@ -89,7 +89,7 @@ def record_daemon_lifecycle_event(
             _ = stream.write(encoded)
             stream.flush()
             os.fsync(stream.fileno())
-        _ = os.replace(temporary, target)
+        os.replace(temporary, target)
         _set_private_mode(target, _PRIVATE_FILE_MODE)
     finally:
         with suppress(OSError):

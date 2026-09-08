@@ -68,7 +68,7 @@ def test_cloud_fail_closed_policy_config_maps_security_levels(tmp_path: Path) ->
     assert _cloud_fail_closed_decision(store=store, workspace_dir=tmp_path / "workspace") == "ask"
 
 
-def test_strict_mode_timeout_blocks_with_cloud_validation_error(
+def test_strict_mode_timeout_requires_explicit_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -101,8 +101,9 @@ def test_strict_mode_timeout_blocks_with_cloud_validation_error(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "block"
-    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
 def test_local_fallback_disclosure_reason_surfaces_after_cloud_timeout(

@@ -4897,7 +4897,7 @@ def test_extract_network_hosts_keeps_real_hosts_with_config_labels():
 def test_extract_network_hosts_ignores_vendor_media_type_subtypes():
     command = (
         "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0'"
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main'"
     )
 
     assert extract_network_hosts(command) == set()
@@ -4906,7 +4906,7 @@ def test_extract_network_hosts_ignores_vendor_media_type_subtypes():
 def test_artifact_risk_signals_do_not_treat_github_media_type_as_host():
     command = (
         "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
         "| jq '{tests: .tests, total: .total}'"
     )
     artifact = GuardArtifact(

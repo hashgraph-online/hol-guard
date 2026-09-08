@@ -282,7 +282,21 @@ class GuardSurfaceDaemonClient:
         except UnicodeDecodeError as error:
             raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         except http.client.IncompleteRead as error:
-            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.05:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            try:
+                with urllib.request.urlopen(request, timeout=remaining) as retry_response:
+                    payload = self._read_response_with_deadline(retry_response, deadline=deadline)
+                    return self._decode_json_response(payload.decode("utf-8"))
+            except TimeoutError as retry_error:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+            except urllib.error.URLError as retry_error:
+                if isinstance(retry_error.reason, TimeoutError):
+                    raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
+            except (OSError, UnicodeDecodeError, http.client.IncompleteRead) as retry_error:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
         except TimeoutError as error:
             raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
         except urllib.error.URLError as error:
@@ -366,6 +380,12 @@ class GuardSurfaceDaemonClient:
         except UnicodeDecodeError as error:
             raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         except http.client.IncompleteRead as error:
+            partial = error.partial
+            if partial:
+                try:
+                    return self._decode_json_response(partial.decode("utf-8"))
+                except (UnicodeDecodeError, GuardDaemonResponseSchemaError):
+                    pass
             raise GuardDaemonTransportError("Guard daemon response was truncated") from error
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error

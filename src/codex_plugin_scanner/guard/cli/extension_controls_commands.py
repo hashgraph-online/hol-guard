@@ -16,7 +16,7 @@ from ..approval_gate import (
     require_extension_control,
 )
 from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
-from ..daemon.manager import load_guard_daemon_auth_token, load_guard_daemon_url
+from ..daemon.runtime_peer import load_guard_daemon_endpoint
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError
 from ..runtime.extension_control_proof import (
@@ -29,10 +29,10 @@ from .approval_gate_prompt import prompt_for_approval_gate
 
 
 def _client(guard_home: Path) -> GuardSurfaceDaemonClient:
-    daemon_url = load_guard_daemon_url(guard_home)
-    auth_token = load_guard_daemon_auth_token(guard_home)
-    if daemon_url is None or auth_token is None:
+    endpoint = load_guard_daemon_endpoint(guard_home)
+    if endpoint is None:
         raise GuardDaemonRequestError("Guard daemon is not running")
+    daemon_url, auth_token = endpoint
     return GuardSurfaceDaemonClient(daemon_url, auth_token)
 
 

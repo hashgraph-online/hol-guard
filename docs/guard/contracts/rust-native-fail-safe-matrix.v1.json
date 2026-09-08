@@ -13,12 +13,12 @@
     },
     "all_evaluators_overloaded": {
       "pre_tool": "emergency_safe_only_else_pause",
-      "post_tool": "withhold_or_block",
+      "post_tool": "observe_continue",
       "prompt_and_permission": "pause_or_deny"
     },
     "python_daemon_unavailable": {
       "pre_tool": "authenticated_emergency_safe_only_else_pause",
-      "post_tool": "withhold_or_block",
+      "post_tool": "observe_continue",
       "prompt_and_permission": "fail_closed"
     },
     "policy_snapshot_stale_or_invalid": {
@@ -38,8 +38,8 @@
     }
   },
   "invariants": [
-    "No native, daemon, transport, policy, timeout, overload, or parser failure becomes allow.",
-    "PostToolUse output is withheld until an authoritative review completes.",
+    "No native, daemon, transport, policy, timeout, overload, or parser failure becomes a high-impact PreToolUse allow.",
+    "PostToolUse continues when authoritative review cannot complete; native block decisions still withhold output.",
     "One-shot and Python fallbacks are bounded and may not amplify overload into process creation.",
     "After Rust authority cutover, resident Rust then verified one-shot Rust then fail-safe pause is the only supported chain."
   ]

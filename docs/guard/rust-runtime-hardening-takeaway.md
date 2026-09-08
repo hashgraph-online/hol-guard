@@ -35,8 +35,8 @@ HOL Guard's product contract:
 - Safe, routine engineering work should proceed autonomously with minimal or no prompts.
 - Catastrophic-capable actions must pause before the side effect occurs.
 - Catastrophic risks include secret exfiltration, prompt injection, broad file deletion or corruption, destructive production database or infrastructure actions, supply-chain compromise, and attempts to disable or overload Guard.
-- PostToolUse output must not reach the model until it has been safely reviewed.
-- A timeout, crash, overload, stale policy, invalid artifact, transport failure, or parser uncertainty must never become an unsafe allow.
+- PostToolUse output is withheld when native review blocks it. If review cannot complete, the turn continues because the tool already ran.
+- A timeout, crash, overload, stale policy, invalid artifact, transport failure, or parser uncertainty must never become an unsafe high-impact PreToolUse allow.
 - If Python and Rust disagree, choose the more restrictive outcome and record only a privacy-safe mismatch category.
 - A Rust crash must not crash the Python daemon.
 - A Python daemon crash or authenticated daemon-unavailable state is a critical failure and must invoke the documented fail-safe hook behavior.
@@ -168,7 +168,7 @@ Crash requirements:
 - Repeated crashes open a circuit and keep Python authoritative.
 - A native crash during a request may use Python only if deadline and capacity remain.
 - A daemon crash must never allow a dangerous, network, secret-capable, destructive, package-executing, process-control, policy-tampering, or uncertain action.
-- PostToolUse output remains blocked while the daemon is unavailable.
+- PostToolUse continues while the daemon is unavailable; native block decisions still withhold output.
 - Only the ratified authenticated emergency-safe read-only profile may continue.
 
 Performance requirements:
@@ -269,7 +269,7 @@ Required validation:
 - CodeQL
 - Security Gates
 - Full repository CI
-- Diff and test-suite ratchets
+- Structural code-quality ratchet
 - No skipped required gate and no baseline inflation without reviewed evidence
 
 PR and review requirements:

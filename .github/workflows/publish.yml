@@ -447,18 +447,20 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Install pinned uv without cache
-        shell: bash
-        run: python -m pip install --disable-pip-version-check --no-cache-dir uv==0.9.26
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
-      - run: uv sync --frozen --extra dev --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
           path: base-dist/
+      - name: Verify release approval enrollment root pin
+        if: needs.build.outputs.channel != 'canary'
+        env:
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
         shell: bash
         env:
@@ -477,6 +479,8 @@ jobs:
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
           RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}
@@ -504,7 +508,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+          python scripts/build_native_hol_guard_wheel.py \
             --wheel "base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$RUNTIME" \
             --output-dir native-dist \
@@ -888,9 +892,10 @@ jobs:
             fi
             status=$(jq -r '.status' <<< "$result")
             if [[ "$status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry testpypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist || exit 1
               break
             fi
-            if [[ "$status" != "absent" || "$attempt" == "60" ]]; then
+            if [[ "$status" != "absent" && "$status" != "exact" ]] || [[ "$attempt" == "60" ]]; then
               echo "TestPyPI did not expose the exact release artifacts" >&2
               exit 1
             fi
@@ -1035,9 +1040,10 @@ jobs:
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
             if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure || exit 1
               break
             fi
-            if [[ "$guard_status" != "absent" && "$guard_status" != "present" ]] || \
+            if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
               [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
@@ -1045,9 +1051,6 @@ jobs:
             fi
             sleep 5
           done
-          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
-            verify-published --registry pypi --version "$VERSION" \
-            --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure
           shopt -s nullglob
           guard_wheels=(dist-hol-guard/*-py3-none-any.whl)
           [[ "${#guard_wheels[@]}" == "1" ]]
@@ -1363,6 +1366,7 @@ jobs:
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
             if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]]; then
+              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
@@ -1373,9 +1377,6 @@ jobs:
             fi
             sleep 5
           done
-          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
-            verify-published --registry pypi --version "$VERSION" \
-            --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full
           mapfile -t guard_wheels < <(
             jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
           )
@@ -1406,6 +1407,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1436,6 +1438,13 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1477,16 +1486,8 @@ jobs:
             done
             exit 0
           fi
-          body_file=$(mktemp)
-          cat > "$body_file" <<EOF
-          Guard ${VERSION}
-
-          Install this release:
-
-          \`\`\`bash
-          uv tool install "hol-guard[cisco]==${VERSION}"
-          \`\`\`
-          EOF
+          body_file="$RUNNER_TEMP/release-notes.md"
+          [[ -s "$body_file" ]]
           mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
           gh release create "$tag" \
             --repo "${{ github.repository }}" \
@@ -1511,6 +1512,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1541,6 +1543,13 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable alpha prerelease
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1581,16 +1590,8 @@ jobs:
             done
             exit 0
           fi
-          body_file=$(mktemp)
-          cat > "$body_file" <<EOF
-          Guard ${VERSION} is an opt-in prerelease. Stable installations remain on the stable channel.
-
-          Install this exact alpha:
-
-          \`\`\`bash
-          uv tool install "hol-guard[cisco]==${VERSION}"
-          \`\`\`
-          EOF
+          body_file="$RUNNER_TEMP/release-notes.md"
+          [[ -s "$body_file" ]]
           mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
           gh release create "$tag" \
             --repo "${{ github.repository }}" \

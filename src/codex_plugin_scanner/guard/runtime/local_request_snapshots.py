@@ -485,8 +485,10 @@ _SOURCE_SEARCH_OPTION_FLAGS_WITH_VALUES = frozenset(
     }
 )
 _SOURCE_SEARCH_PATTERN_FLAGS = frozenset({"-e", "--regexp"})
+# DOTALL applies only to the escape-pair dots so backslash-newline pairs stay
+# inside quoted values; no other dot exists in this pattern.
 _SOURCE_SEARCH_SECRET_ASSIGNMENT_RE = re.compile(
-    r"""(?ix)
+    r"""(?six)
     (?P<prefix>
         [\"']?
         (?:
@@ -505,8 +507,8 @@ _SOURCE_SEARCH_SECRET_ASSIGNMENT_RE = re.compile(
         \s*[:=]\s*
     )
     (?P<value>
-        \"(?:\\.|[^\"])*\"
-        |'(?:\\.|[^'])*'
+        \"(?:\\.|[^"\\])*\\?\"
+        |'(?:\\.|[^'\\])*\\?'
         |[^\s,;)}\]]+
     )
     """

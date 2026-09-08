@@ -77,6 +77,7 @@ def test_fail_safe_matrix_never_allows_unreviewed_output() -> None:
             "python_reference_withhold_until_complete",
             "python_reference_within_deadline",
             "withhold_or_block",
+            "observe_continue",
             "not_valid_for_allow",
             "more_restrictive_output_action",
             "python_reference_or_block",

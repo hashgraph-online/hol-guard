@@ -100,18 +100,18 @@ Status: canonical follow-up backlog for `release/3.0`.
 - [ ] NRH-T105 add plain-language pause copy and exact approve-once/target/pattern/contained/narrow/dry-run/edit/cancel options;
 - [ ] NRH-T106 keep healthy safe operations silent and approval scope consistent across surfaces;
 - [ ] NRH-T107 add local and managed native kill switches plus rollback playbook;
-- [ ] NRH-T108 generate static import/call graph and runtime coverage for migration candidates;
+- [x] NRH-T108 generate static import/call graph and runtime import coverage for migration candidates;
 - [ ] NRH-T109 delete dead duplicate Python implementations, including the unused `choose_post_tool_response` selector, plus its tests, imports, dependencies, package entries, flags, and shims;
-- [ ] NRH-T110 move reusable cases to language-neutral fixtures and add package-content/import-removal tests;
-- [ ] NRH-T111 publish Python LOC/dependency delta and require every retained reference backend to run in named CI.
+- [x] NRH-T110 move reusable cases to language-neutral fixtures and add package-content/import-removal tests;
+- [x] NRH-T111 publish Python LOC/dependency delta and require every retained reference backend to run in named CI.
 - [x] NRH-T112 delete `choose_post_tool_response` after repository-wide static and dynamic caller proof;
 - [ ] NRH-T113 delete replaced PostToolUse traversal, scanning, secure-read, hashing, and path-validation Python implementations in the same authority-cutover wave;
 - [ ] NRH-T114 delete replaced command parsing and catastrophic-risk Python implementations only after cross-shell native authority gates pass;
 - [ ] NRH-T115 remove dependencies and build/package metadata used only by deleted implementations;
-- [ ] NRH-T116 add installed-wheel tests proving removed private modules are absent and intentionally non-importable;
+- [x] NRH-T116 add installed-wheel tests proving removed private modules are absent and intentionally non-importable;
 - [ ] NRH-T117 audit dynamic imports, entry points, plugin references, and string-based module loading before every deletion;
 - [ ] NRH-T118 treat every unreachable or untested fallback as dead code rather than dormant rollback;
-- [ ] NRH-T119 prove dead-code removal preserves the named pure-Python unsupported-platform and rollback configurations.
+- [x] NRH-T119 prove dead-code package exclusion preserves the named pure-Python unsupported-platform and rollback configurations.
 
 ## PR 7: Supply chain, fuzz, chaos, soak, and opt-in gate
 
@@ -127,6 +127,12 @@ Status: canonical follow-up backlog for `release/3.0`.
 - [ ] NRH-T129 retain pure-Python/reference rollback and do not enable PreToolUse allow authority.
 
 ## Final release gate
+
+NHD-091–095 completes the ownership/graph/package proof for the cleanup
+surface. `native_runtime_resident.py` remains a recorded deletion candidate,
+not a deleted file; T109, T113, T114, T115, T117, and T118 remain open until a
+separate authorized deletion wave removes source and any newly proven-dead
+implementation dependencies.
 
 - [ ] all transport, overload, fallback, supervision, daemon-failure, privacy, cross-platform, catastrophic-risk, safe-autonomy, performance, fuzz, chaos, soak, artifact, review, and rollback gates pass;
 - [ ] dead replaced Python code is removed and retained Python ownership is explicit;

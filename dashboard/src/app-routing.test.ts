@@ -89,6 +89,7 @@ assert(!isDisplayableHarness("Ce2b7ac2ccab4fab9902347b033bf25e"), "token-like ps
 assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never renders as raw star");
 assert(harnessDisplayName("grok") === "Grok", "grok harness displays as Grok");
 assert(harnessDisplayName("omp") === "Oh My Pi", "omp harness displays as Oh My Pi");
+assert(harnessDisplayName("zcode") === "ZCode", "zcode harness displays as ZCode");
 assert(harnessDisplayName("grok") !== "*", "grok harness never renders as wildcard");
 assert(
   harnessDisplayName("Ce2b7ac2ccab4fab9902347b033bf25e") === "Unknown app",

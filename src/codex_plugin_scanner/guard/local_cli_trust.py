@@ -111,7 +111,9 @@ def apply_local_mcp_extension_decision(
             "local-mcp-extension",
             "This MCP tool is allowed by a custom extension on this device.",
         )
-    return None
+    from .runtime.mcp_server_grants import apply_contributed_mcp_decision
+
+    return apply_contributed_mcp_decision(store, artifact, current_action)
 
 
 def matching_local_mcp_grant(

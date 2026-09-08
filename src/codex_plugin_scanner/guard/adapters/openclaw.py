@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...safe_output import write_text_atomic_no_follow
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import (
@@ -29,6 +30,44 @@ from .openclaw_support import (
 
 _OPENCLAW_MANAGED_APPROVAL_TIER = "native-or-center"
 _OPENCLAW_MANAGED_PROMPT_CHANNEL = "native"
+
+
+def _openclaw_manifest(context: HarnessContext) -> dict[str, object]:
+    root = managed_root(context)
+    manifest_path = root / "manifest.json"
+    _ensure_path_within_root(context.guard_home, manifest_path, label="OpenClaw manifest")
+    return _json_payload(manifest_path)
+
+
+def _runtime_manifest(context: HarnessContext) -> dict[str, object]:
+    try:
+        return _openclaw_manifest(context)
+    except ValueError:
+        return {}
+
+
+def _validated_managed_paths(
+    context: HarnessContext,
+    manifest: dict[str, object],
+) -> tuple[Path, Path] | None:
+    root = managed_root(context)
+    expected_overlay = root / "overlay.json"
+    expected_pretool = root / "pretool-hook.json"
+    overlay_value = manifest.get("managed_overlay_path")
+    pretool_value = manifest.get("pretool_hook_path")
+    if not isinstance(overlay_value, str) or not isinstance(pretool_value, str):
+        return None
+    if not overlay_value or not pretool_value or "\x00" in overlay_value or "\x00" in pretool_value:
+        return None
+    try:
+        _ensure_path_within_root(context.guard_home, root, label="OpenClaw managed")
+        _ensure_path_within_root(root, expected_overlay, label="OpenClaw overlay")
+        _ensure_path_within_root(root, expected_pretool, label="OpenClaw hook")
+    except ValueError:
+        return None
+    if overlay_value != str(expected_overlay) or pretool_value != str(expected_pretool):
+        return None
+    return expected_overlay, expected_pretool
 
 
 class OpenClawHarnessAdapter(HarnessAdapter):
@@ -71,7 +110,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         overlay_path = root / "overlay.json"
         pretool_path = root / "pretool-hook.json"
         root.mkdir(parents=True, exist_ok=True)
-        existing_manifest = _json_payload(manifest_path)
+        existing_manifest = _openclaw_manifest(context)
         state = install_state(
             existing_manifest=existing_manifest,
             overlay_path=overlay_path,
@@ -79,8 +118,8 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         )
         detection = self.detect(context)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
-        overlay_path.write_text(json.dumps(overlay_payload(detection), indent=2) + "\n", encoding="utf-8")
-        pretool_path.write_text(json.dumps(pretool_payload(context=context), indent=2) + "\n", encoding="utf-8")
+        write_text_atomic_no_follow(overlay_path, json.dumps(overlay_payload(detection), indent=2) + "\n")
+        write_text_atomic_no_follow(pretool_path, json.dumps(pretool_payload(context=context), indent=2) + "\n")
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -108,13 +147,13 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         }
         if cloud_identity is not None:
             manifest["cloud_agent_identity"] = cloud_identity
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        write_text_atomic_no_follow(manifest_path, json.dumps(manifest, indent=2) + "\n")
         return manifest
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(self.harness, context)
         root = managed_root(context)
-        manifest = _json_payload(root / "manifest.json")
+        manifest = _openclaw_manifest(context)
         removed_paths: list[str] = []
         for key in ("managed_manifest_path", "managed_overlay_path", "pretool_hook_path"):
             value = manifest.get(key)
@@ -142,14 +181,14 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         }
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        manifest = _json_payload(managed_root(context) / "manifest.json")
-        overlay_path = manifest.get("managed_overlay_path")
-        pretool_path = manifest.get("pretool_hook_path")
-        if not isinstance(overlay_path, str) or not isinstance(pretool_path, str):
+        manifest = _runtime_manifest(context)
+        managed_paths = _validated_managed_paths(context, manifest)
+        if managed_paths is None:
             return {}
+        overlay_path, pretool_path = managed_paths
         environment = {
-            "OPENCLAW_GUARD_OVERLAY_PATH": overlay_path,
-            "OPENCLAW_GUARD_PRETOOL_PATH": pretool_path,
+            "OPENCLAW_GUARD_OVERLAY_PATH": str(overlay_path),
+            "OPENCLAW_GUARD_PRETOOL_PATH": str(pretool_path),
             "OPENCLAW_GUARD_CHANNEL_POSTURE": "enabled",
         }
         environment.update(
@@ -161,17 +200,17 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        manifest = _json_payload(managed_root(context) / "manifest.json")
-        overlay_path = manifest.get("managed_overlay_path")
-        pretool_path = manifest.get("pretool_hook_path")
+        manifest = _runtime_manifest(context)
+        managed_paths = _validated_managed_paths(context, manifest)
+        overlay_path, pretool_path = managed_paths or (None, None)
         return {
             "command": _run_command_probe([self.executable, "--help"]) if _command_available(self.executable) else None,
             "managed_install_present": bool(manifest),
             "managed_install_ready": (
-                isinstance(overlay_path, str)
-                and Path(overlay_path).exists()
-                and isinstance(pretool_path, str)
-                and Path(pretool_path).exists()
+                overlay_path is not None
+                and overlay_path.exists()
+                and pretool_path is not None
+                and pretool_path.exists()
             ),
             "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
         }

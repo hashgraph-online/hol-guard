@@ -31,8 +31,6 @@ class RuntimeHookWorkItem:
     def __post_init__(self) -> None:
         if self.payload_bytes != len(self.normalized_payload):
             raise ValueError("payload_bytes must equal the immutable normalized payload length")
-        if self.payload_bytes < 0:
-            raise ValueError("payload_bytes must not be negative")
 
 
 __all__ = ["RuntimeHookWorkItem"]

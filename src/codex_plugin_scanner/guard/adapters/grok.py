@@ -350,6 +350,7 @@ class GrokHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
+        guard_args.append("--json")
         return bounded_cli_hook_command(
             python_executable=sys.executable,
             package_root=Path(__file__).resolve().parents[3],
@@ -472,6 +473,22 @@ class GrokHarnessAdapter(HarnessAdapter):
         }
 
 
+def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
+    """Return whether Grok catch-all PreToolUse and observe hooks are installed.
+
+    Managed permission rules in ``managed_config.toml`` are a second layer. Missing
+    that file must not fail machine-wide local protection health while hooks still
+    intercept every tool.
+    """
+
+    from ..cli.install_commands import _grok_pretool_is_catchall, _grok_prompt_hook_is_observe
+
+    hooks_dir = GrokHarnessAdapter._hooks_dir(context)
+    return _grok_pretool_is_catchall(hooks_dir / GUARD_HOOK_PRETOOL_FILE) and _grok_prompt_hook_is_observe(
+        hooks_dir / GUARD_HOOK_PROMPT_FILE
+    )
+
+
 _remove_managed_block = remove_managed_block
 
-__all__ = ["GrokHarnessAdapter", "_remove_managed_block"]
+__all__ = ["GrokHarnessAdapter", "_remove_managed_block", "grok_runtime_hooks_verified"]

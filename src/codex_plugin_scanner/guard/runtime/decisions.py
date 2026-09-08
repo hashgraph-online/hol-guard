@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.signals import (
 )
 
 from .data_flow_sink import data_flow_sink_type
+from .payload_coercion import optional_string, required_string
 
 GuardDecisionAction = Literal["allow", "warn", "ask", "block"]
 
@@ -180,16 +181,16 @@ class GuardDecisionV2:
         return cls(
             guard_action=guard_action,
             action=action,
-            reason=_required_string(payload, "reason"),
-            user_title=_required_string(payload, "user_title"),
-            user_body=_required_string(payload, "user_body"),
-            harness_message=_required_string(payload, "harness_message"),
-            dashboard_primary_detail=_required_string(payload, "dashboard_primary_detail"),
+            reason=required_string(payload, "reason"),
+            user_title=required_string(payload, "user_title"),
+            user_body=required_string(payload, "user_body"),
+            harness_message=required_string(payload, "harness_message"),
+            dashboard_primary_detail=required_string(payload, "dashboard_primary_detail"),
             approval_scopes=_parse_string_tuple(payload.get("approval_scopes"), "approval_scopes"),
-            retry_instruction=_optional_string(payload, "retry_instruction"),
+            retry_instruction=optional_string(payload, "retry_instruction"),
             signals=_parse_signals(payload.get("signals")),
             confidence=_parse_confidence(payload.get("confidence")),
-            package_review_cloud_reason_code=_optional_string(payload, "package_review_cloud_reason_code"),
+            package_review_cloud_reason_code=optional_string(payload, "package_review_cloud_reason_code"),
         )
 
 
@@ -274,8 +275,8 @@ class AuthoritativeGuardDecision:
         if schema_version != AUTHORITATIVE_DECISION_SCHEMA_VERSION or isinstance(schema_version, bool):
             raise ValueError(f"schema_version must be {AUTHORITATIVE_DECISION_SCHEMA_VERSION}")
         action = _parse_guard_action(payload.get("action"))
-        source = _required_string(payload, "source")
-        reason = _required_string(payload, "reason")
+        source = required_string(payload, "source")
+        reason = required_string(payload, "reason")
         raw_composition = payload.get("composition_trace")
         if not isinstance(raw_composition, Mapping) or not all(isinstance(key, str) for key in raw_composition):
             raise ValueError("composition_trace must be an object with string keys")
@@ -611,22 +612,6 @@ def _parse_string_tuple(value: object, key: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _required_string(payload: Mapping[str, object], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-empty string")
-    return value
-
-
-def _optional_string(payload: Mapping[str, object], key: str) -> str | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{key} must be a string or null")
-    return value
-
-
 def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
     return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
@@ -925,7 +910,7 @@ def _validate_artifact_approval_projection(
     reuse_status = raw_reuse.get("status")
     if reuse_status not in {"accepted", "rejected", "not-applicable"}:
         raise ValueError("approval_reuse.status must be a known status")
-    reuse_reason = _required_string(raw_reuse, "reason_code")
+    reuse_reason = required_string(raw_reuse, "reason_code")
     reuse_should_claim = raw_reuse.get("should_claim")
     if not isinstance(reuse_should_claim, bool):
         raise ValueError("approval_reuse.should_claim must be a boolean")

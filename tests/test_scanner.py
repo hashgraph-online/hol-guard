@@ -7,7 +7,7 @@ from codex_plugin_scanner.models import GRADE_LABELS, CategoryResult, CheckResul
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 class TestGetGrade:

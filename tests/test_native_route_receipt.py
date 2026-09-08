@@ -21,13 +21,13 @@ def test_route_receipt_requires_a_current_native_claim(
 ) -> None:
     monkeypatch.setattr(hook_entrypoint_module, "_native_mode_requires_rust", lambda: True)
     reset_native_hook_route()
-    assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]
+    assert hook_entrypoint_module._current_decision_route() == "native_fail_safe"  # pyright: ignore[reportPrivateUsage]
 
     record_native_hook_route("native_resident")
     assert hook_entrypoint_module._current_decision_route() == "native_resident"  # pyright: ignore[reportPrivateUsage]
 
     reset_native_hook_route()
-    assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]
+    assert hook_entrypoint_module._current_decision_route() == "native_fail_safe"  # pyright: ignore[reportPrivateUsage]
 
     monkeypatch.setattr(hook_entrypoint_module, "_native_mode_requires_rust", lambda: False)
     assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]

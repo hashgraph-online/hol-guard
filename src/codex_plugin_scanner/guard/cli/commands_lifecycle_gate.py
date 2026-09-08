@@ -9,14 +9,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, cast
 
-from ..approval_gate import public_config, recent_totp_satisfied, require_high_risk
+from ..approval_gate import ApprovalGateError, public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
+from ..harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
 _ENROLLMENT_NOTICE = (
-    "Security recommendation: protect Guard administration with an approval password or Authenticator. "
-    "Run `hol-guard dashboard`, then enable these controls in Settings."
+    "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
+    "local gate. Run `hol-guard dashboard`, then open Settings > Approval gate, enable `Ask for proof on allow "
+    "decisions`, and set an `Approval password`. Optionally connect an `Authenticator app`; once enabled, its "
+    "code replaces the `Approval password` for every protected action and disables cooldown. This notice is "
+    "advisory and does not block the current command."
 )
 _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "apps.",
@@ -89,12 +93,21 @@ def enforce_lifecycle_gate(
     if not gate.enabled:
         print(_ENROLLMENT_NOTICE, file=error_stream or sys.stderr)
         return
-    if gate.totp_enabled and recent_totp_satisfied(authority_home):
+    if requirement.action == "apps.disconnect" and not _apps_disconnect_confirmation_matches(args):
+        return
+    require_fresh_totp = gate.totp_enabled and disconnect_requires_fresh_authenticator(requirement.action)
+    if gate.totp_enabled and recent_totp_satisfied(authority_home) and not require_fresh_totp:
         gate_input = None
     elif desktop_proof is not None:
         gate_input = desktop_proof
     else:
-        gate_input = prompt_for_approval_gate(authority_home, use_cooldown=False)
+        gate_input = prompt_for_approval_gate(
+            authority_home,
+            use_cooldown=False,
+            require_fresh_totp=require_fresh_totp,
+        )
+    if require_fresh_totp and not ((gate_input.totp_code if gate_input is not None else None) or "").strip():
+        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",
@@ -136,10 +149,26 @@ def trusted_user_home() -> Path:
     return Path(pwd.getpwuid(os.geteuid()).pw_dir).resolve()
 
 
+def _apps_disconnect_confirmation_matches(args: argparse.Namespace) -> bool:
+    harness = _string_attribute(args, "harness")
+    if not harness:
+        return False
+    try:
+        from ..adapters import get_adapter
+        from .install_commands import uninstall_confirmation_token
+
+        expected = uninstall_confirmation_token(get_adapter(harness).harness)
+    except ValueError:
+        return False
+    return _string_attribute(args, "confirm") == expected
+
+
 def _command_subject(args: argparse.Namespace) -> str:
     command = _string_attribute(args, "guard_command")
     if command == "install":
-        return "all" if _bool_attribute(args, "all") else _string_attribute(args, "harness") or "detected"
+        if _bool_attribute(args, "all"):
+            return "all"
+        return _harness_subject(_attribute(args, "harness"))
     if command == "uninstall":
         if _bool_attribute(args, "self_uninstall"):
             return "hol-guard"
@@ -156,6 +185,18 @@ def _attribute(args: argparse.Namespace, name: str) -> object | None:
 def _string_attribute(args: argparse.Namespace, name: str) -> str:
     value = _attribute(args, name)
     return value if isinstance(value, str) else ""
+
+
+def _harness_subject(value: object) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        names = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+        if len(names) == 1:
+            return names[0]
+        if len(names) > 1:
+            return ",".join(names)
+    return "detected"
 
 
 def _bool_attribute(args: argparse.Namespace, name: str) -> bool:

@@ -356,47 +356,24 @@ def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
 
 
-def test_claude_daemon_hook_bridge_sends_guard_token_header(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(parents=True, exist_ok=True)
-    guard_home.chmod(0o700)
-    token_path = guard_home / "daemon-auth-token"
-    token_path.write_text("secret-token", encoding="utf-8")
-    token_path.chmod(0o600)
-    captured_headers: dict[str, str] = {}
+def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path, monkeypatch):
+    captured: dict[str, object] = {}
 
-    class FakeResponse:
-        def __enter__(self) -> FakeResponse:
-            return self
+    def fake_authenticated_transport(**kwargs):
+        captured.update(kwargs)
+        return "{}"
 
-        def __exit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def geturl(self) -> str:
-            return "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x"
-
-        def read(self, amt: int = -1) -> bytes:
-            del amt
-            return b"{}"
-
-        def close(self) -> None:
-            return None
-
-    class FakeOpener:
-        def open(self, request, timeout=30):
-            captured_headers.update(dict(request.header_items()))
-            return FakeResponse()
-
-    monkeypatch.setattr(claude_daemon_hook_bridge, "_build_loopback_opener", lambda: FakeOpener())
+    monkeypatch.setattr(claude_daemon_hook_bridge, "authenticated_claude_hook_response", fake_authenticated_transport)
 
     response = claude_daemon_hook_bridge._post_to_loopback_daemon(
         "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x",
         "{}",
-        state_path=guard_home / "daemon-state.json",
+        state_path=tmp_path / "guard-home" / "daemon-state.json",
     )
 
     assert response == "{}"
-    assert captured_headers["X-guard-token"] == "secret-token"
+    assert captured["query"] == "guard-home=x"
+    assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
 
 
 def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):

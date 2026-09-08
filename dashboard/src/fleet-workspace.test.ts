@@ -1,9 +1,11 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
-import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
+import { repairHarnessesFor } from "./fleet-workspace";
+import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
-import type { FleetHeroCopy } from "./fleet-workspace";
+import type { FleetHeroCopy } from "./fleet-hero-copy";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -82,6 +84,10 @@ assert(
   `F1: local_only primary CTA href should be connect_url — got "${localOnlyWithApps.primaryCtaHref}"`
 );
 assert(
+  localOnlyWithApps.primaryCtaStartsCloudConnect === true,
+  "F1: local_only primary CTA must start the OAuth connect flow instead of a static link"
+);
+assert(
   localOnlyWithApps.primaryCtaLabel.toLowerCase().includes("connect"),
   `F1: local_only primary CTA label should mention connect — got "${localOnlyWithApps.primaryCtaLabel}"`
 );
@@ -92,7 +98,21 @@ assert(
   localOnlyNoApps.primaryCtaHref === urls.connect_url,
   `F2: local_only no-apps primary CTA href should be connect_url — got "${localOnlyNoApps.primaryCtaHref}"`
 );
+assert(
+  localOnlyNoApps.primaryCtaStartsCloudConnect === true,
+  "F2: local_only no-apps primary CTA must start the OAuth connect flow"
+);
 assert(localOnlyNoApps.status === "setup_gap", "F2: local_only no apps status should be setup_gap");
+
+const localOnlyDegraded = resolveFleetHeroCopy("local_only", 2, "degraded", urls);
+assert(
+  localOnlyDegraded.secondaryCtaStartsCloudConnect === false,
+  "degraded hero CTAs stay hidden; the protection recovery panel owns the connect action"
+);
+assert(
+  localOnlyDegraded.primaryCtaStartsCloudConnect === false,
+  "degraded local_only primary CTA stays on local protection repair"
+);
 
 const pairedWaitingWithApps = resolveFleetHeroCopy("paired_waiting", 3, "protected", urls);
 assert(
@@ -151,11 +171,43 @@ const pendingCloudProof = cloudPolicyRecoveryHint({
   cloudPolicySyncError: null,
   connectUrl: urls.fleet_url,
 });
+assert(pendingCloudProof === null, "queued Cloud sync must not appear on local protection repair");
+const staleCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "stale",
+  cloudPolicySyncError: null,
+  connectUrl: urls.fleet_url,
+});
+assert(staleCloudProof === null, "stale Cloud sync must not appear on local protection repair");
+const failedCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+  dashboardUrl: urls.dashboard_url,
+});
 assert(
-  pendingCloudProof?.actionLabel === "Open Guard Cloud" &&
-    pendingCloudProof.detail.includes("separate from local repair") &&
-    pendingCloudProof.startsOAuth === false,
-  "incomplete Cloud proof remains an independent Cloud action",
+  failedCloudProof?.actionLabel === "Open Guard Cloud" &&
+    failedCloudProof.detail.includes("separate from local repair") &&
+    failedCloudProof.startsOAuth === false &&
+    failedCloudProof.href === urls.dashboard_url,
+  "failed Cloud proof remains an independent Cloud action",
+);
+assert(
+  failedCloudProof.href !== urls.connect_url,
+  "already-connected Cloud recovery must not open the connect page",
+);
+const missingDashboardCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+});
+assert(missingDashboardCloudProof === null, "connected Cloud recovery requires a dashboard URL");
+assert(
+  recoverySummary(1, 0, false, ["App hooks"]) ===
+    "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",
+  "a single failed local check is named instead of a generic count",
 );
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
@@ -212,6 +264,25 @@ assert(
   "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
 );
 
+const watchModeCodexHealth = {
+  harness: "codex",
+  state: "degraded" as const,
+  label: "Degraded",
+  detail: "Watch posture is observe-only.",
+  evidence_gap: false,
+  checks: [{ check_id: "harness_hooks", status: "pass" as const, reason_code: "hooks_verified" }],
+  reason_codes: ["hooks_verified"],
+};
+assert(
+  resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true) === "partial",
+  "active Codex with passing hooks is not a repair loop when global protection is Watch",
+);
+const missingHookProofHealth = { ...watchModeCodexHealth, checks: [] };
+assert(
+  resolveDetectedAppStatus({ active: true }, missingHookProofHealth, true, true, true) === "needs_repair",
+  "active installs without an app-specific hook proof still need repair",
+);
+
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];
 for (const state of allStates) {
   assert(
@@ -230,7 +301,7 @@ function containsJargon(text: string): boolean {
 }
 
 const allCopies = [
-  localOnlyWithApps, localOnlyNoApps, pairedWaitingWithApps, pairedWaitingNoApps, pairedActiveWithApps, pairedActiveNoApps,
+  localOnlyWithApps, localOnlyNoApps, localOnlyDegraded, pairedWaitingWithApps, pairedWaitingNoApps, pairedActiveWithApps, pairedActiveNoApps,
 ];
 for (const copy of allCopies) {
   assert(
@@ -245,6 +316,23 @@ for (const copy of allCopies) {
     !containsJargon(copy.primaryCtaLabel),
     `F7: primaryCtaLabel must not contain jargon — got: "${copy.primaryCtaLabel}"`
   );
+  if (copy.primaryCtaStartsCloudConnect) {
+    assert(
+      copy.primaryCtaHref === urls.connect_url,
+      `F7: OAuth-flagged primary CTA must keep href connect_url — got "${copy.primaryCtaHref}"`
+    );
+  }
+  if (copy.secondaryCtaStartsCloudConnect) {
+    assert(
+      copy.secondaryCtaHref === urls.connect_url,
+      `F7: OAuth-flagged secondary CTA must keep href connect_url — got "${copy.secondaryCtaHref}"`
+    );
+  }
 }
+assert(
+  pairedActiveWithApps.primaryCtaStartsCloudConnect === false &&
+    pairedActiveWithApps.secondaryCtaStartsCloudConnect === false,
+  "connected fleet CTAs stay plain cloud links without an OAuth flow"
+);
 
 console.log("fleet-workspace.test.ts: all tests passed");

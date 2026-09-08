@@ -12,8 +12,9 @@ from pathlib import Path
 from .adapters.base import HarnessContext
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
+from .cursor_hook_rebind import rebind_stale_cursor_hooks
 from .shim_refresh import refresh_stale_harness_shims
-from .shims import package_shim_status, repair_package_shims
+from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
 
 
@@ -51,12 +52,54 @@ def _runtime_context(
     )
 
 
+def _package_shim_reconciliation_status(context: HarnessContext) -> dict[str, object]:
+    """Use persisted shell activation for daemon health, not the daemon PATH.
+
+    The resident daemon intentionally does not source interactive shell profiles.
+    When the Guard shims are intact and their profile blocks are present, a
+    restart-required process PATH is expected and must not degrade protection.
+    Keep the raw status as the fallback for incomplete or damaged setup.
+    """
+
+    status = package_shim_status(context)
+    if status.get("path_status") == "restart_required" and status.get("shell_profile_configured") is True:
+        return package_shim_dashboard_status(context)
+    return status
+
+
+def _managed_install_needs_artifact_repair(
+    harness: str,
+    *,
+    context: HarnessContext,
+    verified: Mapping[str, bool],
+) -> bool:
+    if harness == "grok":
+        from .cli.install_commands import grok_hooks_protection_ready
+
+        return grok_hooks_protection_ready(context) is not True
+    return verified.get(harness) is not True
+
+
+def _managed_install_artifacts_ready(
+    harness: str,
+    *,
+    context: HarnessContext,
+    install: Mapping[str, object],
+    store: GuardStore,
+) -> bool:
+    if harness == "grok":
+        from .cli.install_commands import grok_hooks_protection_ready
+
+        return grok_hooks_protection_ready(context) is True
+    return _live_hook_verification([install], store).get(harness) is True
+
+
 def repair_failing_managed_harness_hooks(
     store: GuardStore,
     *,
     home_dir: Path | None = None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Repair only active managed installs that fail live verification."""
+    """Repair active managed installs whose live hooks or owned artifacts are incomplete."""
 
     installs: list[Mapping[str, object]] = list(store.list_managed_installs())
     verified = _live_hook_verification(installs, store)
@@ -66,8 +109,6 @@ def repair_failing_managed_harness_hooks(
         harness = install.get("harness")
         if not isinstance(harness, str) or install.get("active") is not True:
             continue
-        if verified.get(harness) is True:
-            continue
         stored_workspace = install.get("workspace")
         workspace = stored_workspace if isinstance(stored_workspace, str) and stored_workspace else None
         context = _runtime_context(
@@ -75,6 +116,8 @@ def repair_failing_managed_harness_hooks(
             home_dir=home_dir,
             workspace_dir=Path(workspace).expanduser() if workspace is not None else None,
         )
+        if not _managed_install_needs_artifact_repair(harness, context=context, verified=verified):
+            continue
         try:
             apply_managed_install(
                 "install",
@@ -89,7 +132,12 @@ def repair_failing_managed_harness_hooks(
             failed.append(harness)
             continue
         refreshed = store.get_managed_install(harness)
-        if refreshed is None or _live_hook_verification([refreshed], store).get(harness) is not True:
+        if refreshed is None or not _managed_install_artifacts_ready(
+            harness,
+            context=context,
+            install=refreshed,
+            store=store,
+        ):
             failed.append(harness)
             continue
         repaired.append(harness)
@@ -123,10 +171,26 @@ def reconcile_runtime_artifacts(
         store,
         home_dir=context.home_dir,
     )
+    try:
+        cursor_rebind = rebind_stale_cursor_hooks(store.guard_home, home_dir=context.home_dir)
+    except (OSError, RuntimeError, UnicodeError) as error:
+        cursor_rebind = {
+            "rebound": False,
+            "reason": "cursor_hook_script_rebind_failed",
+            "error": str(error),
+        }
+    if cursor_rebind.get("rebound") is True and "cursor" not in repaired_harnesses:
+        repaired_harnesses = (*repaired_harnesses, "cursor")
+    if cursor_rebind.get("reason") in {
+        "cursor_hook_script_rebind_failed",
+        "cursor_hook_script_unreadable",
+    }:
+        error_text = cursor_rebind.get("error")
+        errors.append(f"cursor:rebind:{error_text if isinstance(error_text, str) else 'failed'}")
 
     repaired_managers: tuple[str, ...] = ()
     try:
-        shim_status = package_shim_status(context)
+        shim_status = _package_shim_reconciliation_status(context)
         manifest_state = shim_status.get("manifest_state")
         if manifest_state not in (None, "absent", "valid"):
             errors.append(f"package:manifest:{manifest_state}")
@@ -144,7 +208,7 @@ def reconcile_runtime_artifacts(
                 if isinstance(repaired_values, list)
                 else ()
             )
-            verified = package_shim_status(context)
+            verified = _package_shim_reconciliation_status(context)
             manager_details = verified.get("manager_details")
             if isinstance(manager_details, list):
                 for detail in manager_details:

@@ -13,6 +13,8 @@ Python remains the control plane for CLI and API presentation, configuration and
 The bundled standalone Rust runtime now provides:
 
 - Bounded PostToolUse payload traversal and secret scanning.
+- Bounded generic PreToolUse action extraction and classification, including
+  the command parser's conservative floors.
 - Bounded secure source reads, hashing, sensitive-path handling, and decision composition.
 - Versioned request/response contracts and exact rule-contract provenance.
 - Resident Unix-domain-socket transport on POSIX.
@@ -22,7 +24,12 @@ The bundled standalone Rust runtime now provides:
 - Version-matched Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64 wheel artifacts plus a pure-Python compatibility wheel.
 - Manifest binding for package version, source SHA, rule digest, platform tag, runtime digest, and runtime size.
 
-Native execution remains source-default `off`. Python is authoritative in `off` and `shadow`; `auto` and `force` may use native PostToolUse results under the current compatibility contract. PreToolUse command authority remains Python-owned.
+Native execution remains source-default `off`. Python is authoritative in `off`
+and `shadow`; `auto` and `force` use the native generic PreToolUse and
+PostToolUse results under the current compatibility contract. Supported
+PreToolUse action classification and command floors remain Rust-owned in
+those native modes; Python retains only explicit compatibility and approval
+presentation boundaries.
 
 ## Current performance premise
 

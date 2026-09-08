@@ -141,6 +141,8 @@ jobs:
           echo "log_opts=${BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
       - name: Run Gitleaks on isolated commit range
         if: steps.gitleaks-scope.outputs.mode == 'git'
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: >-
           gitleaks git
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
@@ -150,4 +152,6 @@ jobs:
           "${{ steps.gitleaks-range.outputs.repository }}"
       - name: Run Gitleaks on working tree
         if: steps.gitleaks-scope.outputs.mode == 'dir'
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: gitleaks dir --no-banner --redact --exit-code 1 .

@@ -1,0 +1,10 @@
+{
+  "name": "hol-guard-mcpb-release-tools",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/mcpb": "2.1.2"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
+  }
+}

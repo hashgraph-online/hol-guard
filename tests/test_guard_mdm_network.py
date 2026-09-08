@@ -5,6 +5,7 @@ import os
 import ssl
 import sys
 import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.message import Message
 from email.utils import format_datetime
@@ -18,7 +19,9 @@ from requests.certs import where as requests_ca_bundle
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.mdm import network_diagnostics as diagnostics_module
 from codex_plugin_scanner.guard.mdm import network_transport as transport_module
+from codex_plugin_scanner.guard.mdm import network_trust as trust_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.mdm.managed_file_trust import machine_controlled_file_is_trusted
 from codex_plugin_scanner.guard.mdm.network import (
     ManagedNetworkError,
     diagnose_endpoint,
@@ -150,7 +153,8 @@ def test_private_ca_must_be_an_absolute_trusted_file(tmp_path: Path) -> None:
             managed_ssl_context(ManagedNetworkPolicy(ca_bundle_path=str(writable)))
 
 
-def test_private_ca_is_added_without_replacing_public_trust() -> None:
+def test_private_ca_is_added_without_replacing_public_trust(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trust_module, "machine_controlled_file_is_trusted", lambda _path: True)
     session = managed_requests_session(ManagedNetworkPolicy(ca_bundle_path=requests_ca_bundle()))
 
     assert session.verify is True
@@ -158,6 +162,15 @@ def test_private_ca_is_added_without_replacing_public_trust() -> None:
     context = managed_ssl_context(ManagedNetworkPolicy(ca_bundle_path=requests_ca_bundle()))
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname is True
+
+
+def test_managed_ca_requires_machine_owned_full_path(tmp_path: Path) -> None:
+    bundle = tmp_path / "ca.pem"
+    bundle.write_text(Path(requests_ca_bundle()).read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert machine_controlled_file_is_trusted(bundle, system_name="Linux") is False
+    with pytest.raises(ManagedNetworkError, match="managed_ca_bundle_invalid"):
+        managed_ssl_context(ManagedNetworkPolicy(ca_bundle_path=str(bundle)))
 
 
 def test_disabled_public_registry_fails_before_network() -> None:
@@ -173,6 +186,38 @@ def test_disabled_public_registry_fails_before_network() -> None:
     rooted = session.prepare_request(Request("GET", "https://PYPI.ORG./simple/hol-guard/"))
     with pytest.raises(ManagedNetworkError, match="managed_public_registry_disabled"):
         session.adapters["https://"].add_headers(rooted)
+
+
+def test_authenticated_urlopen_disables_redirects_without_changing_public_downloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = ManagedNetworkPolicy()
+    handlers: list[object] = []
+
+    class FakeOpener:
+        def open(self, _request, timeout=None):
+            assert timeout == 5
+            return _FakeResponse()
+
+    monkeypatch.setattr(transport_module, "resolved_network_policy", lambda _policy: (policy, False))
+    monkeypatch.setattr(
+        urllib.request,
+        "build_opener",
+        lambda *items: handlers.extend(items) or FakeOpener(),
+    )
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: pytest.fail("authenticated request used redirect-following urlopen"),
+    )
+    request = urllib.request.Request(
+        "https://hol.org/api/guard/receipts/sync",
+        headers={"Authorization": "Bearer synthetic", "DPoP": "proof"},
+    )
+
+    managed_urlopen(request, timeout=5, policy=policy)
+
+    assert any(type(handler).__name__ == "RejectRedirects" for handler in handlers)
 
 
 def test_blocked_public_registry_diagnostic_is_stable_and_offline() -> None:

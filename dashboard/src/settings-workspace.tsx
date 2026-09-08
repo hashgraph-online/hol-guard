@@ -76,8 +76,29 @@ import type {
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
+import { ApprovalPasswordSection } from "./settings/approval-password-copy";
+export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
+import {
+  applyPresentationMode,
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  normalizePresentationSettings,
+  parsePresentationMode,
+  presentationModeOptions,
+  presentationModeStatus,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
+export {
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+
+type SettingsSaveScope = "all" | "approval-gate";
 
 export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
   const section = new URLSearchParams(search).get("section");
@@ -157,13 +178,6 @@ export function hasApprovalGateSettingsChanged(
     || cooldownSeconds !== gateConfig.cooldown_seconds
     || strictAllDecisions !== gateConfig.strict_all_decisions
   );
-}
-
-export function resolveApprovalPasswordSectionCopy(wasConfigured: boolean): string {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -309,7 +323,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     ? settings.protection_posture
     : deriveProtectionPosture(settings.mode, securityLevel);
   return {
-    ...settings,
+    ...normalizePresentationSettings(settings),
     protection_posture: posture,
     watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
@@ -462,7 +476,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [proofModalError, setProofModalError] = useState<string | null>(null);
   const [proofModalPending, setProofModalPending] = useState(false);
   const [pendingProofAction, setPendingProofAction] = useState<
-    | { kind: "save" }
+    | { kind: "save"; scope?: SettingsSaveScope }
     | {
         kind: "maintenance";
         action:
@@ -554,6 +568,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     },
     []
   );
+
+  const handlePresentationModeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextMode = parsePresentationMode(event.target.value);
+    if (nextMode === null) return;
+    setDraft((value) => value === null ? value : applyPresentationMode(value, nextMode));
+    setSaveError(null);
+  }, []);
 
   const handleSecurityLevelChange = useCallback((securityLevel: GuardSettings["security_level"]) => {
     setDraft((value) => {
@@ -783,7 +804,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
   }, [proofModalPending]);
 
-  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials) => {
+  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials, scope: SettingsSaveScope = "all") => {
     if (draft === null) {
       return;
     }
@@ -815,11 +836,24 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      const settingsToSave: Partial<GuardSettings> = {
-        ...draft,
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate,
-      };
+      let settingsToSave: Partial<GuardSettings>;
+      if (scope === "approval-gate") {
+        settingsToSave = { approval_gate: approvalGateUpdate };
+      } else {
+        // A presentation-only save is a free preference change: the daemon
+        // accepts it without the high-risk gate, so it must carry only the
+        // presentation keys (no approval_gate, no risk_actions).
+        const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+        if (presentationOnlyPayload !== null) {
+          settingsToSave = presentationOnlyPayload;
+        } else {
+          settingsToSave = {
+            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+            approval_gate: approvalGateUpdate,
+          };
+        }
+      }
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -995,7 +1029,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
     try {
       if (pendingProofAction.kind === "save") {
-        await executeSave(proof);
+        await executeSave(proof, pendingProofAction.scope);
       } else if (pendingProofAction.action === "import-settings") {
         if (pendingProofAction.importExport === undefined) {
           throw new Error("Missing settings import payload.");
@@ -1026,15 +1060,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       draftGateEnabled: approvalGateEnabled,
       changingPassword: false,
     });
-    if (requiresSettingsSaveProof(proofKind)) {
+    // A presentation-only change bypasses the settings gate on the daemon, so
+    // it never needs the save-proof modal.
+    if (requiresSettingsSaveProof(proofKind) && !isPresentationOnlyChange(draft, savedSettingsRef.current)) {
       openProofModal(proofKind!, { kind: "save" });
       return;
     }
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
 
-  const handleOpenPasswordChangeModal = useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
+  const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
+    openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
   }, [openProofModal]);
 
   const handleRequestRevokeCooldown = useCallback(() => {
@@ -1333,6 +1369,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   const consequenceSummary = buildConsequenceSummary(draft);
   const selectedPosture = currentProtectionPosture(draft);
+  const resolvedPresentation = resolveSettingsPresentation(draft);
   const protectionCapabilities: GuardProtectionCapability[] = state.kind === "ready"
     ? (state.payload.protection_capabilities ?? [])
     : [];
@@ -1434,6 +1471,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
+                <SettingsSelectRow
+                  label="Presentation mode"
+                  description="Choose whether Guard leads with clear everyday explanations or opens with technical detail. This never changes protection or enforcement."
+                  value={resolvedPresentation.value}
+                  onChange={handlePresentationModeChange}
+                  options={presentationModeOptions}
+                  disabled={!resolvedPresentation.writable}
+                />
+                <p className="guard-settings-caption -mt-2 text-slate-500">
+                  {presentationModeStatus(resolvedPresentation)}
+                </p>
                 <div>
                   <label htmlFor="approval-wait" className="guard-settings-body font-medium text-brand-dark">
                     How long to wait for your answer
@@ -2067,7 +2115,7 @@ type ApprovalGateCardProps = {
   totpActionPending: "enroll" | "verify" | "disable" | null;
   totpActionError: string | null;
   onToggle: (event: ChangeEvent<HTMLInputElement>) => void;
-  onOpenPasswordChangeModal: () => void;
+  onOpenPasswordChangeModal: (mode?: "change-password" | "setup-gate") => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -2125,21 +2173,11 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
 
       {showGateDetails ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Approval password</SectionLabel>
-            <p className="mt-1 text-xs text-slate-500">{resolveApprovalPasswordSectionCopy(wasConfigured)}</p>
-            {wasConfigured ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={props.onOpenPasswordChangeModal}
-                  className="text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80"
-                >
-                  Change password
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <ApprovalPasswordSection
+            wasConfigured={wasConfigured}
+            enabled={props.enabled}
+            onOpenPasswordChangeModal={props.onOpenPasswordChangeModal}
+          />
 
           <div className="rounded-xl border border-slate-100 bg-white p-4">
             <SectionLabel>Extra checks</SectionLabel>

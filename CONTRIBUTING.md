@@ -70,6 +70,16 @@ python -m build
 5. Run the validation commands above.
 6. Open a pull request against `main` with a clear summary of what changed and why.
 
+## Command Extension Contributions
+
+HOL Guard 3 command safety Extensions have additional security, compatibility, privacy, and test requirements.
+Browse the [Extension directory](docs/guard/extensions/README.md), then follow the
+[Extension contribution guide](docs/guard/extensions/contributing.md) before proposing or implementing coverage.
+
+Open the dedicated Extension proposal form for a new capability boundary or a material authority change. Focused
+coverage expansions and false-positive fixes should still include destructive and safe-counterpart regression cases
+and keep the generated directory synchronized with the canonical runtime registry.
+
 ## Contribution Expectations
 
 - Python code should remain compatible with the versions declared in `pyproject.toml`.

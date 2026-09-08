@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
 
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -199,7 +200,6 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
     from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
 
-    url = load_guard_daemon_url(guard_home)
     running = False
     port: int | None = None
     pid: int | None = None
@@ -220,6 +220,7 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
                 running = True
         except Exception:
             pass
+    url = load_guard_daemon_endpoint_url(guard_home) if running else None
     authenticated_state = load_authenticated_daemon_state(guard_home) if running else None
     package_version = authenticated_state.get("package_version") if authenticated_state is not None else None
     daemon_version = package_version if isinstance(package_version, str) and package_version else None
@@ -242,8 +243,8 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
-def _handle_daemon_repair(guard_home: Path, as_json: bool) -> int:
-    result = repair_approval_center_locator(guard_home)
+def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
+    result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
     _emit("daemon", result, as_json)
     return 0
 
@@ -341,7 +342,7 @@ def _dispatch_guard_daemon_command(
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))
     if daemon_command == "repair":
-        return _handle_daemon_repair(guard_home, getattr(args, "json", False))
+        return _handle_daemon_repair(guard_home, getattr(args, "json", False), home_dir=home_dir)
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
     if store is None:

@@ -380,6 +380,16 @@ def test_state_change_requires_exact_single_use_local_approval(tmp_path: Path) -
     assert consume_local_command_approval(store, authorized) is False
 
 
+def test_pending_approval_rejects_nonportable_cloud_job_id(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    operation = "guard.app.update"
+    _issue(store, operation)
+    job_id = "job-$(touch /opt/guard-test/unsafe)"
+    job = _job(store, operation, job_id=job_id, payload={"channel": "stable"})
+    with pytest.raises(CommandCapabilityError, match="command_id_invalid"):
+        authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+
 def test_poll_is_network_silent_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _connected_store(tmp_path)
     monkeypatch.setattr(

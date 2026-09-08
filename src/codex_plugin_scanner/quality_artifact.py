@@ -16,6 +16,8 @@ from codex_plugin_scanner.reporting import build_json_payload
 from codex_plugin_scanner.verification import VerificationResult
 from codex_plugin_scanner.version import __version__
 
+from .safe_output import write_text_atomic_no_follow
+
 DEFAULT_EXCLUSIONS = (".git/*", "*.pyc", "__pycache__/*", ".venv/*", "dist/*", "build/*")
 DEFAULT_EXCLUDED_DIRECTORIES = frozenset({".git", "__pycache__", ".venv", "build", "dist"})
 
@@ -87,5 +89,4 @@ def build_quality_artifact(
 
 
 def write_quality_artifact(path: Path, artifact: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+    write_text_atomic_no_follow(path, json.dumps(artifact, indent=2))

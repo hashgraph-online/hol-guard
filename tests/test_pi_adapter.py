@@ -125,6 +125,27 @@ class TestPiDetect:
         assert result.installed is True
         assert result.command_available is True
 
+    def test_detect_finds_omp_in_user_local_bin_when_gui_path_omits_it(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        executable = ctx.home_dir / ".local" / "bin" / "omp"
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
+            lambda command, candidates=(): next(
+                (str(candidate) for candidate in candidates if candidate.is_file() and command == "omp"),
+                None,
+            ),
+        )
+
+        result = get_adapter("omp").detect(ctx)
+
+        assert result.installed is True
+        assert result.command_available is True
+
     def test_detect_omp_warning_mentions_omp(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": []})

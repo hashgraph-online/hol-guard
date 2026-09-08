@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime
+from ci.native_runtime.native_hook_client_support import _push_snapshot
+from ci.native_runtime.resident_test_support import process_is_alive
+from ci.native_runtime.test_native_hook_client import (
+    _request as _native_request,
+)
+from ci.native_runtime.test_native_hook_client import _state_files
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
@@ -110,7 +119,8 @@ def test_poisoned_socket_symlink_falls_back_without_touching_target(tmp_path: Pa
         socket_path = runtime_dir / f"hook-v2-{status.identity.sha256[:16]}.sock"
         socket_path.symlink_to(victim)
         try:
-            response = review_post_tool_native(request, observe_mode=False)
+            with native_policy_snapshot(guard_home) as snapshot:
+                response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
             assert response is not None
             assert response.decision == "allow"
             assert victim.read_text(encoding="utf-8") == "keep"
@@ -130,17 +140,69 @@ def test_resident_runtime_restarts_after_contained_shutdown(tmp_path: Path) -> N
             guard_home=guard_home,
             request_id="before-shutdown",
         )
-        first = review_post_tool_native(first_request, observe_mode=False)
-        assert first is not None and first.decision == "allow"
-        close_resident_native_runtimes()
-
-        second_request = _request(
-            tmp_path,
-            guard_home=guard_home,
-            request_id="after-shutdown",
-        )
-        second = review_post_tool_native(second_request, observe_mode=False)
         try:
-            assert second is not None and second.decision == "allow"
+            with native_policy_snapshot(guard_home) as snapshot:
+                first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
+                assert first is not None and first.decision == "allow"
+                close_resident_native_runtimes()
+
+                second_request = _request(
+                    tmp_path,
+                    guard_home=guard_home,
+                    request_id="after-shutdown",
+                )
+                second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
+                assert second is not None and second.decision == "allow"
         finally:
             close_resident_native_runtimes()
+
+
+@pytest.mark.skipif(not _NATIVE_BINARY or os.name == "nt", reason="compiled POSIX resident runtime is required")
+def test_native_clients_share_one_generation_across_processes(tmp_path: Path) -> None:
+    runtime = Path(_NATIVE_BINARY).resolve(strict=True)
+    state_dir = tmp_path / "native-runtime"
+    state_dir.mkdir(mode=0o700)
+    request = _native_request(runtime, tmp_path)
+    _push_snapshot(runtime, state_dir, request)
+    processes = [
+        subprocess.Popen(
+            (str(runtime), "hook-client", "--stdin", str(state_dir)),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        for _ in range(8)
+    ]
+    process_ids: tuple[int, int] = ()
+    try:
+        for process in processes:
+            assert process.stdin is not None
+            process.stdin.write(request)
+            process.stdin.close()
+        for process in processes:
+            process.wait(timeout=5)
+        outputs = [(process.stdout.read() if process.stdout is not None else b"") for process in processes]
+        errors = [(process.stderr.read() if process.stderr is not None else b"") for process in processes]
+        assert [process.returncode for process in processes] == [0] * len(processes), errors
+        assert all(json.loads(output)["authority"] == "rust" for output in outputs)
+        states = [json.loads(path.read_text(encoding="utf-8")) for path in _state_files(state_dir)]
+        assert len(states) == 1
+        process_ids = (states[0]["process_id"], states[0]["owner_process_id"])
+    finally:
+        subprocess.run(
+            (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=2)
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline and (
+        _state_files(state_dir) or any(process_is_alive(process_id) for process_id in process_ids)
+    ):
+        time.sleep(0.01)
+    assert not (_state_files(state_dir) or any(process_is_alive(process_id) for process_id in process_ids))

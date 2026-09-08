@@ -18,13 +18,6 @@ if TYPE_CHECKING:
 
 from ..dashboard_launcher import build_desktop_dashboard_session_url, desktop_bootstrap_is_preflight
 from ._commands_shared import *  # noqa: F403
-from .desktop_presentation import (
-    presentation_projection as _presentation_projection,
-)
-from .desktop_presentation import (
-    run_presentation_set_command,
-    unsupported_presentation_projection,
-)
 
 DESKTOP_BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 _MAX_PENDING_APPROVALS = 20
@@ -87,7 +80,6 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     installed = _bool(item.get("installed"))
     command_available = _bool(item.get("command_available"))
     artifact_count = _int(item.get("artifact_count"))
-    review_count = _int(item.get("review_count"))
     warning_count = _int(item.get("warning_count"))
     managed = _bool(item.get("managed"))
     detected = installed or command_available or artifact_count > 0
@@ -95,7 +87,7 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     if managed and not runtime_active:
         protection = "needs_repair"
         detail = "Guard management is installed, but local enforcement is unavailable until the runtime is active."
-    elif managed and review_count == 0 and warning_count == 0:
+    elif managed and warning_count == 0:
         protection = "protected"
         detail = "Guard management is installed and the latest local check is clean."
     elif managed:
@@ -200,7 +192,7 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     elif state == "paired_waiting":
         status = "syncing"
         detail = "Guard Cloud pairing is complete and the first sync is pending."
-    elif state in {"connected", "active", "synced"}:
+    elif state in {"connected", "active", "synced", "paired_active"}:
         status = "connected"
         detail = "Guard Cloud is connected."
     else:
@@ -214,47 +206,6 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _protection_summary(
-    *, runtime_status: str, managed_harnesses: int, pending_count: int, apps: list[dict[str, object]]
-) -> tuple[str, str, str, str]:
-    protected_count = sum(1 for app in apps if app["protection"] == "protected")
-    needs_repair = any(app["protection"] == "needs_repair" for app in apps)
-    if managed_harnesses == 0:
-        return (
-            "not_configured",
-            "No detected app is currently managed by Guard.",
-            "setup_required",
-            "Connect a detected AI app to start local protection.",
-        )
-    if runtime_status != "active":
-        return (
-            "degraded",
-            "Guard-managed apps exist, but the local runtime is not active.",
-            "attention_required",
-            "Guard is installed, but the local runtime needs attention.",
-        )
-    if needs_repair or protected_count < managed_harnesses:
-        return (
-            "partial",
-            "Some Guard-managed apps need repair or verification.",
-            "attention_required",
-            "Some protected apps need attention.",
-        )
-    if pending_count > 0:
-        return (
-            "protected",
-            "Guard is active and enforcing local policy.",
-            "attention_required",
-            "Guard is active. One or more requests need your decision.",
-        )
-    return (
-        "protected",
-        "Guard is active and enforcing local policy.",
-        "ready",
-        "Guard is active and this machine is protected.",
-    )
-
-
 def build_desktop_bootstrap_payload(
     *,
     status_payload: dict[str, object],
@@ -265,7 +216,6 @@ def build_desktop_bootstrap_payload(
     oldest_pending_at: str | None = None,
     resolved_today_count: int | None = None,
     receipt_summary: dict[str, object] | None = None,
-    presentation: dict[str, object] | None = None,
 ) -> dict[str, object]:
     runtime_status = _text(status_payload.get("runtime_status")) or "offline"
     runtime_active = runtime_status == "active"
@@ -275,12 +225,34 @@ def build_desktop_bootstrap_payload(
 
     managed_harnesses = _int(status_payload.get("managed_harnesses"))
     pending_count = _int(status_payload.get("pending_approvals"), len(pending_requests))
-    protection_state, protection_detail, desktop_status, message = _protection_summary(
-        runtime_status=runtime_status,
-        managed_harnesses=managed_harnesses,
-        pending_count=pending_count,
-        apps=apps,
-    )
+    protected_count = sum(1 for app in apps if app["protection"] == "protected")
+    needs_repair = any(app["protection"] == "needs_repair" for app in apps)
+
+    if managed_harnesses == 0:
+        protection_state = "not_configured"
+        protection_detail = "No detected app is currently managed by Guard."
+        desktop_status = "setup_required"
+        message = "Connect a detected AI app to start local protection."
+    elif runtime_status != "active":
+        protection_state = "degraded"
+        protection_detail = "Guard-managed apps exist, but the local runtime is not active."
+        desktop_status = "attention_required"
+        message = "Guard is installed, but the local runtime needs attention."
+    elif needs_repair or protected_count < managed_harnesses:
+        protection_state = "partial"
+        protection_detail = "Some Guard-managed apps need repair or verification."
+        desktop_status = "attention_required"
+        message = "Some protected apps need attention."
+    elif pending_count > 0:
+        protection_state = "protected"
+        protection_detail = "Guard is active and enforcing local policy."
+        desktop_status = "attention_required"
+        message = "Guard is active. One or more requests need your decision."
+    else:
+        protection_state = "protected"
+        protection_detail = "Guard is active and enforcing local policy."
+        desktop_status = "ready"
+        message = "Guard is active and this machine is protected."
 
     pending_projections = [
         projection
@@ -357,7 +329,6 @@ def build_desktop_bootstrap_payload(
         "recentReceipts": receipt_projections,
         "cloud": _cloud_projection(status_payload),
         "dashboard": {"available": True, "launchCommandSupported": True},
-        "presentation": presentation or unsupported_presentation_projection(),
     }
 
 
@@ -395,11 +366,8 @@ def _run_guard_desktop_command(
         if bool(getattr(args, "alpha", False)):
             argv.append("--alpha")
         return dashboard_update_main(argv)
-    desktop_command = getattr(args, "desktop_command", None)
-    if desktop_command == "presentation-set":
-        return run_presentation_set_command(args, guard_home=guard_home, config=config, output_stream=output_stream)
-    if desktop_command != "bootstrap":
-        print("Choose desktop bootstrap or presentation-set.", file=sys.stderr)
+    if getattr(args, "desktop_command", None) != "bootstrap":
+        print("Choose desktop bootstrap.", file=sys.stderr)
         return 2
     if context is None or store is None or config is None:
         raise RuntimeError("Guard Desktop bootstrap requires local Guard context")
@@ -440,7 +408,6 @@ def _run_guard_desktop_command(
         oldest_pending_at=oldest_pending_at,
         resolved_today_count=resolved_today_count,
         receipt_summary=receipt_summary,
-        presentation=_presentation_projection(config),
     )
     dashboard = payload.get("dashboard")
     if isinstance(dashboard, dict):

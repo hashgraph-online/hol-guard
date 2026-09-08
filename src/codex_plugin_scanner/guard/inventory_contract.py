@@ -163,7 +163,7 @@ def _inventory_item_description_module():
 
 
 _MCP_SECRET_RE = re.compile(
-    r"(?<![a-z0-9])(secret|secrets|token|tokens|password|passwords|credential|credentials|api[_\-\s]?key|apiKey)(?![a-z0-9])",
+    r"(?<![a-z0-9])(secret|secrets|token|tokens|password|passwords|credential|credentials|api[_\-\s]?key)(?![a-z0-9])",
     re.IGNORECASE,
 )
 _MCP_NETWORK_RE = re.compile(

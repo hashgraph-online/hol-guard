@@ -8,13 +8,13 @@ Make the bundled Rust runtime a cross-platform, low-latency safety kernel for ca
 
 The native kernel must reliably pause or block secret exfiltration, prompt injection, broad deletion, destructive production database or infrastructure actions, supply-chain compromise, and Guard tampering. Routine reads, tests, builds, linting, bounded workspace edits, and exact low-impact cleanup must remain quiet and autonomous.
 
-Eligible PostToolUse review uses the verified bundled Rust runtime in `auto` mode by default. Python remains the control plane and fail-safe fallback, explicit `HOL_GUARD_NATIVE=off` remains the emergency rollback, and PreToolUse authority remains Python-only.
+Eligible PostToolUse and supported PreToolUse review use the verified bundled Rust runtime in `auto` mode by default. Python remains the control plane and explicit differential-test oracle; it is never a production semantic fallback. `HOL_GUARD_NATIVE=off` is an explicit fail-safe disablement, and shadow comparison is diagnostic-only.
 
 ## Security invariants
 
 1. Rust never lowers the canonical action, approval floor, or output restriction.
-2. Unreviewed PostToolUse output never reaches the model.
-3. Unknown parsing, stale policy, exhausted scan budget, overload, or daemon unavailability never becomes an unsafe allow.
+2. When native PostToolUse review completes, blocked output never reaches the model. When that review cannot complete, the turn continues because the tool already ran.
+3. Unknown parsing, stale policy, exhausted scan budget, overload, or daemon unavailability never becomes an unsafe high-impact PreToolUse allow.
 4. Same-user local processes are untrusted until message-level authentication succeeds.
 5. Every connection, frame, allocation, parser, scanner, worker, queue, subprocess, log, restart, and fallback is bounded.
 6. The resident Rust child remains outside the Python process and runs through the existing containment and process-tree cleanup boundary.
@@ -31,13 +31,13 @@ Internally preserve three outcomes:
 
 During native failure:
 
-`resident Rust -> bounded verified one-shot Rust or Python reference while still supported -> fail-safe pause/block`
+`resident Rust -> bounded verified one-shot Rust -> fail-safe pause/block`
 
 A resident crash must not retire a healthy Python daemon. Restart occurs outside the requesting hook under a single-flight supervisor. Repeated crashes open a circuit.
 
 During Python daemon failure:
 
-- PostToolUse output is withheld or blocked.
+- PostToolUse output is withheld when native review blocks it. When the daemon cannot complete PostToolUse review, the turn continues because the tool already ran.
 - Mutating, network, secret-capable, destructive, package-executing, process-control, policy-tampering, and uncertain PreToolUse operations pause.
 - Only the authenticated exact emergency-safe profile may continue.
 - Empty or malformed responses are never treated as successful execution.
@@ -45,7 +45,7 @@ During Python daemon failure:
 ## Target architecture
 
 - **Harness adapters:** authenticate the daemon and enforce daemon-unavailable fail-safe behavior.
-- **Python daemon:** policy, approvals, receipts, containment, durable correlation, health orchestration, and reference evaluation.
+- **Python daemon:** policy, approvals, receipts, containment, durable correlation, health orchestration, and explicit differential-test oracle support.
 - **Rust resident runtime:** bounded parsing, output traversal, secret and prompt-injection fast paths, secure source reads, hashing, effect extraction, and eligible decisions.
 - **Native supervisor:** child identity, health, prewarm, restart, rotation, circuit breaking, and fallback budgeting.
 - **Authenticated policy snapshot:** immutable, versioned native inputs bound to package/rule/policy identity.
@@ -80,7 +80,7 @@ Requirements:
 - retain and monitor the actual child handle;
 - asynchronous restart with exponential backoff, jitter, and bounded budget;
 - one half-open probe after cooldown;
-- bounded one-shot and Python fallback queues;
+- bounded one-shot queue;
 - no fallback process storm;
 - zero-downtime generation rotation after bounded uptime or request count;
 - stale sockets, ports, binaries, manifests, policy snapshots, and generation responses rejected;
@@ -133,7 +133,7 @@ macOS adds APFS case modes, aliases, symlinks, hardlinks, mounts, socket path li
 
 Linux adds static-runtime proof, secure path walks, bind/overlay mounts, namespaces/containers, low descriptor limits, cgroups, noexec, read-only Guard homes, and stale socket attacks.
 
-Unsupported platforms must select the pure-Python fallback and provide actionable diagnosis.
+Unsupported platforms must provide actionable diagnosis and fail-safe for supported hook events. Python semantic evaluation remains available only through explicit differential-test fixtures.
 
 ## Performance and resource SLOs
 
@@ -178,12 +178,21 @@ Maintain `docs/guard/contracts/hook-data-plane-ownership.v2.json`.
 For every capability, classify Python code as:
 
 1. required control plane;
-2. active named supported reference/compatibility backend exercised in CI;
+2. active named differential-test oracle exercised in CI;
 3. dead duplicate.
 
-Delete category 3. Replaced, unreachable, or untested Python runtime implementations are dead code, not dormant rollback. Deletion includes implementation files, tests, imports, dependencies, package entries, flags, and shims. Move reusable cases to language-neutral fixtures. Add package-content/import tests and record Python LOC/dependency deltas.
+Delete category 3 only in a separately authorized deletion change. Replaced, unreachable, or untested Python runtime implementations are dead code, not
+dormant rollback. NHD-091–095 makes the first package boundary explicit:
+`docs/guard/contracts/python-capability-ownership.v1.json` classifies the full
+hook/runtime scope, `scripts/ci/python_capability_cleanup_gate.py` proves
+source/runtime reachability and package content, and the six-case parity
+fixture is language-neutral. The superseded Python resident source is retained
+but excluded from wheels/sdists and recorded as the sole deletion candidate;
+source deletion, tests/imports/dependencies/flags/shims removal, and any other
+category-3 cleanup remain separate until their rollback boundary is reviewed.
+Record Python LOC/dependency deltas for each authorized removal.
 
-Do not remove the active Python reference backend while this PRD requires it. An untested fallback is dead code and must be removed.
+Do not remove the active Python differential-test oracle while this PRD requires it. A production semantic fallback is forbidden; an untested oracle is dead code and must be removed.
 
 ## Rollout gates
 
@@ -210,4 +219,4 @@ Do not remove the active Python reference backend while this PRD requires it. An
 - Native doctor/status/repair are accurate and privacy safe.
 - Dead replaced Python code is deleted; active Python control/reference code is explicitly retained and tested.
 - Cargo lock/fmt/Clippy/tests/audit/deny/SBOM/provenance, CodeQL, Security Gates, fuzz, differential, chaos, soak, CI, and review gates pass.
-- Eligible PostToolUse source default is `auto`; explicit `off`, pure-Python unsupported-platform fallback, and Python control/reference ownership remain tested rollback paths.
+- Eligible supported-hook source default is `auto`; explicit `off` is a fail-safe disablement, shadow is diagnostic-only, and Python control/oracle ownership remains covered by differential tests.

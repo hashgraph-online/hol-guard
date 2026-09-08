@@ -87,9 +87,16 @@ def test_lifecycle_gate_warns_and_allows_when_protection_is_disabled(
     )
 
     warning = error_stream.getvalue()
-    assert "Security recommendation" in warning
-    assert "approval password or Authenticator" in warning
-    assert "hol-guard dashboard" in warning
+    assert "Local Guard approval protection is not enabled." in warning
+    assert "Guard Cloud sign-in and account MFA are separate from this local gate." in warning
+    assert "Settings > Approval gate" in warning
+    assert "Ask for proof on allow decisions" in warning
+    assert (
+        "Optionally connect an `Authenticator app`; once enabled, its code replaces the `Approval password` "
+        "for every protected action and disables cooldown."
+    ) in warning
+    assert "Authy" not in warning
+    assert "This notice is advisory and does not block the current command." in warning
 
 
 def test_lifecycle_gate_requires_fresh_password_when_enabled(
@@ -103,8 +110,7 @@ def test_lifecycle_gate_requires_fresh_password_when_enabled(
         {"enabled": True, "new_password": password, "confirm_password": password},
     )
 
-    def wrong_password_prompt(_guard_home: Path, *, use_cooldown: bool = True) -> ApprovalGateInput:
-        del use_cooldown
+    def wrong_password_prompt(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         return ApprovalGateInput(password="wrong password")
 
     monkeypatch.setattr(commands_lifecycle_gate, "prompt_for_approval_gate", wrong_password_prompt)
@@ -127,8 +133,7 @@ def test_lifecycle_gate_accepts_valid_password_and_binds_grant(
         {"enabled": True, "new_password": password, "confirm_password": password},
     )
 
-    def valid_password_prompt(_guard_home: Path, *, use_cooldown: bool = True) -> ApprovalGateInput:
-        del use_cooldown
+    def valid_password_prompt(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         return ApprovalGateInput(password=password)
 
     monkeypatch.setattr(commands_lifecycle_gate, "prompt_for_approval_gate", valid_password_prompt)

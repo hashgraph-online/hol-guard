@@ -11,6 +11,7 @@ from .manager import (
     repair_approval_center_locator,
     schedule_guard_daemon_recovery,
 )
+from .runtime_repair import repair_guard_daemon_runtime
 
 __all__ = [
     "GuardDaemonServer",
@@ -22,6 +23,7 @@ __all__ = [
     "load_guard_surface_daemon_client",
     "recover_guard_daemon_after_hook_failure",
     "repair_approval_center_locator",
+    "repair_guard_daemon_runtime",
     "schedule_guard_daemon_recovery",
 ]
 

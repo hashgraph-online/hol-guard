@@ -83,6 +83,7 @@ _HOOK_EVENT_NAME_MAP = {
     "pretooluse": "PreToolUse",
     "posttooluse": "PostToolUse",
     "permissionrequest": "PermissionRequest",
+    "permissionrequestv2": "PermissionRequest",
 }
 
 

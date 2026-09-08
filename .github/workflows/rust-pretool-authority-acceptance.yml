@@ -11,6 +11,7 @@ on:
       - "src/codex_plugin_scanner/guard/native_pretool.py"
       - "src/codex_plugin_scanner/guard/native_runtime*.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "tests/test_rust_pretool_authority*.py"
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - "src/codex_plugin_scanner/guard/native_pretool.py"
       - "src/codex_plugin_scanner/guard/native_runtime*.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "tests/test_rust_pretool_authority*.py"
   workflow_dispatch:
 
 permissions:
@@ -83,6 +85,7 @@ jobs:
         run: |
           uv run --no-sync pytest -q \
             tests/test_rust_pretool_authority.py \
+            tests/test_rust_pretool_authority_worker.py \
             ci/native_runtime/test_command_model_resident.py \
             ci/native_runtime/test_guard_native_runtime_binary.py \
             --tb=short

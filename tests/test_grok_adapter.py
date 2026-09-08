@@ -115,8 +115,8 @@ class TestGrokInstallUninstall:
         managed_text = managed_config.read_text(encoding="utf-8")
         assert "Read(**/.grok/auth/**)" in managed_text
         assert "Read(~/" not in managed_text
-        assert "[[hooks.PreToolUse]]" in managed_text
-        assert "[[hooks.SessionStart]]" in managed_text
+        assert "[[hooks.PreToolUse]]" in managed_text and "[[hooks.SessionStart]]" in managed_text
+        assert '"--json"' in pretool_entries[0]["hooks"][0]["command"].replace(" ", "")
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -670,7 +670,7 @@ class TestGrokInventoryAndResponses:
         grok_root = ctx.home_dir / ".grok"
         (grok_root / "workflows").mkdir(parents=True)
         (grok_root / "agents").mkdir(parents=True)
-        (grok_root / "sandbox.toml").write_text("[profiles.project]\nextends = \"workspace\"\n", encoding="utf-8")
+        (grok_root / "sandbox.toml").write_text('[profiles.project]\nextends = "workspace"\n', encoding="utf-8")
         result = GrokHarnessAdapter().detect(ctx)
         assert any(path.endswith(".grok/workflows") for path in result.config_paths)
         assert any(path.endswith(".grok/agents") for path in result.config_paths)

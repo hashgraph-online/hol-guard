@@ -177,6 +177,11 @@ test("startup proving snapshot shows checking instead of degraded", async ({ pag
   await expect(page.getByRole("heading", { name: "Checking Codex protection" })).toBeVisible();
   await expect(page.getByText("Codex protection is degraded")).toHaveCount(0);
   await expect(page.getByText("Codex is protected")).toHaveCount(0);
+
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("button", { name: "Apps" }).click();
+  await page.waitForURL(/\/protect/);
+  await expect(page.getByRole("heading", { name: "Checking app protection" })).toBeVisible();
+
   await page.screenshot({ path: testInfo.outputPath("protection-health-checking.png"), fullPage: true });
 });
 

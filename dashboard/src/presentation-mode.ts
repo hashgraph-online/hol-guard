@@ -3,6 +3,7 @@ export type GuardPresentationMode = "everyday" | "technical";
 export type GuardPresentationSource =
   | "default"
   | "local-explicit"
+  | "migrated"
   | "session-preview"
   | "cloud-profile"
   | "read-error";
@@ -17,6 +18,11 @@ export type ResolvedGuardPresentationMode = {
   diagnostic: string | null;
 };
 
+const LEGACY: Record<string, GuardPresentationMode> = {
+  simple: "everyday",
+  advanced: "technical",
+  developer: "technical",
+};
 
 export function resolvePresentationMode(input: {
   value?: unknown;
@@ -44,32 +50,29 @@ export function resolvePresentationMode(input: {
   if (input.sessionPreview === "everyday" || input.sessionPreview === "technical") {
     return resolved(input.sessionPreview, "session-preview", true);
   }
-  if (input.schemaVersion !== undefined && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION) {
-    return resolved("everyday", "default", false, "unsupported_presentation_schema_fell_back_to_everyday");
-  }
-  const persistedMode = input.value === "everyday" || input.value === "technical"
+  const unsupportedSchema = input.schemaVersion !== undefined && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION;
+  const persistedMode = !unsupportedSchema && (input.value === "everyday" || input.value === "technical")
     ? input.value
     : null;
   if (persistedMode !== null && input.explicit === true) {
     return resolved(persistedMode, "local-explicit", true);
   }
-  const invalidDiagnostic =
-    input.value !== undefined &&
-    input.value !== null &&
-    input.value !== "" &&
-    persistedMode === null
-      ? "unknown_presentation_mode_fell_back_to_everyday"
-      : null;
-  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
-    return resolved(input.cloudProfile, "cloud-profile", false, invalidDiagnostic);
+  if (!unsupportedSchema && typeof input.value === "string" && LEGACY[input.value]) {
+    return resolved(LEGACY[input.value], "migrated", true, `migrated_legacy_${input.value}_presentation_mode`);
   }
-  if (invalidDiagnostic !== null) {
-    return resolved("everyday", "default", false, invalidDiagnostic);
+  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
+    return resolved(input.cloudProfile, "cloud-profile", false);
   }
   if (persistedMode !== null) {
     return resolved(persistedMode, "default", false);
   }
-  return resolved("everyday", "default", false);
+  let diagnostic: string | null = null;
+  if (unsupportedSchema) {
+    diagnostic = "unsupported_presentation_schema_fell_back_to_everyday";
+  } else if (input.value !== undefined && input.value !== null && input.value !== "") {
+    diagnostic = "unknown_presentation_mode_fell_back_to_everyday";
+  }
+  return resolved("everyday", "default", false, diagnostic);
 }
 
 export type TechnicalDisclosureState = { open: boolean; source: "mode-default" | "user" | "required" };

@@ -1,0 +1,16 @@
+{
+  "project": "hashgraph-online_hol-guard",
+  "pull_request": 2778,
+  "issue": "AaBvKDhNMjkgZ7apuESm",
+  "rule": "pythonsecurity:S5144",
+  "component": "src/codex_plugin_scanner/guard/cloud_audit_request.py",
+  "reviewed_commit": "ad50ca2cd8d50390b905b4ef72792ef575654918",
+  "reason": "The reported source is the batch API jobId, not the configured sync authority. _normalized_supply_chain_batch_job_url quotes jobId as one path segment and retains scheme/netloc from the configured sync endpoint. The request boundary validates the configured allowlisted origin, then requires exact request-origin equality before creating any credentials. Local HTTP development receives no credentials. Authenticated managed_urlopen rejects redirects on both direct and managed transports. The added regression suite covers hostile scheme/authority/query/fragment/control/Unicode job IDs, the actual polling boundary, and both redirect policies. This reviewed flow cannot direct a credential-bearing request to an attacker-selected origin. No analyzer rule, exclusion, or gate threshold is changed.",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/local_supply_chain.py": "1ec4c9d7626b8678ec2bfb6081d2f2b9182cbed1620fa9edca28d5ca278b87ed",
+    "src/codex_plugin_scanner/guard/cli/oauth_client.py": "aa157f091e3998e2060c506bd8d2fca8b6ea3d5b51e02bc61f28367d35288345",
+    "src/codex_plugin_scanner/guard/mdm/network_transport.py": "f9a29baf8523b06958e283f6ba606bbe7ab2c6745ffb97352c0dcdae57fe0ed8",
+    "src/codex_plugin_scanner/no_redirect.py": "3ff39ddd46aeeebe746fb68253adee94ee35502928b27cb9155adfe5120bc0c7",
+    "src/codex_plugin_scanner/guard/cloud_audit_request.py": "a8e562da0803a62b2d280e7462967656c7c887ca8635a880715a1af798e23fdd"
+  }
+}

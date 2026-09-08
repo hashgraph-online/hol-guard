@@ -665,7 +665,7 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-        def read(self) -> bytes:
+        def read(self, _limit: int = -1) -> bytes:
             return json.dumps(
                 {
                     "ok": True,

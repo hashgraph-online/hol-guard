@@ -7,10 +7,6 @@ from typing import Any
 
 from .authority import AuthorityMode, ControlEffect, ControlInstruction
 from .catalog import CatalogProjection, CatalogValidationError
-from .fleet_contracts import (
-    ContractKind,
-    validate_fleet_contract_collection,
-)
 
 _CONTROLS_FIELD = "x-hol-extension-controls"
 _TARGETS_FIELD = "x-hol-extension-targets"
@@ -32,16 +28,6 @@ class ExtensionTarget:
 class ParsedExtensionContract:
     controls: tuple[ControlInstruction, ...]
     rule_targets: dict[str, tuple[ExtensionTarget, ...]]
-    fleet_contracts: dict[ContractKind, dict[str, object]]
-
-
-def _parse_fleet_contracts(
-    document: dict[str, Any],
-) -> dict[ContractKind, dict[str, object]]:
-    parsed = validate_fleet_contract_collection(document)
-    if parsed:
-        raise ManagedControlsBundleError("exact Fleet contract application is not implemented by this runtime")
-    return parsed
 
 
 def _mapping(value: object, label: str) -> dict[str, object]:
@@ -196,5 +182,4 @@ def parse_extension_contract(
     return ParsedExtensionContract(
         _parse_controls(document, catalog),
         _parse_rule_targets(document, catalog),
-        _parse_fleet_contracts(document),
     )

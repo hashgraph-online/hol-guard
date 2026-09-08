@@ -5,18 +5,25 @@ import os
 import shutil
 import subprocess
 import sys
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import cline_hooks as cline_hooks_module
+from codex_plugin_scanner.guard.adapters import cline_state_paths as cline_state_paths_module
 from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_hooks import (
+    _hook_command,
     _hook_source,
     _posix_wrapper,
     _powershell_wrapper,
     _slot_for_event,
     cline_hook_roots,
+    cline_native_hook_state,
+    run_cline_hook_canary,
+    uninstall_cline_hooks,
 )
 from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
 
@@ -134,7 +141,144 @@ def test_windows_wrapper_uses_isolated_python_and_fails_closed() -> None:
     assert "cancel=$true" in source
 
 
-def test_native_pretool_fails_closed_when_guard_is_unavailable(tmp_path: Path) -> None:
+def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path / "home parent with spaces")
+    hook = cline_hook_roots(context)[0] / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
+    hook.parent.mkdir(parents=True)
+    hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    if os.name != "nt":
+        hook.chmod(0o700)
+    state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"paths": {"PreToolUse": str(hook)}}), encoding="utf-8")
+    observed: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        observed["command"] = command
+        observed["shell"] = kwargs.get("shell")
+        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
+
+    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
+    if os.name == "nt":
+        powershell = tmp_path / "PowerShell Dir" / "powershell.exe"
+        powershell.parent.mkdir()
+        powershell.write_bytes(b"")
+        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
+
+    assert run_cline_hook_canary(context) == {"ok": True}
+    observed_command = observed["command"]
+    assert isinstance(observed_command, list)
+    assert observed_command[-1] == str(hook.resolve())
+    assert observed["shell"] is False
+
+
+def test_cline_powershell_command_never_uses_ambient_path(tmp_path: Path, monkeypatch) -> None:
+    attacker_dir = tmp_path / "attacker-bin"
+    attacker_dir.mkdir()
+    attacker_shell = attacker_dir / "powershell.exe"
+    attacker_shell.write_bytes(b"")
+    monkeypatch.setenv("PATH", str(attacker_dir))
+
+    def unavailable_system_shell(*_parts: str) -> Path:
+        raise OSError("trusted Windows PowerShell unavailable")
+
+    monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", unavailable_system_shell)
+
+    assert _hook_command(tmp_path / "PreToolUse.ps1") == []
+
+
+def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path / "home parent")
+    custom_data = context.home_dir / "custom cline data"
+    custom_root = custom_data / "hooks"
+    monkeypatch.setenv("CLINE_DATA_DIR", str(custom_data))
+    paths: dict[str, str] = {}
+    digests: dict[str, str] = {}
+    workers: dict[str, str] = {}
+    worker_digests: dict[str, str] = {}
+    for event in cline_hooks_module._EVENTS:
+        hook = custom_root / f"{event}{'.ps1' if os.name == 'nt' else ''}"
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
+        hook.write_text(hook_content, encoding="utf-8")
+        worker = context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py"
+        worker.parent.mkdir(parents=True, exist_ok=True)
+        worker_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
+        worker.write_text(worker_content, encoding="utf-8")
+        paths[event] = str(hook)
+        digests[event] = sha256(hook_content.encode()).hexdigest()
+        workers[event] = str(worker)
+        worker_digests[event] = sha256(worker_content.encode()).hexdigest()
+    state_path = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "root": str(custom_root),
+                "paths": paths,
+                "sha256": digests,
+                "workers": workers,
+                "worker_sha256": worker_digests,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("CLINE_DATA_DIR")
+
+    def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
+
+    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
+    if os.name == "nt":
+        powershell = tmp_path / "trusted" / "powershell.exe"
+        powershell.parent.mkdir()
+        powershell.write_bytes(b"")
+        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
+
+    health = cline_native_hook_state(context)
+    assert health["installed"] is True
+    assert health["integrity_ok"] is True
+    assert health["synthetic_canary_ok"] is True
+    uninstall = uninstall_cline_hooks(context)
+    assert uninstall["complete"] is True
+    assert len(uninstall["removed"]) == len(paths) + len(workers)
+    assert not custom_root.exists() or not any(custom_root.iterdir())
+
+
+def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context = _context(tmp_path)
+    attacker_hook = tmp_path / "outside" / "PreToolUse"
+    attacker_hook.parent.mkdir()
+    attacker_hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    attacker_hook.chmod(0o700)
+    state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "paths": {"PreToolUse": str(attacker_hook)},
+                "sha256": {"PreToolUse": "attacker-controlled"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("an unbound Cline state path must not be executed")
+
+    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fail_run)
+
+    assert run_cline_hook_canary(context) == {"ok": False, "reason": "pretool_hook_missing"}
+    assert cline_native_hook_state(context)["installed"] is False
+    uninstall = uninstall_cline_hooks(context)
+    assert uninstall["complete"] is False
+    assert str(attacker_hook) in uninstall["retained_modified_or_unowned"]
+    assert attacker_hook.exists()
+
+
+def test_native_pretool_continues_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
     source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
@@ -142,6 +286,35 @@ def test_native_pretool_fails_closed_when_guard_is_unavailable(tmp_path: Path) -
         source,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["cancel"] is False
+
+
+def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    result = _run_hook(
+        source,
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["cancel"] is True
+
+
+def test_native_pretool_validates_every_command_when_guard_is_unavailable(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    result = _run_hook(
+        source,
+        tmp_path,
+        {
+            "hookName": "PreToolUse",
+            "tool_call": {"id": "1", "name": "run_commands", "input": {"commands": ["git status", "rm -rf /"]}},
+        },
     )
     assert result.returncode == 0
     assert json.loads(result.stdout)["cancel"] is True

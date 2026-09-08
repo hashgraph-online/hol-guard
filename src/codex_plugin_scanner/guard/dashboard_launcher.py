@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.store import GuardStore
 
+from .browser_opener import open_browser_url
 from .daemon.manager import (
     desktop_preflight_requested,
     ensure_guard_daemon,
@@ -140,8 +141,6 @@ def open_dashboard(
     """
     global _in_flight, _last_result
 
-    import webbrowser
-
     with _launch_lock:
         if _in_flight:
             return DashboardLaunchResult(
@@ -191,7 +190,7 @@ def open_dashboard(
                 approval_surface_policy=config.approval_surface_policy,
                 open_key=open_key,
                 force_open=force_open,
-                opener=webbrowser.open,
+                opener=open_browser_url,
             )
         except Exception as error:
             result = DashboardLaunchResult(

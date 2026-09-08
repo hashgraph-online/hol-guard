@@ -4,34 +4,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.checks import mcp_security as mcp_security_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.schemas.consumer_mode import build_consumer_mode_contract
-from codex_plugin_scanner.models import IntegrationResult, ScanOptions, ScanResult
+from codex_plugin_scanner.integrations.cisco_mcp_scanner import CiscoMcpScanSummary
+from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
+from codex_plugin_scanner.models import Finding, IntegrationResult, ScanOptions, ScanResult, Severity
 
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-class FakeCiscoFinding:
-    def __init__(
-        self,
-        *,
-        severity: str,
-        summary: str,
-        analyzer: str,
-        threat_category: str,
-        details: dict[str, Any] | None = None,
-    ) -> None:
-        self.severity = severity
-        self.summary = summary
-        self.analyzer = analyzer
-        self.threat_category = threat_category
-        self.details = details or {}
 
 
 def _write_mcp_plugin(plugin_dir: Path) -> None:
@@ -47,26 +32,25 @@ def _write_mcp_plugin(plugin_dir: Path) -> None:
     (plugin_dir / "server.py").write_text("print('hello')\n", encoding="utf-8")
 
 
-def _build_fake_cisco_components() -> dict[str, type]:
-    class FakeYaraAnalyzer:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            return None
-
-        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
-            file_path = str((context or {}).get("file_path", ""))
-            if file_path.endswith(".mcp.json"):
-                return [
-                    FakeCiscoFinding(
-                        severity="HIGH",
-                        summary="Detected command injection",
-                        analyzer="YARA",
-                        threat_category="command_injection",
-                        details={"raw_response": {"rule": "MCP_COMMAND_INJECTION"}},
-                    )
-                ]
-            return []
-
-    return {"YaraAnalyzer": FakeYaraAnalyzer}
+def _fake_cisco_summary(*_args: object, **_kwargs: object) -> CiscoMcpScanSummary:
+    finding = Finding(
+        rule_id="MCP_COMMAND_INJECTION",
+        severity=Severity.HIGH,
+        category="mcp-security",
+        title="Detected command injection",
+        description="Synthetic Cisco finding for consumer evidence rendering.",
+        file_path=".mcp.json",
+        source="cisco-mcp-scanner",
+    )
+    return CiscoMcpScanSummary(
+        status=CiscoIntegrationStatus.ENABLED,
+        message="Cisco MCP scanner completed static analysis for 2 target(s) using yara analyzer(s).",
+        findings=(finding,),
+        targets_scanned=2,
+        analyzers_used=("yara",),
+        total_findings=1,
+        findings_by_severity={severity.value: int(severity is Severity.HIGH) for severity in Severity},
+    )
 
 
 def _build_scan_options(mode: str) -> ScanOptions:
@@ -79,10 +63,7 @@ def test_build_consumer_mode_contract_includes_cisco_evidence_for_local_mcp_arti
 ) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_mcp_plugin(plugin_dir)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
-        _build_fake_cisco_components,
-    )
+    monkeypatch.setattr(mcp_security_module, "run_cisco_mcp_scan", _fake_cisco_summary)
 
     payload = build_consumer_mode_contract(plugin_dir, options=_build_scan_options("on"))
 
@@ -151,10 +132,7 @@ def test_guard_render_surfaces_cisco_evidence_for_local_mcp_artifact(
 ) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_mcp_plugin(plugin_dir)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
-        _build_fake_cisco_components,
-    )
+    monkeypatch.setattr(mcp_security_module, "run_cisco_mcp_scan", _fake_cisco_summary)
     payload = build_consumer_mode_contract(plugin_dir, options=_build_scan_options("on"))
 
     emit_guard_payload(command, payload, as_json=False)

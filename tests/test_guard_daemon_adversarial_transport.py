@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
@@ -308,17 +309,17 @@ def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
         (
             "/v1/hooks/pi",
             {"hook_event_name": "PreToolUse", "tool_name": "read", "tool_input": {}},
-            ("decision", "deny"),
+            ("decision", "allow"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}},
-            ("permissionDecision", "deny"),
+            ("permissionDecision", "allow"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PermissionRequest", "tool_name": "Read", "tool_input": {}},
-            ("behavior", "deny"),
+            ("continue", True),
         ),
     ],
 )
@@ -327,7 +328,7 @@ def test_hook_overload_returns_native_fail_safe_response(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
     payload: dict[str, object],
-    assertion: tuple[str, str],
+    assertion: tuple[str, object],
 ) -> None:
     with _running_daemon(tmp_path, monkeypatch) as daemon:
         monkeypatch.setattr(
@@ -341,17 +342,27 @@ def test_hook_overload_returns_native_fail_safe_response(
                 "workspace": str(tmp_path),
             }
         )
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}{path}?{query}",
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": daemon._server.auth_token,
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=1) as response:
-            result = json.loads(response.read())
+        if path == "/v1/hooks/claude-code":
+            result = json.loads(
+                authenticated_claude_hook_response(
+                    state_path=daemon._server.store.guard_home / "daemon-state.json",
+                    query=query,
+                    data=json.dumps(payload),
+                    timeout_seconds=1,
+                )
+            )
+        else:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}{path}?{query}",
+                data=json.dumps(payload).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=1) as response:
+                result = json.loads(response.read())
 
     assert result["reason_code"] == "daemon_hook_queue_capacity"
     if assertion[0] == "decision":
@@ -359,7 +370,7 @@ def test_hook_overload_returns_native_fail_safe_response(
     elif assertion[0] == "permissionDecision":
         assert result["hookSpecificOutput"]["permissionDecision"] == assertion[1]
     else:
-        assert result["hookSpecificOutput"]["decision"]["behavior"] == assertion[1]
+        assert result[assertion[0]] == assertion[1]
 
 
 def test_unknown_harnesses_share_one_bounded_capacity_bucket(tmp_path: Path) -> None:
@@ -442,8 +453,10 @@ def test_partial_start_failure_rolls_back_workers_state_and_owner_lock(
         daemon.start()
         assert daemon._thread is not None
         assert daemon._thread.is_alive()
+        assert daemon._finish_service_completed is False
     finally:
         daemon.stop()
+    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_partial_start_retains_owner_until_worker_containment(

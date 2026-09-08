@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-daemon-acceptance" / "workloads.json"
 
@@ -134,6 +135,8 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     failure_reasons: Counter[str] = Counter()
     latencies_ms: list[float] = []
     lock = threading.Lock()
+    remaining_ms = str(int(10_000 * under_coverage_scale(3.0)))
+    review_timeout_seconds = 30 * under_coverage_scale(3.0)
 
     def review(harness: str, client: str, index: int) -> None:
         started = time.monotonic()
@@ -148,7 +151,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             "tool_response": [{"type": "text", "text": output}],
             "stdout": output,
             "session_id": client,
-            "guard_remaining_ms": 10_000,
+            "guard_remaining_ms": int(remaining_ms),
         }
         query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
@@ -156,7 +159,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             f"workspace={urllib.parse.quote(str(workspace))}"
         )
         try:
-            if harness == "codex":
+            if harness in {"codex", "claude-code"}:
                 result = None
                 for attempt in range(2):
                     nonce = secrets.token_hex(32)
@@ -185,7 +188,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                         challenge = cast(dict[str, object], json.loads(challenge_body))
                         connection.request(
                             "POST",
-                            f"/v1/hooks/codex?{query}",
+                            f"/v1/hooks/{harness}?{query}",
                             body=json.dumps(payload).encode(),
                             headers={
                                 "Connection": "close",
@@ -193,7 +196,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                                 "X-Guard-Token": daemon._server.auth_token,
                                 "X-Guard-Daemon-Nonce": nonce,
                                 "X-Guard-Daemon-Proof": str(challenge["proof"]),
-                                "X-Guard-Remaining-Ms": "10000",
+                                "X-Guard-Remaining-Ms": remaining_ms,
                             },
                         )
                         hook_response = connection.getresponse()
@@ -213,7 +216,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                     headers={
                         "Content-Type": "application/json",
                         "X-Guard-Token": daemon._server.auth_token,
-                        "X-Guard-Remaining-Ms": "10000",
+                        "X-Guard-Remaining-Ms": remaining_ms,
                     },
                     method="POST",
                 )
@@ -263,7 +266,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 for index in range(client["requests"])
             ]
             for future in futures:
-                future.result(timeout=30)
+                future.result(timeout=review_timeout_seconds)
         worker_stats = daemon._server.hook_process_runner.stats()
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))

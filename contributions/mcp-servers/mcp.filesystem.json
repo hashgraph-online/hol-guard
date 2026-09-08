@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.filesystem",
+  "version": "1.0.0",
+  "name": "Filesystem MCP",
+  "description": "Reviews official filesystem MCP tools. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.modelcontextprotocol",
+    "displayName": "Community",
+    "url": "https://github.com/modelcontextprotocol/servers"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#1F3A8A" },
+  "homepage": "https://github.com/modelcontextprotocol/servers",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@modelcontextprotocol/server-filesystem"
+  },
+  "riskClasses": ["external-filesystem-write"],
+  "tools": [
+    { "name": "read_file", "state": "inherit" },
+    { "name": "write_file", "state": "block" },
+    { "name": "edit_file", "state": "block" },
+    { "name": "move_file", "state": "block" },
+    { "name": "create_directory", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": ["https://github.com/modelcontextprotocol/servers"],
+  "saferAlternatives": ["Keep write and move tools on Recommended or Block unless this device needs them."]
+}

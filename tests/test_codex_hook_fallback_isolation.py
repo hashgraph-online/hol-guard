@@ -65,8 +65,8 @@ def _config_command(config: dict[str, object], name: str) -> list[str]:
 
 def test_daemon_start_command_keeps_pre_home_argument_compatibility(tmp_path: Path) -> None:
     command = isolated_daemon_start_command(sys.executable, tmp_path, tmp_path / "guard")
-
     assert f"home_dir=Path({str(Path.home())!r})" in command[3]
+    assert "schedule_guard_daemon_recovery" in command[3]
 
 
 def test_fallback_environment_drops_import_virtualenv_project_and_loader_controls(
@@ -259,7 +259,7 @@ def test_isolated_process_preserves_exact_input_and_bounds_combined_output(tmp_p
             sys.executable,
             "-I",
             "-c",
-            "import sys;sys.stdout.write('o'*800);sys.stderr.write('e'*800);sys.stdout.flush();sys.stderr.flush()",
+            "import os;os.write(1,b'\\xff'*800);os.write(2,b'e'*800)",
         ],
         input_text="",
         cwd=cwd,
@@ -272,7 +272,7 @@ def test_isolated_process_preserves_exact_input_and_bounds_combined_output(tmp_p
     assert echo_result.stdout == payload
     assert echo_result.output_limit_exceeded is False
     assert overflow_result.output_limit_exceeded is True
-    assert len(overflow_result.stdout.encode("utf-8")) <= 1024
+    assert len((overflow_result.stdout + overflow_result.stderr).encode("utf-8")) <= 1024
 
 
 def test_isolated_process_timeout_kills_descendants(tmp_path: Path) -> None:

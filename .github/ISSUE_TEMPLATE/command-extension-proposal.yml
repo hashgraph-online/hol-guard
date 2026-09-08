@@ -1,0 +1,95 @@
+name: Command Extension proposal
+description: Propose new or expanded command protection for HOL Guard 3.
+title: "[extension] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for new command safety Extensions and material coverage expansions. Do not include secrets, private command history, local paths, or vulnerability details. Report vulnerabilities through SECURITY.md.
+  - type: dropdown
+    id: contribution_type
+    attributes:
+      label: Contribution type
+      options:
+        - New Extension
+        - Existing Extension coverage
+        - False-positive or safe-variant improvement
+    validations:
+      required: true
+  - type: input
+    id: extension_identity
+    attributes:
+      label: Proposed or existing Extension ID
+      description: Use a stable command.<domain> or command.<domain>.<tool> identity.
+      placeholder: command.example
+    validations:
+      required: true
+  - type: textarea
+    id: capability_boundary
+    attributes:
+      label: Capability boundary
+      description: Describe what the Extension owns, what remains out of scope, and any overlap with the current directory.
+    validations:
+      required: true
+  - type: textarea
+    id: command_surface
+    attributes:
+      label: Command surface
+      description: List executables, dialects, transports, subcommands, flags, wrappers, and supported version assumptions.
+    validations:
+      required: true
+  - type: textarea
+    id: destructive_examples
+    attributes:
+      label: Destructive or sensitive examples
+      description: Provide redacted, reproducible commands for every operation family that should reach review or enforcement.
+    validations:
+      required: true
+  - type: textarea
+    id: safe_counterparts
+    attributes:
+      label: Safe counterparts
+      description: Pair every destructive family with preview, read-only, help, or otherwise safe commands that must remain non-reviewable.
+    validations:
+      required: true
+  - type: textarea
+    id: edge_cases
+    attributes:
+      label: Parser and composition edge cases
+      description: Cover quoting, reordered flags, paths with spaces, wrappers, separators, pipelines, suffixes, and malformed input.
+    validations:
+      required: true
+  - type: textarea
+    id: authority_model
+    attributes:
+      label: Risk and authority model
+      description: Propose risk/action classes, severity, default mode, safer alternatives, and explain why the Extension cannot weaken another match.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy_performance
+    attributes:
+      label: Privacy and performance
+      description: Identify sensitive inputs, redaction needs, matcher bounds, and likely benign hot paths.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Authoritative references
+      description: Link official CLI or API documentation for the proposed command semantics.
+    validations:
+      required: true
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Readiness checklist
+      options:
+        - label: I searched the Extension directory and existing issues for overlapping coverage.
+          required: true
+        - label: I removed secrets, credentials, private command history, and local paths from these examples.
+          required: true
+        - label: I can contribute or help validate destructive and safe-counterpart tests.
+          required: true

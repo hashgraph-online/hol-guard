@@ -22,7 +22,7 @@ _DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
-    r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
+    r"\b(?:prompt\s+injection|attacks?|examples?|phrases?|strings?|fixtures?|say|says)\b",
     re.IGNORECASE,
 )
 _STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(

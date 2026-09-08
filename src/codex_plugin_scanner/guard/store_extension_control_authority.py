@@ -115,7 +115,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
                 if view.health is AuthorityHealth.PROTECTED:
                     key = self._authority_key(required=True)
-                    assert key is not None
+                    if key is None:
+                        raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
                     self._record_catalog_manifest(registry, key=key)
                 if include_managed_controls:
                     return self._with_managed_controls_activation(view)
@@ -618,8 +619,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         key: bytes | None,
         reason: str,
     ) -> ExtensionControlAuthorityView:
-        # Authenticated recovery must not import rows whose chain cannot be
-        # verified. Re-establish an empty, protected local authority instead.
+        # Never import rows with an unverifiable chain; re-establish an empty protected authority.
         reset_at = _now()
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
