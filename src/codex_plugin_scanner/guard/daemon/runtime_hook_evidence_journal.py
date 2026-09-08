@@ -9,10 +9,12 @@ import stat
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+from ..action_lattice import is_guard_action
 from ..native_decision_receipt import (
     NATIVE_HOOK_DECISION_RECEIPT_SCHEMA,
     validate_native_decision_receipt,
@@ -48,6 +50,11 @@ class _CommandActivityRecord:
     succeeded: bool
     payload_bytes: int
     attempts: int = 0
+    policy_action: str | None = None
+    occurred_at: str | None = None
+    receipt_id: str | None = None
+    prompted: bool = False
+    approval_reuse_status: str = "not-applicable"
 
     def serialized(self) -> bytes:
         return (
@@ -69,6 +76,11 @@ class _CommandActivityRecord:
                     ),
                     "has_command": self.has_command,
                     "succeeded": self.succeeded,
+                    "policy_action": self.policy_action,
+                    "occurred_at": self.occurred_at,
+                    "receipt_id": self.receipt_id,
+                    "interaction_observed": self.prompted,
+                    "approval_reuse_status": self.approval_reuse_status,
                 },
                 separators=(",", ":"),
                 sort_keys=True,
@@ -87,6 +99,31 @@ class _CommandActivityRecord:
         correlation_value = fields.get("correlation")
         has_command = fields.get("has_command")
         succeeded = fields.get("succeeded")
+        policy_action = fields.get("policy_action")
+        if policy_action is not None and not is_guard_action(policy_action):
+            return None
+        occurred_at = fields.get("occurred_at")
+        if occurred_at is not None:
+            try:
+                if not isinstance(occurred_at, str) or datetime.fromisoformat(
+                    occurred_at
+                ).utcoffset() != timezone.utc.utcoffset(None):
+                    return None
+            except ValueError:
+                return None
+        if policy_action is not None and (event != "PreToolUse" or occurred_at is None):
+            return None
+        receipt_id = fields.get("receipt_id")
+        prompted = fields.get("interaction_observed", False)
+        reuse = fields.get("approval_reuse_status", "not-applicable")
+        if receipt_id is not None and (not isinstance(receipt_id, str) or not _SAFE_IDENTIFIER.fullmatch(receipt_id)):
+            return None
+        if (
+            type(prompted) is not bool
+            or reuse not in ("not-applicable", "accepted", "rejected")
+            or (prompted and reuse == "accepted")
+        ):
+            return None
         if (
             not isinstance(record_id, str)
             or not isinstance(harness, str)
@@ -109,7 +146,20 @@ class _CommandActivityRecord:
                 )
             except (TypeError, ValueError):
                 return None
-        record = cls(record_id, harness, event, correlation, has_command, succeeded, 0)
+        record = cls(
+            record_id,
+            harness,
+            event,
+            correlation,
+            has_command,
+            succeeded,
+            0,
+            policy_action=cast(str | None, policy_action),
+            occurred_at=cast(str | None, occurred_at),
+            receipt_id=cast(str | None, receipt_id),
+            prompted=prompted,
+            approval_reuse_status=cast(str, reuse),
+        )
         return cls(
             record.record_id,
             record.harness,
@@ -118,6 +168,11 @@ class _CommandActivityRecord:
             record.has_command,
             record.succeeded,
             len(record.serialized()),
+            policy_action=cast(str | None, policy_action),
+            occurred_at=cast(str | None, occurred_at),
+            receipt_id=record.receipt_id,
+            prompted=record.prompted,
+            approval_reuse_status=record.approval_reuse_status,
         )
 
 
@@ -292,7 +347,7 @@ def _write_all(descriptor: int, payload: bytes) -> None:
 
 
 def _payload_has_command(payload: Mapping[str, object]) -> bool:
-    arguments = payload.get("tool_input", payload.get("arguments"))
+    arguments = payload.get("tool_input", payload.get("toolInput", payload.get("arguments")))
     if isinstance(arguments, Mapping):
         command_arguments = cast(Mapping[object, object], arguments)
         for key in ("command", "cmd", "shell_command", "shellCommand"):

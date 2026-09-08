@@ -724,15 +724,16 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     # Keep all 48 callers synchronized; the scheduler must queue more callers
     # than the eight-worker process pool while the runner remains integrated.
     barrier = threading.Barrier(48)
+    timing_scale = under_coverage_scale(4.0)
 
     def review(index: int) -> HookProcessReview:
-        barrier.wait(timeout=3)
+        barrier.wait(timeout=3 * timing_scale)
         admission = scheduler.acquire(
             harness="pi",
             client_key=f"client-{index % 6}",
             lane="decision",
             payload_bytes=1,
-            deadline=time.monotonic() + 10,
+            deadline=time.monotonic() + 10 * timing_scale,
         )
         assert admission.permit is not None
         with admission.permit:
@@ -743,7 +744,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4,
+                deadline=time.monotonic() + 4 * timing_scale,
             )
 
     try:
