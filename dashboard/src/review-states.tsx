@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   HiMiniArrowPath,
   HiMiniCheckCircle,
@@ -16,11 +17,14 @@ import {
 import type {
   GuardApprovalRequest,
   GuardCodexResumeResult,
+  GuardPresentationMode,
   GuardProtectionState,
   GuardRuntimeSnapshot,
 } from "./guard-types";
 import { normalizeGuardAction } from "./guard-action";
+import { fetchSettings } from "./guard-api";
 import { LoggedActionPanel } from "./logged-action-panel";
+import { resolvePresentationMode } from "./presentation-mode";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { ActionExplanationSummary } from "./action-explanation-summary";
 
@@ -196,17 +200,70 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
   );
 }
 
-export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+function useReviewPresentationMode(): GuardPresentationMode {
+  const [mode, setMode] = useState<GuardPresentationMode>("everyday");
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSettings()
+      .then((payload) => {
+        if (cancelled) return;
+        setMode(resolvePresentationMode({
+          value: payload.settings.presentation_mode,
+          explicit: payload.settings.presentation_mode_explicit,
+          schemaVersion: payload.settings.presentation_schema_version,
+          revision: payload.settings.presentation_revision,
+        }).value);
+      })
+      .catch(() => {
+        if (!cancelled) setMode("everyday");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return mode;
+}
+
+function TechnicalStoppedAction({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4" data-guard-technical-stopped-action>
+      <SectionLabel>Technical details</SectionLabel>
+      <div className="mt-2">
+        <LoggedActionPanel
+          key={item.request_id}
+          label={action.label}
+          text={action.text}
+          copyAriaLabel="Copy full stopped action to clipboard"
+          expandAriaLabel="Expand full stopped action"
+          collapseAriaLabel="Collapse full stopped action"
+        />
+      </div>
+      {workingDirectory !== null && (
+        <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
+          <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+          <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
+          <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
+            {workingDirectory}
+          </code>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+  const action = buildPrimaryReviewAction(item);
   const explanation = item.action_explanation ?? null;
+  const presentationMode = useReviewPresentationMode();
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <SectionLabel>What was stopped</SectionLabel>
-          {action.detail !== null && explanation === null && (
+          {action.detail !== null && explanation === null && presentationMode === "technical" && (
             <p className="mt-1 text-sm text-brand-dark/70">
               {action.detail}
             </p>
@@ -216,29 +273,19 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           {action.label}
         </span>
       </div>
+
       {explanation !== null ? (
         <ActionExplanationSummary explanation={explanation} />
-      ) : (
-        <div className="mt-3">
-          <LoggedActionPanel
-            key={item.request_id}
-            label={action.label}
-            text={action.text}
-            copyAriaLabel="Copy full stopped action to clipboard"
-            expandAriaLabel="Expand full stopped action"
-            collapseAriaLabel="Collapse full stopped action"
-          />
-          {workingDirectory !== null && (
-            <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
-              <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
-              <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
-              <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
-                {workingDirectory}
-              </code>
-            </div>
-          )}
+      ) : presentationMode === "everyday" ? (
+        <div className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-4">
+          <p className="text-sm font-semibold text-brand-dark">Plain-language details are unavailable</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Guard paused this action, but this record does not contain a safe Everyday explanation. Technical mode can show retained local details when you deliberately enable it in Settings.
+          </p>
         </div>
-      )}
+      ) : null}
+
+      {presentationMode === "technical" && <TechnicalStoppedAction item={item} />}
     </div>
   );
 }
