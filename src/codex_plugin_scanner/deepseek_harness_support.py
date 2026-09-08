@@ -97,6 +97,12 @@ def _declared_bundle_mode(bundle: dict[str, object]) -> str | None:
     return None
 
 
+def _declares_runtime_entry(manifest: dict[str, object]) -> bool:
+    """Return whether the manifest claims a package runtime via main or exports."""
+
+    return "main" in manifest or "exports" in manifest
+
+
 def _runtime_path(manifest: dict[str, object]) -> str | None:
     """Resolve the package root export, falling back to ``main`` only without ``exports``."""
 
@@ -322,7 +328,7 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
         )
 
     runtime_path = _runtime_path(manifest)
-    runtime_required = mode != "patch" or runtime_path is not None
+    runtime_required = mode != "patch" or _declares_runtime_entry(manifest)
     runtime_target = package.root_path / runtime_path if runtime_path is not None else None
     runtime_ok = False
     if not runtime_required:

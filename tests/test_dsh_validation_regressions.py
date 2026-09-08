@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.deepseek_harness_support import (
     DSH_SEMVER_RE,
     _exports_apply,
@@ -83,6 +85,33 @@ def test_dsh_patch_mode_still_requires_apply_when_entry_point_exists(tmp_path: P
             "version": "1.0.0",
             "main": "index.js",
             "dsh": {"bundle": {"patch": "cordis.patch.yml", "mode": "patch"}},
+        },
+    )
+    validation = validate_dsh_package(package)
+    assert validation.runtime_required is True
+    assert validation.runtime_ok is False
+
+
+@pytest.mark.parametrize(
+    "runtime_fields",
+    [
+        {"main": ""},
+        {"main": 1},
+        {"exports": None},
+        {"exports": {}},
+        {"exports": {"./client": "./client.js"}},
+    ],
+)
+def test_dsh_patch_mode_requires_runtime_when_entry_fields_are_declared(
+    tmp_path: Path, runtime_fields: dict[str, object]
+) -> None:
+    package = _patch_only_package(
+        tmp_path,
+        {
+            "name": "dsh-patch-bundle",
+            "version": "1.0.0",
+            "dsh": {"bundle": {"patch": "cordis.patch.yml", "mode": "patch"}},
+            **runtime_fields,
         },
     )
     validation = validate_dsh_package(package)
