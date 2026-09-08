@@ -40,6 +40,13 @@ def test_native_pre_and_post_keep_authoritative_decision(
             payload=payload,
             succeeded=True,
         )
+        assert writer.submit_command_activity(
+            harness=harness,
+            event="PreToolUse",
+            payload=payload,
+            succeeded=True,
+            policy_action="warn",
+        )
     finally:
         assert writer.stop(timeout_seconds=5)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:

@@ -313,7 +313,8 @@ class RuntimeHookEvidenceWriter:
                                     policy_action=cast(GuardAction, record.policy_action),
                                     request_correlation=record.correlation,
                                 )
-                                _ = self._store.record_command_activity(evidence)
+                                if not self._store.is_exact_command_activity_pre_replay(evidence):
+                                    _ = self._store.record_command_activity(evidence)
                         else:
                             _ = persist_deferred_post_hook_command_activity(
                                 store=self._store,
