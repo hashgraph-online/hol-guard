@@ -77,6 +77,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.claude-tmux",
       "command.mcp-filesystem",
       "command.noodle",
       "command.probe",

@@ -96,6 +96,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
         "command.blitcp",
+        "command.claude-tmux",
         "command.mcp-filesystem",
         "command.noodle",
         "command.probe",

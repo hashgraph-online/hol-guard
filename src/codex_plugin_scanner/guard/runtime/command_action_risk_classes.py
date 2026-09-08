@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
+from .command_claude_tmux_extensions import CLAUDE_TMUX_ACTION_RISK_CLASSES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
@@ -64,5 +65,6 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
     **BLITCP_ACTION_RISK_CLASSES,
+    **CLAUDE_TMUX_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
 }
