@@ -230,3 +230,128 @@ def test_evaluate_write_file_stays_review_while_inert(tmp_path: Path) -> None:
     )
     assert decision.action == "review"
     assert decision.source != "catalog-mcp-extension"
+
+
+def _tether_identity():
+    return build_mcp_server_identity(
+        config_path="",
+        command="uvx",
+        args=("tether-memory",),
+        transport="stdio",
+    )
+
+
+def _tether_artifact(identity, tool_name: str):
+    return build_tool_call_artifact(
+        harness="codex",
+        server_name="tether",
+        tool_name=tool_name,
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+
+
+@pytest.mark.parametrize("tool_name", ["remember", "recall", "link", "forget"])
+def test_tether_mcp_stays_inert_until_enabled(tool_name: str) -> None:
+    artifact = _tether_artifact(_tether_identity(), tool_name)
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "review") is None
+
+
+@pytest.mark.parametrize("tool_name", ["remember", "recall", "link", "forget"])
+def test_enabled_tether_keeps_every_tool_on_review(tool_name: str) -> None:
+    artifact = _tether_artifact(_tether_identity(), tool_name)
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-tether", ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(enabled, artifact, "review") is None
+
+
+def test_signed_cloud_enable_does_not_activate_tether() -> None:
+    artifact = _tether_artifact(_tether_identity(), "forget")
+    cloud = _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, "command.mcp-tether", ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(cloud, artifact, "review") is None
+
+
+def test_pipx_launch_matches_tether_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path="",
+        command="pipx",
+        args=("run", "tether-memory"),
+        transport="stdio",
+    )
+    assert identity.package_name == "tether-memory"
+    artifact = _tether_artifact(identity, "remember")
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "review") is None
+
+
+def test_custom_mcp_grant_overrides_tether_contribution(tmp_path: Path) -> None:
+    identity = _tether_identity()
+    store = GuardStore(tmp_path / "guard-home")
+    cli_identity = UnlistedCliIdentity(
+        cli_id=f"local-cli.mcp-{identity.identity_hash[:8]}",
+        name=identity.package_name or "mcp-server",
+        kind="executable",
+        identity_hash=identity.identity_hash,
+        example_label="uvx tether-memory",
+    )
+    store.record_local_cli_observation(
+        cli_identity,
+        seen_at=utc_now(),
+        surface="mcp",
+        server_identity_hash=identity.identity_hash,
+        server_command=identity.command,
+        server_args_hash=identity.args_hash,
+        help_status="ok",
+    )
+    store.replace_local_cli_commands(
+        cli_identity.cli_id,
+        (LocalCliCommand("forget", "forget", "forget", "Soft-delete a memory"),),
+    )
+    store.upsert_local_cli_grant(
+        identity=cli_identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at=utc_now(),
+        command_states={"forget": "block"},
+    )
+    artifact = _tether_artifact(identity, "forget")
+    granted = apply_local_mcp_extension_decision(store, artifact, "review")
+    assert granted is not None
+    assert granted[0] == "block"
+    assert granted[1] == "local-mcp-extension"
+
+
+def _evaluate_tether_forget(tmp_path: Path, store: GuardStore):
+    artifact = _tether_artifact(_tether_identity(), "forget")
+    arguments = {"id": 42}
+    config = _config(tmp_path)
+    return evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=config),
+        arguments=arguments,
+        claim_saved_approval=False,
+    )
+
+
+def test_evaluate_tether_forget_unchanged_by_local_enable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every tether tool inherits, so enabling the catalog item must not change Guard's usual review."""
+
+    inert = _evaluate_tether_forget(tmp_path, GuardStore(tmp_path / "inert-home"))
+    assert inert.source != "catalog-mcp-extension"
+
+    store = GuardStore(tmp_path / "guard-home")
+    view = ExtensionControlAuthorityView(
+        health=AuthorityHealth.PROTECTED,
+        revision=1,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        layers=(_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-tether", ControlState.ENABLED),),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: view)
+    enabled = _evaluate_tether_forget(tmp_path, store)
+    assert enabled.action == inert.action
+    assert enabled.source != "catalog-mcp-extension"

@@ -183,3 +183,35 @@ def test_frozen_mcp_payloads_fail_closed_without_package_data(tmp_path: Path, mo
     monkeypatch.setattr(mcp_module.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
         mcp_module._load_packaged_payloads()
+
+
+_TETHER = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.tether.json"
+
+
+def _tether_payload() -> dict[str, object]:
+    payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_tether_catalog_item_is_external_opt_in() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.mcp-tether")
+    assert extension is not None
+    payload = extension.to_dict()
+    assert payload["enabled"] is False
+    assert payload["trust_class"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["surface"] == "mcp"
+    assert payload["mcp_launch"]["command"] == "uvx"
+    assert payload["mcp_launch"]["package"] == "tether-memory"
+    assert payload["publisher"]["id"] == "community.sidyellur"
+    assert payload["icon"]["name"] == "HiMiniCube"
+    assert payload["permissions"][0]["configurable"] is False
+    assert trust_class_for("command.mcp-tether") == "external"
+    assert "command.mcp-tether" in mcp_catalog_ids()
+
+
+def test_tether_tool_defaults_keep_every_write_on_review() -> None:
+    payload = _tether_payload()
+    for tool_name in ("remember", "recall", "link", "forget", "unknown_tool"):
+        assert mcp_tool_state(payload, tool_name) == "inherit"
