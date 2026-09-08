@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls_policy_bundle import MANAGED_CONTROLS_ACTIVE_STATE_KEY
+from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
+    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
+    MANAGED_CONTROLS_REVISION_STATE_KEY,
+    build_managed_controls_revision_state,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, AuthorityPhase
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind
@@ -82,6 +86,27 @@ def test_stale_managed_activation_with_invalid_mac_still_fails_closed(
     assert tampered.health is AuthorityHealth.TAMPERED
 
 
+def test_stale_managed_activation_revision_mismatch_still_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    legacy = _description_only_catalog_variant()
+    _activate_under_catalog(store, legacy, monkeypatch, preserve_local_controls=True)
+    key = store._authority_key(required=True)
+    assert key is not None
+    mismatched = build_managed_controls_revision_state(99, authority_key=key)
+    with store._connect() as connection:
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (json.dumps(mismatched, allow_nan=False), MANAGED_CONTROLS_REVISION_STATE_KEY),
+        )
+
+    tampered = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+
+    assert tampered.health is AuthorityHealth.TAMPERED
+
+
 def test_catalog_upgrade_resumes_anchored_pending_migration_without_repair(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
@@ -123,3 +148,13 @@ def test_catalog_upgrade_resumes_anchored_pending_migration_without_repair(tmp_p
         ).fetchone()
     assert committed["phase"] == AuthorityPhase.COMMITTED.value
     assert snapshot["catalog_digest"] == upgraded_registry.catalog_digest
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()
+    assert event is not None
+    payload = json.loads(event["payload_json"])
+    assert payload["previous_revision"] == 1
+    assert payload["revision"] == 2
+    assert payload["catalog_digest"] == upgraded_registry.catalog_digest

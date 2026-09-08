@@ -177,21 +177,23 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             # trusted package update rebinds local controls first, so the stored
             # Cloud snapshot is stale but still must verify. Invalid MACs stay
             # fail-closed; only a catalog-bound mismatch drops Cloud layers.
-            managed_controls_layers_from_activation_state(
+            _, managed_revision = managed_controls_layers_from_activation_state(
                 active,
                 catalog_digest=activation_digest,
                 authority_key=key,
             )
-            managed_revision = managed_controls_revision_from_state(
+            durable_revision = managed_controls_revision_from_state(
                 revision_state,
                 authority_key=key,
             )
+            if managed_revision != durable_revision:
+                raise ExtensionControlAuthorityError("managed controls activation revision mismatch")
             return ExtensionControlAuthorityView(
                 view.health,
                 view.revision,
                 view.catalog_digest,
                 local_layers,
-                managed_revision,
+                durable_revision,
             )
         key = self._authority_key(required=True)
         assert key is not None
@@ -745,6 +747,16 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
                 pending = self._pending_transition(revision + 1)
                 if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
+                    pending_layers = layers_from_json(_row_str(pending, "layers_json"))
+                    previous_target_ids = {
+                        control.target.target_id
+                        for layer in layers_from_json(str(row["layers_json"]))
+                        for control in layer.controls
+                    }
+                    pending_target_ids = {
+                        control.target.target_id for layer in pending_layers for control in layer.controls
+                    }
+                    retired_targets = tuple(sorted(previous_target_ids - pending_target_ids))
                     with self._connect() as connection:
                         resumed = self._resume_idempotent_transition(
                             connection,
@@ -764,6 +776,14 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             key=key,
                         )
                     if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                        self._record_catalog_migrated_event_once(
+                            previous_revision=revision,
+                            revision=_row_int(pending, "revision"),
+                            previous_catalog_digest=stored_catalog_digest,
+                            catalog_digest=catalog_digest,
+                            layers=pending_layers,
+                            retired_targets=retired_targets,
+                        )
                         return resumed
                 previous = self._read_extension_control_authority_locked(stored_catalog_digest)
                 if previous.health is not AuthorityHealth.PROTECTED:
@@ -945,6 +965,42 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         ):
             raise ExtensionControlAuthorityError("invalid extension control catalog manifest")
         return value
+
+    def _record_catalog_migrated_event_once(
+        self,
+        *,
+        previous_revision: int,
+        revision: int,
+        previous_catalog_digest: str,
+        catalog_digest: str,
+        layers: tuple[ExtensionControlLayer, ...],
+        retired_targets: tuple[str, ...],
+    ) -> None:
+        payload = json.dumps(
+            {
+                "previous_revision": previous_revision,
+                "revision": revision,
+                "previous_catalog_digest": previous_catalog_digest,
+                "catalog_digest": catalog_digest,
+                "layer_count": len(layers),
+                "control_count": sum(len(layer.controls) for layer in layers),
+                "retired_target_count": len(retired_targets),
+                "retired_target_ids": list(retired_targets),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with self._connect() as connection:
+            existing = connection.execute(
+                "select payload_json from guard_events where event_name = ?",
+                ("extension_control_authority_catalog_migrated",),
+            ).fetchall()
+            if any(str(row["payload_json"]) == payload for row in existing):
+                return
+            connection.execute(
+                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+                ("extension_control_authority_catalog_migrated", payload, _now()),
+            )
 
     def _migrate_extension_control_catalog(
         self,
