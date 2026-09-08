@@ -6077,9 +6077,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             queued=scheduler_stats["queued"],
         )
         if review.payload is not None and time.monotonic() < process_deadline:
+            receipt_accepted = False
             if review.receipt is not None:
                 with suppress(Exception):
-                    _ = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(review.receipt)
+                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
+                        review.receipt
+                    )
             with suppress(Exception):
                 activity_action = review.payload.get("policy_action")
                 event = payload.get("hook_event_name", payload.get("hookEventName"))
@@ -6095,7 +6098,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         payload=payload,
                         succeeded=True,
                         policy_action=activity_action,
-                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id")),
+                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id"))
+                        if receipt_accepted
+                        else None,
                         prompted=review.payload.get("prompted") is True,
                         approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
                         or "not-applicable",

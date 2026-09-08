@@ -118,7 +118,11 @@ class _CommandActivityRecord:
         reuse = fields.get("approval_reuse_status", "not-applicable")
         if receipt_id is not None and (not isinstance(receipt_id, str) or not _SAFE_IDENTIFIER.fullmatch(receipt_id)):
             return None
-        if type(prompted) is not bool or reuse not in ("not-applicable", "accepted", "rejected"):
+        if (
+            type(prompted) is not bool
+            or reuse not in ("not-applicable", "accepted", "rejected")
+            or (prompted and reuse == "accepted")
+        ):
             return None
         if (
             not isinstance(record_id, str)

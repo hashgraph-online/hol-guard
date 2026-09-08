@@ -2,11 +2,27 @@
 
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.mark.parametrize("accepted", [True, False])
+def test_native_receipt_link_requires_writer_acceptance(accepted: bool) -> None:
+    from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+
+    host = SimpleNamespace(
+        activity_writer=SimpleNamespace(submit_native_decision_receipt=lambda **kwargs: accepted),
+        _last_native_decision_receipt=None,
+    )
+    receipt = {"decision_id": "native-receipt-example"}
+    result = HookWorkerNativeMixin._record_native_decision_receipt(host, receipt)
+    assert result == (receipt if accepted else None)
+    assert HookWorkerNativeMixin._record_native_decision_receipt(host, None) is None
+    assert host._last_native_decision_receipt is None
 
 
 @pytest.mark.parametrize(
@@ -100,6 +116,25 @@ def test_pre_without_decision_never_becomes_execution(tmp_path: Path) -> None:
         )
     finally:
         assert writer.stop(timeout_seconds=5)
+    assert store.count_command_activities() == 0
+
+
+def test_incompatible_approval_metadata_is_not_queued(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    writer = RuntimeHookEvidenceWriter(store=store)
+    try:
+        assert not writer.submit_command_activity(
+            harness="grok",
+            event="PreToolUse",
+            payload={"command": "echo example"},
+            succeeded=True,
+            policy_action="allow",
+            prompted=True,
+            approval_reuse_status="accepted",
+        )
+    finally:
+        assert writer.stop(timeout_seconds=5)
+    assert writer.stats()["failures"] == 0
     assert store.count_command_activities() == 0
 
 
