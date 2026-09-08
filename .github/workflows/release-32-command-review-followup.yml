@@ -1,0 +1,76 @@
+name: Release 3.2 command review follow-up
+
+on:
+  push:
+    branches:
+      - fix/3.2-command-review-followup
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-clean:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/3.2-command-review-followup
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.13'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: false
+
+      - name: Install locked development environment
+        run: uv sync --frozen --extra dev --python 3.12
+
+      - name: Apply deterministic Ruff fixes
+        run: |
+          uv run --no-sync ruff check --fix --unsafe-fixes \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers_extra.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_review_followup.py
+
+      - name: Verify repository Ruff gate
+        run: |
+          uv run --no-sync python -m ruff check \
+            src/ \
+            scripts/ci/code_quality_*.py \
+            tests/test_code_quality_audit.py \
+            tests/test_guard_durable_io.py \
+            tests/test_guard_managed_install_context.py \
+            tests/test_guard_node_semver.py \
+            tests/test_guard_private_file_io.py \
+            tests/test_guard_command_review_followup.py
+
+      - name: Verify command review regressions
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py \
+            tests/test_guard_command_cloud_gcp_batch_2.py
+
+      - name: Commit Ruff fixes and remove one-shot workflow
+        run: |
+          git rm .github/workflows/release-32-command-review-followup.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers_extra.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_review_followup.py
+          git commit -m 'fix(commands): finish release 3.2 review follow-up'
+          git push origin HEAD:fix/3.2-command-review-followup
