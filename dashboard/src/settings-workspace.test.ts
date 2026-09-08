@@ -119,6 +119,9 @@ assert(settingsWorkspaceSource.includes('handleStringChange("receipt_redaction_l
 assert(settingsWorkspaceSource.includes('label="Presentation mode"'), "presentation: mode control is visible in settings");
 assert(settingsWorkspaceSource.includes("handlePresentationModeChange"), "presentation: mode changes use the dedicated save handler");
 assert(settingsWorkspaceSource.includes("resolveSettingsPresentation"), "presentation: settings use the authoritative resolved mode");
+assert(settingsWorkspaceSource.includes("disabled={totpEnabled}"), "approval-gate: cooldown selector is disabled while authenticator MFA is enabled");
+assert(settingsWorkspaceSource.includes("effectiveApprovalGateCooldownSeconds"), "approval-gate: settings render the effective cooldown when MFA is enabled");
+assert(settingsWorkspaceSource.includes("Authenticator approvals do not use the password cooldown"), "approval-gate: settings explain why MFA disables password cooldown");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(
