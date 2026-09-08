@@ -1,0 +1,36 @@
+name: Everyday dashboard refresh
+
+on:
+  push:
+    branches:
+      - fix/everyday-mode-live-release-3.2-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Build checked-in dashboard assets
+        run: |
+          cd dashboard
+          bun install --frozen-lockfile
+          bun run build
+      - name: Commit generated assets when changed
+        run: |
+          git add src/codex_plugin_scanner/guard/daemon/static
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build(dashboard): refresh Everyday review bundle'
+          git push origin HEAD:fix/everyday-mode-live-release-3.2-20260908
