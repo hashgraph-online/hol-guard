@@ -30,7 +30,8 @@ def test_package_extensions_delegate_to_existing_package_firewall() -> None:
 
     assert len(package_extensions) == 9
     assert {extension.extension_id for extension in package_extensions} == {
-        "command.package.dotnet", "command.package.go",
+        "command.package.dotnet",
+        "command.package.go",
         "command.package.jvm",
         "command.package.node",
         "command.package.php",
