@@ -16,8 +16,8 @@ from .version import __version__
 def _guard_cli(name: str):
     # Deferred: importing the Guard CLI eagerly pulls the whole Guard command
     # surface through the package __init__, which short-lived invocations
-    # must not pay for. The Guard package itself stays eager so spawned hook
-    # workers see the same import order as the daemon.
+    # must not pay for. Hook workers import their explicit hook modules before
+    # serving requests, preserving readiness semantics without package eagerness.
     from .guard import cli as guard_cli_module
 
     return getattr(guard_cli_module, name)
