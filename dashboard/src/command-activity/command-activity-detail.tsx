@@ -169,7 +169,11 @@ export function CommandActivityDetail(props: {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">No rule match was recorded.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            {props.activity.decision_reason_code === "no_match"
+              ? "No rule matched this action."
+              : "Rule evidence is unavailable for this record."}
+          </p>
         )}
       </div>
 

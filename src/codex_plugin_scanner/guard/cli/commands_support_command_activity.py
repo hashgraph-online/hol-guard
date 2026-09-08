@@ -216,6 +216,10 @@ def hook_post_succeeded(event: str, payload: Mapping[str, object]) -> bool:
 
     if "failure" in event.strip().lower():
         return False
+    for name in ("hook_event_name", "hookEventName"):
+        raw_event = payload.get(name)
+        if isinstance(raw_event, str) and raw_event.replace("_", "").replace("-", "").lower() == "posttoolusefailure":
+            return False
     for key in ("is_error", "isError", "failed"):
         if payload.get(key) is True:
             return False

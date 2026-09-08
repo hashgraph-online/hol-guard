@@ -47,7 +47,9 @@ def pause_native_pre_tool_for_approval(
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
-        return harness_json_from_native_pre_tool(harness, allowed)
+        response = harness_json_from_native_pre_tool(harness, allowed)
+        response["approval_reuse_status"] = "accepted"
+        return response
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
@@ -64,7 +66,9 @@ def pause_native_pre_tool_for_approval(
         failed["reason_code"] = "native_review_queue_failed"
         failed["reason"] = "HOL Guard could not record this review for approval."
         return harness_json_from_native_pre_tool(harness, failed)
-    return harness_json_from_native_pre_tool_review(harness, native_result, approval=queued)
+    response = harness_json_from_native_pre_tool_review(harness, native_result, approval=queued)
+    response["prompted"] = True
+    return response
 
 
 def queue_native_pre_tool_review(

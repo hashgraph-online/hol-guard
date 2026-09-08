@@ -32,6 +32,12 @@ _KEY_BYTES: Final = 32
 # Only native, top-level request identifiers documented by these hook adapters
 # can pair pre- and post-execution evidence. Content and session fields are absent.
 _PROVEN_REQUEST_ID_FIELDS: Final[dict[tuple[str, str], str]] = {
+    ("grok", "PreToolUse"): "toolUseId",
+    ("grok", "PostToolUse"): "toolUseId",
+    ("grok", "PostToolUseFailure"): "toolUseId",
+    ("zcode", "PreToolUse"): "tool_use_id",
+    ("zcode", "PostToolUse"): "tool_use_id",
+    ("zcode", "PostToolUseFailure"): "tool_use_id",
     ("codex", "PreToolUse"): "tool_call_id",
     ("codex", "PostToolUse"): "tool_call_id",
     ("codex", "PostToolUseFailure"): "tool_call_id",
