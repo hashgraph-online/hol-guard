@@ -40,7 +40,16 @@ def build_live_action_explanation(
     )
     if explanation is None:
         return None
-    return explanation.list_projection() if list_projection else explanation.to_dict()
+    projected = explanation.list_projection() if list_projection else explanation.to_dict()
+    technical = projected.get("technical")
+    if (
+        retained
+        and isinstance(technical, dict)
+        and technical.get("available") is False
+        and technical.get("unavailable_reason") == "No exact command was retained for this action."
+    ):
+        technical["unavailable_reason"] = "Exact technical details require deliberate local disclosure."
+    return projected
 
 
 def attach_live_action_explanation(
