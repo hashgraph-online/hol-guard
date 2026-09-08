@@ -38,22 +38,28 @@ _REPOSITORY_WRITE_RULE = "command.where-are-we.repository-write"
 _INSTALL_HOOK_RULE = "command.where-are-we.install-hook"
 _TRACKER_FETCH_RULE = "command.where-are-we.tracker-fetch"
 
-# `where-are-we --effects --json` for 1.5.0, the manifest the rule table is
+# `where-are-we --effects --json` for 1.6.0, the manifest the rule table is
 # written against. Held here so a flag added at writes-repo or above in a later
 # release fails this suite instead of silently escaping review.
 _EFFECTS_SCHEMA = "where-are-we-effects/1"
 _EFFECTS_ORDER: tuple[str, ...] = ("read", "writes-map-dir", "writes-repo", "writes-config", "network")
 _EFFECTS_FLAGS: dict[str, str] = {
+    "--affected": "read",
+    "--affected-depth": "read",
+    "--affected-format": "read",
+    "--affected-out": "writes-repo",
     "--agent-file": "writes-repo",
     "--also": "read",
     "--ask": "read",
     "--at": "read",
     "--callees": "read",
     "--callers": "read",
+    "--changed": "read",
     "--context": "read",
     "--corpus": "read",
     "--cost": "read",
     "--ctags": "writes-map-dir",
+    "--dead": "read",
     "--defines": "read",
     "--diff": "writes-map-dir",
     "--docs": "writes-repo",
@@ -64,6 +70,7 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--for": "read",
     "--force": "writes-map-dir",
     "--help": "read",
+    "--hot": "read",
     "--html": "writes-map-dir",
     "--impact": "read",
     "--impact-depth": "read",
@@ -78,10 +85,14 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--no-semantic": "read",
     "--only": "read",
     "--out": "writes-map-dir",
+    "--path": "read",
+    "--path-depth": "read",
     "--pointer": "read",
     "--product": "read",
     "--quiet": "read",
+    "--range": "read",
     "--rank": "read",
+    "--reaches": "read",
     "--repo": "read",
     "--rules": "read",
     "--runs-api": "network",
@@ -92,6 +103,7 @@ _EFFECTS_FLAGS: dict[str, str] = {
     "--spec-limit": "network",
     "--spec-source": "network",
     "--specs": "network",
+    "--unreached": "read",
     "--watch": "writes-map-dir",
     "-h": "read",
 }
@@ -121,6 +133,13 @@ WHERE_ARE_WE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     # value. The rule follows the manifest rather than reading the value.
     ("where-are-we --repo . --export -", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --ex map-export.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    (
+        "where-are-we --repo . --affected src/a.py --affected-format pytest --affected-out selection.txt",
+        _REPOSITORY_WRITE_ACTION,
+        _REPOSITORY_WRITE_RULE,
+    ),
+    ("where-are-we --affected-out=selection.txt --repo .", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --repo . --affected-o selection.txt", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     (
         'where-are-we --repo "/tmp/my repo" --agent-file "docs/agent notes.md"',
         _REPOSITORY_WRITE_ACTION,
@@ -178,6 +197,17 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --context resolve_target",
     "where-are-we --repo . --cost",
     "where-are-we --repo . --cost 2000 --json",
+    "where-are-we --repo . --affected src/a.py",
+    "where-are-we --repo . --affected - --affected-format behave",
+    "where-are-we --repo . --affected src/a.py --affected-format pytest --affected-depth 3",
+    "where-are-we --repo . --changed",
+    "where-are-we --repo . --changed HEAD~3",
+    "where-are-we --repo . --reaches build_map",
+    "where-are-we --repo . --unreached --limit 40",
+    "where-are-we --repo . --path build_map,resolve_target --path-depth 8",
+    "where-are-we --repo . --range build_map",
+    "where-are-we --repo . --dead",
+    "where-are-we --repo . --hot",
     "where-are-we --repo . --for coder --only Layers --skip Steps --max-lines 400",
     "where-are-we --repo . --spec-depth 3 --spec-limit 40 --ask x",
     "where-are-we --repo . --sections | grep steps",
@@ -197,6 +227,9 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --export map-export.md --dry-run",
     "where-are-we --repo . --export - --dry-run",
     "where-are-we --repo . --export map-export.md --help",
+    "where-are-we --repo . --affected-out selection.txt --dry-run",
+    "where-are-we --repo . --affected src/a.py --affected-out selection.txt --dry-run",
+    "where-are-we --repo . --affected-out selection.txt --help",
     "where-are-we --repo . --specs ABC-1 --spec-source github --dry-run",
     "grep 'where-are-we --repo . --install-hook git' docs",
     "echo where-are-we --init",

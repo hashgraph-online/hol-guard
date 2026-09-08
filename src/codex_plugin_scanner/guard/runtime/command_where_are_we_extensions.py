@@ -6,7 +6,7 @@ from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
-# Flag surface verified against where-are-we 1.5.0 (PyPI), which publishes its
+# Flag surface verified against where-are-we 1.6.0 (PyPI), which publishes its
 # own effects manifest: `where-are-we --effects --json`, schema
 # "where-are-we-effects/1", installed beside the code as effects.json. It
 # classes every flag read < writes-map-dir < writes-repo < writes-config <
@@ -24,11 +24,15 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 # executable, so each rule is a required-flag constraint.
 
 # Every value-taking option, so a reviewed flag spelled inside another option's
-# value cannot be mistaken for the option itself. The three options that take an
-# optional argument (--docs, --cost, --rank) are deliberately absent: treating
-# one as value-taking would let it swallow a following reviewed flag.
+# value cannot be mistaken for the option itself. The four options that take an
+# optional argument (--docs, --cost, --rank, --changed) are deliberately absent:
+# treating one as value-taking would let it swallow a following reviewed flag.
 _OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
     {
+        "--affected",
+        "--affected-depth",
+        "--affected-format",
+        "--affected-out",
         "--agent-file",
         "--also",
         "--ask",
@@ -49,7 +53,11 @@ _OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
         "--more",
         "--only",
         "--out",
+        "--path",
+        "--path-depth",
         "--product",
+        "--range",
+        "--reaches",
         "--repo",
         "--rules",
         "--runs-api",
@@ -81,6 +89,7 @@ _AGENT_FILE_FLAGS: tuple[str, ...] = (
 _INIT_FLAGS: tuple[str, ...] = ("--init", "--ini")
 _DOCS_FLAGS: tuple[str, ...] = ("--docs", "--doc", "--do")
 _EXPORT_FLAGS: tuple[str, ...] = ("--export", "--expor", "--expo", "--exp", "--ex")
+_AFFECTED_OUT_FLAGS: tuple[str, ...] = ("--affected-out", "--affected-ou", "--affected-o")
 _INSTALL_HOOK_FLAGS: tuple[str, ...] = (
     "--install-hook",
     "--install-hoo",
@@ -112,7 +121,9 @@ _RUNS_API_FLAGS: tuple[str, ...] = (
     "--run",
 )
 
-REPOSITORY_WRITE_FLAGS: tuple[str, ...] = _AGENT_FILE_FLAGS + _INIT_FLAGS + _DOCS_FLAGS + _EXPORT_FLAGS
+REPOSITORY_WRITE_FLAGS: tuple[str, ...] = (
+    _AGENT_FILE_FLAGS + _INIT_FLAGS + _DOCS_FLAGS + _EXPORT_FLAGS + _AFFECTED_OUT_FLAGS
+)
 INSTALL_HOOK_FLAGS: tuple[str, ...] = _INSTALL_HOOK_FLAGS
 TRACKER_FETCH_FLAGS: tuple[str, ...] = _SPECS_FLAGS + _SPEC_CMD_FLAGS + _SPEC_SOURCE_FLAGS + _RUNS_API_FLAGS
 
@@ -167,8 +178,8 @@ WHERE_ARE_WE_COMMAND_RULES = (
             "Identifies the where-are-we flags that write into the repository being mapped rather than into the "
             "map directory: --agent-file writes the brief into an agent file such as AGENTS.md or CLAUDE.md, "
             "--init writes a starter .framework-map.json, --docs write creates the READMEs, manifest and "
-            "architecture page a repository lacks, and --export writes one self-contained file wherever the "
-            "caller named."
+            "architecture page a repository lacks, and --export and --affected-out each write one file "
+            "wherever the caller named."
         ),
         severity="medium",
         risk_classes=("local_secret_read",),
@@ -178,7 +189,8 @@ WHERE_ARE_WE_COMMAND_RULES = (
             "Confirm which agent file is being written before writing it; the map lands between markers and the "
             "rest of the file survives, but the target is chosen by the caller.",
             "Use --docs without an argument, which only reports what it would write.",
-            "Confirm the --export destination, which is whatever path the caller named rather than a path under --out.",
+            "Confirm the --export and --affected-out destinations, which are whatever path the caller named "
+            "rather than a path under --out.",
         ),
         matcher=_WHERE_ARE_WE_REPOSITORY_WRITE,
         default_mode="review",
