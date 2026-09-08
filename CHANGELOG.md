@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `HARDCODED_SECRET` no longer treats pure `${VAR}` or `{{var}}` expansions as
   embedded credentials outside docs and tests. Non-empty defaults and suffixes
   still fail.
+- Native DeepSeek Harness packages can set `dsh.bundle.mode` to `"patch"` so
+  patch-only bundles are not required to export Cordis `apply(ctx)`. Packages
+  that declare `main` or `exports` still need that runtime.
 
 ### Changed
 

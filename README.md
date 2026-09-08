@@ -209,7 +209,7 @@ The published `cisco` extra provides skill scanning; the separate `cisco-mcp` gr
 | :--- | :--- |
 | Codex | `.codex-plugin/plugin.json`, `marketplace.json`, `.agents/plugins/marketplace.json` |
 | Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` |
-| DeepSeek Harness | `package.json` with `dsh.bundle`, declared patches, and Cordis `apply(ctx)` exports |
+| DeepSeek Harness | `package.json` with `dsh.bundle`, declared patches, and Cordis `apply(ctx)` exports, or `dsh.bundle.mode` set to `"patch"` for patch-only bundles |
 | Gemini CLI | `gemini-extension.json`, `commands/**/*.toml` |
 | Kimi Code | `kimi.plugin.json`, `.kimi-plugin/plugin.json`, declared skills, agents, commands, prompts, and MCP servers |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode/commands`, `.opencode/plugins` |
