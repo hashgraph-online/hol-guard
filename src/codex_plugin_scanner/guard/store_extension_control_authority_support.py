@@ -69,7 +69,11 @@ def preserve_managed_extension_control(
     previous_manifest: Mapping[str, str],
     current_manifest: Mapping[str, str],
 ) -> bool:
-    """Keep the original state when the target is known and its contract is unchanged."""
+    """Keep managed state only with an authenticated prior contract match.
+
+    Unlike local-admin migration, a missing previous manifest is intentionally
+    treated as no match so an enabled cloud allow fails closed until refreshed.
+    """
 
     key_name = f"{control.target.kind.value}:{control.target.target_id}"
     current_fingerprint = current_manifest.get(key_name)

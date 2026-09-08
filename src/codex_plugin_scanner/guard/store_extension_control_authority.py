@@ -195,6 +195,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 raise ExtensionControlAuthorityError("managed controls activation layer catalog mismatch")
             if current_manifest is None:
                 raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
+            # A missing prior manifest must not act as an implicit fingerprint
+            # match: stale managed allows remain disabled until cloud refresh.
             previous_manifest = self._load_catalog_manifest(active_catalog_digest, key=key) or {}
             managed_layers = tuple(
                 replace(

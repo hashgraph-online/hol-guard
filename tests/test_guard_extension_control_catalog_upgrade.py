@@ -164,7 +164,49 @@ def test_catalog_upgrade_projects_active_managed_controls_without_rewriting_ack(
     assert upgraded.health is AuthorityHealth.PROTECTED
     assert upgraded.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert upgraded.managed_revision == 1
+    managed_layer = next(layer for layer in upgraded.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+    assert managed_layer.controls[0].state is ControlState.DISABLED
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) == active
+
+
+def test_catalog_upgrade_fails_closed_when_managed_manifest_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets, enroll=False)
+    legacy = _upgraded_registry()
+    monkeypatch.setattr(command_extensions, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", legacy)
+    monkeypatch.setattr(activation_support, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", legacy)
+    store._bootstrap_extension_control_authority(legacy.catalog_digest, key=None)  # pyright: ignore[reportPrivateUsage]
+    assert activation_support.activate_managed_bundle(store, activation_support.managed_bundle()) is True
+
+    permission_id = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0].permissions[0].permission_id
+    _replace_active_managed_control(
+        store,
+        target_kind=ControlTargetKind.PERMISSION,
+        target_id=permission_id,
+    )
+    active_before_projection = store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
+    with store._connect() as connection:
+        connection.execute("delete from extension_control_catalog_manifest")
+
+    monkeypatch.setattr(command_extensions, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    monkeypatch.setattr(activation_support, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    managed_layer = next(layer for layer in upgraded.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+    assert managed_layer.controls[0].state is ControlState.DISABLED
+    assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) == active_before_projection
+    resolution = resolve_extension_controls(
+        upgraded.layers,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        extension_ids=(),
+        permission_ids=(permission_id,),
+        surface=ControlSurface.COMMAND_EVALUATION,
+    )
+    assert resolution.blocked is True
 
 
 @pytest.mark.parametrize(
