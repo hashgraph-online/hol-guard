@@ -146,6 +146,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 raise ExtensionControlAuthorityError("invalid managed controls state") from exc
         active = managed_state.get(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
         revision_state = managed_state.get(MANAGED_CONTROLS_REVISION_STATE_KEY)
+        local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
         if active is None or active == {}:
             if revision_state is None or revision_state == {}:
                 return view
@@ -155,7 +156,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 revision_state,
                 authority_key=key,
             )
-            local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
             return ExtensionControlAuthorityView(
                 view.health,
                 view.revision,
@@ -167,6 +167,32 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             raise ExtensionControlAuthorityError("managed controls require protected local authority")
         if revision_state is None or revision_state == {}:
             raise ExtensionControlAuthorityError("managed controls revision state is missing")
+        if isinstance(active, dict) and active.get("catalogDigest") != view.catalog_digest:
+            key = self._authority_key(required=True)
+            assert key is not None
+            activation_digest = active.get("catalogDigest")
+            if not isinstance(activation_digest, str):
+                raise ExtensionControlAuthorityError("incomplete managed controls activation state")
+            # Authenticate the leftover activation against its own catalog. A
+            # trusted package update rebinds local controls first, so the stored
+            # Cloud snapshot is stale but still must verify. Invalid MACs stay
+            # fail-closed; only a catalog-bound mismatch drops Cloud layers.
+            managed_controls_layers_from_activation_state(
+                active,
+                catalog_digest=activation_digest,
+                authority_key=key,
+            )
+            managed_revision = managed_controls_revision_from_state(
+                revision_state,
+                authority_key=key,
+            )
+            return ExtensionControlAuthorityView(
+                view.health,
+                view.revision,
+                view.catalog_digest,
+                local_layers,
+                managed_revision,
+            )
         key = self._authority_key(required=True)
         assert key is not None
         managed_layers, managed_revision = managed_controls_layers_from_activation_state(
@@ -717,6 +743,28 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             if stored_catalog_digest != catalog_digest:
                 if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
+                pending = self._pending_transition(revision + 1)
+                if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
+                    with self._connect() as connection:
+                        resumed = self._resume_idempotent_transition(
+                            connection,
+                            pending,
+                            current=ExtensionControlAuthorityView(
+                                AuthorityHealth.RECOVERY_REQUIRED,
+                                revision,
+                                stored_catalog_digest,
+                                (),
+                            ),
+                            catalog_digest=_row_str(pending, "catalog_digest"),
+                            layers_json=_row_str(pending, "layers_json"),
+                            actor_hash=_row_str(pending, "actor_id_hash"),
+                            idempotency_hash=_row_str(pending, "idempotency_key_hash"),
+                            nonce_hash=_row_str(pending, "nonce_hash"),
+                            expected_revision=_row_int(pending, "previous_revision"),
+                            key=key,
+                        )
+                    if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                        return resumed
                 previous = self._read_extension_control_authority_locked(stored_catalog_digest)
                 if previous.health is not AuthorityHealth.PROTECTED:
                     raise ExtensionControlAuthorityError("extension control catalog migration source unavailable")
