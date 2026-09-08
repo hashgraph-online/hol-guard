@@ -128,8 +128,8 @@ assert(
 
 const primaryActionMarkup = renderToStaticMarkup(createElement(PrimaryActionCard, { item: shellRequest }));
 assert(
-  primaryActionMarkup.includes("Working directory") && primaryActionMarkup.includes("/workspace/current"),
-  "T494: primary action card shows the full working directory next to the stopped command"
+  !primaryActionMarkup.includes("Working directory") && !primaryActionMarkup.includes("/workspace/current"),
+  "Everyday review hides retained working-directory details until Technical Mode is deliberately enabled"
 );
 
 const longCommand = "a".repeat(200);
