@@ -19867,140 +19867,35 @@ function AlphaChannelDialog({
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           ApprovalProofFieldInputs,
           {
-            type: "button",
-            onClick: handleCopyWorkspaceId,
-            className: "mt-1 flex w-full items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1.5 font-mono text-[10px] text-slate-600 transition hover:bg-slate-100",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.workspaceId }),
-              copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "h-3 w-3 shrink-0 text-green-600" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3 w-3 shrink-0 text-slate-400" })
-            ]
+            approvalGate,
+            approvalPassword,
+            approvalTotpCode,
+            onApprovalPasswordChange,
+            onApprovalTotpCodeChange
           }
-        ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] text-slate-400", children: "Not available" })
-      ] }),
-      props.planId ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-medium uppercase tracking-wider text-slate-400", children: "Plan" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 flex items-center gap-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center rounded-md bg-brand-blue/10 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-brand-blue", children: props.planId }) })
-      ] }) : null
-    ] }) })
-  ] });
-}
-function Surface(props) {
-  const toneClass = surfaceToneClass(props.tone);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "section",
-    {
-      className: `guard-surface-in rounded-xl border p-4 sm:p-5 ${toneClass}${props.className ? ` ${props.className}` : ""}`,
-      children: props.children
-    }
-  );
-}
-function SectionLabel(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-blue", children: props.children });
-}
-function PolicyStatField(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `min-w-0 ${props.className ?? ""}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: props.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 min-w-0", children: props.children })
-  ] });
-}
-function Badge(props) {
-  const toneClass = badgeToneClass(props.tone);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-normal w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1.5 [&>svg]:pointer-events-none transition-colors duration-200 overflow-hidden ${toneClass}`, children: props.children });
-}
-function Tag(props) {
-  const toneClass = tagToneClass(props.tone);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center rounded-full border px-3 py-1 text-xs font-normal whitespace-nowrap ${toneClass}`, children: props.children });
-}
-function EmptyState(props) {
-  const isTeach = props.tone === "teach";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-2xl border border-brand-blue/10 bg-gradient-to-br from-white to-brand-blue/[0.02] px-6" : "px-6"}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-slate-100"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: `h-7 w-7 ${isTeach ? "text-brand-blue" : "text-slate-400"}`, "aria-hidden": "true" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: props.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground", children: props.body }),
-    props.action ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: props.action }) : null
-  ] });
-}
-function anchorPropsFromButtonProps(props) {
-  const {
-    disabled: _disabled,
-    form: _form,
-    formAction: _formAction,
-    formEncType: _formEncType,
-    formMethod: _formMethod,
-    formNoValidate: _formNoValidate,
-    formTarget: _formTarget,
-    name: _name,
-    value: _value,
-    type: _type,
-    ...rest
-  } = props;
-  return rest;
-}
-const ActionButton = reactExports.forwardRef(
-  ({ children, href, variant, disabled, onClick, className: customClassName, type, ...buttonProps }, ref) => {
-    const className = `${actionButtonClass(variant)}${customClassName ? ` ${customClassName}` : ""}`;
-    if (href) {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "a",
-        {
-          ref,
-          href: guardAwareHref(href),
-          target: /^https?:\/\//i.test(href) ? "_blank" : void 0,
-          rel: /^https?:\/\//i.test(href) ? "noopener noreferrer" : void 0,
-          onClick,
-          className,
-          ...anchorPropsFromButtonProps(buttonProps),
-          children
-        }
-      );
-    }
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { ref, type: type ?? "button", className, onClick, disabled, ...buttonProps, children });
-  }
-);
-ActionButton.displayName = "ActionButton";
-function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }) {
-  const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
-  const tone = variant === "primary" ? "bg-brand-blue text-white shadow-sm hover:bg-brand-blue/90" : variant === "danger" ? "bg-brand-purple text-white shadow-sm hover:bg-brand-purple/90" : variant === "ghost" ? "text-slate-600 hover:bg-slate-100" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick, disabled, "aria-label": ariaLabel ?? label, className: `${base} ${tone}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`, "aria-hidden": "true", children: icon }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: spinning ? "Running..." : label })
-  ] });
-}
-function PaginationControls(props) {
-  const firstItem = props.totalItems === 0 ? 0 : (props.page - 1) * props.pageSize + 1;
-  const lastItem = Math.min(props.totalItems, props.page * props.pageSize);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between${props.className ? ` ${props.className}` : ""}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-      firstItem,
-      "-",
-      lastItem,
-      " of ",
-      props.totalItems
+        )
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
-          onClick: props.onPrevious,
-          disabled: props.page <= 1,
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
-          children: "Previous"
+          onClick: onClose,
+          disabled: pending,
+          className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50",
+          children: "Cancel"
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-slate-400", children: [
-        props.page,
-        "/",
-        props.totalPages
-      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
-          onClick: props.onNext,
-          disabled: props.page >= props.totalPages,
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
-          children: "Next"
+          onClick: onConfirm,
+          disabled: confirmDisabled,
+          className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
+          children: pending ? "Saving…" : confirmLabel
         }
       )
     ] })
@@ -20133,200 +20028,45 @@ function getFocusableElements(container2) {
     (el) => el instanceof HTMLElement && el.offsetParent !== null
   );
 }
-function badgeToneClass(tone) {
-  if (tone === "success") return "border-transparent bg-accent/10 text-accent border-accent/20";
-  if (tone === "warning") return "border-transparent bg-brand-blue/10 text-brand-blue border-brand-blue/20";
-  if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700 border-blue-500/20";
-  if (tone === "destructive") return "border-transparent bg-brand-purple/10 text-brand-purple border-brand-purple/20";
-  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention border-brand-attention/20";
-  return "border-transparent bg-gray-100 text-gray-600 border-gray-200";
-}
-function tagToneClass(tone) {
-  if (tone === "green") return "border-transparent bg-brand-green-bg/60 text-brand-green-text";
-  if (tone === "purple") return "border-transparent bg-brand-purple/10 text-brand-purple";
-  if (tone === "destructive") return "border-transparent bg-brand-purple/10 text-brand-purple";
-  if (tone === "red") return "border-transparent bg-brand-purple/10 text-brand-purple";
-  if (tone === "amber") return "border-transparent bg-amber-50 text-amber-700";
-  if (tone === "warning") return "border-transparent bg-amber-50 text-amber-700";
-  if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700";
-  if (tone === "default") return "border-gray-200 bg-gray-100 text-gray-500";
-  if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
-  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention";
-  return "border-transparent bg-blue-500/10 text-blue-700";
-}
-function actionButtonClass(variant) {
-  const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
-  const sizeDefault = "min-h-11 h-auto px-3 py-1.5 sm:px-4 sm:py-2";
-  if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
-  if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
-  if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
-  if (variant === "danger") return `${base} ${sizeDefault} bg-brand-purple text-white shadow-lg shadow-brand-blue/10 hover:bg-brand-purple/90 hover:shadow-brand-blue/20`;
-  if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
-  if (variant === "quiet") return `${base} ${sizeDefault} bg-transparent text-brand-dark hover:bg-surface-1`;
-  return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
-}
-function GuardHero(props) {
-  let bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
-  if (props.status === "needs_review" || props.status === "degraded") {
-    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]";
-  } else if (props.status !== "clear") {
-    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
-  }
-  let statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
-  let HeroIcon = HiMiniShieldCheck;
-  let iconColorClass = "text-brand-green";
-  let iconBgClass = "bg-brand-green/10";
-  let iconSpinClass = "";
-  if (props.status === "needs_review") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs your choice" });
-    HeroIcon = HiMiniExclamationTriangle;
-    iconColorClass = "text-brand-attention";
-    iconBgClass = "bg-brand-attention/10";
-  } else if (props.status === "checking") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Checking" });
-    HeroIcon = HiMiniArrowPath;
-    iconColorClass = "text-brand-blue";
-    iconBgClass = "bg-brand-blue/10";
-    iconSpinClass = "animate-spin";
-  } else if (props.status === "degraded") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Degraded" });
-    HeroIcon = HiMiniInformationCircle;
-    iconColorClass = "text-brand-attention";
-    iconBgClass = "bg-brand-attention/10";
-  } else if (props.status === "partial") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Partially protected" });
-    HeroIcon = HiMiniInformationCircle;
-    iconColorClass = "text-brand-blue";
-    iconBgClass = "bg-brand-blue/10";
-  } else if (props.status === "neutral") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Configuration" });
-    HeroIcon = HiMiniInformationCircle;
-    iconColorClass = "text-brand-blue";
-    iconBgClass = "bg-brand-blue/10";
-  } else if (props.status === "setup_gap") {
-    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" });
-    HeroIcon = HiMiniInformationCircle;
-    iconColorClass = "text-brand-blue";
-    iconBgClass = "bg-brand-blue/10";
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "section",
-    {
-      className: `guard-surface-in relative overflow-hidden rounded-2xl border border-brand-blue/10 ${bgClass} p-5 sm:p-6 lg:p-7`,
-      role: "region",
-      "aria-label": "Protection status",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection status" }),
-          statusBadge
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-3xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBgClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HeroIcon, { className: `h-4 w-4 ${iconColorClass} ${iconSpinClass}`.trim(), "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl", children: props.headline }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: props.subheadline })
-          ] })
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-          props.cta,
-          props.secondaryCta
-        ] })
-      ] })
+function useFocusTrap(active, containerRef) {
+  const previouslyFocusedRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!active) return;
+    const container2 = containerRef.current;
+    if (!container2) return;
+    previouslyFocusedRef.current = document.activeElement;
+    const focusable = getFocusableElements(container2);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (first) {
+      first.focus();
     }
-  );
-}
-function ProofStrip(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4", children: props.items.map((item) => {
-    const toneColor = item.tone === "blue" ? "text-brand-blue" : item.tone === "green" ? "text-emerald-600" : item.tone === "purple" ? "text-brand-purple" : item.tone === "attention" ? "text-amber-600" : "text-brand-dark";
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", title: item.hint, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-wider text-slate-400", children: item.label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-2xl font-semibold tracking-tight ${toneColor}`, children: item.value })
-    ] }, item.label);
-  }) });
-}
-function TabBar(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "tablist", className: "flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5", children: props.tabs.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      id: tab.id ?? tab.value,
-      type: "button",
-      role: "tab",
-      "aria-selected": props.active === tab.value,
-      onClick: () => props.onChange(tab.value),
-      className: `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${props.active === tab.value ? "bg-white text-brand-dark shadow-sm" : "text-slate-500 hover:text-brand-dark"}`,
-      children: tab.label
-    },
-    tab.value
-  )) });
-}
-function approvalProofRecentlySatisfied(gate) {
-  return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
-}
-function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
-}
-function isApprovalProofSubmitDisabled(gate, credentials, busy) {
-  if (busy) {
-    return true;
-  }
-  if (approvalProofRecentlySatisfied(gate)) {
-    return false;
-  }
-  if (approvalProofRequiresPassword(gate)) {
-    return credentials.approvalPassword.trim() === "";
-  }
-  return credentials.approvalTotpCode.trim() === "";
-}
-function buildApprovalProofCredentials(gate, credentials) {
-  if (approvalProofRecentlySatisfied(gate)) {
-    return {};
-  }
-  if (approvalProofRequiresPassword(gate)) {
-    return { approval_password: credentials.approvalPassword };
-  }
-  return { approval_totp_code: credentials.approvalTotpCode };
-}
-function ApprovalProofFieldInputs(props) {
-  const handleTotpChange = reactExports.useCallback((event) => {
-    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
-    event.target.value = digits;
-    props.onApprovalTotpCodeChange(event);
-  }, [props]);
-  if (approvalProofRecentlySatisfied(props.approvalGate)) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
-  }
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        ref: props.passwordRef,
-        type: "password",
-        autoComplete: "current-password",
-        value: props.approvalPassword,
-        onChange: props.onApprovalPasswordChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+    function handleKeyDown(event) {
+      if (event.key !== "Tab") return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
       }
-    )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        maxLength: 6,
-        autoComplete: "one-time-code",
-        name: "one-time-code",
-        autoFocus: true,
-        value: props.approvalTotpCode,
-        onChange: handleTotpChange,
-        className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
-    )
-  ] }) });
+    }
+    container2.addEventListener("keydown", handleKeyDown);
+    return () => {
+      container2.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
+        previouslyFocusedRef.current.focus();
+      }
+    };
+  }, [active, containerRef]);
 }
 function GuardModalLayer({
   ariaLabel,
@@ -20343,17 +20083,26 @@ function GuardModalLayer({
   reactExports.useEffect(() => {
     setOverlayRoot(ensureGuardOverlayRoot());
   }, []);
-  const submitDisabled = isApprovalProofSubmitDisabled(
-    props.approvalGate,
-    {
-      approvalPassword: props.approvalPassword,
-      approvalTotpCode: props.approvalTotpCode
-    },
-    props.submitBusy
-  );
-  const handleKeyDown = reactExports.useCallback(
-    (event) => {
-      if (event.key === "Enter" && !submitDisabled) {
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const previousCount = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+    document.documentElement.dataset.guardModalOpen = String(previousCount + 1);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      const nextCount = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
+      if (nextCount <= 0) {
+        delete document.documentElement.dataset.guardModalOpen;
+      } else {
+        document.documentElement.dataset.guardModalOpen = String(nextCount);
+      }
+    };
+  }, [mounted]);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         onCloseRef.current();
@@ -20600,71 +20349,96 @@ function useGuardUpdate(options) {
     updatePhaseRef.current = updatePhase;
   }, [updatePhase]);
   reactExports.useEffect(() => {
-    if (!active) return;
-    const container2 = containerRef.current;
-    if (!container2) return;
-    previouslyFocusedRef.current = document.activeElement;
-    const focusable = getFocusableElements(container2);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (first) {
-      first.focus();
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  const refreshUpdateStatus = reactExports.useCallback(async () => {
+    if (!enabled || !isMounted.current || channelMutationPending.current) {
+      return;
     }
-    function handleKeyDown(event) {
-      if (event.key !== "Tab") return;
-      if (focusable.length === 0) {
-        event.preventDefault();
+    const epoch = updateStatusEpoch.current;
+    const mutationId = channelMutationId.current;
+    try {
+      const status = await fetchGuardUpdateStatus();
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
         return;
       }
-      if (event.shiftKey) {
-        if (document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
+      setUpdateStatus(status);
+      if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
+        setUpdatePhase("idle");
+      }
+    } catch {
+      if (isMounted.current && updatePhaseRef.current === "checking") {
+        setUpdatePhase("idle");
       }
     }
-    container2.addEventListener("keydown", handleKeyDown);
-    return () => {
-      container2.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
-        previouslyFocusedRef.current.focus();
+  }, [enabled]);
+  reactExports.useEffect(() => {
+    if (!enabled) {
+      setUpdatePhase("idle");
+      return;
+    }
+    let cancelled = false;
+    const epoch = updateStatusEpoch.current;
+    const mutationId = channelMutationId.current;
+    void fetchGuardUpdateStatus().then((status) => {
+      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+        return;
       }
-    };
-  }, [active, containerRef]);
-}
-function GuardModalLayer({
-  ariaLabel,
-  children,
-  onClose,
-  panelClassName = "w-full max-w-2xl"
-}) {
-  const [overlayRoot, setOverlayRoot] = reactExports.useState(null);
-  const panelRef = reactExports.useRef(null);
-  const onCloseRef = reactExports.useRef(onClose);
-  onCloseRef.current = onClose;
-  const mounted = overlayRoot !== null;
-  useFocusTrap(mounted, panelRef);
-  reactExports.useEffect(() => {
-    setOverlayRoot(ensureGuardOverlayRoot());
-  }, []);
-  reactExports.useEffect(() => {
-    if (!mounted) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const previousCount = Number(document.documentElement.dataset.guardModalOpen ?? 0);
-    document.documentElement.dataset.guardModalOpen = String(previousCount + 1);
+      setUpdateStatus(status);
+      if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
+        setUpdatePhase("idle");
+      }
+    }).catch(() => {
+      if (!cancelled && updatePhaseRef.current === "checking") {
+        setUpdatePhase("idle");
+      }
+    });
+    const pollId = window.setInterval(() => {
+      if (updatePhaseRef.current === "updating" || updatePhaseRef.current === "reconnecting") {
+        return;
+      }
+      void refreshUpdateStatus();
+    }, UPDATE_STATUS_POLL_MS);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      const nextCount = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
-      if (nextCount <= 0) {
-        delete document.documentElement.dataset.guardModalOpen;
-      } else {
-        document.documentElement.dataset.guardModalOpen = String(nextCount);
+      cancelled = true;
+      window.clearInterval(pollId);
+    };
+  }, [enabled, refreshUpdateStatus]);
+  const waitForReconnect = reactExports.useCallback(
+    async (expectedPreviousVersion, expectedLatestVersion, authorization) => {
+      reconnectStartedAt.current = Date.now();
+      let sawUpdateInProgress = false;
+      while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
+        try {
+          const reconnectResult = await reconnectGuardDaemonAfterUpdate({
+            expectedPreviousVersion,
+            expectedLatestVersion,
+            sawUpdateInProgress,
+            authorization
+          });
+          if (!reconnectResult) {
+            throw new Error("Guard daemon not found");
+          }
+          sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          if (!reconnectResult.origin) {
+            throw new Error("Guard daemon not ready");
+          }
+          const { origin } = reconnectResult;
+          if (origin !== window.location.origin) {
+            redirectToGuardDaemonOrigin(origin, readGuardToken());
+            return true;
+          }
+          updateStatusEpoch.current += 1;
+          setUpdateStatus(reconnectResult.status);
+          setUpdatePhase("idle");
+          options?.onReconnected?.();
+          return false;
+        } catch {
+          await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+        }
       }
       setUpdatePhase("error");
       throw new Error("Guard did not reconnect after the update.");
@@ -20710,6 +20484,21 @@ function GuardModalLayer({
         setUpdatePhase("error");
         setUpdateError(error instanceof Error ? error.message : "The update did not finish. The installed version stays in place.");
       }
+    },
+    [waitForReconnect]
+  );
+  const onUpdateGuard = reactExports.useCallback(async () => {
+    if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
+      return;
+    }
+    await scheduleAndWait({
+      expectedPreviousVersion: updateStatus.current_version,
+      expectedLatestVersion: updateStatus.latest_version
+    });
+  }, [scheduleAndWait, updateStatus]);
+  const onReinstallGuard = reactExports.useCallback(async () => {
+    if (!updateStatus?.recovery_reinstall_available) {
+      return;
     }
     await scheduleAndWait({
       forcePypiReinstall: true,
@@ -31275,7 +31064,8 @@ function ApprovalCenterLayout(props) {
     updatePhase,
     updateError,
     onUpdateGuard,
-    onReinstallGuard
+    onReinstallGuard,
+    onSetUpdateChannel
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -31292,6 +31082,7 @@ function ApprovalCenterLayout(props) {
         updateError,
         onUpdateGuard,
         onReinstallGuard,
+        onSetUpdateChannel,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
