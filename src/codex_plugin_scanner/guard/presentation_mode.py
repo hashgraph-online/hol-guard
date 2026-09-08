@@ -17,6 +17,7 @@ GuardPresentationSource = Literal[
 
 PRESENTATION_SCHEMA_VERSION = 1
 PRESENTATION_MODE_VALUES = frozenset({"everyday", "technical"})
+UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC = "unsupported_presentation_schema_fell_back_to_everyday"
 LEGACY_PRESENTATION_MODE_MAP: dict[str, GuardPresentationMode] = {
     "simple": "everyday",
     "advanced": "technical",
@@ -68,7 +69,7 @@ def coerce_persisted_presentation_mode(
             explicit=False,
             source="default",
             schema_version=PRESENTATION_SCHEMA_VERSION,
-            diagnostic="unsupported_presentation_schema_fell_back_to_everyday",
+            diagnostic=UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
         )
     if isinstance(value, str) and value in PRESENTATION_MODE_VALUES:
         return PersistedPresentationMode(
