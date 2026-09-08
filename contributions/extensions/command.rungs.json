@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.rungs",
+  "version": "1.0.0",
+  "name": "rungs",
+  "description": "Reviews rungs runs that execute registered gates or write module files, gates and records into a repository, and keeps doctor and the documented previews unreviewed.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.rungs",
+    "displayName": "Community",
+    "url": "https://github.com/ThroughTheWind/rungs"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#1D4ED8" },
+  "homepage": "https://docs.rungscli.com/",
+  "license": "MIT",
+  "executables": ["rungs"],
+  "ecosystemIds": ["rungs"],
+  "riskClasses": ["destructive_shell", "execution"],
+  "actionClasses": [
+    "rungs gate execution command",
+    "rungs module install command",
+    "rungs module upgrade command"
+  ],
+  "referenceUrls": ["https://docs.rungscli.com/", "https://github.com/ThroughTheWind/rungs/blob/v0.4.0/src/cli.ts"],
+  "saferAlternatives": [
+    "Inspect with `rungs doctor`, preview with `rungs add --dry-run` or `rungs upgrade` without --apply, and read .ai/gates.toml before `rungs check`."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_rungs_extensions"
+  }
+}
