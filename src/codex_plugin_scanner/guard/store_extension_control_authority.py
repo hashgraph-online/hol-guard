@@ -123,7 +123,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     key = self._authority_key(required=True)
                     if key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
-                    self._record_catalog_manifest(registry, key=key)
+                    view = self._sync_trusted_catalog_manifest(view, registry, key=key)
                 if include_managed_controls:
                     return self._with_managed_controls_activation(
                         view,
@@ -904,32 +904,81 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 ).hexdigest()
         return manifest
 
-    def _record_catalog_manifest(self, registry: CommandSafetyExtensionRegistry, *, key: bytes) -> None:
-        manifest_json = json.dumps(
-            self._catalog_target_manifest(registry),
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+    def _sync_trusted_catalog_manifest(
+        self,
+        view: ExtensionControlAuthorityView,
+        registry: CommandSafetyExtensionRegistry,
+        *,
+        key: bytes,
+    ) -> ExtensionControlAuthorityView:
+        current = self._catalog_target_manifest(registry)
         with self._connect() as connection:
             existing = connection.execute(
-                "select manifest_json from extension_control_catalog_manifest where catalog_digest = ?",
+                "select 1 from extension_control_catalog_manifest where catalog_digest = ?",
                 (registry.catalog_digest,),
             ).fetchone()
-            if existing is not None:
-                persisted = self._load_catalog_manifest(registry.catalog_digest, key=key)
-                if persisted is None or persisted != self._catalog_target_manifest(registry):
+        if existing is None:
+            self._write_catalog_manifest(registry, key=key, manifest=current)
+            return view
+        persisted = self._load_catalog_manifest(registry.catalog_digest, key=key)
+        if persisted is None:
+            raise ExtensionControlAuthorityError("extension control catalog manifest conflict")
+        if persisted == current:
+            return view
+        # Same catalog digest can still carry a newer trusted contract fingerprint
+        # after a package update. Rebind controls, then replace the stored
+        # manifest. An unverifiable stored row stays fail-closed above.
+        if view.layers:
+            view = self._migrate_extension_control_catalog(view, registry=registry, key=key)
+        self._write_catalog_manifest(registry, key=key, manifest=current, replace=True)
+        return view
+
+    def _record_catalog_manifest(self, registry: CommandSafetyExtensionRegistry, *, key: bytes) -> None:
+        self._sync_trusted_catalog_manifest(
+            ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 0, registry.catalog_digest, ()),
+            registry,
+            key=key,
+        )
+
+    def _write_catalog_manifest(
+        self,
+        registry: CommandSafetyExtensionRegistry,
+        *,
+        key: bytes,
+        manifest: dict[str, str],
+        replace: bool = False,
+    ) -> None:
+        manifest_json = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+        recorded_at = _now()
+        record_json, record_digest, record_mac = authenticated_record(
+            {
+                "catalog_digest": registry.catalog_digest,
+                "manifest_json": manifest_json,
+                "recorded_at": recorded_at,
+            },
+            key=key,
+            purpose=self._catalog_manifest_purpose,
+        )
+        with self._connect() as connection:
+            if replace:
+                connection.execute(
+                    """
+                    update extension_control_catalog_manifest
+                    set manifest_json = ?, record_json = ?, record_digest = ?, record_mac = ?, recorded_at = ?
+                    where catalog_digest = ?
+                    """,
+                    (
+                        manifest_json,
+                        record_json,
+                        record_digest,
+                        record_mac,
+                        recorded_at,
+                        registry.catalog_digest,
+                    ),
+                )
+                if connection.execute("select changes()").fetchone()[0] != 1:
                     raise ExtensionControlAuthorityError("extension control catalog manifest conflict")
                 return
-            recorded_at = _now()
-            record_json, record_digest, record_mac = authenticated_record(
-                {
-                    "catalog_digest": registry.catalog_digest,
-                    "manifest_json": manifest_json,
-                    "recorded_at": recorded_at,
-                },
-                key=key,
-                purpose=self._catalog_manifest_purpose,
-            )
             connection.execute(
                 """
                 insert into extension_control_catalog_manifest (
