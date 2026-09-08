@@ -63,6 +63,24 @@ def preserve_migrated_extension_control(
     return control.state is ControlState.DISABLED or previous_fingerprint in {None, current_manifest[key_name]}
 
 
+def preserve_managed_extension_control(
+    control: ExtensionControl,
+    *,
+    previous_manifest: Mapping[str, str],
+    current_manifest: Mapping[str, str],
+) -> bool:
+    """Keep the original state when the target is known and its contract is unchanged."""
+
+    key_name = f"{control.target.kind.value}:{control.target.target_id}"
+    current_fingerprint = current_manifest.get(key_name)
+    if current_fingerprint is None:
+        # Keep unknown targets visible so the resolver emits its fail-closed error.
+        return True
+    if control.state is ControlState.DISABLED:
+        return True
+    return previous_manifest.get(key_name) == current_fingerprint
+
+
 class _ExtensionControlAuthoritySupportMixin:
     def _require_compatible_extension_control_schema(self) -> None:
         with self._connect() as connection:
