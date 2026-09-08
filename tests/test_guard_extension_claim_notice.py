@@ -24,6 +24,9 @@ def listing(extension_id: str, ids: list[str]) -> dict[str, Any]:
     return {
         "schemaVersion": "guard.extension-listing.v1",
         "extensionId": extension_id,
+        "tagline": f"Reviewed operation coverage for {extension_id}.",
+        "category": "other",
+        "limitations": ["Coverage is limited to the reviewed operations and the surrounding Guard policy."],
         "maintainerGithubIds": ids,
     }
 
@@ -33,7 +36,9 @@ class FakeGitHub:
         self.default_branch = "main"
         self.merged = True
         self.base_ref = "main"
+        self.base_sha = BEFORE_SHA
         self.compare_status = "ahead"
+        self.baseline_status = "ahead"
         self.files: list[dict[str, Any]] = []
         self.file_payloads: dict[tuple[str, str], dict[str, Any] | None] = {}
         self.comment_rows: list[dict[str, Any]] = []
@@ -46,18 +51,16 @@ class FakeGitHub:
     def pull_request(self, number: int) -> dict[str, Any]:
         return {
             "merged_at": "2026-09-08T00:00:00Z" if self.merged else None,
-            "base": {"ref": self.base_ref},
+            "base": {"ref": self.base_ref, "sha": self.base_sha},
             "merge_commit_sha": MERGE_SHA,
         }
 
     def compare(self, base: str, head: str) -> dict[str, Any]:
-        assert base == MERGE_SHA
-        assert head == self.default_branch
-        return {"status": self.compare_status}
-
-    def commit(self, sha: str) -> dict[str, Any]:
-        assert sha == MERGE_SHA
-        return {"parents": [{"sha": BEFORE_SHA}]}
+        if base == self.base_sha and head == MERGE_SHA:
+            return {"status": self.baseline_status}
+        if base == MERGE_SHA and head == self.default_branch:
+            return {"status": self.compare_status}
+        raise AssertionError(f"unexpected comparison: {base}...{head}")
 
     def pull_request_files(self, number: int) -> list[dict[str, Any]]:
         return self.files
@@ -81,17 +84,20 @@ class FakeGitHub:
         self.posted.append((number, body))
 
 
+def configure_new_contribution(client: FakeGitHub, extension_id: str, ids: list[str]) -> None:
+    contribution_path = f"contributions/extensions/{extension_id}.json"
+    listing_path = f"contributions/extension-listings/{extension_id}.json"
+    client.files = [
+        {"status": "added", "filename": contribution_path},
+        {"status": "added", "filename": listing_path},
+    ]
+    client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ids)
+
+
 def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     client = FakeGitHub()
-    extension_id = "command.example"
-    client.files = [
-        {"status": "added", "filename": f"contributions/extensions/{extension_id}.json"},
-        {"status": "added", "filename": f"contributions/extension-listings/{extension_id}.json"},
-    ]
-    client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {"schemaVersion": "v1"}
-    client.file_payloads[(MERGE_SHA, f"contributions/extension-listings/{extension_id}.json")] = listing(
-        extension_id, ["200", "100"]
-    )
+    configure_new_contribution(client, "command.example", ["200", "100"])
     client.logins = {"200": "second-maintainer", "100": "first-maintainer"}
 
     assert MODULE.process(client, 42, MODULE.DEFAULT_STUDIO_URL) == 0
@@ -135,12 +141,36 @@ def test_listing_change_notifies_only_newly_accepted_ids() -> None:
     assert "@old-maintainer" not in body
 
 
-def test_existing_marker_makes_manual_backfill_idempotent() -> None:
+def test_pre_pr_base_sha_supports_multi_commit_rebase_merges() -> None:
     client = FakeGitHub()
-    client.comment_rows = [{"body": f"{MODULE.MARKER}\nAlready posted"}]
+    configure_new_contribution(client, "command.rebased", ["300"])
+    client.logins = {"300": "rebased-maintainer"}
+
+    assert MODULE.process(client, 12, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert "@rebased-maintainer" in client.posted[0][1]
+
+
+def test_existing_marker_from_trusted_actions_identity_is_idempotent() -> None:
+    client = FakeGitHub()
+    client.comment_rows = [
+        {
+            "body": f"{MODULE.MARKER}\nAlready posted",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
 
     assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []
+
+
+def test_contributor_cannot_spoof_notice_marker() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.marker-spoof", ["400"])
+    client.logins = {"400": "real-maintainer"}
+    client.comment_rows = [{"body": MODULE.MARKER, "user": {"id": 1234, "type": "User"}}]
+
+    assert MODULE.process(client, 13, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
 
 
 def test_noncanonical_or_removed_merge_is_not_actionable() -> None:
@@ -157,17 +187,29 @@ def test_noncanonical_or_removed_merge_is_not_actionable() -> None:
 def test_invalid_authority_metadata_fails_closed() -> None:
     client = FakeGitHub()
     extension_id = "command.invalid-authority"
-    listing_path = f"contributions/extension-listings/{extension_id}.json"
-    contribution_path = f"contributions/extensions/{extension_id}.json"
-    client.files = [
-        {"status": "added", "filename": contribution_path},
-        {"status": "added", "filename": listing_path},
-    ]
-    client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
-    client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ["not-a-number"])
+    configure_new_contribution(client, extension_id, ["not-a-number"])
 
     with pytest.raises(MODULE.ClaimNoticeError, match="invalid numeric GitHub ID"):
         MODULE.collect_notice_items(client, 11)
+
+
+def test_missing_required_listing_fields_fail_closed() -> None:
+    client = FakeGitHub()
+    extension_id = "command.invalid-listing"
+    configure_new_contribution(client, extension_id, ["500"])
+    listing_path = f"contributions/extension-listings/{extension_id}.json"
+    client.file_payloads[(MERGE_SHA, listing_path)].pop("tagline")
+
+    with pytest.raises(MODULE.ClaimNoticeError, match="canonical schema"):
+        MODULE.collect_notice_items(client, 14)
+
+
+def test_non_ascii_and_duplicate_github_ids_fail_closed() -> None:
+    extension_id = "command.invalid-ids"
+    with pytest.raises(MODULE.ClaimNoticeError, match="invalid numeric GitHub ID"):
+        MODULE.accepted_github_ids(listing(extension_id, ["１２３"]), extension_id)
+    with pytest.raises(MODULE.ClaimNoticeError, match="must be unique"):
+        MODULE.accepted_github_ids(listing(extension_id, ["600", "600"]), extension_id)
 
 
 def test_unresolved_numeric_id_stays_visible_without_guessing_a_username() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import json
 import os
 import re
@@ -23,8 +24,26 @@ CONTRIBUTION_PREFIXES = (
     "contributions/mcp-servers/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
+TAG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+GITHUB_ID_RE = re.compile(r"^[1-9][0-9]{0,19}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+TRUSTED_NOTICE_ACTOR_ID = 41898282
+MAX_LISTING_BYTES = 16_384
+LISTING_REQUIRED_KEYS = frozenset({"schemaVersion", "extensionId", "tagline", "category", "limitations"})
+LISTING_ALLOWED_KEYS = LISTING_REQUIRED_KEYS | frozenset({"documentationUrl", "tags", "maintainerGithubIds"})
+LISTING_CATEGORIES = frozenset(
+    {
+        "core-safety",
+        "cloud-infrastructure",
+        "data-resilience",
+        "delivery-remote",
+        "managed-services",
+        "package-supply-chain",
+        "specialized-tools",
+        "other",
+    }
+)
 
 
 class ClaimNoticeError(RuntimeError):
@@ -98,12 +117,6 @@ class GitHubApi:
             if len(data) < 100:
                 return files
         raise ClaimNoticeError("pull request changes exceed the supported 3000-file bound")
-
-    def commit(self, sha: str) -> dict[str, Any]:
-        data = self._request(f"{self.base_url}/commits/{sha}")
-        if not isinstance(data, dict):
-            raise ClaimNoticeError("commit response is invalid")
-        return data
 
     def compare(self, base: str, head: str) -> dict[str, Any]:
         data = self._request(f"{self.base_url}/compare/{base}...{head}")
@@ -191,22 +204,98 @@ def changed_extension_ids(files: list[dict[str, Any]]) -> tuple[set[str], set[st
     return contributions, listings
 
 
+def _plain_text(value: object, *, minimum: int, maximum: int, field: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not minimum <= len(value) <= maximum
+        or value != value.strip()
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise ClaimNoticeError(f"listing {field} does not match the canonical plain-text contract")
+    return value
+
+
+def _public_https(value: object) -> None:
+    value = _plain_text(value, minimum=10, maximum=1024, field="documentationUrl")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        host = parsed.hostname
+        if (
+            parsed.scheme != "https"
+            or not host
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+            or host.lower() in {"localhost", "localhost.localdomain"}
+            or host.lower().endswith((".localhost", ".local", ".internal"))
+            or "\\" in value
+        ):
+            raise ValueError("non-public reference")
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            if "." not in host or host.endswith("."):
+                raise ValueError("non-public host") from None
+        else:
+            raise ValueError("literal IP")
+    except ValueError as error:
+        raise ClaimNoticeError("listing documentationUrl must use public HTTPS without credentials") from error
+
+
 def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str, ...]:
-    """Read the authority-bearing numeric IDs from a canonical listing sidecar."""
+    """Validate the complete listing contract, then return its reviewed claimant IDs."""
+    keys = frozenset(listing)
+    if not LISTING_REQUIRED_KEYS <= keys or not keys <= LISTING_ALLOWED_KEYS:
+        raise ClaimNoticeError(f"{extension_id}: listing fields do not match the canonical schema")
     if listing.get("schemaVersion") != "guard.extension-listing.v1":
         raise ClaimNoticeError(f"{extension_id}: unsupported extension listing schema")
-    if listing.get("extensionId") != extension_id:
+    listed_id = listing.get("extensionId")
+    if (
+        listed_id != extension_id
+        or not isinstance(listed_id, str)
+        or len(listed_id) > 256
+        or not EXTENSION_ID_RE.fullmatch(listed_id)
+    ):
         raise ClaimNoticeError(f"{extension_id}: listing identity does not match its path")
+    _plain_text(listing.get("tagline"), minimum=10, maximum=140, field="tagline")
+    if listing.get("category") not in LISTING_CATEGORIES:
+        raise ClaimNoticeError(f"{extension_id}: listing category is invalid")
+
+    limitations = listing.get("limitations")
+    if not isinstance(limitations, list) or not 1 <= len(limitations) <= 8:
+        raise ClaimNoticeError(f"{extension_id}: listing limitations are invalid")
+    checked_limitations = [
+        _plain_text(value, minimum=10, maximum=400, field="limitations") for value in limitations
+    ]
+    if len(set(checked_limitations)) != len(checked_limitations):
+        raise ClaimNoticeError(f"{extension_id}: listing limitations must be unique")
+
+    if "documentationUrl" in listing:
+        _public_https(listing["documentationUrl"])
+    if "tags" in listing:
+        tags = listing["tags"]
+        if not isinstance(tags, list) or len(tags) > 8:
+            raise ClaimNoticeError(f"{extension_id}: listing tags are invalid")
+        if any(not isinstance(tag, str) or not 2 <= len(tag) <= 30 or not TAG_RE.fullmatch(tag) for tag in tags):
+            raise ClaimNoticeError(f"{extension_id}: listing tags are invalid")
+        if len(set(tags)) != len(tags):
+            raise ClaimNoticeError(f"{extension_id}: listing tags must be unique")
+
     values = listing.get("maintainerGithubIds", [])
     if not isinstance(values, list) or len(values) > 8:
         raise ClaimNoticeError(f"{extension_id}: maintainerGithubIds must be an array of at most eight IDs")
-    result: list[str] = []
-    for value in values:
-        if not isinstance(value, str) or not value.isdecimal() or int(value) <= 0:
-            raise ClaimNoticeError(f"{extension_id}: maintainerGithubIds contains an invalid numeric GitHub ID")
-        if value not in result:
-            result.append(value)
-    return tuple(result)
+    if any(not isinstance(value, str) or not GITHUB_ID_RE.fullmatch(value) for value in values):
+        raise ClaimNoticeError(f"{extension_id}: maintainerGithubIds contains an invalid numeric GitHub ID")
+    if len(set(values)) != len(values):
+        raise ClaimNoticeError(f"{extension_id}: maintainerGithubIds must be unique")
+
+    try:
+        encoded = json.dumps(listing, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    except (TypeError, ValueError) as error:
+        raise ClaimNoticeError(f"{extension_id}: listing cannot be canonically serialized") from error
+    if len(encoded) > MAX_LISTING_BYTES:
+        raise ClaimNoticeError(f"{extension_id}: listing exceeds the canonical byte budget")
+    return tuple(values)
 
 
 def contribution_path(extension_id: str) -> str:
@@ -248,6 +337,17 @@ def _resolve_identities(client: GitHubApi, github_ids: tuple[str, ...]) -> tuple
     return tuple((account_id, client.user_login(account_id)) for account_id in github_ids)
 
 
+def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
+    """Return whether the trusted GitHub Actions identity already posted this notice."""
+    for comment in comments:
+        if MARKER not in str(comment.get("body") or ""):
+            continue
+        user = comment.get("user")
+        if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
+            return True
+    return False
+
+
 def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
     repo = client.repo_metadata()
     default_branch = repo.get("default_branch")
@@ -263,22 +363,20 @@ def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
     if base_ref != default_branch:
         print(f"PR #{pr_number}: merged into {base_ref!r}, not canonical {default_branch!r}; skipping")
         return []
+    before_sha = base.get("sha") if isinstance(base, dict) else None
+    if not isinstance(before_sha, str) or not SHA_RE.fullmatch(before_sha):
+        raise ClaimNoticeError("merged pull request is missing its pre-merge base SHA")
     merge_sha = pr.get("merge_commit_sha")
     if not isinstance(merge_sha, str) or not SHA_RE.fullmatch(merge_sha):
         raise ClaimNoticeError("merged pull request is missing a canonical merge commit SHA")
 
+    baseline_relation = client.compare(before_sha, merge_sha).get("status")
+    if baseline_relation not in {"ahead", "identical"}:
+        raise ClaimNoticeError("pull request base SHA is not an ancestor of the merged source")
     ancestry = client.compare(merge_sha, default_branch).get("status")
     if ancestry not in {"ahead", "identical"}:
         print(f"PR #{pr_number}: merge commit is no longer on canonical {default_branch}; skipping")
         return []
-
-    commit = client.commit(merge_sha)
-    parents = commit.get("parents")
-    if not isinstance(parents, list) or not parents or not isinstance(parents[0], dict):
-        raise ClaimNoticeError("merged commit has no first parent for authority comparison")
-    before_sha = parents[0].get("sha")
-    if not isinstance(before_sha, str) or not SHA_RE.fullmatch(before_sha):
-        raise ClaimNoticeError("merged commit first parent is invalid")
 
     contribution_changes, listing_changes = changed_extension_ids(client.pull_request_files(pr_number))
     candidates = sorted(contribution_changes | listing_changes)
@@ -322,8 +420,8 @@ def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
 
 
 def process(client: GitHubApi, pr_number: int, studio_url: str, *, dry_run: bool = False) -> int:
-    if any(MARKER in str(comment.get("body") or "") for comment in client.comments(pr_number)):
-        print(f"PR #{pr_number}: extension claim notice already exists; skipping")
+    if has_trusted_notice(client.comments(pr_number)):
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping")
         return 0
     items = collect_notice_items(client, pr_number)
     if not items:
