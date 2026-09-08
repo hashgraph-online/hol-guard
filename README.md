@@ -22,7 +22,7 @@ HOL Guard reviews agent actions before they run: shell commands, file access, pa
 
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
-[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contributing](#development)
+[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
 
 ## Install HOL Guard
 
@@ -368,9 +368,119 @@ The action may need approval under your active policy, or its tools or artifacts
 | [Policy specification](spec/guard-policy/v1alpha1/README.md) | GuardPolicy document format. |
 | [Policy recipes](docs/guard/policy-recipes.md) | Configuration examples for common workflows. |
 | [Extensions](docs/guard/extensions/README.md) | Built-in command rules and contribution guidance. |
+| [Contribute an extension](#contribute-a-new-extension) | Generate, review, integrate, and test a new extension with the CLI. |
 | [Local vs. cloud](docs/guard/local-vs-cloud.md) | Local capabilities and optional cloud services. |
 | [Troubleshooting](docs/guard/troubleshooting.md) | Diagnosis and recovery. |
 | [Security](SECURITY.md) | Vulnerability reporting and disclosure policy. |
+
+## Contribute a New Extension
+
+Use the **Extension Builder CLI** to turn exported command metadata or an MCP tool inventory into contribution files and tests. It works offline: it reads the export without importing or running the target tool.
+
+### 1. Propose the coverage
+
+Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+
+Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
+
+### 2. Generate a contribution kit
+
+This example uses the checked-in, synthetic `samplectl` inventory. For your own contribution, replace the input and metadata with your tool's export and public publisher details.
+
+```bash
+uv run --no-sync hol-guard extensions generate \
+  --from cli \
+  --input docs/guard/extension-builder/examples/cli-surface.json \
+  --slug samplectl \
+  --executable samplectl \
+  --name 'Sample CLI' \
+  --publisher community.example \
+  --publisher-name 'Example Maintainer' \
+  --homepage https://example.test/samplectl \
+  --upstream-version 1.0.0 \
+  --output samplectl-kit
+
+uv run --no-sync hol-guard extensions validate samplectl-kit
+```
+
+The output directory must be new, with an existing parent directory. The kit includes `discovery.json`, `review.json`, `report.json`, contribution metadata, a native detector, generated tests, and a file manifest.
+
+| Input format | Generator option |
+| :--- | :--- |
+| Normalized `guard.cli-surface.v1` JSON | `--from cli` |
+| Saved command help text | `--from help` |
+| Click `Context.to_info_dict()` export | `--from click` |
+| `oclif.manifest.json` | `--from oclif` |
+| Complete exported MCP `tools/list` result | `--from mcp` |
+| Previously generated `discovery.json` | `--from snapshot` |
+
+For MCP contributions, the generator uses `--launcher` and `--package` instead of `--executable`. See the [MCP kit example](docs/guard/extension-builder/README.md#generate-an-mcp-kit) for a complete command and pagination requirements.
+
+### 3. Review the operations and regenerate
+
+Read `report.json` and compare the discovered operations with the upstream implementation. Copy the review file before editing:
+
+```bash
+cp samplectl-kit/review.json samplectl-review.json
+```
+
+Edit `samplectl-review.json`, keeping its discovery binding and operation IDs intact. CLI operations use `review` or `block`; the root operation stays `review`. Set `reviewed: true` for entries you have assessed, with rationale and a public HTTPS evidence reference. Add `safeArgv` only for exact, verified safe invocations. The [review format](docs/guard/extension-builder/README.md#review-and-recompile) includes a complete entry example.
+
+Recompile from the saved snapshot rather than editing generated detectors or manifests:
+
+```bash
+uv run --no-sync hol-guard extensions generate \
+  --from snapshot \
+  --input samplectl-kit/discovery.json \
+  --review samplectl-review.json \
+  --output samplectl-reviewed
+
+uv run --no-sync hol-guard extensions validate samplectl-reviewed
+uv run --no-sync hol-guard extensions diff samplectl-kit samplectl-reviewed
+```
+
+`diff` exits `0` for equal kits and `1` when valid kits differ. If the upstream export changes, generate and review a new snapshot.
+
+### 4. Preview and apply the integration
+
+On your contribution branch, preview the changes to the current checkout:
+
+```bash
+uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo .
+```
+
+Inspect the listed paths and generated files. Copy the printed plan digest into the following command before running it:
+
+```bash
+uv run --no-sync hol-guard extensions apply samplectl-reviewed \
+  --repo . \
+  --expected-plan THE_PRINTED_PLAN_DIGEST \
+  --write
+```
+
+The write applies the reviewed plan to contribution files, the external trust map, catalog registration, packaging, and authoring ownership records. Existing IDs or conflicting files stop integration for review.
+
+### 5. Test and submit a pull request
+
+For the `samplectl` example:
+
+```bash
+uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
+uv run --no-sync pytest -q tests/test_generated_cli_samplectl_extension.py
+uv run --no-sync pytest -q \
+  tests/test_guard_extension_contribution.py \
+  tests/test_guard_extension_trust.py \
+  tests/test_guard_command_extension_registry.py
+uv run --no-sync python scripts/render_command_extension_directory.py
+uv run --no-sync python scripts/render_command_extension_directory.py --check
+git diff --check
+```
+
+Use your generated test filename for a different slug. Add cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run lint and formatting checks on changed Python files. Inspect the final diff, commit the integration and regenerated directory, and open a PR against `main` linking the proposal and test results. Include the generated authoring records; keep scratch kit directories and raw upstream exports out of the PR.
+
+**Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its detector cannot weaken Guard's required protections.
+
+[Full builder reference](docs/guard/extension-builder/README.md) · [Contribution review requirements](docs/guard/extensions/contributing.md) · [External extension contract](docs/guard/extension-contributions.md) · [Builder validation](docs/guard/extension-builder/VALIDATION.md)
 
 <a id="quick-start-for-contributors"></a>
 
