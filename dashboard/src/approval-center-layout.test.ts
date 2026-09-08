@@ -126,7 +126,7 @@ assert(
   "T494: working directory stays scoped to executable actions"
 );
 
-const primaryActionMarkup = renderToStaticMarkup(PrimaryActionCard({ item: shellRequest }));
+const primaryActionMarkup = renderToStaticMarkup(createElement(PrimaryActionCard, { item: shellRequest }));
 assert(
   primaryActionMarkup.includes("Working directory") && primaryActionMarkup.includes("/workspace/current"),
   "T494: primary action card shows the full working directory next to the stopped command"
