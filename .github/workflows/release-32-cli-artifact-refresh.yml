@@ -47,7 +47,7 @@ jobs:
           uv run --no-sync python - <<'PY'
           from pathlib import Path
 
-          from codex_plugin_scanner.guard.runtime.command_extensions import command_extensions_payload
+          from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload
 
           root = Path.cwd()
           payload = command_extensions_payload()
