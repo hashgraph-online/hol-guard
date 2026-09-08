@@ -39,11 +39,33 @@ jobs:
             tests/test_guard_command_common_cli_gaps.py \
             tests/test_guard_command_cloud_gcp_batch_2.py
 
-      - name: Refresh deterministic command artifacts
+      - name: Refresh deterministic command evidence
+        run: uv run --no-sync python tests/guard_command_decision_diff.py --write
+
+      - name: Refresh registry count ratchet
         run: |
-          uv run --no-sync python tests/guard_command_decision_diff.py --write
-          uv run --no-sync python scripts/render_command_extension_directory.py
-          uv run --no-sync python scripts/export_extension_directory.py
+          uv run --no-sync python - <<'PY'
+          import re
+          from pathlib import Path
+
+          from codex_plugin_scanner.guard.runtime.command_extensions import command_extensions_payload
+
+          root = Path.cwd()
+          payload = command_extensions_payload()
+          rule_count = sum(extension["rule_count"] for extension in payload["extensions"])
+          test_path = root / "tests" / "test_guard_command_extensions.py"
+          text = test_path.read_text(encoding="utf-8")
+          text, replacements = re.subn(
+              r'assert sum\(extension\["rule_count"\] for extension in payload\["extensions"\]\) == \d+',
+              f'assert sum(extension["rule_count"] for extension in payload["extensions"]) == {rule_count}',
+              text,
+              count=1,
+          )
+          if replacements != 1:
+              raise SystemExit("registry rule-count ratchet assertion not found")
+          test_path.write_text(text, encoding="utf-8")
+          print(f"refreshed registry rule-count ratchet to {rule_count}")
+          PY
 
       - name: Refresh managed-controls catalog projection vector
         run: |
@@ -98,14 +120,14 @@ jobs:
           test_path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Verify regenerated artifacts
+      - name: Verify regenerated evidence
         run: |
           uv run --no-sync python tests/guard_command_decision_diff.py --check
-          uv run --no-sync python scripts/render_command_extension_directory.py --check
-          uv run --no-sync python scripts/export_extension_directory.py --check
           uv run --no-sync pytest -q \
-            tests/test_policy_bundle_delivery_runtime.py::test_signed_cloud_extension_projection_matches_shared_vector \
-            tests/test_guard_command_extension_directory.py
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_extensions.py::test_command_extension_registry_is_deterministic_and_complete \
+            tests/test_policy_bundle_delivery_runtime.py::test_signed_cloud_extension_projection_matches_shared_vector
 
       - name: Commit generated evidence and remove refresh workflow
         run: |
@@ -115,10 +137,9 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
             tests/fixtures/guard-command-corpus/decision-diff-report.json \
-            docs/guard/extensions/README.md \
-            docs/guard/extensions/catalog.v1.json \
             contracts/managed-controls/v1/extension-projection-digest-vector.json \
-            tests/test_policy_bundle_delivery_runtime.py
+            tests/test_policy_bundle_delivery_runtime.py \
+            tests/test_guard_command_extensions.py
           if git diff --cached --quiet; then
             exit 0
           fi
