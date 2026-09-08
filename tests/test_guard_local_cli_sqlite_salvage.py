@@ -69,6 +69,18 @@ def test_salvage_keeps_destination_schema_marker(tmp_path: Path) -> None:
     assert checksum != "stale"
 
 
+def test_salvage_rolls_back_when_grants_unreadable(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src")
+    with sqlite3.connect(source.path) as connection:
+        connection.execute("drop table local_cli_grant")
+        connection.commit()
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is False
+    assert destination.read_local_cli_grant(_identity().cli_id) is None
+    listed = destination.list_local_cli_items()
+    assert listed == []
+
+
 def test_salvage_ignores_unreadable_quarantine(tmp_path: Path) -> None:
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     junk = tmp_path / "junk.db"

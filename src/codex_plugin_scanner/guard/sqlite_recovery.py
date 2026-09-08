@@ -223,13 +223,14 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
             from .store_local_cli_schema import ensure_local_cli_schema
 
             ensure_local_cli_schema(dst)
-            copied = False
+            copied: dict[str, bool] = {}
             for table in _LOCAL_CLI_SALVAGE_TABLES:
-                if _copy_allowlisted_table(src, dst, table):
-                    copied = True
-            if copied:
-                dst.commit()
-            return copied
+                copied[table] = _copy_allowlisted_table(src, dst, table)
+            if not copied.get("local_cli_grant"):
+                dst.rollback()
+                return False
+            dst.commit()
+            return True
     except sqlite3.Error:
         return False
 
