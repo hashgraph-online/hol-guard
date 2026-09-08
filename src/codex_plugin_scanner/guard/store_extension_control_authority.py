@@ -34,7 +34,12 @@ from .runtime.extension_control_authority import (
     layers_to_json,
     verify_authenticated_record,
 )
-from .runtime.extension_control_contract import ControlLayerKind, ExtensionControl, ExtensionControlLayer
+from .runtime.extension_control_contract import (
+    ControlLayerKind,
+    ControlState,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 from .runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlEnrollmentProof,
@@ -52,6 +57,7 @@ from .store_extension_control_authority_support import (
     _private_hash,
     _row_int,
     _row_str,
+    preserve_managed_extension_control,
     preserve_migrated_extension_control,
 )
 from .store_extension_control_authority_transitions import _ExtensionControlAuthorityTransitionMixin
@@ -119,7 +125,10 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
                     self._record_catalog_manifest(registry, key=key)
                 if include_managed_controls:
-                    return self._with_managed_controls_activation(view)
+                    return self._with_managed_controls_activation(
+                        view,
+                        current_manifest=self._catalog_target_manifest(registry),
+                    )
                 return view
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
@@ -129,6 +138,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
     def _with_managed_controls_activation(
         self,
         view: ExtensionControlAuthorityView,
+        *,
+        current_manifest: Mapping[str, str] | None = None,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
             rows = connection.execute(
@@ -169,11 +180,43 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             raise ExtensionControlAuthorityError("managed controls revision state is missing")
         key = self._authority_key(required=True)
         assert key is not None
+        if not isinstance(active, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls activation state")
+        active_catalog_digest = active.get("catalogDigest")
+        if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
+            raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
         managed_layers, managed_revision = managed_controls_layers_from_activation_state(
             active,
-            catalog_digest=view.catalog_digest,
+            catalog_digest=active_catalog_digest,
             authority_key=key,
         )
+        if active_catalog_digest != view.catalog_digest:
+            if any(layer.catalog_digest != active_catalog_digest for layer in managed_layers):
+                raise ExtensionControlAuthorityError("managed controls activation layer catalog mismatch")
+            if current_manifest is None:
+                raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
+            # A missing prior manifest must not act as an implicit fingerprint
+            # match: stale managed allows remain disabled until cloud refresh.
+            previous_manifest = self._load_catalog_manifest(active_catalog_digest, key=key) or {}
+            managed_layers = tuple(
+                replace(
+                    layer,
+                    catalog_digest=view.catalog_digest,
+                    controls=tuple(
+                        (
+                            control
+                            if preserve_managed_extension_control(
+                                control,
+                                previous_manifest=previous_manifest,
+                                current_manifest=current_manifest,
+                            )
+                            else replace(control, state=ControlState.DISABLED)
+                        )
+                        for control in layer.controls
+                    ),
+                )
+                for layer in managed_layers
+            )
         durable_revision = managed_controls_revision_from_state(
             revision_state,
             authority_key=key,

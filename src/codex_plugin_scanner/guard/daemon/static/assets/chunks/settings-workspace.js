@@ -2735,6 +2735,9 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
 }
+function effectiveApprovalGateCooldownSeconds(cooldownSeconds, totpEnabled) {
+  return totpEnabled ? 0 : cooldownSeconds;
+}
 function resolveTotpSetupModalTitle(isConfirmStep) {
   if (isConfirmStep) {
     return "Confirm your approval password";
@@ -4365,6 +4368,7 @@ function ApprovalGateCard(props) {
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
   const failClosed = props.gateConfig?.fail_closed === true;
+  const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt ? new Date(cooldownExpiresAt).toLocaleTimeString() : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-start justify-between gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -4406,12 +4410,16 @@ function ApprovalGateCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "select",
               {
-                value: String(props.cooldownSeconds),
+                id: "settings-approval-gate-cooldown",
+                value: String(effectiveCooldownSeconds),
                 onChange: props.onCooldownChange,
-                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+                disabled: totpEnabled,
+                "aria-describedby": totpEnabled ? "settings-approval-gate-cooldown-help" : void 0,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
                 children: cooldownOptions.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
               }
-            )
+            ),
+            totpEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "settings-approval-gate-cooldown-help", className: "mt-1 block text-xs leading-5 text-slate-500", children: "Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off." }) : null
           ] })
         ] })
       ] }),
@@ -4651,6 +4659,7 @@ export {
   buildClearReviewQueuePayload,
   buildSettingsUpdatePayload,
   buildTotpQrImageOptions,
+  effectiveApprovalGateCooldownSeconds,
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
   hasApprovalGateSettingsChanged,
