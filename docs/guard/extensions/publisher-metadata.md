@@ -11,24 +11,35 @@ The stable contribution ID is the public identity. `command.blitcp` uses
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 
-Publisher verification checks the numeric GitHub account that authored the merged
-pull request introducing that specific file. A profile link, username, repository
-membership, or authorship of an unrelated change is not sufficient. The contribution
-must still exist on canonical `main`. Ambiguous history, renames, direct pushes,
-and disputed attribution require maintainer review. An ordinary later edit does
-not replace the original contributor's claim.
+Publisher verification uses numeric GitHub account IDs recorded in accepted
+publisher metadata. Pull-request authorship is attribution evidence only; it never
+creates publisher authority by itself. A profile link, username, repository
+membership, authorship of the contribution, commit email, or authorship of an
+unrelated change is not sufficient. The contribution and the authority-bearing
+metadata must still exist on canonical `main`. Ambiguous history, renames, direct
+pushes, and disputed attribution require maintainer review rather than an automatic
+grant.
+
+The first accepted claimant set is established through normal protected repository
+review of `maintainerGithubIds`. Adding or removing one of those IDs is an
+authority-bearing metadata change and must be reviewed as such. An empty claimant
+set deliberately leaves the extension unclaimable until maintainers accept an
+explicit mapping; consumers must not fall back to PR authorship.
 
 First-party and trusted-library coverage is project-maintained. It is not claimable
 by the last person who edited its source.
 
 ## Optional presentation file
 
-Existing contributors do not need a sidecar merely to establish the introducing-PR
-relationship. Optional presentation data belongs in:
+Publisher presentation and claim authority belong in:
 
 ```text
 contributions/extension-listings/<contribution-id>.json
 ```
+
+A sidecar is optional for public presentation, but an external extension cannot be
+automatically claimed until an accepted sidecar names at least one authorized
+numeric GitHub ID.
 
 Example for `command.blitcp`:
 
@@ -42,7 +53,8 @@ Example for `command.blitcp`:
     "Coverage is limited to the reviewed operations and the surrounding Guard policy."
   ],
   "documentationUrl": "https://github.com/hashgraph-online/hol-guard",
-  "tags": ["file-transfer"]
+  "tags": ["file-transfer"],
+  "maintainerGithubIds": ["12345678"]
 }
 ```
 
@@ -58,21 +70,25 @@ IP address. Do not include policy, executable code, activation state, trust clas
 private email addresses, secrets, or commands. Native contribution contracts remain
 the only source of runtime behavior.
 
-### Reviewed delegation
+### Reviewed claim authority
 
 `maintainerGithubIds` may contain up to eight numeric GitHub IDs as decimal strings.
-Omit it unless maintainers have reviewed that delegation. It can establish another
-eligible profile claimant, not runtime trust or upstream ownership. Once claimed,
-additional roles and transfers require an explicit invitation and the named
-account's acceptance. Renaming a GitHub account must not change ownership.
+Each ID is an explicit, reviewed authorization to manage the extension's publisher
+profile. It never changes runtime trust, code ownership, or upstream ownership.
+GitHub login names remain display data and can change without changing identity.
 
-Omitting `maintainerGithubIds` and providing an empty array both mean there are
-no additional delegates. Neither removes the introducing-PR author's eligibility.
-The directory always emits an array; consumers use `claimPolicy: provenance` to
-verify the introducing author independently and treat the array as supplemental.
+Omitting `maintainerGithubIds` and providing an empty array both mean there is no
+automatic publisher claimant. Pull-request authorship remains useful context for a
+maintainer review, but it cannot substitute for an accepted numeric-ID mapping.
+The directory always emits an array. For `claimPolicy: provenance`, Cloud must grant
+or transfer elevated publisher authority only to IDs present in that accepted array.
 `claimPolicy: project` never grants a third-party claim through this field.
-Contribution IDs retain the native 256-character contract; mapped MCP runtime IDs
-and source paths allow the additional prefix and filename characters.
+
+Once claimed, profile editors may be invited explicitly without gaining source
+maintainer authority. Primary or maintainer roles must remain bound to the current
+accepted claimant set and must be revalidated before a transfer or other elevated
+action. Contribution IDs retain the native 256-character contract; mapped MCP
+runtime IDs and source paths allow the additional prefix and filename characters.
 
 ## Generate a separate listing template
 
@@ -109,7 +125,7 @@ file and check output paths before replacement instead of truncating through a
 symlink. Contribution files use LF checkout semantics so digests match canonical
 Git blobs on Windows, macOS, and Linux. Consumers pin an immutable source commit
 and verify provenance independently. A source merge does not prove release
-availability or enabled protection on a device.
+availability, publisher authority, or enabled protection on a device.
 
 ## Cloud availability
 
