@@ -28829,6 +28829,32 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
+function ActionExplanationSummary({ explanation }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4",
+      "data-action-explanation": true,
+      "data-action-identity": explanation.action_identity,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: explanation.everyday.headline }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: explanation.everyday.summary }),
+        explanation.everyday.impact ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "What could happen?" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: explanation.everyday.impact })
+        ] }) : null,
+        explanation.everyday.recommendation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Recommended next step" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: explanation.everyday.recommendation })
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-medium text-brand-blue", children: "Show technical details" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-brand-dark", children: explanation.technical.available && explanation.technical.command_display ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs", "data-exact-command": true, children: explanation.technical.command_display }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: explanation.technical.unavailable_reason ?? "Technical details are unavailable." }) })
+        ] })
+      ]
+    }
+  );
+}
 const PROTECTION_APPEARANCE = {
   protected: {
     Icon: HiMiniShieldCheck,
@@ -28938,15 +28964,16 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const explanation = item.action_explanation ?? null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
-        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
+        action.detail !== null && explanation === null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+    explanation !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionExplanationSummary, { explanation }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
