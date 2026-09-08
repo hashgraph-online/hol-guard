@@ -67,71 +67,70 @@ _GCLOUD_GLOBAL_FLAGS = frozenset(
 )
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--help", "--only-show-errors", "--verbose", "-h"})
+
+
+def _aws(*subcommands: str, required_flags: frozenset[str] = frozenset()):
+    return executable_matcher(
+        "aws",
+        *subcommands,
+        required_flags=required_flags,
+        global_options_with_values=_AWS_GLOBAL_OPTIONS,
+        global_flags=_AWS_GLOBAL_FLAGS,
+        fail_secure_unknown_options=True,
+    )
+
+
+def _gcloud(*subcommands: str):
+    return tuple(
+        executable_matcher(
+            "gcloud",
+            *((track,) if track else ()),
+            *subcommands,
+            global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
+        )
+        for track in ("", "alpha", "beta")
+    )
+
+
+def _azure(*subcommands: str):
+    return executable_matcher(
+        "az",
+        *subcommands,
+        global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+        global_flags=_AZURE_GLOBAL_FLAGS,
+        fail_secure_unknown_options=True,
+    )
+
+
 _AWS_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher(
-            "aws",
-            "ec2",
-            "terminate-instances",
-            global_options_with_values=_AWS_GLOBAL_OPTIONS,
-            global_flags=_AWS_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
-        executable_matcher(
-            "aws",
-            "rds",
-            "delete-db-instance",
-            global_options_with_values=_AWS_GLOBAL_OPTIONS,
-            global_flags=_AWS_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
-        executable_matcher(
-            "aws",
-            "rds",
-            "delete-db-cluster",
-            global_options_with_values=_AWS_GLOBAL_OPTIONS,
-            global_flags=_AWS_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
-        executable_matcher(
-            "aws",
-            "eks",
-            "delete-cluster",
-            global_options_with_values=_AWS_GLOBAL_OPTIONS,
-            global_flags=_AWS_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
+        _aws("ec2", "terminate-instances"),
+        _aws("rds", "delete-db-instance"),
+        _aws("rds", "delete-db-cluster"),
+        _aws("eks", "delete-cluster"),
         *aws_destructive_command_matchers(
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
         ),
     )
 )
-_AWS_EC2_TERMINATE = AnyMatcher(
-    matchers=(
-        executable_matcher(
-            "aws",
-            "ec2",
-            "terminate-instances",
-            global_options_with_values=_AWS_GLOBAL_OPTIONS,
-            global_flags=_AWS_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
-    )
-)
+_AWS_EC2_TERMINATE = AnyMatcher(matchers=(_aws("ec2", "terminate-instances"),))
 _GCLOUD_RESOURCE_DELETE = AnyMatcher(
     matchers=(
         *(
             executable_matcher(
                 "gcloud",
                 *track,
-                *operation,
+                "compute",
+                "instances",
+                "delete",
                 global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
                 global_flags=_GCLOUD_GLOBAL_FLAGS,
                 fail_secure_unknown_options=True,
             )
             for track in ((), ("alpha",), ("beta",), ("preview",))
-            for operation in (("compute", "instances", "delete"),)
         ),
         *(
             executable_matcher(
@@ -154,18 +153,38 @@ _GCLOUD_RESOURCE_DELETE = AnyMatcher(
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher(
-            "az",
-            "vm",
-            "delete",
-            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
-            global_flags=_AZURE_GLOBAL_FLAGS,
-            fail_secure_unknown_options=True,
-        ),
+        _azure("vm", "delete"),
         *azure_destructive_command_matchers(
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
         ),
+    )
+)
+_AWS_SENSITIVE = AnyMatcher(
+    matchers=(
+        _aws("secretsmanager", "get-secret-value"),
+        _aws("ssm", "get-parameter", required_flags=frozenset({"--with-decryption"})),
+        _aws("ssm", "get-parameters", required_flags=frozenset({"--with-decryption"})),
+        _aws("iam", "create-access-key"),
+        _aws("sts", "get-session-token"),
+        _aws("sts", "assume-role"),
+    )
+)
+_GCLOUD_SENSITIVE = AnyMatcher(
+    matchers=(
+        *_gcloud("secrets", "versions", "access"),
+        *_gcloud("auth", "print-access-token"),
+        *_gcloud("auth", "application-default", "print-access-token"),
+        *_gcloud("iam", "service-accounts", "keys", "create"),
+    )
+)
+_AZURE_SENSITIVE = AnyMatcher(
+    matchers=(
+        _azure("keyvault", "secret", "show"),
+        _azure("keyvault", "secret", "download"),
+        _azure("keyvault", "secret", "set"),
+        _azure("account", "get-access-token"),
+        _azure("ad", "app", "credential", "reset"),
     )
 )
 
@@ -180,8 +199,6 @@ def _cloud_delete_rule(
     safer_alternative: str,
     safe_variants: tuple[CommandSafeVariant, ...],
 ) -> CommandSafetyRule:
-    """Build a critical cloud deletion rule with stable policy metadata."""
-
     return CommandSafetyRule(
         rule_id=rule_id,
         title=title,
@@ -195,13 +212,34 @@ def _cloud_delete_rule(
     )
 
 
+def _cloud_sensitive_rule(
+    *,
+    rule_id: str,
+    title: str,
+    matcher: AnyMatcher,
+    action_class: str,
+    safer_alternative: str,
+) -> CommandSafetyRule:
+    return CommandSafetyRule(
+        rule_id=rule_id,
+        title=title,
+        description=f"Identifies documented {title.lower()} operations that expose or create credential material.",
+        severity="critical",
+        risk_classes=("local_secret_read", "network_egress"),
+        action_classes=(action_class,),
+        safer_alternatives=(safer_alternative,),
+        matcher=matcher,
+        safe_variants=(safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),),
+    )
+
+
 CLOUD_COMMAND_RULES = (
     _cloud_delete_rule(
         rule_id="command.cloud.aws.resource-deletion",
         title="AWS resource deletion",
         description=(
-            "Identifies termination or deletion of validated compute, data, identity, "
-            "application, delivery, and control-plane resources through AWS CLI."
+            "Identifies termination or deletion of validated compute, data, identity, application, delivery, "
+            "and control-plane resources through AWS CLI."
         ),
         matcher=_AWS_RESOURCE_DELETE,
         action_class="AWS destructive command",
@@ -228,47 +266,51 @@ CLOUD_COMMAND_RULES = (
         rule_id="command.cloud.gcp.resource-deletion",
         title="Google Cloud resource deletion",
         description=(
-            "Identifies deletion of validated compute, data, identity, application, "
-            "network, and control-plane resources through Google Cloud CLI."
+            "Identifies deletion of validated compute, data, identity, application, network, and control-plane "
+            "resources through Google Cloud CLI."
         ),
         matcher=_GCLOUD_RESOURCE_DELETE,
         action_class="Google Cloud destructive command",
         safer_alternative="Describe the exact resources and confirm the active project and location before deletion.",
         safe_variants=(
-            safe_flag_variant(
-                _GCLOUD_RESOURCE_DELETE,
-                variant_id="help",
-                title="Google Cloud command help",
-                flag="--help",
-            ),
+            safe_flag_variant(_GCLOUD_RESOURCE_DELETE, variant_id="help", title="Google Cloud command help", flag="--help"),
         ),
     ),
     _cloud_delete_rule(
         rule_id="command.cloud.azure.resource-deletion",
         title="Azure resource deletion",
         description=(
-            "Identifies deletion of validated resource-management, identity, network, compute, "
-            "application, data, messaging, observability, and AI resources through Azure CLI."
+            "Identifies deletion of validated resource-management, identity, network, compute, application, data, "
+            "messaging, observability, and AI resources through Azure CLI."
         ),
         matcher=_AZURE_RESOURCE_DELETE,
         action_class="Azure destructive command",
-        safer_alternative=(
-            "Show the exact resource and confirm the active subscription and resource group before deletion."
-        ),
+        safer_alternative="Show the exact resource and confirm the active subscription and resource group before deletion.",
         safe_variants=(
-            safe_flag_variant(
-                _AZURE_RESOURCE_DELETE,
-                variant_id="help",
-                title="Azure command help",
-                flag="--help",
-            ),
-            safe_flag_variant(
-                _AZURE_RESOURCE_DELETE,
-                variant_id="short-help",
-                title="Azure short command help",
-                flag="-h",
-            ),
+            safe_flag_variant(_AZURE_RESOURCE_DELETE, variant_id="help", title="Azure command help", flag="--help"),
+            safe_flag_variant(_AZURE_RESOURCE_DELETE, variant_id="short-help", title="Azure short command help", flag="-h"),
         ),
+    ),
+    _cloud_sensitive_rule(
+        rule_id="command.cloud.aws.secret-or-credential",
+        title="AWS secret or credential access",
+        matcher=_AWS_SENSITIVE,
+        action_class="AWS secret or credential command",
+        safer_alternative="Request only the required secret field or temporary credential scope for the active account.",
+    ),
+    _cloud_sensitive_rule(
+        rule_id="command.cloud.gcp.secret-or-credential",
+        title="Google Cloud secret or credential access",
+        matcher=_GCLOUD_SENSITIVE,
+        action_class="Google Cloud secret or credential command",
+        safer_alternative="Request only the required secret version or narrowest service-account credential scope.",
+    ),
+    _cloud_sensitive_rule(
+        rule_id="command.cloud.azure.secret-or-credential",
+        title="Azure secret or credential access",
+        matcher=_AZURE_SENSITIVE,
+        action_class="Azure secret or credential command",
+        safer_alternative="Request only the required Key Vault value or narrowest short-lived access token.",
     ),
 )
 
@@ -277,49 +319,40 @@ CLOUD_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.cloud.aws",
         name="AWS command protection",
-        description=(
-            "Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination."
-        ),
-        action_classes=("AWS destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
-        safer_alternatives=("Inspect resource state, account, region, and recovery options before deletion.",),
+        description="Reviews permanent AWS resource deletion plus high-risk secret and credential operations.",
+        action_classes=("AWS destructive command", "AWS secret or credential command"),
+        risk_classes=("destructive_shell", "network_egress", "local_secret_read"),
+        safer_alternatives=("Inspect resource state, account, region, recovery options, and requested credential scope first.",),
         reference_urls=(
             "https://docs.aws.amazon.com/cli/latest/reference/",
-            "https://docs.aws.amazon.com/cli/latest/reference/ec2/terminate-instances.html",
-            "https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-instance.html",
-            "https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-cluster.html",
-            "https://docs.aws.amazon.com/cli/latest/reference/eks/delete-cluster.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/secretsmanager/get-secret-value.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/iam/create-access-key.html",
         ),
     ),
     CommandExtensionSpec(
         extension_id="command.cloud.gcp",
         name="Google Cloud command protection",
-        description=(
-            "Reviews a validated gcloud operation matrix for permanent resource deletion "
-            "across stable and supported release tracks."
-        ),
-        action_classes=("Google Cloud destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
-        safer_alternatives=("Inspect resource state, project, location, and recovery options before deletion.",),
+        description="Reviews permanent Google Cloud deletion plus high-risk secret and credential operations.",
+        action_classes=("Google Cloud destructive command", "Google Cloud secret or credential command"),
+        risk_classes=("destructive_shell", "network_egress", "local_secret_read"),
+        safer_alternatives=("Inspect resource state, project, location, recovery options, and requested credential scope first.",),
         reference_urls=(
             "https://cloud.google.com/sdk/gcloud/reference",
-            "https://cloud.google.com/sdk/gcloud/reference/compute/instances/delete",
-            "https://cloud.google.com/sdk/gcloud/reference/sql/instances/delete",
+            "https://cloud.google.com/sdk/gcloud/reference/secrets/versions/access",
+            "https://cloud.google.com/sdk/gcloud/reference/auth/print-access-token",
         ),
     ),
     CommandExtensionSpec(
         extension_id="command.cloud.azure",
         name="Azure command protection",
-        description=(
-            "Reviews a validated Azure CLI operation matrix for permanent resource deletion "
-            "across subscription, identity, network, compute, application, data, messaging, and AI services."
-        ),
-        action_classes=("Azure destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
-        safer_alternatives=("Inspect resource state, subscription, resource group, and attached resources first.",),
+        description="Reviews permanent Azure deletion plus high-risk Key Vault and credential operations.",
+        action_classes=("Azure destructive command", "Azure secret or credential command"),
+        risk_classes=("destructive_shell", "network_egress", "local_secret_read"),
+        safer_alternatives=("Inspect resource state, subscription, resource group, and requested credential scope first.",),
         reference_urls=(
             "https://learn.microsoft.com/cli/azure/reference-index",
-            "https://learn.microsoft.com/cli/azure/vm#az-vm-delete",
+            "https://learn.microsoft.com/cli/azure/keyvault/secret",
+            "https://learn.microsoft.com/cli/azure/account#az-account-get-access-token",
         ),
     ),
 )
