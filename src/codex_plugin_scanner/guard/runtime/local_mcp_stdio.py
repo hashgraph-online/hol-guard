@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TypeGuard
 
@@ -19,12 +19,25 @@ MCP_PROBE_TIMEOUT_SECONDS = 6.0
 MCP_PACKAGE_PROBE_TIMEOUT_SECONDS = 20.0
 MCP_PROBE_OUTPUT_LIMIT = 1_000_000
 MAX_MCP_PROBE_TOOLS = 80
+_PROBE_ENV_LOCKED = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONBREAKPOINT",
+        "__PYVENV_LAUNCHER__",
+    }
+)
 
 
 def run_mcp_tools_list(
     argv: Sequence[str],
     *,
     timeout: float = MCP_PROBE_TIMEOUT_SECONDS,
+    extra_env: Mapping[str, str] | None = None,
 ) -> list[dict[str, object]] | None:
     """Run initialize + tools/list against argv and return tool objects."""
 
@@ -32,8 +45,8 @@ def run_mcp_tools_list(
         return None
     try:
         with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
-            return _exchange_tools_list(list(argv), tmp, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
+            return _exchange_tools_list(list(argv), tmp, timeout=timeout, extra_env=extra_env)
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
         return None
 
 
@@ -59,7 +72,7 @@ def _is_package_shim_dir(entry: str) -> bool:
     return path.name == "bin" and path.parent.name == "package-shims"
 
 
-def probe_env(tmp: str) -> dict[str, str]:
+def probe_env(tmp: str, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     env = {
         "PATH": probe_search_path(),
         "HOME": tmp,
@@ -80,6 +93,14 @@ def probe_env(tmp: str) -> dict[str, str]:
         system_root = os.environ.get("SYSTEMROOT")
         if system_root:
             env["SYSTEMROOT"] = system_root
+    if extra:
+        for key, value in extra.items():
+            name = key.strip()
+            if not name or name.upper() in _PROBE_ENV_LOCKED:
+                continue
+            if "=" in name or "\x00" in name or "\x00" in value:
+                continue
+            env[name] = value
     return env
 
 
@@ -132,11 +153,17 @@ def _first_env(*keys: str) -> str | None:
     return None
 
 
-def _exchange_tools_list(argv: list[str], tmp: str, *, timeout: float) -> list[dict[str, object]] | None:
+def _exchange_tools_list(
+    argv: list[str],
+    tmp: str,
+    *,
+    timeout: float,
+    extra_env: Mapping[str, str] | None = None,
+) -> list[dict[str, object]] | None:
     process = subprocess.Popen(
         argv,
         cwd=tmp,
-        env=probe_env(tmp),
+        env=probe_env(tmp, extra_env),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
