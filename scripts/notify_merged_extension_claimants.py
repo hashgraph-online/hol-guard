@@ -277,9 +277,7 @@ def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str
     limitations = listing.get("limitations")
     if not isinstance(limitations, list) or not 1 <= len(limitations) <= 8:
         raise ClaimNoticeError(f"{extension_id}: listing limitations are invalid")
-    checked_limitations = [
-        _plain_text(value, minimum=10, maximum=400, field="limitations") for value in limitations
-    ]
+    checked_limitations = [_plain_text(value, minimum=10, maximum=400, field="limitations") for value in limitations]
     if len(set(checked_limitations)) != len(checked_limitations):
         raise ClaimNoticeError(f"{extension_id}: listing limitations must be unique")
 
