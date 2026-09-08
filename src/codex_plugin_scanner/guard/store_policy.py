@@ -1166,14 +1166,9 @@ class StorePolicyMixin:
         encoded_payloads = {
             state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
         }
-        managed_base_authority = None
         managed_base_snapshot: tuple[int, str] | None = None
         managed_base_snapshot_captured = False
-        from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
-        managed_base_authority = self.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        )
+        managed_base_authority = self.read_persisted_extension_control_authority()
         with self._connect() as authority_connection:
             authority_row = authority_connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
@@ -1230,9 +1225,14 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     previous_active = json.loads(str(active_row["payload_json"]))
+                    active_catalog_digest = (
+                        previous_active.get("catalogDigest") if isinstance(previous_active, dict) else None
+                    )
+                    if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
+                        raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
                     _, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
-                        catalog_digest=managed_base_authority.catalog_digest,
+                        catalog_digest=active_catalog_digest,
                         authority_key=managed_authority_key,
                     )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:

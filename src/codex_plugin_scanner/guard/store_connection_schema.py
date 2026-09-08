@@ -23,6 +23,7 @@ from .sqlite_recovery import (
     FATAL_SQLITE_ERROR_MARKERS,
     SQLITE_IO_ERROR_MARKER,
     restore_readable_sqlite_store,
+    salvage_local_cli_state,
     sqlite_store_is_proven_unusable,
 )
 
@@ -315,7 +316,10 @@ class StoreConnectionSchemaMixin:
                     _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
                 else:
                     self._initialize_schema()
-                    self._last_sqlite_recovery = "reinitialized"
+                    if salvage_local_cli_state(source=quarantined, destination=self.path):
+                        self._last_sqlite_recovery = "reinitialized_salvaged"
+                    else:
+                        self._last_sqlite_recovery = "reinitialized"
             finally:
                 self._storage_recovery_local.owner = None
             return True

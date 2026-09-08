@@ -31,7 +31,7 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
-| `command.container-runtime` | Reviews container operations that can expose credentials, publish data, or mutate host state. | 5 | Built in |
+| `command.container-runtime` | Reviews container lifecycle, cleanup, execution, network, and persistent-data operations that can expose credentials or mutate host state. | 21 | Built in |
 | `command.data-protection` | Detects shell flows that can send credentials or local file contents to a network destination. | 2 | Built in |
 | `command.encoded-execution` | Reviews decode-and-execute flows whose effective program is hidden from normal command inspection. | 1 | Built in |
 | `command.filesystem` | Reviews recursive deletion and access-control changes across filesystem trees. | 2 | Required core |
@@ -53,7 +53,7 @@ Protection model meanings:
 | `command.cloud.gcp` | Reviews a validated gcloud operation matrix for permanent resource deletion across stable and supported release tracks. | 1 | Built in |
 | `command.dns` | Reviews hosted-zone deletion through supported cloud CLIs. | 1 | Built in |
 | `command.infrastructure-as-code` | Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi. | 1 | Built in |
-| `command.kubernetes-operations` | Reviews cluster operations that delete resources, evict workloads, or remove releases. | 3 | Built in |
+| `command.kubernetes-operations` | Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, and Helm lifecycle operations. | 28 | Built in |
 | `command.load-balancer` | Reviews load-balancer and forwarding-rule deletion through supported cloud CLIs. | 1 | Built in |
 
 ### Data and resilience

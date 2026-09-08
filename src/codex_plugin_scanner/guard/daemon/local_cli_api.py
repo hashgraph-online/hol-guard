@@ -9,8 +9,10 @@ from typing import TYPE_CHECKING
 
 from ..adapters.harness_mcp_discovery import (
     DiscoveredHarnessMcpServer,
+    apply_source_labels,
     discover_harness_mcp_servers,
     discovered_server_for_observation,
+    extra_env_for_mcp_launch,
     persist_discovered_harness_mcp_servers,
 )
 from ..approval_gate import (
@@ -42,7 +44,6 @@ from ..runtime.local_cli_identity import (
     recognize_operator_cli,
 )
 from ..runtime.local_mcp_probe import (
-    is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
@@ -53,6 +54,7 @@ from ..runtime.package_json_script_memory import (
     operator_working_directory,
     public_local_cli_item,
     recognize_operator_package_scripts,
+    refresh_package_script_catalogs,
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from .local_cli_continuity_api import decorate_local_cli_continuity
@@ -85,12 +87,32 @@ class LocalCliApiService:
         # Listing must stay a read of persisted grants. Live MCP/package
         # discovery writes to the same store and can abort the HTTP response
         # when the daemon is under lock contention.
+        return self._list_payload(self._listed_public_items())
+
+    def discover_items(self) -> dict[str, object]:
+        """Refresh package.json catalogs and app MCP servers, then return the list.
+
+        GET listing stays a store read. This write path is for Add custom
+        extension so project scripts reappear without blocking the overview.
+        """
+        try:
+            labels = self._observe_harness_mcp_servers()
+            items = apply_source_labels(
+                refresh_package_script_catalogs(self._store, home_dir=Path.home()),
+                labels,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+            items = self._listed_public_items()
+        return self._list_payload(items)
+
+    def _listed_public_items(self) -> list[dict[str, object]]:
         stored = self._store.list_local_cli_items()
-        items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
-        revision = self._store.read_local_cli_revision()
+        return [public_local_cli_item(item) for item in stored if _package_item_available(item)]
+
+    def _list_payload(self, items: list[dict[str, object]]) -> dict[str, object]:
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
-            "revision": revision,
+            "revision": self._store.read_local_cli_revision(),
             "items": items,
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
@@ -109,12 +131,13 @@ class LocalCliApiService:
             recognize_summary=_recognize_mcp_summary,
         )
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if stored_id is not None:
+        if stored_id is not None or (
+            tokens is not None and looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir)
+        ):
             _ = self._observe_harness_mcp_servers()
-            live_command = self._live_mcp_launch_command(payload)
-        elif tokens is not None and is_package_mcp_launcher(tokens):
-            _ = self._observe_harness_mcp_servers()
-        mcp_item = self._recognize_mcp(live_command or command, home_dir)
+            if stored_id is not None:
+                live_command = self._live_mcp_launch_command(payload)
+        mcp_item = self._recognize_mcp(live_command or command, home_dir, cli_id=stored_id)
         if mcp_item is not None:
             return mcp_item
         if stored_mcp is not None:
@@ -162,13 +185,20 @@ class LocalCliApiService:
             _recognize_summary(identity.name, help_status, len(commands)),
         )
 
-    def _recognize_mcp(self, command: str, home_dir: Path) -> dict[str, object] | None:
+    def _recognize_mcp(
+        self,
+        command: str,
+        home_dir: Path,
+        *,
+        cli_id: str | None = None,
+    ) -> dict[str, object] | None:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
         if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
             return None
+        extra_env = extra_env_for_mcp_launch(self._discovered_servers(), command=command, cli_id=cli_id)
         try:
-            probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
-        except (OSError, RuntimeError, TimeoutError):
+            probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir, extra_env=extra_env)
+        except (OSError, RuntimeError, TimeoutError, ValueError):
             probed = None
         if probed is None:
             stored = stored_mcp_recognition(
@@ -418,7 +448,7 @@ def _recognize_mcp_summary(name: str, help_status: str, tool_count: int) -> str:
         )
     return (
         f"Guard could not list tools from {name}. You can still add the server. "
-        "Tools stay on Recommended until listing works."
+        "List tools again, or continue and keep tools on Recommended."
     )
 
 

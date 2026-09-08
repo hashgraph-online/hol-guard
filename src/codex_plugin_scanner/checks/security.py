@@ -8,7 +8,6 @@ import json
 import os
 import re
 import stat
-from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 from urllib.parse import urlparse
@@ -16,49 +15,16 @@ from urllib.parse import urlparse
 from ..models import CheckResult, Finding, Severity
 from ..path_support import path_entry_exists, read_text_file_within_root, resolves_within_root
 from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
-
-
-@dataclass(frozen=True, slots=True)
-class SecretPattern:
-    pattern: re.Pattern[str]
-    kind: str = "provider"
-    value_group: int = 0
-
-
-# Patterns for hardcoded secrets
-SECRET_PATTERNS: tuple[SecretPattern, ...] = (
-    SecretPattern(re.compile(r"AKIA[0-9A-Z]{16}")),
-    SecretPattern(re.compile(r"aws_secret_access_key\s*[=:]\s*[\"']?([A-Za-z0-9/+=]{40})", re.I), value_group=1),
-    SecretPattern(
-        re.compile(
-            r"-----BEGIN (?P<label>(?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY)-----"
-            r"[\s\S]{32,}?"
-            r"-----END (?P=label)-----"
-        ),
-        kind="private_key",
-    ),
-    SecretPattern(re.compile(r"password\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"secret\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"token\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"api_?key\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"API_KEY\s*[=:]\s*[\"']([^\s\"']{8,})"), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"PRIVATE_KEY\s*[=:]\s*[\"']([^\s\"']{8,})"), kind="generic", value_group=1),
-    SecretPattern(re.compile(r"ghp_[A-Za-z0-9]{36}")),
-    SecretPattern(re.compile(r"gho_[A-Za-z0-9]{36}")),
-    SecretPattern(re.compile(r"ghu_[A-Za-z0-9]{36}")),
-    SecretPattern(re.compile(r"ghs_[A-Za-z0-9]{36}")),
-    SecretPattern(re.compile(r"github_pat_[A-Za-z0-9_]{20,}")),
-    SecretPattern(re.compile(r"glpat-[A-Za-z0-9\-]{20}")),
-    SecretPattern(re.compile(r"xox[bpas]-[A-Za-z0-9\-]{10,}")),
-    SecretPattern(re.compile(r"xoxe-[A-Za-z0-9\-]{10,}")),
-    SecretPattern(re.compile(r"xoxr-[A-Za-z0-9\-]{10,}")),
-    SecretPattern(re.compile(r"xapp-[A-Za-z0-9\-]{10,}")),
-    SecretPattern(re.compile(r"(?<![A-Za-z0-9])sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}")),
+from .security_secret_patterns import (
+    DOCUMENTATION_EXTS,
+    SECRET_PATTERNS,
+    SecretPattern,
+    _field_name_map_spans,
+    _is_generated_token_expression,
 )
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
 
-DOCUMENTATION_EXTS = {".md", ".mdx", ".markdown", ".rst", ".adoc", ".asciidoc"}
 EXAMPLE_PATH_HINTS = {
     "docs",
     "doc",
@@ -259,12 +225,26 @@ def _normalize_secret_candidate(value: str) -> str:
     return normalized
 
 
+_PURE_SHELL_EXPANSION_RE = re.compile(
+    r"^\$\{[A-Za-z_][A-Za-z0-9_]*"
+    r"(?:(?::-|-|:=|=|:\?|\?|:\+|\+)(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*)?)?"
+    r"\}$"
+)
+_PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
+
+
+def _looks_like_interpolated_secret(value: str) -> bool:
+    """True only for complete env/template references with no literal payload."""
+    normalized = _normalize_secret_candidate(value)
+    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
+
+
 def _looks_like_placeholder_secret(value: str) -> bool:
     normalized = _normalize_secret_candidate(value)
     lowered = normalized.lower()
     if not normalized:
         return True
-    if normalized.startswith(("${", "{{", "<", "[")):
+    if _looks_like_interpolated_secret(normalized) or normalized.startswith(("<", "[")):
         return True
     if "..." in normalized or "…" in normalized:
         return True
@@ -434,8 +414,20 @@ def _should_skip_secret_match(
     *,
     lines: list[str] | None = None,
     offsets: tuple[int, ...] | None = None,
+    field_name_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
+    """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
+    if _looks_like_interpolated_secret(candidate):
+        return True
+    if detector.kind == "generic" and _provider_payload(candidate) is None:
+        if _is_generated_token_expression(relative_path, content, match):
+            return True
+        span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
+        if span_index >= 0:
+            start, end = field_name_spans[span_index]
+            if start <= match.start() and match.end() <= end:
+                return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
@@ -455,8 +447,10 @@ def _should_skip_secret_match(
 
 
 def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
+    """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
+    field_name_spans = _field_name_map_spans(relative_path, content)
     first_line = _first_private_key_line(relative_path, content, lines=lines, offsets=offsets)
     first_offset: int | None = None
     matches_seen = 0
@@ -478,6 +472,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 match,
                 lines=lines,
                 offsets=offsets,
+                field_name_spans=field_name_spans,
             ):
                 continue
             first_offset = match.start()

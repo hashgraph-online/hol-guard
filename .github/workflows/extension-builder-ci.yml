@@ -13,6 +13,12 @@ on:
       - contracts/mcp-servers/**
       - contributions/extensions/**
       - contributions/mcp-servers/**
+      - contributions/extension-listings/**
+      - docs/guard/extensions/**
+      - scripts/export_extension_directory.py
+      - scripts/render_command_extension_directory.py
+      - tests/test_guard_extension_directory*.py
+      - tests/fixtures/extension-listings/**
       - docs/guard/extension-builder/**
       - tests/*extension_builder*.py
       - tests/test_guard_extension_contribution.py
@@ -75,10 +81,15 @@ jobs:
         run: |
           mkdir -p builder-evidence
           uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
+            tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \
             --junitxml=builder-evidence/tests.xml --tb=short
+      - name: Verify native public directory projections
+        run: |
+          uv run --no-sync python scripts/export_extension_directory.py --check
+          uv run --no-sync python scripts/render_command_extension_directory.py --check
       - name: Build and install a wheel outside the checkout
         run: |
           uv build --wheel --out-dir "$RUNNER_TEMP/extension-builder-dist"

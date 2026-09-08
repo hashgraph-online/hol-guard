@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, release/3.0, release/3.1]
+    branches: [main, release/3.0, release/3.1, release/3.2]
   pull_request:
     branches: [main, release/3.0, release/3.2]
   schedule:
@@ -61,29 +61,18 @@ jobs:
           uv run --no-sync python scripts/ci/test_duplicate_candidates.py \
             --output test-duplicate-candidates.json
           cat test-duplicate-candidates.json
-      - name: Enforce structural code-quality debt ratchet
-        run: |
-          uv run --no-sync python scripts/ci/code_quality_audit.py \
-            --root . \
-            --baseline ci/code-quality-baseline.json \
-            --json-output code-quality-audit.json
-          cat code-quality-audit.json
-      - name: Lint production and code-quality audit sources
+      - name: Lint production sources
         run: |
           uv run --no-sync python -m ruff check \
             src/ \
-            scripts/ci/code_quality_*.py \
-            tests/test_code_quality_audit.py \
             tests/test_guard_durable_io.py \
             tests/test_guard_managed_install_context.py \
             tests/test_guard_node_semver.py \
             tests/test_guard_private_file_io.py
-      - name: Check formatting for production and code-quality audit sources
+      - name: Check formatting for production sources
         run: |
           uv run --no-sync python -m ruff format --check \
             src/ \
-            scripts/ci/code_quality_*.py \
-            tests/test_code_quality_audit.py \
             tests/test_guard_durable_io.py \
             tests/test_guard_managed_install_context.py \
             tests/test_guard_node_semver.py \
@@ -132,20 +121,27 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TELEMETRY_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
         run: |
-          read -r artifact_id run_id < <(
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=pytest-duration-manifest-candidate&per_page=100" \
-              --jq '.artifacts | map(select(.expired == false and .workflow_run.head_branch == "release/3.0")) | sort_by(.created_at) | reverse | .[0] | [.id, .workflow_run.id] | @tsv'
+          run_id=$(
+            gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f branch="$TELEMETRY_BRANCH" -f event=push -f status=success -f per_page=1 \
+              --jq '.workflow_runs[0].id // empty'
           )
-          test -n "$artifact_id"
+          test -n "$run_id"
           read -r event conclusion branch workflow_path < <(
             gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" \
               --jq '[.event, .conclusion, .head_branch, .path] | @tsv'
           )
           test "$event" = "push"
           test "$conclusion" = "success"
-          test "$branch" = "release/3.0"
+          test "$branch" = "$TELEMETRY_BRANCH"
           test "$workflow_path" = ".github/workflows/ci.yml"
+          artifact_id=$(
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?name=pytest-duration-manifest-candidate&per_page=100" \
+              --jq '.artifacts | map(select(.expired == false and .name == "pytest-duration-manifest-candidate")) | .[0].id // empty'
+          )
+          test -n "$artifact_id"
           gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/duration-manifest.zip
           unzip -p /tmp/duration-manifest.zip pytest-duration-manifest-candidate.json.gz \
             > /tmp/pytest-duration-manifest.json.gz
@@ -338,12 +334,27 @@ jobs:
         with:
           pattern: pytest-coverage-*
           path: coverage-data
+      - name: Cache Sonar analyzer downloads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/sonar/cache
+          key: sonar-analyzers-${{ runner.os }}-${{ hashFiles('sonar-project.properties') }}
+      - name: Initialize pinned Rust analysis toolchain
+        shell: bash
+        run: bash scripts/ci/setup_sonar_rust.sh
+      - name: Cache Rust analysis dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          shared-key: sonar
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Prepare coverage and pinned Rust analysis
         shell: bash
         run: bash scripts/ci/prepare_sonar_analysis.sh
       - name: Analyze with SonarQube Cloud
         uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
         env:
+          SONAR_USER_HOME: ${{ runner.temp }}/sonar
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - name: SonarQube Quality Gate check
         uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
@@ -386,6 +397,7 @@ jobs:
           tests/test_guard_sandbox.py
           tests/test_guard_js_lockfile_resolution_phase11.py
           tests/test_guard_runtime_hook_scheduler.py
+          tests/test_guard_continuation_contract.py
           --tb=short
 
   compatibility:

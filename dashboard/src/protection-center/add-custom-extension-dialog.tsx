@@ -38,6 +38,9 @@ import {
   dialogIntro,
   enrollConfirmCopy,
   enrollSubmitDisabled,
+  mcpCatalogHasTools,
+  mcpListingRetryError,
+  McpListingStatus,
   ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
@@ -54,6 +57,7 @@ function randomToken(): string {
 export function AddCustomExtensionWorkspace(props: {
   items: LocalCliItem[];
   revision: number;
+  discovering?: boolean;
   onBack: () => void;
   onAdded: (cliId: string) => void;
 }) {
@@ -72,6 +76,7 @@ export function AddCustomExtensionWorkspace(props: {
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
   const didAutoSelect = useRef(false);
+  const sawDiscovering = useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
   const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
   const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
@@ -121,7 +126,12 @@ export function AddCustomExtensionWorkspace(props: {
     setReviewingScripts(false);
     setStep("review");
   }, []);
-  const runRecognize = useCallback(async (commandText: string, cliId?: string, silent = false) => {
+  const runRecognize = useCallback(async (
+    commandText: string,
+    cliId?: string,
+    silent = false,
+    keepOnError = false,
+  ) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
@@ -130,12 +140,18 @@ export function AddCustomExtensionWorkspace(props: {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : undefined);
       if (recognizeGeneration.current !== generation) return;
       markRecognized(result.item, result.summary);
-      setError(null);
+      if (keepOnError) {
+        setError(mcpListingRetryError(result.help_status, result.item.commands));
+      } else {
+        setError(null);
+      }
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
-      setRecognized(null);
-      setSummary(null);
-      setStep("pick");
+      if (!keepOnError) {
+        setRecognized(null);
+        setSummary(null);
+        setStep("pick");
+      }
       if (!silent) {
         setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
       }
@@ -160,13 +176,30 @@ export function AddCustomExtensionWorkspace(props: {
   const findTool = useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  const retryMcpListing = useCallback(() => {
+    if (recognized === null) return;
+    void runRecognize(command.trim() || recognized.example_label, recognized.cli_id, false, true);
+  }, [command, recognized, runRecognize]);
   useEffect(() => {
-    if (didAutoSelect.current || recognized !== null || command.trim() !== "") return;
+    if (props.discovering === true) sawDiscovering.current = true;
+    if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
     const preferred = preferredPackageScriptExtension(props.items);
     if (preferred === null) return;
+    if (recognized !== null) {
+      if (recognized.cli_id !== preferred.cli_id) return;
+      if (
+        recognized.identity_hash === preferred.identity_hash
+        && recognized.commands.length === preferred.commands.length
+      ) {
+        return;
+      }
+      markRecognized(preferred, suggestionSummary(preferred));
+      return;
+    }
+    if (didAutoSelect.current) return;
     didAutoSelect.current = true;
     selectSuggestion(preferred);
-  }, [command, props.items, recognized, selectSuggestion]);
+  }, [command, markRecognized, props.discovering, props.items, recognized, selectSuggestion]);
   useEffect(() => {
     const trimmed = command.trim();
     if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;
@@ -264,6 +297,8 @@ export function AddCustomExtensionWorkspace(props: {
   const showingMcpCatalog = recognized?.surface === "mcp";
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const mcpHasTools = mcpCatalogHasTools(enrollable);
+  const showMcpRetry = showingMcpCatalog && !mcpHasTools;
   const visibleCommands = showingPackageCatalog
     ? filterPackageScriptCommands(enrollable, command)
     : commands;
@@ -312,7 +347,12 @@ export function AddCustomExtensionWorkspace(props: {
           <header className="mt-3 max-w-2xl pb-4">
             <h1 id="add-custom-extension-title" className="text-2xl font-semibold tracking-tight text-brand-dark">Add a custom extension</h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              {dialogIntro(rememberedProjects.length > 0, recognized?.surface ?? null)}
+              {dialogIntro(
+                rememberedProjects.length > 0,
+                recognized?.surface ?? null,
+                props.discovering === true && recognized === null,
+                !showMcpRetry,
+              )}
             </p>
           </header>
           <label htmlFor="custom-extension-command" className="mt-4 block text-sm font-semibold text-brand-dark">
@@ -339,10 +379,13 @@ export function AddCustomExtensionWorkspace(props: {
                 {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
               </p>
               {summary ? <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{summary}</p> : null}
-              {showingCatalog && enrollable.length > 0 ? (
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <BulkPolicyPicker value={bulkState} disabled={busy} onChange={applyBulk} />
               ) : null}
-              {showingCatalog ? (
+              {showMcpRetry ? (
+                <McpListingStatus name={recognized.name} busy={busy} onRetry={retryMcpListing} />
+              ) : null}
+              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
                 <CatalogPreview
                   query={command}
                   showFilterCount={showingPackageCatalog}
@@ -381,6 +424,7 @@ export function AddCustomExtensionWorkspace(props: {
           ) : (
             <SuggestionPanel
               query={command}
+              discovering={props.discovering === true}
               hasSuggestions={hasSuggestions}
               packageScriptSuggestions={packageScriptSuggestions}
               harnessSuggestions={harnessSuggestions}
