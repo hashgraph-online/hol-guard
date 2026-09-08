@@ -117,7 +117,7 @@ def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
         }
     )
 
-    def _urlopen(_request: urllib.request.Request, timeout: int) -> _JsonResponse:
+    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _JsonResponse:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -150,7 +150,7 @@ def test_urlopen_retries_cloudflare_524_with_retry_after_header(
     attempts = 0
     slept: list[int] = []
 
-    def _urlopen(_request: urllib.request.Request, timeout: int) -> _EmptyResponse:
+    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _EmptyResponse:
         nonlocal attempts
         attempts += 1
         if attempts == 1:

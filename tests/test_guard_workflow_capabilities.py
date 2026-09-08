@@ -320,20 +320,23 @@ def test_concurrent_claims_never_exceed_exact_use_limit(tmp_path) -> None:
     claim = _claim(capability_id="wc-concurrent", max_uses=8)
     _issue(store, claim)
 
-    def attempt(invocation_id: str) -> str:
-        contender = _store(tmp_path)
+    # Initialize connections before measuring concurrent capability claims.
+    contenders = [_store(tmp_path) for _ in range(32)]
+
+    def attempt(index: int) -> str:
+        contender = contenders[index]
         try:
             _claim_capability(
                 contender,
                 claim,
-                invocation_id=invocation_id,
+                invocation_id=f"invocation-{index}",
             )
         except WorkflowCapabilityError as error:
             return str(error)
         return "claimed"
 
     with ThreadPoolExecutor(max_workers=32) as executor:
-        results = list(executor.map(attempt, (f"invocation-{index}" for index in range(32))))
+        results = list(executor.map(attempt, range(32)))
     assert results.count("claimed") == 8
     assert results.count("capability_exhausted") == 24
     with sqlite3.connect(store.path) as connection:
