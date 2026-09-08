@@ -11,9 +11,10 @@ from pathlib import Path
 
 from ..models import HarnessDetection
 from ..runtime.local_cli_identity import UnlistedCliIdentity
-from ..runtime.mcp_protection import McpServerIdentity
+from ..runtime.local_mcp_probe import mcp_launch_tokens
+from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .contracts import display_name_for
-from .mcp_servers import ManagedMcpServer, managed_stdio_servers
+from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_process_env
 
 MAX_DISCOVERED_MCP_SERVERS = 40
 
@@ -26,6 +27,7 @@ class DiscoveredHarnessMcpServer:
     server_identity: McpServerIdentity
     source_label: str
     launch_command: str
+    env: tuple[tuple[str, str], ...] = ()
 
 
 def discover_harness_mcp_servers(
@@ -49,6 +51,7 @@ def discover_harness_mcp_servers(
             label = display_name_for(server.harness)
             current = groups.get(key)
             launch_command = _raw_launch_label(server.command, server.args)
+            env = tuple(sorted(proxy_process_env(server.env).items()))
             if current is None:
                 groups[key] = _DiscoveryGroup(
                     identity=identity,
@@ -56,10 +59,16 @@ def discover_harness_mcp_servers(
                     launch_command=launch_command,
                     labels=[label],
                     env_key_count=len(server_identity.env_keys),
+                    env=env,
                 )
                 continue
             if label not in current.labels:
                 current.labels.append(label)
+            if env:
+                if current.env and current.env != env:
+                    current.env = ()
+                elif not current.env:
+                    current.env = env
             if len(server_identity.env_keys) > current.env_key_count:
                 current.identity = identity
                 current.server_identity = server_identity
@@ -80,6 +89,7 @@ def discover_harness_mcp_servers(
             server_identity=group.server_identity,
             source_label=_join_labels(group.labels),
             launch_command=group.launch_command,
+            env=group.env,
         )
         for group in ranked[:MAX_DISCOVERED_MCP_SERVERS]
     )
@@ -133,6 +143,44 @@ def discovered_server_for_observation(
     return None
 
 
+def extra_env_for_mcp_launch(
+    servers: Sequence[DiscoveredHarnessMcpServer],
+    *,
+    command: str,
+    cli_id: str | None = None,
+) -> dict[str, str]:
+    """Return harness-configured env for a listing probe. Values stay in memory."""
+
+    matched = discovered_server_for_observation(servers, cli_id=cli_id)
+    if matched is None:
+        tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
+        if tokens is not None:
+            identity = build_mcp_server_identity(
+                config_path="",
+                command=tokens[0],
+                args=tuple(tokens[1:]),
+                transport="stdio",
+            )
+            matched = discovered_server_for_observation(
+                servers,
+                server_command=identity.command,
+                args_hash=identity.args_hash,
+            )
+    if matched is None:
+        return {}
+    extra = dict(matched.env)
+    for key in matched.server_identity.env_keys:
+        current = extra.get(key)
+        if key in os.environ and (current is None or _looks_unresolved(current)):
+            extra[key] = os.environ[key]
+    return extra
+
+
+def _looks_unresolved(value: str) -> bool:
+    stripped = value.strip()
+    return len(stripped) >= 4 and stripped.startswith("${") and stripped.endswith("}")
+
+
 def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) -> list[dict[str, object]]:
     """Overlay harness source labels onto listed custom extensions."""
 
@@ -153,6 +201,7 @@ class _DiscoveryGroup:
     launch_command: str
     labels: list[str]
     env_key_count: int
+    env: tuple[tuple[str, str], ...]
 
 
 def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:
