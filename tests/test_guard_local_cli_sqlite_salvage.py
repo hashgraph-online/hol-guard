@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.sqlite_recovery import _copy_allowlisted_table, salvage_local_cli_state
 from codex_plugin_scanner.guard.store import GuardStore
@@ -19,7 +20,15 @@ def _identity() -> UnlistedCliIdentity:
     )
 
 
-def _grant_store(home: Path) -> GuardStore:
+def _commands() -> tuple[LocalCliCommand, ...]:
+    return (
+        LocalCliCommand("root", "chrome-devtools", "npx chrome-devtools", "root"),
+        LocalCliCommand("navigate", "navigate", "navigate", "Open a page", parent_id="root"),
+        LocalCliCommand("other", "Other commands", "npx chrome-devtools …", "other"),
+    )
+
+
+def _grant_store(home: Path, *, with_commands: bool = False) -> GuardStore:
     store = GuardStore(home, prime_policy_integrity=False)
     identity = _identity()
     store.record_local_cli_observation(
@@ -34,6 +43,9 @@ def _grant_store(home: Path) -> GuardStore:
         expected_revision=0,
         updated_at=utc_now(),
     )
+    if with_commands:
+        store.replace_local_cli_commands(identity.cli_id, _commands())
+        store.upsert_local_cli_command_states(identity.cli_id, {"navigate": "block"})
     return store
 
 
@@ -53,9 +65,7 @@ def test_salvage_copies_custom_extension_grant(tmp_path: Path) -> None:
 def test_salvage_keeps_destination_schema_marker(tmp_path: Path) -> None:
     source = _grant_store(tmp_path / "src")
     with sqlite3.connect(source.path) as connection:
-        connection.execute(
-            "update local_cli_schema_migration set version = 1, checksum = 'stale' where singleton = 1"
-        )
+        connection.execute("update local_cli_schema_migration set version = 1, checksum = 'stale' where singleton = 1")
         connection.commit()
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     assert salvage_local_cli_state(source=source.path, destination=destination.path) is True
@@ -79,6 +89,45 @@ def test_salvage_rolls_back_when_grants_unreadable(tmp_path: Path) -> None:
     assert destination.read_local_cli_grant(_identity().cli_id) is None
     listed = destination.list_local_cli_items()
     assert listed == []
+
+
+def test_salvage_rolls_back_when_commands_unreadable(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    with sqlite3.connect(source.path) as connection:
+        connection.execute("drop table local_cli_command")
+        connection.commit()
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is False
+    assert destination.read_local_cli_grant(_identity().cli_id) is None
+    assert destination.read_local_cli_command_catalog(_identity().cli_id) == []
+    listed = destination.list_local_cli_items()
+    assert listed == []
+
+
+def test_salvage_rolls_back_when_command_grants_unreadable(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    with sqlite3.connect(source.path) as connection:
+        connection.execute("drop table local_cli_command_grant")
+        connection.commit()
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is False
+    assert destination.read_local_cli_grant(_identity().cli_id) is None
+    assert destination.read_local_cli_command_catalog(_identity().cli_id) == []
+    assert destination.read_local_cli_command_states(_identity().cli_id) == {}
+    listed = destination.list_local_cli_items()
+    assert listed == []
+
+
+def test_salvage_copies_command_catalog_and_states(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is True
+    granted = destination.read_local_cli_grant(_identity().cli_id)
+    assert granted is not None
+    assert granted["state"] == "allowed"
+    catalog = destination.read_local_cli_command_catalog(_identity().cli_id)
+    assert [item.command_id for item in catalog] == ["root", "navigate", "other"]
+    assert destination.read_local_cli_command_states(_identity().cli_id) == {"navigate": "block"}
 
 
 def test_copy_keeps_rows_read_before_source_failure(tmp_path: Path) -> None:

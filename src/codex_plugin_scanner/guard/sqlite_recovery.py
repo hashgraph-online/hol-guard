@@ -203,6 +203,11 @@ _LOCAL_CLI_SALVAGE_TABLES = (
     "local_cli_command",
     "local_cli_command_grant",
 )
+_REQUIRED_LOCAL_CLI_SALVAGE_TABLES = (
+    "local_cli_grant",
+    "local_cli_command",
+    "local_cli_command_grant",
+)
 
 
 def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
@@ -210,6 +215,9 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
 
     Full ``quick_check`` can fail after an interrupted update while
     ``local_cli_*`` tables still SELECT. Empty reinit would drop those grants.
+    Grant, command catalog, and command-grant copies must all succeed
+    (empty tables still count) so an allowed grant cannot restore without
+    its scoped catalog.
     """
 
     if source.is_symlink() or destination.is_symlink() or not destination.is_file():
@@ -226,7 +234,7 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
             copied: dict[str, bool] = {}
             for table in _LOCAL_CLI_SALVAGE_TABLES:
                 copied[table] = _copy_allowlisted_table(src, dst, table)
-            if not copied.get("local_cli_grant"):
+            if not all(copied.get(table) for table in _REQUIRED_LOCAL_CLI_SALVAGE_TABLES):
                 dst.rollback()
                 return False
             dst.commit()
