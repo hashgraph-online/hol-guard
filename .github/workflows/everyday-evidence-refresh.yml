@@ -1,6 +1,7 @@
 name: Everyday evidence refresh
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - fix/everyday-mode-live-release-3.2-20260908
