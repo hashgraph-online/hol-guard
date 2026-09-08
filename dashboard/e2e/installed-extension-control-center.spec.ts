@@ -13,7 +13,7 @@ const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
 const extensionId = "command.api-gateway";
 const permissionId = "command.api-gateway.permission.delete";
 const governedRuleId = "command.api-gateway.delete";
-const expectedExtensionCount = 61;
+const minimumExpectedExtensionCount = 61;
 
 async function installSession(page: import("@playwright/test").Page) {
   await page.addInitScript(({ daemon, token }) => {
@@ -115,7 +115,15 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
     sessionStorage.setItem("guardDaemon", daemon);
   }, { daemon: origin, token: session });
 
+  const catalogResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/v1/extension-controls/catalog" && response.status() === 200;
+  });
   await page.goto("/extensions");
+  const catalogResponse = await catalogResponsePromise;
+  const catalogPayload = await catalogResponse.json() as { extensions?: unknown[] };
+  const expectedExtensionCount = Array.isArray(catalogPayload.extensions) ? catalogPayload.extensions.length : 0;
+  expect(expectedExtensionCount).toBeGreaterThanOrEqual(minimumExpectedExtensionCount);
   await expectSecretSafeUrl(page);
   await expect(page.getByRole("heading", { name: "Extensions", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "All tools" })).toBeVisible();

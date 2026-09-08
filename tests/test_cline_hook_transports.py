@@ -200,11 +200,11 @@ def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, mon
         hook = custom_root / f"{event}{'.ps1' if os.name == 'nt' else ''}"
         hook.parent.mkdir(parents=True, exist_ok=True)
         hook_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        hook.write_text(hook_content, encoding="utf-8")
+        hook.write_text(hook_content, encoding="utf-8", newline="")
         worker = context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py"
         worker.parent.mkdir(parents=True, exist_ok=True)
         worker_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        worker.write_text(worker_content, encoding="utf-8")
+        worker.write_text(worker_content, encoding="utf-8", newline="")
         paths[event] = str(hook)
         digests[event] = sha256(hook_content.encode()).hexdigest()
         workers[event] = str(worker)

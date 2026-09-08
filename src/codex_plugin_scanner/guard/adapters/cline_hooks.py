@@ -71,7 +71,7 @@ def _slot_for_event(root: Path, event: str, *, windows: bool | None = None) -> P
 def _write(path: Path, text: str, *, executable: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.hol-guard.tmp-{os.getpid()}")
-    with temporary.open("w", encoding="utf-8") as handle:
+    with temporary.open("w", encoding="utf-8", newline="") as handle:
         handle.write(text)
         handle.flush()
         os.fsync(handle.fileno())
