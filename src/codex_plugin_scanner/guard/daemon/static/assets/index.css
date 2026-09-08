@@ -974,6 +974,11 @@
     height: calc(var(--spacing) * 8);
   }
 
+  .size-9 {
+    width: calc(var(--spacing) * 9);
+    height: calc(var(--spacing) * 9);
+  }
+
   .size-11 {
     width: calc(var(--spacing) * 11);
     height: calc(var(--spacing) * 11);
@@ -1425,6 +1430,10 @@
 
   .max-w-\[17\.5rem\] {
     max-width: 17.5rem;
+  }
+
+  .max-w-\[70ch\] {
+    max-width: 70ch;
   }
 
   .max-w-\[260px\] {
@@ -6007,7 +6016,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus-visible\:ring-brand-blue\/30:focus-visible {
+  .focus-visible\:ring-brand-blue:focus-visible, .focus-visible\:ring-brand-blue\/30:focus-visible {
     --tw-ring-color: var(--brand-blue);
   }
 
@@ -6312,6 +6321,10 @@
       grid-template-columns: 8rem minmax(0, 1fr);
     }
 
+    .sm\:grid-cols-\[minmax\(0\,0\.85fr\)_minmax\(0\,1\.25fr\)\] {
+      grid-template-columns: minmax(0, .85fr) minmax(0, 1.25fr);
+    }
+
     .sm\:grid-cols-\[minmax\(0\,1fr\)_auto\] {
       grid-template-columns: minmax(0, 1fr) auto;
     }
@@ -6378,6 +6391,10 @@
 
     .sm\:gap-y-3 {
       row-gap: calc(var(--spacing) * 3);
+    }
+
+    .sm\:justify-self-stretch {
+      justify-self: stretch;
     }
 
     .sm\:truncate {
