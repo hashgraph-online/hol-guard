@@ -194,3 +194,105 @@ def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bo
         with suppress(OSError):
             destination.replace(quarantined)
         return False
+
+
+_LOCAL_CLI_SALVAGE_TABLES = (
+    "local_cli_authority",
+    "local_cli_observation",
+    "local_cli_grant",
+    "local_cli_command",
+    "local_cli_command_grant",
+)
+_REQUIRED_LOCAL_CLI_SALVAGE_TABLES = (
+    "local_cli_grant",
+    "local_cli_command",
+    "local_cli_command_grant",
+)
+_PARTIAL_COPY_OK_TABLES = frozenset(
+    {
+        "local_cli_authority",
+        "local_cli_observation",
+        "local_cli_grant",
+    }
+)
+
+
+def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
+    """Copy readable custom-extension tables from a quarantined store.
+
+    Full ``quick_check`` can fail after an interrupted update while
+    ``local_cli_*`` tables still SELECT. Empty reinit would drop those grants.
+    Grant, command catalog, and command-grant copies must all succeed
+    (empty tables still count) so an allowed grant cannot restore without
+    its scoped catalog.
+    """
+
+    if source.is_symlink() or destination.is_symlink() or not destination.is_file():
+        return False
+    try:
+        source_uri = f"{source.resolve().as_uri()}?mode=ro"
+        with (
+            sqlite3.connect(source_uri, uri=True, timeout=1.0) as src,
+            sqlite3.connect(destination, timeout=1.0) as dst,
+        ):
+            from .store_local_cli_schema import ensure_local_cli_schema
+
+            ensure_local_cli_schema(dst)
+            copied: dict[str, bool] = {}
+            for table in _LOCAL_CLI_SALVAGE_TABLES:
+                copied[table] = _copy_allowlisted_table(src, dst, table)
+            if not all(copied.get(table) for table in _REQUIRED_LOCAL_CLI_SALVAGE_TABLES):
+                dst.rollback()
+                return False
+            dst.commit()
+            return True
+    except sqlite3.Error:
+        return False
+
+
+def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> bool:
+    if table not in _LOCAL_CLI_SALVAGE_TABLES:
+        return False
+    try:
+        source_columns = _table_columns(src, table)
+        dest_columns = _table_columns(dst, table)
+    except sqlite3.Error:
+        return False
+    shared = [column for column in dest_columns if column in source_columns]
+    if not shared:
+        return False
+    quoted = ",".join(f'"{column}"' for column in shared)
+    placeholders = ",".join("?" for _ in shared)
+    try:
+        cursor = src.execute(f'select {quoted} from "{table}"')
+    except sqlite3.Error:
+        return False
+    inserted = False
+    saw_rows = False
+    statement = f'insert or replace into "{table}" ({quoted}) values ({placeholders})'
+    try:
+        for row in cursor:
+            saw_rows = True
+            try:
+                _ = dst.execute(statement, row)
+                inserted = True
+            except sqlite3.Error:
+                if table not in _PARTIAL_COPY_OK_TABLES:
+                    return False
+                continue
+    except sqlite3.Error:
+        # Partial command or command-grant copies can drop block rows and
+        # widen an allowed grant. Fail those tables closed.
+        return inserted if table in _PARTIAL_COPY_OK_TABLES else False
+    return inserted or not saw_rows
+
+
+def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
+    if table not in _LOCAL_CLI_SALVAGE_TABLES:
+        return []
+    names: list[str] = []
+    for row in connection.execute(f'pragma table_info("{table}")'):
+        name = row[1] if isinstance(row, tuple) else row["name"]
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
