@@ -71,7 +71,12 @@ def _write_bytes_descriptor_relative(path: Path, payload: bytes) -> None:
             try:
                 child = os.open(part, directory_flags, dir_fd=directory)
             except FileNotFoundError:
-                os.mkdir(part, mode=0o755, dir_fd=directory)
+                try:
+                    os.mkdir(part, mode=0o755, dir_fd=directory)
+                except FileExistsError:
+                    # Another writer won the create race. Re-open with O_NOFOLLOW
+                    # so a raced-in symlink or non-directory still fails closed.
+                    pass
                 child = os.open(part, directory_flags, dir_fd=directory)
             os.close(directory)
             directory = child
