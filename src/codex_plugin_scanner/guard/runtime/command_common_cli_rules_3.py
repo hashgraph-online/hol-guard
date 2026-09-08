@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .command_common_cli_matchers import (
     _ALT_CONTAINER_CLEANUP,
-    _ANSIBLE_EXECUTION,
     _ANSIBLE_VAULT,
     _CLOUD_CREDENTIAL_MUTATION,
     _CLOUD_SECRET_READ,
@@ -15,8 +14,8 @@ from .command_common_cli_matchers import (
     _PACKAGE_PUBLISH,
     _RAILWAY_CHANGE,
 )
+from .command_common_cli_matchers_extra import ANSIBLE_EXECUTION_REFINED
 from .command_common_cli_rule_support import help_variants, rule
-from .command_extension_matchers import safe_flag_variant
 from .command_rules import CommandSafetyRule
 
 COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
@@ -36,16 +35,11 @@ COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
         extension_id="command.configuration-management.ansible",
         suffix="remote-execution",
         title="Ansible remote execution",
-        description="Identifies ad-hoc, playbook, or pull-based Ansible execution.",
-        matcher=_ANSIBLE_EXECUTION,
+        description="Identifies ad-hoc, playbook, or pull-based Ansible execution while excluding read-only modes.",
+        matcher=ANSIBLE_EXECUTION_REFINED,
         action_class="Ansible remote execution command",
         risk_classes=("execution", "network_egress", "destructive_shell"),
         safer_alternative="Limit inventory and hosts and inspect playbook changes before execution.",
-        safe_variants=(
-            safe_flag_variant(_ANSIBLE_EXECUTION, variant_id="help", title="Command help", flag="--help"),
-            safe_flag_variant(_ANSIBLE_EXECUTION, variant_id="short-help", title="Command help", flag="-h"),
-            safe_flag_variant(_ANSIBLE_EXECUTION, variant_id="version", title="Version display", flag="--version"),
-        ),
         example_command="ansible-playbook -i production site.yml",
     ),
     rule(
