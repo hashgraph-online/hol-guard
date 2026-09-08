@@ -1,4 +1,4 @@
-"""Inert, bounded presentation metadata. Never imported by runtime enforcement."""
+"""Bounded extension listing metadata. Never imported by runtime enforcement."""
 
 from __future__ import annotations
 
@@ -70,13 +70,13 @@ def _public_https(value: str) -> None:
 
 
 def validate_listing(payload: object, *, expected_id: str | None = None) -> dict[str, object]:
-    """Validate presentation data without resolving a URL or granting authority."""
+    """Validate bounded listing metadata without resolving links or performing a claim grant."""
 
     validator = Draft202012Validator(listing_schema(), format_checker=FormatChecker())
     try:
         validator.validate(payload)
     except (ValidationError, RecursionError) as exc:
-        raise BuilderError("listing_schema", "Listing does not match the bounded presentation contract.") from exc
+        raise BuilderError("listing_schema", "Listing does not match the bounded publisher metadata contract.") from exc
     row = cast(dict[str, object], payload)
     if expected_id is not None and row["extensionId"] != expected_id:
         raise BuilderError("listing_identity", "Listing identity must match its native contribution and filename.")
@@ -103,7 +103,7 @@ def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
 
 
 def listing_template(metadata: Metadata) -> str:
-    """Produce optional presentation data without changing a native contribution kit."""
+    """Produce optional public listing fields without inventing publisher claim authority."""
 
     row: dict[str, object] = {
         "schemaVersion": LISTING_SCHEMA,
