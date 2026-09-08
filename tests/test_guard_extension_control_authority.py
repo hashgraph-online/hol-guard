@@ -722,6 +722,21 @@ def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migrat
     assert bootstrapped.health is AuthorityHealth.PROTECTED
     legacy = store.read_extension_control_authority_for_registry(legacy_registry)
     assert legacy.health is AuthorityHealth.PROTECTED
+    legacy_manifest = store._catalog_target_manifest(legacy_registry)  # pyright: ignore[reportPrivateUsage]
+    current_manifest = store._catalog_target_manifest(  # pyright: ignore[reportPrivateUsage]
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    )
+    assert (
+        legacy_manifest["extension:command.container-runtime"]
+        != current_manifest["extension:command.container-runtime"]
+    )
+    with store._connect() as connection:
+        manifest_row = connection.execute(
+            "select manifest_json from extension_control_catalog_manifest where catalog_digest = ?",
+            (legacy_registry.catalog_digest,),
+        ).fetchone()
+    assert manifest_row is not None
+    assert json.loads(str(manifest_row["manifest_json"])) == legacy_manifest
 
     same_digest_current_manifest = _LegacyRegistryView(
         extensions=BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions,
