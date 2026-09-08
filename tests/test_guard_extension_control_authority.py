@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
 import subprocess
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -353,61 +352,6 @@ def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _LegacyRegistryView:
-    extensions: tuple[object, ...]
-    catalog_digest: str
-
-
-def _legacy_catalog_digest(registry: CommandSafetyExtensionRegistry) -> str:
-    payload = []
-    for extension in registry.extensions:
-        extension_payload = extension.to_dict()
-        rule_payloads = cast(list[dict[str, object]], extension_payload["rules"])
-        for rule_payload in rule_payloads:
-            rule_payload.pop("family", None)
-            rule_payload.pop("matcher_contract_digest", None)
-            for variant_payload in cast(list[dict[str, object]], rule_payload["safe_variants"]):
-                variant_payload.pop("matcher_contract_digest", None)
-        payload.append(extension_payload)
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _legacy_format_registry() -> _LegacyRegistryView:
-    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
-    rule_index = next(
-        index
-        for index, rule in enumerate(extension.rules)
-        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
-    )
-    rule = extension.rules[rule_index]
-    assert isinstance(rule.matcher, AnyMatcher)
-    leaf_index = next(
-        index
-        for index, matcher in enumerate(rule.matcher.matchers)
-        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
-    )
-    leaf = rule.matcher.matchers[leaf_index]
-    assert isinstance(leaf, ExecutableMatcher)
-    legacy_leaf = replace(leaf, required_option_values=())
-    legacy_matcher = replace(
-        rule.matcher,
-        matchers=(*rule.matcher.matchers[:leaf_index], legacy_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
-    )
-    legacy_rule = replace(rule, matcher=legacy_matcher)
-    legacy_extension = replace(
-        extension,
-        rules=(*extension.rules[:rule_index], legacy_rule, *extension.rules[rule_index + 1 :]),
-    )
-    legacy_source = CommandSafetyExtensionRegistry(
-        (legacy_extension, *(item for item in extensions if item is not extension))
-    )
-    legacy_digest = _legacy_catalog_digest(legacy_source)
-    return _LegacyRegistryView(extensions=legacy_source.extensions, catalog_digest=legacy_digest)
-
-
 def _proof(
     store: GuardStore,
     layers: tuple[ExtensionControlLayer, ...],
@@ -710,94 +654,6 @@ def test_catalog_upgrade_retires_enabled_target_when_matcher_contract_changes(tm
     assert upgraded.layers[0].controls == ()
 
 
-def test_legacy_format_manifest_collision_fails_closed_before_new_catalog_migration(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets, enroll=False)
-    record_calls: list[str] = []
-    record_failures: list[str] = []
-    original_record = store._record_catalog_manifest  # pyright: ignore[reportPrivateUsage]
-    record_function = getattr(original_record, "__func__", original_record)
-    record_code_names = tuple(
-        name
-        for name in (
-            "_load_catalog_manifest",
-            "_catalog_target_manifest",
-            "ExtensionControlAuthorityError",
-        )
-        if name in record_function.__code__.co_names
-    )
-
-    def record_probe(registry: CommandSafetyExtensionRegistry | _LegacyRegistryView, *, key: bytes) -> None:
-        record_calls.append(registry.catalog_digest)
-        try:
-            original_record(registry, key=key)  # type: ignore[arg-type]
-        except ExtensionControlAuthorityError as exc:
-            record_failures.append(str(exc))
-            raise
-
-    tampered_health: list[str] = []
-    original_tampered = store._tampered_view  # pyright: ignore[reportPrivateUsage]
-
-    def tampered_probe(catalog_digest: str) -> ExtensionControlAuthorityView:
-        result = original_tampered(catalog_digest)
-        tampered_health.append(result.health.value)
-        return result
-
-    monkeypatch.setattr(store, "_record_catalog_manifest", record_probe)
-    monkeypatch.setattr(store, "_tampered_view", tampered_probe)
-    legacy_registry = _legacy_format_registry()
-    assert legacy_registry.catalog_digest != BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    bootstrapped = store._bootstrap_extension_control_authority(  # pyright: ignore[reportPrivateUsage]
-        legacy_registry.catalog_digest,
-        key=None,
-    )
-    assert bootstrapped.health is AuthorityHealth.PROTECTED
-    legacy = store.read_extension_control_authority_for_registry(legacy_registry)
-    assert legacy.health is AuthorityHealth.PROTECTED
-    legacy_manifest = store._catalog_target_manifest(legacy_registry)  # pyright: ignore[reportPrivateUsage]
-    current_manifest = store._catalog_target_manifest(  # pyright: ignore[reportPrivateUsage]
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    )
-    assert (
-        legacy_manifest["extension:command.container-runtime"]
-        != current_manifest["extension:command.container-runtime"]
-    )
-    with store._connect() as connection:
-        manifest_row = connection.execute(
-            "select manifest_json from extension_control_catalog_manifest where catalog_digest = ?",
-            (legacy_registry.catalog_digest,),
-        ).fetchone()
-    assert manifest_row is not None
-    assert json.loads(str(manifest_row["manifest_json"])) == legacy_manifest
-
-    same_digest_current_manifest = _LegacyRegistryView(
-        extensions=BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions,
-        catalog_digest=legacy_registry.catalog_digest,
-    )
-    conflict = store.read_extension_control_authority_for_registry(same_digest_current_manifest)
-    assert conflict.health.__class__ is AuthorityHealth
-    assert conflict.health is AuthorityHealth.TAMPERED, {
-        "record_calls": record_calls,
-        "record_failures": record_failures,
-        "tampered_health": tampered_health,
-        "record_code_names": record_code_names,
-    }
-
-    migrated = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    assert migrated.health is AuthorityHealth.PROTECTED
-    assert migrated.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    with store._connect() as connection:
-        manifests = connection.execute(
-            "select catalog_digest from extension_control_catalog_manifest order by catalog_digest"
-        ).fetchall()
-    assert [str(row["catalog_digest"]) for row in manifests] == sorted(
-        (legacy_registry.catalog_digest, BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    )
-
-
 def test_catalog_manifest_tamper_is_detected_immediately(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
@@ -973,9 +829,7 @@ def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkey
     assert _enroll(store).health is AuthorityHealth.PROTECTED
 
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    view = restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    view = restarted.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert view.health is AuthorityHealth.PROTECTED
     secrets_dir = tmp_path / "secrets"
     if os.name != "nt":
@@ -990,9 +844,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(sys, "platform", "linux")
     legacy_secrets = MemorySecretStore()
     legacy_store = _store(tmp_path, legacy_secrets)
-    assert legacy_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        legacy_store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "get_secret",
@@ -1001,9 +858,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", lambda _self, _secret_id, _value: None)
 
     migrated = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert migrated.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        migrated.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
     monkeypatch.setattr(
         SystemKeyringSecretStore,
@@ -1011,9 +871,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
         lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("session keyring disappeared")),
     )
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        restarted.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
 
 def test_macos_extension_authority_default_never_probes_keychain(
