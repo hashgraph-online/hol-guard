@@ -35,6 +35,7 @@ jobs:
         run: uv sync --frozen --extra dev --python 3.12
       - name: Format and lint refactor
         run: |
+          uv run --no-sync ruff check --fix src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
           uv run --no-sync ruff format src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
           uv run --no-sync ruff check --output-format concise src/codex_plugin_scanner/guard/runtime/action_explanation_semantics.py src/codex_plugin_scanner/guard/runtime/action_explanation_projection.py tests/test_guard_action_explanation_projection.py
           git diff --check
