@@ -22,6 +22,7 @@ import type {
 import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
+import { ActionExplanationSummary } from "./action-explanation-summary";
 
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -198,13 +199,14 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const explanation = item.action_explanation ?? null;
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <SectionLabel>What was stopped</SectionLabel>
-          {action.detail !== null && (
+          {action.detail !== null && explanation === null && (
             <p className="mt-1 text-sm text-brand-dark/70">
               {action.detail}
             </p>
@@ -214,25 +216,29 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           {action.label}
         </span>
       </div>
-      <div className="mt-3">
-        <LoggedActionPanel
-          key={item.request_id}
-          label={action.label}
-          text={action.text}
-          copyAriaLabel="Copy full stopped action to clipboard"
-          expandAriaLabel="Expand full stopped action"
-          collapseAriaLabel="Collapse full stopped action"
-        />
-        {workingDirectory !== null && (
-          <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
-            <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
-            <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
-            <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
-              {workingDirectory}
-            </code>
-          </div>
-        )}
-      </div>
+      {explanation !== null ? (
+        <ActionExplanationSummary explanation={explanation} />
+      ) : (
+        <div className="mt-3">
+          <LoggedActionPanel
+            key={item.request_id}
+            label={action.label}
+            text={action.text}
+            copyAriaLabel="Copy full stopped action to clipboard"
+            expandAriaLabel="Expand full stopped action"
+            collapseAriaLabel="Collapse full stopped action"
+          />
+          {workingDirectory !== null && (
+            <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
+              <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+              <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
+              <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
+                {workingDirectory}
+              </code>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
