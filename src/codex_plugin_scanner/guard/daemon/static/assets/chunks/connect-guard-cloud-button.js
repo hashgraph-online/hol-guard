@@ -2,7 +2,7 @@ import { Y as openPackageFirewallAuthorizeFallback, Z as waitForCloudConnection,
 const SIGN_IN_PENDING_MESSAGE = "Sign-in is still pending. Complete it in the opened window, or open sign-in again.";
 function cloudConnectErrorMessage(message) {
   if (/CERTIFICATE_VERIFY_FAILED|certificate verify failed/i.test(message)) {
-    return "Guard could not verify the secure connection to Guard Cloud. Update Guard and retry. Your local protection settings have not changed.";
+    return "Guard could not verify the secure connection to Guard Cloud. Check your network or proxy certificate settings and make sure Guard is up to date, then retry. Your local protection settings have not changed.";
   }
   return message;
 }

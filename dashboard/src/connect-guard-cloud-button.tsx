@@ -27,7 +27,7 @@ const SIGN_IN_PENDING_MESSAGE =
 
 function cloudConnectErrorMessage(message: string): string {
   if (/CERTIFICATE_VERIFY_FAILED|certificate verify failed/i.test(message)) {
-    return "Guard could not verify the secure connection to Guard Cloud. Update Guard and retry. Your local protection settings have not changed.";
+    return "Guard could not verify the secure connection to Guard Cloud. Check your network or proxy certificate settings and make sure Guard is up to date, then retry. Your local protection settings have not changed.";
   }
   return message;
 }
