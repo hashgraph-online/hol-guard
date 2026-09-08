@@ -339,11 +339,16 @@ def _validate_activity_state(activity: CommandActivity) -> None:
     if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST:
         if activity.decision_reason_code is ActivityDecisionReason.NO_MATCH and activity.match_count != 0:
             raise ValueError("no-match reason cannot carry activity matches")
-        if activity.match_count == 0 and activity.decision_reason_code not in {
-            ActivityDecisionReason.NO_MATCH,
-            ActivityDecisionReason.CAPABILITY,
-        } and not (
-            activity.decision_reason_code is ActivityDecisionReason.POLICY and activity.parse_confidence is None
+        if (
+            activity.match_count == 0
+            and activity.decision_reason_code
+            not in {
+                ActivityDecisionReason.NO_MATCH,
+                ActivityDecisionReason.CAPABILITY,
+            }
+            and not (
+                activity.decision_reason_code is ActivityDecisionReason.POLICY and activity.parse_confidence is None
+            )
         ):
             raise ValueError("an activity without matches requires a no-match reason or capability reason")
     if activity.receipt_link_status is ReceiptLinkStatus.LINKED and activity.receipt_id is None:
