@@ -125,9 +125,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     authority_key = self._authority_key(required=True)
                     if authority_key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
-                    view, stale_manifest = self._sync_trusted_catalog_manifest(
-                        view, registry, key=authority_key
-                    )
+                    view, stale_manifest = self._sync_trusted_catalog_manifest(view, registry, key=authority_key)
                 if include_managed_controls:
                     composed = self._with_managed_controls_activation(
                         view,
