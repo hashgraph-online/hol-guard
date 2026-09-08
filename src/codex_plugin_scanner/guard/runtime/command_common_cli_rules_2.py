@@ -83,7 +83,7 @@ COMMON_CLI_COMMAND_RULES_2: tuple[CommandSafetyRule, ...] = (
         example_command="flux reconcile kustomization production",
     ),
     rule(
-        extension_id="command.package.dotnet",
+        extension_id="command.package-dotnet",
         suffix="package-mutation",
         title=".NET package dependency mutation",
         description="Identifies .NET and NuGet package addition, install, and restore operations.",
@@ -95,7 +95,7 @@ COMMON_CLI_COMMAND_RULES_2: tuple[CommandSafetyRule, ...] = (
         example_command="dotnet package add Example.Package",
     ),
     rule(
-        extension_id="command.package.dotnet",
+        extension_id="command.package-dotnet",
         suffix="publication",
         title="NuGet publication mutation",
         description="Identifies push or deletion of NuGet package versions.",
