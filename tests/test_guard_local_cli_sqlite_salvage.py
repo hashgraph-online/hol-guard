@@ -5,7 +5,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-from codex_plugin_scanner.guard.sqlite_recovery import salvage_local_cli_state
+from codex_plugin_scanner.guard.sqlite_recovery import _copy_allowlisted_table, salvage_local_cli_state
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -79,6 +79,35 @@ def test_salvage_rolls_back_when_grants_unreadable(tmp_path: Path) -> None:
     assert destination.read_local_cli_grant(_identity().cli_id) is None
     listed = destination.list_local_cli_items()
     assert listed == []
+
+
+def test_copy_keeps_rows_read_before_source_failure(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src")
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
+        original = src.execute
+
+        class _Source:
+            def execute(self, sql: str, parameters: object = ()) -> object:
+                cursor = original(sql, parameters)
+                if not sql.strip().lower().startswith("select "):
+                    return cursor
+                rows = list(cursor)
+                if not rows:
+                    return cursor
+
+                class _Cursor:
+                    def __iter__(self) -> object:
+                        yield rows[0]
+                        raise sqlite3.DatabaseError("btreeInitPage")
+
+                return _Cursor()
+
+        assert _copy_allowlisted_table(_Source(), dst, "local_cli_grant") is True
+        dst.commit()
+    granted = destination.read_local_cli_grant(_identity().cli_id)
+    assert granted is not None
+    assert granted["state"] == "allowed"
 
 
 def test_salvage_ignores_unreadable_quarantine(tmp_path: Path) -> None:

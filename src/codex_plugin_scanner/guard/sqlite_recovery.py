@@ -249,18 +249,23 @@ def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, ta
     quoted = ",".join(f'"{column}"' for column in shared)
     placeholders = ",".join("?" for _ in shared)
     try:
-        rows = src.execute(f'select {quoted} from "{table}"').fetchall()
+        cursor = src.execute(f'select {quoted} from "{table}"')
     except sqlite3.Error:
         return False
     inserted = False
+    saw_rows = False
     statement = f'insert or replace into "{table}" ({quoted}) values ({placeholders})'
-    for row in rows:
-        try:
-            _ = dst.execute(statement, row)
-            inserted = True
-        except sqlite3.Error:
-            continue
-    return inserted or not rows
+    try:
+        for row in cursor:
+            saw_rows = True
+            try:
+                _ = dst.execute(statement, row)
+                inserted = True
+            except sqlite3.Error:
+                continue
+    except sqlite3.Error:
+        return inserted
+    return inserted or not saw_rows
 
 
 def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
