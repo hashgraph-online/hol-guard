@@ -397,6 +397,7 @@ jobs:
           tests/test_guard_sandbox.py
           tests/test_guard_js_lockfile_resolution_phase11.py
           tests/test_guard_runtime_hook_scheduler.py
+          tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial
           tests/test_guard_continuation_contract.py
           --tb=short
 

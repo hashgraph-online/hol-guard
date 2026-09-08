@@ -24,6 +24,12 @@ function CommandRow(props: {
     props.onSelect(props.item.activity_id);
   }, [props.item.activity_id, props.onSelect]);
   const firstRule = props.item.matches[0];
+  let ruleLabel = "Rule evidence unavailable";
+  if (firstRule) {
+    ruleLabel = safeEvidenceId(firstRule.rule_id);
+  } else if (props.item.decision_reason_code === "no_match") {
+    ruleLabel = "No rule match";
+  }
   return (
     <tr className={props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70"}>
       <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{recordedTime(props.item.occurred_at)}</td>
@@ -31,7 +37,7 @@ function CommandRow(props: {
       <td className="px-3 py-3 text-sm text-brand-dark">{commandDecisionLabel(props.item.policy_action)}</td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandExecutionLabel(props.item.execution_status)}</td>
       <td className="px-3 py-3 text-sm text-slate-600">
-        {firstRule ? safeEvidenceId(firstRule.rule_id) : "No rule match"}
+        {ruleLabel}
         {props.item.match_count > 1 ? <Badge tone="info">+{props.item.match_count - 1}</Badge> : null}
       </td>
       <td className="px-3 py-3 text-right">
