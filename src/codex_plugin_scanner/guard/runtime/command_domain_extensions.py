@@ -2,108 +2,25 @@
 
 from __future__ import annotations
 
+from .command_extension_matchers import executable_matcher, safe_flag_variant, safe_option_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import (
-    AnyMatcher,
-    CommandRuleSeverity,
-    CommandSafetyRule,
-    CommandSafeVariant,
-    ExecutableMatcher,
-)
+from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
 
-_DOCKER_GLOBAL_OPTIONS = frozenset({"--config", "--context", "--host", "-h", "--log-level"})
-_KUBECTL_GLOBAL_OPTIONS = frozenset(
+_CONTAINER_GLOBAL_OPTIONS = frozenset({"--config", "--context", "--host", "-H", "--log-level"})
+_KUBE_GLOBAL_OPTIONS = frozenset(
     {"--as", "--as-group", "--cluster", "--context", "--kubeconfig", "--namespace", "-n", "--server", "--user"}
 )
 _HELM_GLOBAL_OPTIONS = frozenset({"--kube-context", "--kubeconfig", "--namespace", "-n", "--registry-config"})
 _TERRAFORM_GLOBAL_OPTIONS = frozenset({"-chdir"})
 _PULUMI_GLOBAL_OPTIONS = frozenset({"--cwd", "-c", "--stack", "-s"})
-_EMPTY_STRING_SET: frozenset[str] = frozenset()
+_CDK_GLOBAL_OPTIONS = frozenset({"--app", "-a", "--context", "-c", "--profile", "--region"})
+_SAM_GLOBAL_OPTIONS = frozenset({"--config-env", "--config-file", "--profile", "--region"})
+_SERVERLESS_GLOBAL_OPTIONS = frozenset({"--config", "--region", "--stage", "--org", "--app"})
+_COMMON_FLAGS = frozenset({"--help", "-h", "--verbose"})
 
 
-def _executable_matcher(
-    executables: frozenset[str],
-    *subcommands: str,
-    required_flags: frozenset[str] = _EMPTY_STRING_SET,
-    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-) -> ExecutableMatcher:
-    return ExecutableMatcher(
-        executables=executables,
-        subcommands=subcommands,
-        required_flags=required_flags,
-        allow_leading_options=bool(leading_options_with_values),
-        leading_options_with_values=leading_options_with_values,
-    )
-
-
-def _flag_variants(
-    executables: frozenset[str],
-    *subcommands: str,
-    flags: frozenset[str],
-    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-) -> tuple[ExecutableMatcher, ...]:
-    return tuple(
-        _executable_matcher(
-            executables,
-            *subcommands,
-            required_flags=frozenset({flag}),
-            leading_options_with_values=leading_options_with_values,
-        )
-        for flag in sorted(flags)
-    )
-
-
-def _help_variant(matcher: ExecutableMatcher) -> CommandSafeVariant:
-    return CommandSafeVariant(
-        variant_id="help",
-        title="Command help",
-        matcher=ExecutableMatcher(
-            executables=matcher.executables,
-            subcommands=matcher.subcommands,
-            required_flags=frozenset({"--help"}),
-            allow_leading_options=matcher.allow_leading_options,
-            leading_options_with_values=matcher.leading_options_with_values,
-        ),
-    )
-
-
-def _help_variant_for_any(matcher: AnyMatcher) -> CommandSafeVariant:
-    help_matchers = tuple(
-        ExecutableMatcher(
-            executables=child.executables,
-            subcommands=child.subcommands,
-            required_flags=frozenset({"--help"}),
-            allow_leading_options=child.allow_leading_options,
-            leading_options_with_values=child.leading_options_with_values,
-        )
-        for child in matcher.matchers
-        if isinstance(child, ExecutableMatcher)
-    )
-    if len(help_matchers) != len(matcher.matchers):
-        raise ValueError("Help variants require executable matchers")
-    return CommandSafeVariant(
-        variant_id="help",
-        title="Command help",
-        matcher=AnyMatcher(matchers=help_matchers),
-    )
-
-
-def _kubernetes_dry_run_variant(subcommand: str) -> CommandSafeVariant:
-    return CommandSafeVariant(
-        variant_id="dry-run",
-        title=f"Kubernetes {subcommand} preview",
-        matcher=AnyMatcher(
-            matchers=tuple(
-                _executable_matcher(
-                    frozenset({"kubectl"}),
-                    subcommand,
-                    required_flags=frozenset({f"--dry-run={mode}"}),
-                    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-                )
-                for mode in ("client", "server")
-            )
-        ),
-    )
+def _any(*matchers) -> AnyMatcher:
+    return AnyMatcher(matchers=tuple(matchers))
 
 
 def _rule(
@@ -111,7 +28,7 @@ def _rule(
     rule_id: str,
     title: str,
     description: str,
-    matcher: ExecutableMatcher | AnyMatcher,
+    matcher: AnyMatcher,
     action_class: str,
     risk_classes: tuple[str, ...],
     safer_alternative: str,
@@ -131,243 +48,223 @@ def _rule(
     )
 
 
-_DOCKER_SYSTEM_PRUNE = _executable_matcher(
-    frozenset({"docker"}),
-    "system",
-    "prune",
-    leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-)
-_DOCKER_FORCE_REMOVE = AnyMatcher(
-    matchers=(
-        *_flag_variants(
-            frozenset({"docker"}),
-            "rm",
-            flags=frozenset({"--force", "-f"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-        ),
-        *_flag_variants(
-            frozenset({"docker"}),
-            "container",
-            "rm",
-            flags=frozenset({"--force", "-f"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-        ),
+def _container(*subcommands: str, required_flags: frozenset[str] = frozenset()) -> AnyMatcher:
+    return _any(
+        *(
+            executable_matcher(
+                executable,
+                *subcommands,
+                required_flags=required_flags,
+                global_options_with_values=_CONTAINER_GLOBAL_OPTIONS,
+                global_flags=_COMMON_FLAGS,
+            )
+            for executable in ("docker", "podman", "nerdctl")
+        )
     )
-)
-_DOCKER_PRIVILEGED_RUN = AnyMatcher(
-    matchers=(
-        _executable_matcher(
-            frozenset({"docker"}),
-            "run",
-            required_flags=frozenset({"--privileged"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-        ),
-        _executable_matcher(
-            frozenset({"docker"}),
-            "container",
-            "run",
-            required_flags=frozenset({"--privileged"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-        ),
-    )
-)
-_KUBECTL_DELETE = _executable_matcher(
-    frozenset({"kubectl"}),
-    "delete",
-    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-)
-_KUBECTL_DRAIN = _executable_matcher(
-    frozenset({"kubectl"}),
-    "drain",
-    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-)
-_HELM_UNINSTALL = _executable_matcher(
-    frozenset({"helm"}),
-    "uninstall",
-    leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-)
-_TERRAFORM_DESTROY = _executable_matcher(
-    frozenset({"terraform", "tofu"}),
-    "destroy",
-    leading_options_with_values=_TERRAFORM_GLOBAL_OPTIONS,
-)
-_TERRAFORM_APPLY_DESTROY = _executable_matcher(
-    frozenset({"terraform", "tofu"}),
-    "apply",
-    required_flags=frozenset({"-destroy"}),
-    leading_options_with_values=_TERRAFORM_GLOBAL_OPTIONS,
-)
-_PULUMI_DESTROY = _executable_matcher(
-    frozenset({"pulumi"}),
-    "destroy",
-    leading_options_with_values=_PULUMI_GLOBAL_OPTIONS,
-)
 
+
+def _kube(*subcommands: str) -> AnyMatcher:
+    return _any(
+        *(
+            executable_matcher(
+                executable,
+                *subcommands,
+                global_options_with_values=_KUBE_GLOBAL_OPTIONS,
+                global_flags=_COMMON_FLAGS,
+            )
+            for executable in ("kubectl", "oc")
+        )
+    )
+
+
+_CONTAINER_PRUNE = _container("system", "prune")
+_CONTAINER_FORCE_REMOVE = _any(
+    *_container("rm", required_flags=frozenset({"--force"})).matchers,
+    *_container("rm", required_flags=frozenset({"-f"})).matchers,
+    *_container("container", "rm", required_flags=frozenset({"--force"})).matchers,
+    *_container("container", "rm", required_flags=frozenset({"-f"})).matchers,
+)
+_CONTAINER_PRIVILEGED = _any(
+    *_container("run", required_flags=frozenset({"--privileged"})).matchers,
+    *_container("container", "run", required_flags=frozenset({"--privileged"})).matchers,
+)
+_KUBE_DELETE = _kube("delete")
+_KUBE_DRAIN = _any(*_kube("drain").matchers, executable_matcher("oc", "adm", "drain", global_options_with_values=_KUBE_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS))
+_OC_MUTATION = _any(
+    *(executable_matcher("oc", *path, global_options_with_values=_KUBE_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS) for path in (
+        ("apply",),
+        ("patch",),
+        ("scale",),
+        ("rollout", "restart"),
+        ("project",),
+        ("adm", "cordon"),
+        ("adm", "uncordon"),
+    ))
+)
+_HELM_UNINSTALL = _any(executable_matcher("helm", "uninstall", global_options_with_values=_HELM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS))
+_TERRAFORM_DESTROY = _any(
+    executable_matcher("terraform", "destroy", global_options_with_values=_TERRAFORM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("tofu", "destroy", global_options_with_values=_TERRAFORM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("terraform", "apply", required_flags=frozenset({"-destroy"}), global_options_with_values=_TERRAFORM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("tofu", "apply", required_flags=frozenset({"-destroy"}), global_options_with_values=_TERRAFORM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("pulumi", "destroy", global_options_with_values=_PULUMI_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("cdk", "destroy", global_options_with_values=_CDK_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("sam", "delete", global_options_with_values=_SAM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("serverless", "remove", global_options_with_values=_SERVERLESS_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("sls", "remove", global_options_with_values=_SERVERLESS_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+)
+_IAC_PRODUCTION_CHANGE = _any(
+    executable_matcher("cdk", "deploy", global_options_with_values=_CDK_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("sam", "deploy", global_options_with_values=_SAM_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("serverless", "deploy", global_options_with_values=_SERVERLESS_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+    executable_matcher("sls", "deploy", global_options_with_values=_SERVERLESS_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
+)
 
 DOMAIN_COMMAND_RULES = (
     _rule(
         rule_id="command.container-runtime.system-prune",
         title="Container system prune",
-        description=(
-            "Identifies broad cleanup of unused containers, networks, images, build cache, and optional volumes."
-        ),
-        matcher=_DOCKER_SYSTEM_PRUNE,
+        description="Identifies broad cleanup of unused container runtime state.",
+        matcher=_CONTAINER_PRUNE,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell",),
-        safer_alternative="List the targeted container resources and prune one resource class at a time.",
-        safe_variants=(_help_variant(_DOCKER_SYSTEM_PRUNE),),
+        safer_alternative="List targeted containers, images, networks, volumes, and build cache before pruning.",
+        safe_variants=(safe_flag_variant(_CONTAINER_PRUNE, variant_id="help", title="Command help", flag="--help"),),
     ),
     _rule(
         rule_id="command.container-runtime.forced-container-removal",
         title="Forced container removal",
-        description="Identifies forced removal that can terminate a running container without a graceful stop.",
-        matcher=_DOCKER_FORCE_REMOVE,
+        description="Identifies forced Docker, Podman, or nerdctl container removal.",
+        matcher=_CONTAINER_FORCE_REMOVE,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell",),
         safer_alternative="Stop the named container gracefully, inspect it, then remove that exact container.",
-        safe_variants=(_help_variant_for_any(_DOCKER_FORCE_REMOVE),),
+        safe_variants=(safe_flag_variant(_CONTAINER_FORCE_REMOVE, variant_id="help", title="Command help", flag="--help"),),
     ),
     _rule(
         rule_id="command.container-runtime.privileged-run",
         title="Privileged container execution",
-        description="Identifies containers launched with broad host-level privileges.",
-        matcher=_DOCKER_PRIVILEGED_RUN,
+        description="Identifies Docker, Podman, or nerdctl containers launched with broad host privileges.",
+        matcher=_CONTAINER_PRIVILEGED,
         action_class="docker-sensitive command",
-        risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Grant only the required capabilities and keep host devices and filesystems isolated.",
+        risk_classes=("destructive_shell", "network_egress", "execution"),
+        safer_alternative="Grant only required capabilities and keep host devices and filesystems isolated.",
         severity="critical",
-        safe_variants=(_help_variant_for_any(_DOCKER_PRIVILEGED_RUN),),
+        safe_variants=(safe_flag_variant(_CONTAINER_PRIVILEGED, variant_id="help", title="Command help", flag="--help"),),
     ),
     _rule(
         rule_id="command.kubernetes-operations.delete-resources",
         title="Kubernetes resource deletion",
-        description="Identifies deletion of live cluster resources.",
-        matcher=_KUBECTL_DELETE,
+        description="Identifies kubectl or OpenShift oc deletion of live cluster resources.",
+        matcher=_KUBE_DELETE,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Run a client-side dry run and review the exact resource names and namespace first.",
+        safer_alternative="Run a client-side dry run and review exact resource names and namespace first.",
         safe_variants=(
-            _help_variant(_KUBECTL_DELETE),
-            _kubernetes_dry_run_variant("delete"),
+            safe_flag_variant(_KUBE_DELETE, variant_id="help", title="Command help", flag="--help"),
+            safe_option_variant(_KUBE_DELETE, variant_id="dry-run", title="Kubernetes deletion preview", option="--dry-run", allowed_values=frozenset({"client", "server"})),
         ),
     ),
     _rule(
         rule_id="command.kubernetes-operations.drain-node",
         title="Kubernetes node drain",
-        description="Identifies node drains that evict workloads and make a node unschedulable.",
-        matcher=_KUBECTL_DRAIN,
+        description="Identifies kubectl or OpenShift node drains that evict workloads.",
+        matcher=_KUBE_DRAIN,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternative="Preview the drain and verify disruption budgets, node identity, and workload scope first.",
         safe_variants=(
-            _help_variant(_KUBECTL_DRAIN),
-            _kubernetes_dry_run_variant("drain"),
+            safe_flag_variant(_KUBE_DRAIN, variant_id="help", title="Command help", flag="--help"),
+            safe_option_variant(_KUBE_DRAIN, variant_id="dry-run", title="Kubernetes drain preview", option="--dry-run", allowed_values=frozenset({"client", "server"})),
         ),
+    ),
+    _rule(
+        rule_id="command.kubernetes-operations.openshift-mutation",
+        title="OpenShift cluster mutation",
+        description="Identifies OpenShift oc apply, patch, scale, rollout, project, cordon, and uncordon operations.",
+        matcher=_OC_MUTATION,
+        action_class="Kubernetes destructive command",
+        risk_classes=("destructive_shell", "network_egress", "execution"),
+        safer_alternative="Inspect the exact resource, namespace, and current rollout or node state before mutation.",
+        safe_variants=(safe_flag_variant(_OC_MUTATION, variant_id="help", title="Command help", flag="--help"),),
     ),
     _rule(
         rule_id="command.kubernetes-operations.helm-uninstall",
         title="Helm release removal",
-        description="Identifies uninstall operations that remove a release and its managed cluster resources.",
+        description="Identifies Helm uninstall operations that remove a release and managed resources.",
         matcher=_HELM_UNINSTALL,
         action_class="Kubernetes destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Run Helm uninstall with dry-run and confirm the release and namespace first.",
+        safer_alternative="Run Helm uninstall with dry-run and confirm release and namespace first.",
         safe_variants=(
-            _help_variant(_HELM_UNINSTALL),
-            CommandSafeVariant(
-                variant_id="dry-run",
-                title="Helm uninstall preview",
-                matcher=_executable_matcher(
-                    frozenset({"helm"}),
-                    "uninstall",
-                    required_flags=frozenset({"--dry-run"}),
-                    leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-                ),
-            ),
+            safe_flag_variant(_HELM_UNINSTALL, variant_id="help", title="Command help", flag="--help"),
+            safe_flag_variant(_HELM_UNINSTALL, variant_id="dry-run", title="Helm uninstall preview", flag="--dry-run"),
         ),
     ),
     _rule(
         rule_id="command.infrastructure-as-code.destroy",
         title="Infrastructure teardown",
-        description="Identifies infrastructure-as-code commands that destroy managed resources.",
-        matcher=AnyMatcher(matchers=(_TERRAFORM_DESTROY, _TERRAFORM_APPLY_DESTROY, _PULUMI_DESTROY)),
+        description="Identifies Terraform, OpenTofu, Pulumi, AWS CDK/SAM, and Serverless teardown commands.",
+        matcher=_TERRAFORM_DESTROY,
         action_class="infrastructure destructive command",
         risk_classes=("destructive_shell", "network_egress"),
-        safer_alternative="Generate and review a destroy preview for the selected workspace or stack first.",
+        safer_alternative="Generate and inspect a plan, diff, or preview for the selected environment before teardown.",
         severity="critical",
         safe_variants=(
+            safe_flag_variant(_TERRAFORM_DESTROY, variant_id="help", title="Command help", flag="--help"),
             CommandSafeVariant(
-                variant_id="help",
-                title="Command help",
-                matcher=AnyMatcher(
-                    matchers=(
-                        _executable_matcher(
-                            frozenset({"terraform", "tofu"}),
-                            "destroy",
-                            required_flags=frozenset({"--help"}),
-                            leading_options_with_values=_TERRAFORM_GLOBAL_OPTIONS,
-                        ),
-                        _executable_matcher(
-                            frozenset({"terraform", "tofu"}),
-                            "apply",
-                            required_flags=frozenset({"--help"}),
-                            leading_options_with_values=_TERRAFORM_GLOBAL_OPTIONS,
-                        ),
-                        _executable_matcher(
-                            frozenset({"pulumi"}),
-                            "destroy",
-                            required_flags=frozenset({"--help"}),
-                            leading_options_with_values=_PULUMI_GLOBAL_OPTIONS,
-                        ),
-                    )
-                ),
-            ),
-            CommandSafeVariant(
-                variant_id="preview-only",
+                variant_id="pulumi-preview-only",
                 title="Pulumi destroy preview",
-                matcher=_executable_matcher(
-                    frozenset({"pulumi"}),
-                    "destroy",
-                    required_flags=frozenset({"--preview-only"}),
-                    leading_options_with_values=_PULUMI_GLOBAL_OPTIONS,
-                ),
+                matcher=executable_matcher("pulumi", "destroy", required_flags=frozenset({"--preview-only"}), global_options_with_values=_PULUMI_GLOBAL_OPTIONS, global_flags=_COMMON_FLAGS),
             ),
         ),
     ),
+    _rule(
+        rule_id="command.infrastructure-as-code.production-change",
+        title="Infrastructure production deployment",
+        description="Identifies AWS CDK, SAM, and Serverless Framework deployment operations.",
+        matcher=_IAC_PRODUCTION_CHANGE,
+        action_class="infrastructure destructive command",
+        risk_classes=("destructive_shell", "network_egress", "execution"),
+        safer_alternative="Inspect the generated change set, diff, or package before applying production infrastructure changes.",
+        safe_variants=(safe_flag_variant(_IAC_PRODUCTION_CHANGE, variant_id="help", title="Command help", flag="--help"),),
+    ),
 )
-
 
 DOMAIN_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.kubernetes-operations",
         name="Kubernetes operation protection",
-        description="Reviews cluster operations that delete resources, evict workloads, or remove releases.",
+        description="Reviews Kubernetes, OpenShift, and Helm cluster mutations and teardown operations.",
         action_classes=("Kubernetes destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
+        risk_classes=("destructive_shell", "network_egress", "execution"),
         safer_alternatives=(
             "Use client-side dry runs and explicit namespaces before mutating cluster resources.",
             "Review disruption budgets and exact workload scope before draining nodes.",
         ),
         reference_urls=(
-            "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/",
-            "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_drain/",
+            "https://kubernetes.io/docs/reference/kubectl/",
+            "https://docs.redhat.com/en/documentation/openshift_container_platform/",
             "https://helm.sh/docs/helm/helm_uninstall/",
         ),
     ),
     CommandExtensionSpec(
         extension_id="command.infrastructure-as-code",
         name="Infrastructure-as-code protection",
-        description="Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi.",
+        description="Reviews teardown and high-impact deployment through Terraform, OpenTofu, Pulumi, AWS CDK/SAM, and Serverless Framework.",
         action_classes=("infrastructure destructive command",),
-        risk_classes=("destructive_shell", "network_egress"),
+        risk_classes=("destructive_shell", "network_egress", "execution"),
         safer_alternatives=(
-            "Create and inspect a saved plan or preview before applying destructive changes.",
-            "Confirm the selected workspace, stack, account, and region before teardown.",
+            "Create and inspect a saved plan, diff, change set, or preview before applying destructive changes.",
+            "Confirm the selected workspace, stack, account, stage, and region before mutation.",
         ),
         reference_urls=(
             "https://developer.hashicorp.com/terraform/cli/commands/destroy",
             "https://opentofu.org/docs/cli/commands/destroy/",
             "https://www.pulumi.com/docs/iac/cli/commands/pulumi_destroy/",
+            "https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-destroy.html",
+            "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-delete.html",
+            "https://www.serverless.com/framework/docs/providers/aws/cli-reference/remove",
         ),
     ),
 )
