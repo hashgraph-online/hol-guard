@@ -1,4 +1,4 @@
-"""Public metadata preserves native identity bounds and supplemental delegation."""
+"""Public metadata preserves native identity bounds and explicit claim authority."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.listing import listing_template, validate_listing
+from codex_plugin_scanner.guard.extension_builder.listing import listing_schema, listing_template, validate_listing
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
 
@@ -75,7 +75,20 @@ def test_directory_rejects_unbounded_dependent_fields() -> None:
             )
 
 
-def test_omitted_and_empty_delegates_preserve_automatic_provenance(tmp_path: Path) -> None:
+def test_listing_contract_distinguishes_presentation_from_claim_authority() -> None:
+    schema = listing_schema()
+    assert schema["title"] == "HOL Guard extension publisher listing metadata"
+    assert "maintainerGithubIds is reviewed claim-authority input" in schema["description"]
+    assert "Validation does not itself grant authority" in schema["description"]
+    packaged = json.loads(
+        (REPOSITORY / "src/codex_plugin_scanner/guard/extension_builder/listing.v1.schema.json").read_text()
+    )
+    public = json.loads((REPOSITORY / "contracts/extensions/listing.v1.schema.json").read_text())
+    assert schema == public
+    assert packaged == public
+
+
+def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Path) -> None:
     specification = importlib.util.spec_from_file_location(
         "publisher_contract_export", REPOSITORY / "scripts/export_extension_directory.py"
     )
@@ -87,15 +100,20 @@ def test_omitted_and_empty_delegates_preserve_automatic_provenance(tmp_path: Pat
     listings = tmp_path / "contributions/extension-listings"
     listings.mkdir()
     path = listings / "command.blitcp.json"
-    row = json.loads(listing_template(metadata()))
-    row["extensionId"] = "command.blitcp"
-    for delegates in (None, [], ["6068672"]):
-        if delegates is not None:
-            row["maintainerGithubIds"] = delegates
+    base = json.loads(listing_template(metadata()))
+    base["extensionId"] = "command.blitcp"
+    for claimants in (None, [], ["6068672"]):
+        row = dict(base)
+        if claimants is not None:
+            row["maintainerGithubIds"] = claimants
         path.write_text(json.dumps(row))
         payload = exporter.export_directory(tmp_path)
         entry = next(item for item in payload["entries"] if item["id"] == "command.blitcp")
         assert entry["claimPolicy"] == "provenance"
-        assert entry["maintainerGithubIds"] == (delegates or [])
+        assert entry["maintainerGithubIds"] == (claimants or [])
         assert entry["trustClass"] == "external"
         assert entry["protectionModel"] == "external-opt-in"
+
+    description = directory_schema()["properties"]["entries"]["items"]["properties"]["maintainerGithubIds"]["description"]
+    assert "only IDs in this accepted array" in description
+    assert "Pull-request authorship is attribution evidence only" in description

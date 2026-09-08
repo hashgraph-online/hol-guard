@@ -142,7 +142,7 @@
             ]
           },
           "maintainerGithubIds": {
-            "description": "Additional reviewed profile claimants. An empty array means no extra delegates. For claimPolicy provenance, verify introducing-PR author eligibility independently; delegates never replace that evidence. For claimPolicy project, this array grants no third-party claim authority.",
+            "description": "Reviewed numeric GitHub IDs authorized to manage this extension's publisher profile. For claimPolicy provenance, only IDs in this accepted array are eligible for automatic claims or elevated transfers; an empty array means no automatic claimant. Pull-request authorship is attribution evidence only. For claimPolicy project, this array grants no third-party claim authority.",
             "type": "array",
             "maxItems": 8,
             "uniqueItems": true,
