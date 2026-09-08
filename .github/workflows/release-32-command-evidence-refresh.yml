@@ -108,8 +108,30 @@ jobs:
             tests/test_guard_command_common_cli_gaps.py \
             tests/test_policy_bundle_delivery_runtime.py::test_signed_cloud_extension_projection_matches_shared_vector \
             --tb=short
-          uv run --no-sync ruff check src/ tests/test_guard_command_ecosystem_setup.py tests/test_guard_command_review_followup.py tests/test_policy_bundle_delivery_runtime.py
-          uv run --no-sync ruff format --check src/ tests/test_guard_command_ecosystem_setup.py tests/test_guard_command_review_followup.py tests/test_policy_bundle_delivery_runtime.py
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_1.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_2.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_ecosystem_setup.py \
+            tests/test_guard_command_review_followup.py \
+            tests/test_policy_bundle_delivery_runtime.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_1.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_2.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_ecosystem_setup.py \
+            tests/test_guard_command_review_followup.py \
+            tests/test_policy_bundle_delivery_runtime.py
       - name: Commit evidence and remove one-shot workflow
         shell: bash
         run: |
