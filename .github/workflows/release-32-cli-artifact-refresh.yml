@@ -45,7 +45,6 @@ jobs:
       - name: Refresh registry count ratchet
         run: |
           uv run --no-sync python - <<'PY'
-          import re
           from pathlib import Path
 
           from codex_plugin_scanner.guard.runtime.command_extensions import command_extensions_payload
@@ -55,15 +54,11 @@ jobs:
           rule_count = sum(extension["rule_count"] for extension in payload["extensions"])
           test_path = root / "tests" / "test_guard_command_extensions.py"
           text = test_path.read_text(encoding="utf-8")
-          text, replacements = re.subn(
-              r'assert sum\(extension\["rule_count"\] for extension in payload\["extensions"\]\) == \d+',
-              f'assert sum(extension["rule_count"] for extension in payload["extensions"]) == {rule_count}',
-              text,
-              count=1,
-          )
-          if replacements != 1:
-              raise SystemExit("registry rule-count ratchet assertion not found")
-          test_path.write_text(text, encoding="utf-8")
+          needle = 'assert sum(extension["rule_count"] for extension in payload["extensions"]) == 147'
+          replacement = f'assert sum(extension["rule_count"] for extension in payload["extensions"]) == {rule_count}'
+          if text.count(needle) != 1:
+              raise SystemExit("registry rule-count ratchet assertion not found exactly once")
+          test_path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
           print(f"refreshed registry rule-count ratchet to {rule_count}")
           PY
 
