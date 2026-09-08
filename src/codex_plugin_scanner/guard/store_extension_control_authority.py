@@ -169,11 +169,20 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             raise ExtensionControlAuthorityError("managed controls revision state is missing")
         key = self._authority_key(required=True)
         assert key is not None
+        if not isinstance(active, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls activation state")
+        active_catalog_digest = active.get("catalogDigest")
+        if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
+            raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
         managed_layers, managed_revision = managed_controls_layers_from_activation_state(
             active,
-            catalog_digest=view.catalog_digest,
+            catalog_digest=active_catalog_digest,
             authority_key=key,
         )
+        if active_catalog_digest != view.catalog_digest:
+            if any(layer.catalog_digest != active_catalog_digest for layer in managed_layers):
+                raise ExtensionControlAuthorityError("managed controls activation layer catalog mismatch")
+            managed_layers = tuple(replace(layer, catalog_digest=view.catalog_digest) for layer in managed_layers)
         durable_revision = managed_controls_revision_from_state(
             revision_state,
             authority_key=key,
