@@ -9,11 +9,13 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
+from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherContractError, canonical_contract_digest
 from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     COMMAND_PERMISSION_SCHEMA_VERSION,
     CommandPermissionCatalog,
     CommandPermissionSpec,
 )
+from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 
 _GITHUB_PERMISSION_IDS = {
@@ -187,7 +189,6 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "14dfe51da62093fc36240bd1deed75626c5931179b89b4e157c0530afb939b09"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )
@@ -200,6 +201,84 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def test_registry_digest_changes_when_nested_matcher_contract_changes() -> None:
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    extension = next(item for item in registry.extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index for index, item in enumerate(extension.rules) if isinstance(item.matcher, ExecutableMatcher)
+    )
+    rule = extension.rules[rule_index]
+    assert isinstance(rule.matcher, ExecutableMatcher)
+    changed_matcher = replace(rule.matcher, required_flags=rule.matcher.required_flags | {"--identity-test"})
+    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),
+    )
+    changed_registry = CommandSafetyExtensionRegistry(
+        (changed_extension, *(item for item in registry.extensions if item is not extension))
+    )
+
+    assert changed_rule.to_dict()["matcher_contract_digest"] != rule.to_dict()["matcher_contract_digest"]
+    assert changed_registry.catalog_digest != registry.catalog_digest
+
+    family_extension = next(
+        item for item in registry.extensions if any(rule.family is not None for rule in item.rules)
+    )
+    family_rule_index = next(index for index, item in enumerate(family_extension.rules) if item.family is not None)
+    family_rule = family_extension.rules[family_rule_index]
+    assert family_rule.family is not None
+    changed_family_rule = replace(family_rule, family=f"{family_rule.family}-identity")
+    changed_family_extension = replace(
+        family_extension,
+        rules=(
+            *family_extension.rules[:family_rule_index],
+            changed_family_rule,
+            *family_extension.rules[family_rule_index + 1 :],
+        ),
+    )
+    changed_family_registry = CommandSafetyExtensionRegistry(
+        (changed_family_extension, *(item for item in registry.extensions if item is not family_extension))
+    )
+    assert changed_family_registry.catalog_digest != registry.catalog_digest
+
+    safe_variant_rules = [
+        item for current_extension in registry.extensions for item in current_extension.rules if item.safe_variants
+    ]
+    assert safe_variant_rules
+    assert all(
+        isinstance(variant.to_dict()["matcher_contract_digest"], str)
+        and len(variant.to_dict()["matcher_contract_digest"]) == 64
+        for item in safe_variant_rules
+        for variant in item.safe_variants
+    )
+
+
+def test_matcher_contract_rejects_unsupported_values() -> None:
+    with pytest.raises(MatcherContractError, match="unsupported catalog contract value"):
+        canonical_contract_digest(object())
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        {1: "integer-key"},
+        {"1": "string-key", 1: "integer-key"},
+        {1: "integer-key", "1": "string-key"},
+    ],
+)
+def test_matcher_contract_rejects_non_string_mapping_keys(mapping: dict[object, str]) -> None:
+    with pytest.raises(MatcherContractError, match="catalog contract mappings require string keys"):
+        canonical_contract_digest(mapping)
+
+
+def test_matcher_contract_string_mapping_order_is_deterministic() -> None:
+    first = {"beta": "two", "alpha": "one"}
+    second = {"alpha": "one", "beta": "two"}
+
+    assert canonical_contract_digest(first) == canonical_contract_digest(second)
 
 
 def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_references() -> None:

@@ -8,6 +8,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -754,7 +755,11 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         runner.close()
 
     assert len(results) == 48
-    assert all(result.reason_code is None for result in results), runner.stats()
+    result_reason_codes = Counter(result.reason_code for result in results)
+    assert all(result.reason_code is None for result in results), {
+        "runner_stats": runner.stats(),
+        "result_reason_codes": dict(result_reason_codes),
+    }
     assert all(result.payload is not None for result in results), runner.stats()
     assert all(result.payload.get("test_worker") == "capacity" for result in results if result.payload is not None)
     assert scheduler.stats()["completed"] == 48
