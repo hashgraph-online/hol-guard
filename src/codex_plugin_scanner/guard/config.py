@@ -32,8 +32,14 @@ from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_m
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
 from .presentation_mode import (
     PRESENTATION_SCHEMA_VERSION,
+    UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
     coerce_persisted_presentation_mode,
     coerce_presentation_mode_write,
+)
+from .presentation_settings import (
+    PRESENTATION_SETTING_INPUT_KEYS,
+    apply_presentation_settings_update,
+    resolve_presentation_settings_update,
 )
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
@@ -646,7 +652,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
             "value": config.presentation_mode,
             "source": config.presentation_source,
             "explicit": config.presentation_mode_explicit,
-            "writable": True,
+            "writable": presentation_writable,
             "schema_version": config.presentation_schema_version,
             "revision": config.presentation_revision,
             "diagnostic": config.presentation_diagnostic,
@@ -725,35 +731,13 @@ def _update_guard_settings_locked(
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
-    presentation_keys = {
-        "presentation_mode",
-        "presentation_mode_explicit",
-        "presentation_schema_version",
-    }
-    presentation_preference_keys = {"presentation_mode", "presentation_mode_explicit"}
-    supplied_presentation = presentation_keys & payload.keys()
-    coerced_presentation: dict[str, object] = {
-        key: _coerce_editable_setting(key, payload[key]) for key in supplied_presentation
-    }
-    has_presentation_preference = bool(presentation_preference_keys & payload.keys())
-    if "presentation_revision" in payload and not has_presentation_preference:
-        raise ValueError("presentation_revision requires a presentation preference change.")
-    requested_presentation_mode = coerced_presentation.get(
-        "presentation_mode",
-        current_config.presentation_mode,
+    presentation_update = resolve_presentation_settings_update(
+        payload,
+        current_mode=coerce_presentation_mode_write(current_config.presentation_mode),
+        current_explicit=current_config.presentation_mode_explicit,
+        current_revision=current_config.presentation_revision,
+        current_writable=current_config.presentation_diagnostic != UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC,
     )
-    requested_presentation_explicit = coerced_presentation.get(
-        "presentation_mode_explicit",
-        current_config.presentation_mode_explicit,
-    )
-    presentation_change = has_presentation_preference and (
-        requested_presentation_mode != current_config.presentation_mode
-        or requested_presentation_explicit != current_config.presentation_mode_explicit
-    )
-    if presentation_change:
-        expected_revision = payload.get("presentation_revision")
-        if expected_revision is not None and expected_revision != current_config.presentation_revision:
-            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
     switching_to_custom_without_overrides = (
         payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()
     )
@@ -765,15 +749,12 @@ def _update_guard_settings_locked(
     for key, value in payload.items():
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
-        if key in presentation_keys:
-            if presentation_change:
-                next_payload[key] = coerced_presentation[key]
+        if key in PRESENTATION_SETTING_INPUT_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
-    if presentation_change:
-        next_payload["presentation_mode_explicit"] = True
-        next_payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
-        next_payload["presentation_revision"] = current_config.presentation_revision + 1
+    apply_presentation_settings_update(
+        next_payload, presentation_update, current_revision=current_config.presentation_revision
+    )
     incoming_selected_posture = _incoming_selects_protection_posture(
         payload,
         current_config,
