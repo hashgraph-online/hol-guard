@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import ssl
 import sys
 from pathlib import Path
@@ -13,6 +14,14 @@ from .managed_file_trust import machine_controlled_file_is_trusted
 
 class ManagedTrustError(RuntimeError):
     """A managed TLS trust source is unavailable or invalid."""
+
+
+def build_default_ssl_context() -> ssl.SSLContext:
+    """Keep platform trust and explicit CA overrides usable in bundled runtimes."""
+    context = ssl.create_default_context()
+    if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
+        context.load_verify_locations(cafile=str(_requests_ca_bundle()))
+    return context
 
 
 def _requests_ca_bundle() -> Path:

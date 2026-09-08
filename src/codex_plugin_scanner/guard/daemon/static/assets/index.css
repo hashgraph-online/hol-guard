@@ -6280,6 +6280,10 @@
       max-width: 9rem;
     }
 
+    .sm\:max-w-sm {
+      max-width: var(--container-sm);
+    }
+
     .sm\:min-w-\[6\.5rem\] {
       min-width: 6.5rem;
     }
