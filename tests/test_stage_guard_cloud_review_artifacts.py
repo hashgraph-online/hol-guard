@@ -43,6 +43,21 @@ def test_stage_artifacts_fails_closed_when_source_is_missing(tmp_path: Path) -> 
         MODULE.stage_artifacts(tmp_path)
 
 
+def test_stage_artifacts_includes_repro_surgeon_contribution(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    source_name = "contributions/extensions/command.repro-surgeon.json"
+    source = tmp_path / source_name
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text('{"id":"command.repro-surgeon"}', encoding="utf-8")
+
+    MODULE.stage_artifacts(tmp_path)
+
+    destination = (
+        tmp_path / "src/codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repro-surgeon.json"
+    )
+    assert destination.read_text(encoding="utf-8") == '{"id":"command.repro-surgeon"}'
+
+
 def test_stage_artifacts_includes_existing_package_inits(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
     data_root = tmp_path / "src/codex_plugin_scanner/guard/contracts/data"
