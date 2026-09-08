@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from .command_common_cli_matchers import _OC_FLAGS, _OC_OPTIONS
 from .command_common_cli_matchers_extra import (
-    DOTNET_POSITIONAL_PACKAGE,
-    MONGOSH_MUTATION,
-    SQLITE_MUTATION,
     _ARGO_ADDITIONAL_RECONCILE,
     _CDK_ALIAS_DESTROY,
     _FIREBASE_SECRET_CHANGE,
@@ -18,6 +15,9 @@ from .command_common_cli_matchers_extra import (
     _RAILWAY_ALIAS_DESTRUCTIVE,
     _SLS_ALIAS_REMOVE,
     _VAULT_ADDITIONAL_MUTATION,
+    DOTNET_POSITIONAL_PACKAGE,
+    MONGOSH_MUTATION,
+    SQLITE_MUTATION,
 )
 from .command_common_cli_rule_support import help_variants, rule
 from .command_common_cli_support import _path_bundle

@@ -5,7 +5,6 @@ from __future__ import annotations
 from .command_extension_matchers import executable_matcher, executable_path_set_matcher
 from .command_rules import AnyMatcher
 
-
 _EMPTY: frozenset[str] = frozenset()
 _RUNNER_OPTIONS = frozenset(
     {

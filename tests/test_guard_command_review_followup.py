@@ -6,7 +6,6 @@ from pathlib import Path
 
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 
-
 REVIEW_COMMENT_CASES: tuple[tuple[str, str, str], ...] = (
     (
         "bunx cdk destroy",

@@ -32,11 +32,10 @@ def _option_value(arguments: tuple[str, ...], long_name: str, short_name: str) -
     while index < len(arguments):
         argument = arguments[index]
         lowered = argument.lower()
-        if lowered in {long_name, short_name}:
-            if index + 1 < len(arguments):
-                values.append(arguments[index + 1])
-                index += 2
-                continue
+        if lowered in {long_name, short_name} and index + 1 < len(arguments):
+            values.append(arguments[index + 1])
+            index += 2
+            continue
         if lowered.startswith(f"{long_name}="):
             values.append(argument.split("=", 1)[1])
         elif lowered.startswith(short_name) and lowered != short_name:
