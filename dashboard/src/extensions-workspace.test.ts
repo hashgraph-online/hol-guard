@@ -151,6 +151,30 @@ assert.match(totpRecoveryMarkup, /Authenticator code/);
 assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
 assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
 assert.match(totpRecoveryMarkup, /role="alert"/);
+assert.match(totpRecoveryMarkup, /<form/);
+assert.match(totpRecoveryMarkup, /id="[^"]*-approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /for="[^"]*-approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /type="submit"/);
+assert.match(totpRecoveryMarkup, /autoComplete="one-time-code"/);
+assert.match(totpRecoveryMarkup, /enterKeyHint="done"/);
+
+const busyMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
+  title: "Repair extension controls",
+  detail: "Authenticate this repair on your device.",
+  confirmLabel: "Repair controls",
+  busy: true,
+  busyLabel: "Repairing…",
+  approvalGate: {
+    enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false,
+    cooldown_expires_at: null, locked_until: null, fail_closed: true,
+    strict_all_decisions: false, totp_enabled: true,
+  },
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(busyMarkup, /role="status"/);
+assert.match(busyMarkup, /tabindex="0"/);
+assert.match(busyMarkup, /Repairing…/);
 
 const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
   settings: { approval_gate: {

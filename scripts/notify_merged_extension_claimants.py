@@ -182,26 +182,39 @@ def _extension_id_from_path(path: str, prefix: str) -> str | None:
     return name
 
 
-def changed_extension_ids(files: list[dict[str, Any]]) -> tuple[set[str], set[str]]:
-    """Return contribution-changed and listing-changed extension IDs."""
+def _extension_change(path: object) -> tuple[str, str] | None:
+    if not isinstance(path, str):
+        return None
+    listing_id = _extension_id_from_path(path, LISTING_PREFIX)
+    if listing_id:
+        return "listing", listing_id
+    for prefix in CONTRIBUTION_PREFIXES:
+        contribution_id = _extension_id_from_path(path, prefix)
+        if contribution_id:
+            return "contribution", contribution_id
+    return None
+
+
+def changed_extension_ids(files: list[dict[str, Any]]) -> tuple[set[str], set[str], set[str]]:
+    """Return contribution, listing, and rename-affected extension IDs."""
     contributions: set[str] = set()
     listings: set[str] = set()
+    renamed: set[str] = set()
     for item in files:
-        if item.get("status") == "removed":
+        status = item.get("status")
+        if status == "removed":
             continue
-        path = item.get("filename")
-        if not isinstance(path, str):
+        current = _extension_change(item.get("filename"))
+        if current:
+            kind, extension_id = current
+            (listings if kind == "listing" else contributions).add(extension_id)
+        if status != "renamed":
             continue
-        listing_id = _extension_id_from_path(path, LISTING_PREFIX)
-        if listing_id:
-            listings.add(listing_id)
-            continue
-        for prefix in CONTRIBUTION_PREFIXES:
-            contribution_id = _extension_id_from_path(path, prefix)
-            if contribution_id:
-                contributions.add(contribution_id)
-                break
-    return contributions, listings
+        for path in (item.get("filename"), item.get("previous_filename")):
+            renamed_change = _extension_change(path)
+            if renamed_change:
+                renamed.add(renamed_change[1])
+    return contributions, listings, renamed
 
 
 def _plain_text(value: object, *, minimum: int, maximum: int, field: str) -> str:
@@ -245,7 +258,7 @@ def _public_https(value: object) -> None:
 def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str, ...]:
     """Validate the complete listing contract, then return its reviewed claimant IDs."""
     keys = frozenset(listing)
-    if not LISTING_REQUIRED_KEYS <= keys or not keys <= LISTING_ALLOWED_KEYS:
+    if not keys.issuperset(LISTING_REQUIRED_KEYS) or not keys.issubset(LISTING_ALLOWED_KEYS):
         raise ClaimNoticeError(f"{extension_id}: listing fields do not match the canonical schema")
     if listing.get("schemaVersion") != "guard.extension-listing.v1":
         raise ClaimNoticeError(f"{extension_id}: unsupported extension listing schema")
@@ -290,7 +303,13 @@ def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str
         raise ClaimNoticeError(f"{extension_id}: maintainerGithubIds must be unique")
 
     try:
-        encoded = json.dumps(listing, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        encoded = json.dumps(
+            listing,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
     except (TypeError, ValueError) as error:
         raise ClaimNoticeError(f"{extension_id}: listing cannot be canonically serialized") from error
     if len(encoded) > MAX_LISTING_BYTES:
@@ -348,7 +367,7 @@ def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
     return False
 
 
-def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
+def collect_notice_items(client: GitHubApi, pr_number: int, *, allow_renames: bool = False) -> list[NoticeItem]:
     repo = client.repo_metadata()
     default_branch = repo.get("default_branch")
     if not isinstance(default_branch, str) or not default_branch:
@@ -378,10 +397,14 @@ def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
         print(f"PR #{pr_number}: merge commit is no longer on canonical {default_branch}; skipping")
         return []
 
-    contribution_changes, listing_changes = changed_extension_ids(client.pull_request_files(pr_number))
-    candidates = sorted(contribution_changes | listing_changes)
+    contribution_changes, listing_changes, rename_changes = changed_extension_ids(client.pull_request_files(pr_number))
+    candidates = contribution_changes | listing_changes
+    if rename_changes and not allow_renames:
+        print(f"PR #{pr_number}: rename-affected extensions require explicit maintainer backfill")
+        candidates -= rename_changes
+    candidates = sorted(candidates)
     if not candidates:
-        print(f"PR #{pr_number}: no extension contribution or listing changes; skipping")
+        print(f"PR #{pr_number}: no automatically claimable extension changes; skipping")
         return []
 
     items: list[NoticeItem] = []
@@ -419,11 +442,18 @@ def collect_notice_items(client: GitHubApi, pr_number: int) -> list[NoticeItem]:
     return items
 
 
-def process(client: GitHubApi, pr_number: int, studio_url: str, *, dry_run: bool = False) -> int:
+def process(
+    client: GitHubApi,
+    pr_number: int,
+    studio_url: str,
+    *,
+    dry_run: bool = False,
+    allow_renames: bool = False,
+) -> int:
     if has_trusted_notice(client.comments(pr_number)):
         print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping")
         return 0
-    items = collect_notice_items(client, pr_number)
+    items = collect_notice_items(client, pr_number, allow_renames=allow_renames)
     if not items:
         return 0
     body = build_comment(items, studio_url.rstrip("/"))
@@ -441,6 +471,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument("--studio-url", default=os.environ.get("GUARD_EXTENSION_STUDIO_URL", DEFAULT_STUDIO_URL))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-renames", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -448,7 +479,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     try:
-        return process(GitHubApi(token, args.repo), args.pr_number, args.studio_url, dry_run=args.dry_run)
+        return process(
+            GitHubApi(token, args.repo),
+            args.pr_number,
+            args.studio_url,
+            dry_run=args.dry_run,
+            allow_renames=args.allow_renames,
+        )
     except ClaimNoticeError as error:
         print(f"extension claim notice failed: {error}", file=sys.stderr)
         return 1

@@ -136,11 +136,18 @@ and verifies the current numeric GitHub ID before accepting a claim.
 
 The post-merge `Extension Claim Notice` workflow runs only after a pull request is
 merged into the repository's default branch and only for native contribution or
-publisher-listing changes. It compares the canonical merge commit with its first
-parent, reads the accepted sidecar at the merge SHA, and notifies only newly
-accepted `maintainerGithubIds`. For a newly introduced native contribution, all
-accepted IDs in its merged sidecar are eligible for the notice. Pull-request
+publisher-listing changes. It compares the merged source with the pull request's
+recorded pre-merge base revision, verifies both ancestry and canonical-branch
+membership, reads the accepted sidecar at the merged source SHA, and notifies only
+newly accepted `maintainerGithubIds`. For a newly introduced native contribution,
+all accepted IDs in its merged sidecar are eligible for the notice. Pull-request
 authorship is never substituted for missing authority.
+
+Rename-affected contributions and publisher listings are never invited
+automatically. After maintainers review the renamed identity and claimant mapping,
+they can use the manual backfill with `allow_renames` enabled. This keeps rename
+handling behind an explicit maintainer decision instead of treating a new filename
+as a new source of authority.
 
 Notices are idempotent on each merged PR and can be backfilled with the workflow's
 manual `pr_number` input. A removed, non-canonical, malformed, or authority-free

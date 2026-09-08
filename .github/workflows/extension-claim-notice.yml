@@ -13,6 +13,11 @@ on:
         description: "Merged PR number to backfill"
         required: true
         type: string
+      allow_renames:
+        description: "Allow explicit maintainer backfill for rename-affected extensions"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -40,8 +45,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          ALLOW_RENAMES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_renames || 'false' }}
           GUARD_EXTENSION_STUDIO_URL: https://hol.org/guard/extension-studio
-        run: >-
-          python3 scripts/notify_merged_extension_claimants.py
-          --repo "$GITHUB_REPOSITORY"
-          --pr-number "$PR_NUMBER"
+        run: |
+          args=(
+            scripts/notify_merged_extension_claimants.py
+            --repo "$GITHUB_REPOSITORY"
+            --pr-number "$PR_NUMBER"
+          )
+          if [[ "$ALLOW_RENAMES" == "true" ]]; then
+            args+=(--allow-renames)
+          fi
+          python3 "${args[@]}"

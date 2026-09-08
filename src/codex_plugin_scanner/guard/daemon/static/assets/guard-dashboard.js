@@ -19734,6 +19734,9 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
   return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
+  const instanceId = reactExports.useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
   const handleTotpChange = reactExports.useCallback((event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
@@ -19743,31 +19746,37 @@ function ApprovalProofFieldInputs(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
         ref: props.passwordRef,
+        id: passwordFieldId,
         type: "password",
         autoComplete: "current-password",
+        name: "password",
+        enterKeyHint: "done",
         value: props.approvalPassword,
         onChange: props.onApprovalPasswordChange,
         className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       }
     )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: totpFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
+        id: totpFieldId,
         type: "text",
         inputMode: "numeric",
         pattern: "[0-9]*",
         maxLength: 6,
         autoComplete: "one-time-code",
         name: "one-time-code",
+        enterKeyHint: "done",
         autoFocus: true,
+        "aria-required": "true",
         value: props.approvalTotpCode,
         onChange: handleTotpChange,
         className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
@@ -20035,14 +20044,15 @@ function useFocusTrap(active, containerRef) {
     const container2 = containerRef.current;
     if (!container2) return;
     previouslyFocusedRef.current = document.activeElement;
-    const focusable = getFocusableElements(container2);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (first) {
-      first.focus();
+    const initial = getFocusableElements(container2);
+    if (initial[0]) {
+      initial[0].focus();
     }
     function handleKeyDown(event) {
       if (event.key !== "Tab") return;
+      const focusable = getFocusableElements(container2);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (focusable.length === 0) {
         event.preventDefault();
         return;
@@ -20052,11 +20062,9 @@ function useFocusTrap(active, containerRef) {
           event.preventDefault();
           last?.focus();
         }
-      } else {
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     }
     container2.addEventListener("keydown", handleKeyDown);

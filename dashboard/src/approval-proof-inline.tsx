@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
@@ -55,6 +55,9 @@ export function buildApprovalProofCredentials(
 }
 
 export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
+  const instanceId = useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
   const handleTotpChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
@@ -71,28 +74,34 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
   return (
     <div className="space-y-3">
       {needsPassword ? (
-        <label className="block">
+        <label className="block" htmlFor={passwordFieldId}>
         <span className="text-sm font-semibold text-brand-dark">Approval password</span>
         <input
           ref={props.passwordRef}
+          id={passwordFieldId}
           type="password"
           autoComplete="current-password"
+          name="password"
+          enterKeyHint="done"
           value={props.approvalPassword}
           onChange={props.onApprovalPasswordChange}
           className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
         </label>
       ) : (
-        <label className="block">
+        <label className="block" htmlFor={totpFieldId}>
           <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
           <input
+            id={totpFieldId}
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
             autoComplete="one-time-code"
             name="one-time-code"
+            enterKeyHint="done"
             autoFocus
+            aria-required="true"
             value={props.approvalTotpCode}
             onChange={handleTotpChange}
             className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
