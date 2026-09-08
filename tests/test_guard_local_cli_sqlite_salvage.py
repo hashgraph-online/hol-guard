@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from codex_plugin_scanner.guard import sqlite_recovery
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
@@ -130,33 +131,75 @@ def test_salvage_copies_command_catalog_and_states(tmp_path: Path) -> None:
     assert destination.read_local_cli_command_states(_identity().cli_id) == {"navigate": "block"}
 
 
+def _source_that_fails_after_first_select_row(connection: sqlite3.Connection) -> object:
+    original = connection.execute
+
+    class _Source:
+        def execute(self, sql: str, parameters: object = ()) -> object:
+            cursor = original(sql, parameters)
+            if not sql.strip().lower().startswith("select "):
+                return cursor
+            rows = list(cursor)
+            if not rows:
+                return cursor
+
+            class _Cursor:
+                def __iter__(self) -> object:
+                    yield rows[0]
+                    raise sqlite3.DatabaseError("btreeInitPage")
+
+            return _Cursor()
+
+    return _Source()
+
+
 def test_copy_keeps_rows_read_before_source_failure(tmp_path: Path) -> None:
     source = _grant_store(tmp_path / "src")
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
-        original = src.execute
-
-        class _Source:
-            def execute(self, sql: str, parameters: object = ()) -> object:
-                cursor = original(sql, parameters)
-                if not sql.strip().lower().startswith("select "):
-                    return cursor
-                rows = list(cursor)
-                if not rows:
-                    return cursor
-
-                class _Cursor:
-                    def __iter__(self) -> object:
-                        yield rows[0]
-                        raise sqlite3.DatabaseError("btreeInitPage")
-
-                return _Cursor()
-
-        assert _copy_allowlisted_table(_Source(), dst, "local_cli_grant") is True
+        assert _copy_allowlisted_table(_source_that_fails_after_first_select_row(src), dst, "local_cli_grant") is True
         dst.commit()
     granted = destination.read_local_cli_grant(_identity().cli_id)
     assert granted is not None
     assert granted["state"] == "allowed"
+
+
+def test_copy_rejects_partial_command_grant_scan(tmp_path: Path) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    source.upsert_local_cli_command_states(_identity().cli_id, {"navigate": "block", "other": "block"})
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
+        assert (
+            _copy_allowlisted_table(
+                _source_that_fails_after_first_select_row(src),
+                dst,
+                "local_cli_command_grant",
+            )
+            is False
+        )
+
+
+def test_salvage_rolls_back_after_partial_command_grant_scan(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    original = sqlite_recovery._copy_allowlisted_table
+
+    def wrapped(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> bool:
+        copied = original(src, dst, table)
+        if table != "local_cli_command_grant":
+            return copied
+        assert copied is True
+        return False
+
+    monkeypatch.setattr(sqlite_recovery, "_copy_allowlisted_table", wrapped)
+    assert salvage_local_cli_state(source=source.path, destination=destination.path) is False
+    assert destination.read_local_cli_grant(_identity().cli_id) is None
+    assert destination.read_local_cli_command_states(_identity().cli_id) == {}
+    listed = destination.list_local_cli_items()
+    assert listed == []
 
 
 def test_salvage_ignores_unreadable_quarantine(tmp_path: Path) -> None:

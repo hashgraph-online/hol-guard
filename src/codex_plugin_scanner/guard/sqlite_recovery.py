@@ -208,6 +208,13 @@ _REQUIRED_LOCAL_CLI_SALVAGE_TABLES = (
     "local_cli_command",
     "local_cli_command_grant",
 )
+_PARTIAL_COPY_OK_TABLES = frozenset(
+    {
+        "local_cli_authority",
+        "local_cli_observation",
+        "local_cli_grant",
+    }
+)
 
 
 def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
@@ -272,7 +279,9 @@ def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, ta
             except sqlite3.Error:
                 continue
     except sqlite3.Error:
-        return inserted
+        # Partial command or command-grant copies can drop block rows and
+        # widen an allowed grant. Fail those tables closed.
+        return inserted if table in _PARTIAL_COPY_OK_TABLES else False
     return inserted or not saw_rows
 
 
