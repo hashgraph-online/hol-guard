@@ -9,6 +9,11 @@ from __future__ import annotations
 from typing import TypeGuard, cast
 
 from . import managed_controls_policy_fields_core as _core
+from .managed_controls.fleet_contracts import (
+    FleetContractError,
+    negotiate_fleet_capabilities,
+    validate_fleet_contract_collection,
+)
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_limits import MAX_CONTROL_SET_RULES
 
@@ -93,6 +98,24 @@ def parse_managed_controls_policy_fields(
 ) -> ParsedManagedControlsPolicy:
     """Validate presence-sensitive fields, then use the canonical projection."""
 
+    try:
+        fleet_contracts = validate_fleet_contract_collection(document)
+    except FleetContractError as error:
+        raise ManagedControlsPolicyError(error.code, str(error)) from error
+    if fleet_contracts:
+        try:
+            supported, _missing = negotiate_fleet_capabilities(sorted(negotiated_capabilities))
+        except FleetContractError as error:
+            raise ManagedControlsPolicyError(error.code, str(error)) from error
+        if not supported:
+            raise ManagedControlsPolicyError(
+                "fec_unsupported_capability",
+                "The runtime does not support all required Fleet contract semantics.",
+            )
+        raise ManagedControlsPolicyError(
+            "fec_unsupported_capability",
+            "Exact Fleet contract application is not implemented by this runtime.",
+        )
     _validate_presence_sensitive_fields(document)
     capabilities = negotiated_capabilities
     if package_firewall_supported:
