@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
 from .store_base import *
@@ -14,6 +16,47 @@ def _with_live_explanation(payload: dict[str, object] | None) -> dict[str, objec
     return attach_live_action_explanation(payload)
 
 
+def _summary_projection_sources(connection, items: list[object]) -> dict[str, dict[str, object]]:
+    request_ids = [
+        request_id
+        for item in items
+        if isinstance(item, dict)
+        and isinstance((request_id := item.get("request_id")), str)
+        and request_id
+    ]
+    if not request_ids:
+        return {}
+    placeholders = ",".join("?" for _ in request_ids)
+    rows = connection.execute(
+        f"""
+        select request_id, harness, action_identity, action_envelope_json, raw_command_text
+        from approval_requests
+        where request_id in ({placeholders})
+        """,
+        tuple(request_ids),
+    ).fetchall()
+    sources: dict[str, dict[str, object]] = {}
+    for row in rows:
+        request_id = str(row["request_id"])
+        envelope_raw = row["action_envelope_json"]
+        envelope: dict[str, object] | None = None
+        if isinstance(envelope_raw, str) and envelope_raw:
+            try:
+                parsed = json.loads(envelope_raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                envelope = parsed
+        sources[request_id] = {
+            "request_id": request_id,
+            "harness": row["harness"],
+            "action_identity": row["action_identity"],
+            "action_envelope_json": envelope,
+            "raw_command_text": row["raw_command_text"],
+        }
+    return sources
+
+
 def _with_live_summary_explanations(
     connection,
     page: dict[str, object],
@@ -21,21 +64,18 @@ def _with_live_summary_explanations(
     items = page.get("items")
     if not isinstance(items, list):
         return page
+    sources = _summary_projection_sources(connection, items)
     decorated: list[dict[str, object]] = []
     for item in items:
         if not isinstance(item, dict):
             continue
         request_id = item.get("request_id")
-        detail = (
-            load_approval_request(connection, request_id)
-            if isinstance(request_id, str) and request_id
-            else None
-        )
+        source = sources.get(request_id) if isinstance(request_id, str) else None
         decorated.append(
             attach_live_action_explanation(
                 item,
                 list_projection=True,
-                source_payload=detail,
+                source_payload=source,
             )
         )
     return {**page, "items": decorated}
