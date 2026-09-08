@@ -157,6 +157,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 raise ExtensionControlAuthorityError("invalid managed controls state") from exc
         active = managed_state.get(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
         revision_state = managed_state.get(MANAGED_CONTROLS_REVISION_STATE_KEY)
+        local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
         if active is None or active == {}:
             if revision_state is None or revision_state == {}:
                 return view
@@ -166,7 +167,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 revision_state,
                 authority_key=key,
             )
-            local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
             return ExtensionControlAuthorityView(
                 view.health,
                 view.revision,
@@ -760,6 +760,28 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             if stored_catalog_digest != catalog_digest:
                 if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
+                pending = self._pending_transition(revision + 1)
+                if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
+                    with self._connect() as connection:
+                        resumed = self._resume_idempotent_transition(
+                            connection,
+                            pending,
+                            current=ExtensionControlAuthorityView(
+                                AuthorityHealth.RECOVERY_REQUIRED,
+                                revision,
+                                stored_catalog_digest,
+                                (),
+                            ),
+                            catalog_digest=_row_str(pending, "catalog_digest"),
+                            layers_json=_row_str(pending, "layers_json"),
+                            actor_hash=_row_str(pending, "actor_id_hash"),
+                            idempotency_hash=_row_str(pending, "idempotency_key_hash"),
+                            nonce_hash=_row_str(pending, "nonce_hash"),
+                            expected_revision=_row_int(pending, "previous_revision"),
+                            key=key,
+                        )
+                    if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                        return resumed
                 previous = self._read_extension_control_authority_locked(stored_catalog_digest)
                 if previous.health is not AuthorityHealth.PROTECTED:
                     raise ExtensionControlAuthorityError("extension control catalog migration source unavailable")
@@ -806,6 +828,11 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 revision,
                 current_snapshot_digest=_row_str(row, "snapshot_digest"),
                 key=key,
+            )
+            self._ensure_catalog_migrated_event(
+                revision=revision,
+                catalog_digest=catalog_digest,
+                layers=layers,
             )
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, revision, catalog_digest, layers)
         except ExtensionControlAuthorityError:
@@ -940,6 +967,89 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         ):
             raise ExtensionControlAuthorityError("invalid extension control catalog manifest")
         return value
+
+    def _ensure_catalog_migrated_event(
+        self,
+        *,
+        revision: int,
+        catalog_digest: str,
+        layers: tuple[ExtensionControlLayer, ...],
+    ) -> None:
+        if revision < 1:
+            return
+        with self._connect() as connection:
+            current = connection.execute(
+                "select previous_revision, catalog_digest, layers_json from extension_control_authority_transition "
+                "where revision = ?",
+                (revision,),
+            ).fetchone()
+            if current is None or _row_str(current, "catalog_digest") != catalog_digest:
+                return
+            previous_revision = _row_int(current, "previous_revision")
+            previous = connection.execute(
+                "select catalog_digest, layers_json from extension_control_authority_transition where revision = ?",
+                (previous_revision,),
+            ).fetchone()
+            if previous is None:
+                return
+            previous_catalog_digest = _row_str(previous, "catalog_digest")
+            if previous_catalog_digest == catalog_digest:
+                return
+            previous_target_ids = {
+                control.target.target_id
+                for layer in layers_from_json(_row_str(previous, "layers_json"))
+                for control in layer.controls
+            }
+        current_target_ids = {control.target.target_id for layer in layers for control in layer.controls}
+        self._record_catalog_migrated_event_once(
+            previous_revision=previous_revision,
+            revision=revision,
+            previous_catalog_digest=previous_catalog_digest,
+            catalog_digest=catalog_digest,
+            layers=layers,
+            retired_targets=tuple(sorted(previous_target_ids - current_target_ids)),
+        )
+
+    def _record_catalog_migrated_event_once(
+        self,
+        *,
+        previous_revision: int,
+        revision: int,
+        previous_catalog_digest: str,
+        catalog_digest: str,
+        layers: tuple[ExtensionControlLayer, ...],
+        retired_targets: tuple[str, ...],
+    ) -> None:
+        payload = json.dumps(
+            {
+                "previous_revision": previous_revision,
+                "revision": revision,
+                "previous_catalog_digest": previous_catalog_digest,
+                "catalog_digest": catalog_digest,
+                "layer_count": len(layers),
+                "control_count": sum(len(layer.controls) for layer in layers),
+                "retired_target_count": len(retired_targets),
+                "retired_target_ids": list(retired_targets),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with self._connect() as connection:
+            existing = connection.execute(
+                "select payload_json from guard_events where event_name = ?",
+                ("extension_control_authority_catalog_migrated",),
+            ).fetchall()
+            for row in existing:
+                try:
+                    recorded = json.loads(str(row["payload_json"]))
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(recorded, dict) and recorded.get("revision") == revision:
+                    return
+            connection.execute(
+                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+                ("extension_control_authority_catalog_migrated", payload, _now()),
+            )
 
     def _migrate_extension_control_catalog(
         self,
