@@ -12,7 +12,11 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, AuthorityPhase
-from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    ControlLayerKind,
+    ControlState,
+    ControlTargetKind,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_extension_control_clear_catalog_migration import (
     _activate_under_catalog,
@@ -51,7 +55,17 @@ def test_catalog_upgrade_keeps_protection_when_managed_activation_is_stale(
     assert upgraded.health is AuthorityHealth.PROTECTED
     assert upgraded.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert upgraded.layers
-    assert any(layer.kind is ControlLayerKind.LOCAL_ADMIN for layer in upgraded.layers)
+    local_layers = tuple(layer for layer in upgraded.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
+    assert local_layers
+    preserved = [
+        control
+        for layer in local_layers
+        for control in layer.controls
+        if control.target.kind is ControlTargetKind.EXTENSION
+        and control.target.target_id == legacy.extensions[0].extension_id
+    ]
+    assert preserved
+    assert all(control.state is ControlState.DISABLED for control in preserved)
     assert all(layer.catalog_digest == upgraded.catalog_digest for layer in upgraded.layers)
     leftover = store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
     assert isinstance(leftover, dict)
