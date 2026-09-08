@@ -20,67 +20,17 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12'
-      - name: Apply deterministic Cline and catalog test repairs
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/codex_plugin_scanner/guard/adapters/cline_hooks.py')
-          text = path.read_text(encoding='utf-8')
-          old = '    with temporary.open("w", encoding="utf-8") as handle:\n'
-          new = '    with temporary.open("w", encoding="utf-8", newline="") as handle:\n'
-          assert text.count(old) == 1
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          path = Path('tests/test_cline_hook_transports.py')
-          text = path.read_text(encoding='utf-8')
-          replacements = {
-              '        hook.write_text(hook_content, encoding="utf-8")\n':
-                  '        hook.write_text(hook_content, encoding="utf-8", newline="")\n',
-              '        worker.write_text(worker_content, encoding="utf-8")\n':
-                  '        worker.write_text(worker_content, encoding="utf-8", newline="")\n',
-          }
-          for old, new in replacements.items():
-              assert text.count(old) == 1
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding='utf-8')
-
-          path = Path('dashboard/e2e/installed-extension-control-center.spec.ts')
-          text = path.read_text(encoding='utf-8')
-          old = 'const expectedExtensionCount = 61;\n'
-          new = 'const minimumExpectedExtensionCount = 61;\n'
-          assert text.count(old) == 1
-          text = text.replace(old, new, 1)
-          old = '''  await page.goto("/extensions");
-  await expectSecretSafeUrl(page);
-  await expect(page.getByRole("heading", { name: "Extensions", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "All tools" })).toBeVisible();
-  await expect(page.getByText(`${expectedExtensionCount} tools`)).toBeVisible();
-'''
-          new = '''  const catalogResponsePromise = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return url.pathname === "/v1/extension-controls/catalog" && response.status() === 200;
-  });
-  await page.goto("/extensions");
-  const catalogResponse = await catalogResponsePromise;
-  const catalogPayload = await catalogResponse.json() as { extensions?: unknown[] };
-  const expectedExtensionCount = Array.isArray(catalogPayload.extensions) ? catalogPayload.extensions.length : 0;
-  expect(expectedExtensionCount).toBeGreaterThanOrEqual(minimumExpectedExtensionCount);
-  await expectSecretSafeUrl(page);
-  await expect(page.getByRole("heading", { name: "Extensions", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "All tools" })).toBeVisible();
-  await expect(page.getByText(`${expectedExtensionCount} tools`)).toBeVisible();
-'''
-          assert text.count(old) == 1
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-          python -m py_compile src/codex_plugin_scanner/guard/adapters/cline_hooks.py tests/test_cline_hook_transports.py
-      - name: Commit repairs and remove helper workflow
+      - name: Apply repairs
+        run: python scripts/ci/pr2848_final_ci_repair.py
+      - name: Validate repaired Python sources
+        run: python -m py_compile src/codex_plugin_scanner/guard/adapters/cline_hooks.py tests/test_cline_hook_transports.py
+      - name: Commit repairs and remove temporary helpers
         run: |
           rm .github/workflows/pr2848-final-ci-repair.yml
+          rm scripts/ci/pr2848_final_ci_repair.py
           git config user.name 'Michael Kantor'
           git config user.email '6068672+kantorcodes@users.noreply.github.com'
-          git add src/codex_plugin_scanner/guard/adapters/cline_hooks.py tests/test_cline_hook_transports.py dashboard/e2e/installed-extension-control-center.spec.ts .github/workflows/pr2848-final-ci-repair.yml
+          git add src/codex_plugin_scanner/guard/adapters/cline_hooks.py tests/test_cline_hook_transports.py dashboard/e2e/installed-extension-control-center.spec.ts .github/workflows/pr2848-final-ci-repair.yml scripts/ci/pr2848_final_ci_repair.py
           git diff --cached --check
           git commit -m 'fix: stabilize installed extension and Cline contracts'
           git push origin HEAD:chore/sync-main-into-release-3.2-20260907
