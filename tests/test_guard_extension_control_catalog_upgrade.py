@@ -197,6 +197,7 @@ def test_catalog_upgrade_fails_closed_when_managed_manifest_is_missing(
 
     assert upgraded.health is AuthorityHealth.PROTECTED
     managed_layer = next(layer for layer in upgraded.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+    assert managed_layer.controls[0].target.target_id == permission_id
     assert managed_layer.controls[0].state is ControlState.DISABLED
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) == active_before_projection
     resolution = resolve_extension_controls(
