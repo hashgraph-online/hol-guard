@@ -119,17 +119,33 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             with self._extension_control_authority_lock():
                 self._require_compatible_extension_control_schema()
                 view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
+                stale_manifest: dict[str, str] | None = None
+                authority_key: bytes | None = None
                 if view.health is AuthorityHealth.PROTECTED:
-                    key = self._authority_key(required=True)
-                    if key is None:
+                    authority_key = self._authority_key(required=True)
+                    if authority_key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
-                    view = self._sync_trusted_catalog_manifest(view, registry, key=key)
+                    view, stale_manifest = self._sync_trusted_catalog_manifest(
+                        view, registry, key=authority_key
+                    )
                 if include_managed_controls:
-                    return self._with_managed_controls_activation(
+                    composed = self._with_managed_controls_activation(
                         view,
                         current_manifest=self._catalog_target_manifest(registry),
+                        previous_manifest=stale_manifest,
                     )
-                return view
+                else:
+                    composed = view
+                if stale_manifest is not None:
+                    if authority_key is None:
+                        raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
+                    self._write_catalog_manifest(
+                        registry,
+                        key=authority_key,
+                        manifest=self._catalog_target_manifest(registry),
+                        replace=True,
+                    )
+                return composed
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
         except Exception:
@@ -140,6 +156,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         view: ExtensionControlAuthorityView,
         *,
         current_manifest: Mapping[str, str] | None = None,
+        previous_manifest: Mapping[str, str] | None = None,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
             rows = connection.execute(
@@ -190,14 +207,24 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             catalog_digest=active_catalog_digest,
             authority_key=key,
         )
-        if active_catalog_digest != view.catalog_digest:
+        fingerprint_refresh = (
+            current_manifest is not None
+            and previous_manifest is not None
+            and previous_manifest != current_manifest
+            and active_catalog_digest == view.catalog_digest
+        )
+        if active_catalog_digest != view.catalog_digest or fingerprint_refresh:
             if any(layer.catalog_digest != active_catalog_digest for layer in managed_layers):
                 raise ExtensionControlAuthorityError("managed controls activation layer catalog mismatch")
             if current_manifest is None:
                 raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
             # A missing prior manifest must not act as an implicit fingerprint
             # match: stale managed allows remain disabled until cloud refresh.
-            previous_manifest = self._load_catalog_manifest(active_catalog_digest, key=key) or {}
+            prior_manifest = (
+                previous_manifest
+                if fingerprint_refresh
+                else (self._load_catalog_manifest(active_catalog_digest, key=key) or {})
+            )
             managed_layers = tuple(
                 replace(
                     layer,
@@ -207,7 +234,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             control
                             if preserve_managed_extension_control(
                                 control,
-                                previous_manifest=previous_manifest,
+                                previous_manifest=prior_manifest,
                                 current_manifest=current_manifest,
                             )
                             else replace(control, state=ControlState.DISABLED)
@@ -910,7 +937,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         registry: CommandSafetyExtensionRegistry,
         *,
         key: bytes,
-    ) -> ExtensionControlAuthorityView:
+    ) -> tuple[ExtensionControlAuthorityView, dict[str, str] | None]:
         current = self._catalog_target_manifest(registry)
         with self._connect() as connection:
             existing = connection.execute(
@@ -919,26 +946,34 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             ).fetchone()
         if existing is None:
             self._write_catalog_manifest(registry, key=key, manifest=current)
-            return view
+            return view, None
         persisted = self._load_catalog_manifest(registry.catalog_digest, key=key)
         if persisted is None:
             raise ExtensionControlAuthorityError("extension control catalog manifest conflict")
         if persisted == current:
-            return view
+            return view, None
         # Same catalog digest can still carry a newer trusted contract fingerprint
-        # after a package update. Rebind controls, then replace the stored
-        # manifest. An unverifiable stored row stays fail-closed above.
-        if view.layers:
-            view = self._migrate_extension_control_catalog(view, registry=registry, key=key)
-        self._write_catalog_manifest(registry, key=key, manifest=current, replace=True)
-        return view
-
-    def _record_catalog_manifest(self, registry: CommandSafetyExtensionRegistry, *, key: bytes) -> None:
-        self._sync_trusted_catalog_manifest(
-            ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 0, registry.catalog_digest, ()),
-            registry,
-            key=key,
+        # after a package update. Rebind local controls when needed, then let the
+        # caller replace the stored manifest after managed layers are composed.
+        rebound = tuple(
+            replace(
+                layer,
+                catalog_digest=view.catalog_digest,
+                controls=tuple(
+                    control
+                    for control in layer.controls
+                    if preserve_migrated_extension_control(
+                        control,
+                        previous_manifest=persisted,
+                        current_manifest=current,
+                    )
+                ),
+            )
+            for layer in view.layers
         )
+        if rebound != view.layers:
+            view = self._migrate_extension_control_catalog(view, registry=registry, key=key)
+        return view, persisted
 
     def _write_catalog_manifest(
         self,
