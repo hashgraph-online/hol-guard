@@ -19706,8 +19706,6 @@ function TabBar(props) {
     tab.value
   )) });
 }
-const APPROVAL_PROOF_PASSWORD_FIELD_ID = "approval-proof-password";
-const APPROVAL_PROOF_TOTP_FIELD_ID = "approval-proof-totp";
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
@@ -19736,6 +19734,9 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
   return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
+  const instanceId = reactExports.useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
   const handleTotpChange = reactExports.useCallback((event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
@@ -19745,13 +19746,13 @@ function ApprovalProofFieldInputs(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: APPROVAL_PROOF_PASSWORD_FIELD_ID, children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
         ref: props.passwordRef,
-        id: APPROVAL_PROOF_PASSWORD_FIELD_ID,
+        id: passwordFieldId,
         type: "password",
         autoComplete: "current-password",
         name: "password",
@@ -19761,13 +19762,12 @@ function ApprovalProofFieldInputs(props) {
         className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       }
     )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: APPROVAL_PROOF_TOTP_FIELD_ID, children: [
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: totpFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
-        ref: props.totpRef,
-        id: APPROVAL_PROOF_TOTP_FIELD_ID,
+        id: totpFieldId,
         type: "text",
         inputMode: "numeric",
         pattern: "[0-9]*",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
@@ -9,14 +9,10 @@ type ApprovalProofFieldInputsProps = {
   approvalPassword: string;
   approvalTotpCode: string;
   passwordRef?: RefObject<HTMLInputElement | null>;
-  totpRef?: RefObject<HTMLInputElement | null>;
   requireFreshTotp?: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
-
-export const APPROVAL_PROOF_PASSWORD_FIELD_ID = "approval-proof-password";
-export const APPROVAL_PROOF_TOTP_FIELD_ID = "approval-proof-totp";
 
 export function approvalProofRecentlySatisfied(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
@@ -59,6 +55,9 @@ export function buildApprovalProofCredentials(
 }
 
 export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
+  const instanceId = useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
   const handleTotpChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
@@ -75,11 +74,11 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
   return (
     <div className="space-y-3">
       {needsPassword ? (
-        <label className="block" htmlFor={APPROVAL_PROOF_PASSWORD_FIELD_ID}>
+        <label className="block" htmlFor={passwordFieldId}>
         <span className="text-sm font-semibold text-brand-dark">Approval password</span>
         <input
           ref={props.passwordRef}
-          id={APPROVAL_PROOF_PASSWORD_FIELD_ID}
+          id={passwordFieldId}
           type="password"
           autoComplete="current-password"
           name="password"
@@ -90,11 +89,10 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
         />
         </label>
       ) : (
-        <label className="block" htmlFor={APPROVAL_PROOF_TOTP_FIELD_ID}>
+        <label className="block" htmlFor={totpFieldId}>
           <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
           <input
-            ref={props.totpRef}
-            id={APPROVAL_PROOF_TOTP_FIELD_ID}
+            id={totpFieldId}
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"

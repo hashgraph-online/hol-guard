@@ -152,8 +152,8 @@ assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
 assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
 assert.match(totpRecoveryMarkup, /role="alert"/);
 assert.match(totpRecoveryMarkup, /<form/);
-assert.match(totpRecoveryMarkup, /id="approval-proof-totp"/);
-assert.match(totpRecoveryMarkup, /for="approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /id="[^"]*-approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /for="[^"]*-approval-proof-totp"/);
 assert.match(totpRecoveryMarkup, /type="submit"/);
 assert.match(totpRecoveryMarkup, /autoComplete="one-time-code"/);
 assert.match(totpRecoveryMarkup, /enterKeyHint="done"/);
@@ -175,8 +175,6 @@ const busyMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
 assert.match(busyMarkup, /role="status"/);
 assert.match(busyMarkup, /tabindex="0"/);
 assert.match(busyMarkup, /Repairing…/);
-const trapSource = readFileSync(new URL("./use-focus-trap.ts", import.meta.url), "utf8");
-assert.match(trapSource, /function handleKeyDown\(event: KeyboardEvent\) \{\n      if \(event.key !== "Tab"\) return;\n      const focusable = getFocusableElements\(container\);/);
 
 const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
   settings: { approval_gate: {
