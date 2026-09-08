@@ -8,17 +8,21 @@ import time
 from collections import OrderedDict, deque
 from collections.abc import Mapping
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypedDict, final
+from typing import TypedDict, cast, final
 from uuid import uuid4
 
+from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
+from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.command_activity_contract import CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
@@ -127,7 +131,10 @@ class RuntimeHookEvidenceWriter:
         event: str,
         payload: Mapping[str, object],
         succeeded: bool,
+        policy_action: str | None = None,
     ) -> bool:
+        if event == "PreToolUse" and not is_guard_action(policy_action):
+            return False
         try:
             snapshot = deepcopy(dict(payload))
             encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -144,6 +151,8 @@ class RuntimeHookEvidenceWriter:
             has_command=_payload_has_command(snapshot),
             succeeded=succeeded,
             payload_bytes=len(encoded),
+            policy_action=policy_action,
+            occurred_at=datetime.now(timezone.utc).isoformat(),
         )
         with self._condition:
             if (
@@ -291,6 +300,20 @@ class RuntimeHookEvidenceWriter:
                             )
                             if not persisted:
                                 raise RuntimeError("native receipt persistence was not acknowledged")
+                        elif record.event == "PreToolUse":
+                            if (
+                                record.has_command
+                                and record.policy_action is not None
+                                and record.occurred_at is not None
+                            ):
+                                evidence = build_native_pre_hook_evidence(
+                                    activity_id=record.record_id,
+                                    occurred_at=datetime.fromisoformat(record.occurred_at),
+                                    harness=record.harness,
+                                    policy_action=cast(GuardAction, record.policy_action),
+                                    request_correlation=record.correlation,
+                                )
+                                _ = self._store.record_command_activity(evidence)
                         else:
                             _ = persist_deferred_post_hook_command_activity(
                                 store=self._store,

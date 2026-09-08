@@ -85,6 +85,45 @@ _UNCERTAINTY_REASON: Final = MappingProxyType(
 )
 
 
+def build_native_pre_hook_evidence(
+    *,
+    activity_id: str,
+    occurred_at: datetime,
+    harness: str,
+    policy_action: GuardAction,
+    request_correlation: CorrelationHandle | None,
+) -> CommandActivityEvidence:
+    """Preserve a final native action without inventing Python rule evaluation."""
+
+    activity = CommandActivity(
+        activity_id=activity_id,
+        occurred_at=occurred_at,
+        harness=harness,
+        hook_phase=CommandHookPhase.PRE,
+        execution_status=(
+            CommandExecutionStatus.PREVENTED
+            if guard_action_severity(policy_action) >= guard_action_severity("review")
+            else CommandExecutionStatus.ALLOWED_UNCONFIRMED
+        ),
+        proof_level=CommandProofLevel.PRE_HOOK,
+        policy_action=policy_action,
+        decision_reason_code=ActivityDecisionReason.POLICY,
+        controlling_rule_id=None,
+        parse_confidence=None,
+        uncertainty_class=None,
+        match_count=0,
+        prompted=False,
+        approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+        request_correlation=request_correlation,
+        session_correlation=None,
+        receipt_link_status=ReceiptLinkStatus.NOT_APPLICABLE,
+        receipt_id=None,
+        evaluation_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
+        persistence_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
+    )
+    return CommandActivityEvidence(activity=activity, matches=())
+
+
 def build_pre_hook_evidence(
     evaluation: CompositeCommandEvaluation,
     decision: CommandActivityDecisionFacts,

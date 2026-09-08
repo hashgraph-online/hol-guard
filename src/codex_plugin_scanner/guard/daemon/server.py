@@ -6080,6 +6080,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if review.receipt is not None:
                 with suppress(Exception):
                     _ = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(review.receipt)
+                    activity_action = review.payload.get("policy_action")
+                    if review.receipt.get("event_name") == "PreToolUse" and isinstance(activity_action, str):
+                        _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
+                            harness=harness,
+                            event="PreToolUse",
+                            payload=payload,
+                            succeeded=True,
+                            policy_action=activity_action,
+                        )
             self._write_json(review.payload)
             return
         reason_code = (

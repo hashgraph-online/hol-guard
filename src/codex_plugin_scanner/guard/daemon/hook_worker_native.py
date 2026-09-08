@@ -81,6 +81,25 @@ class _HookWorkerNativeHost(Protocol):
     _record_native_decision_receipt: Callable[[object], None]
 
 
+def _record_native_pre_activity(
+    host: _HookWorkerNativeHost,
+    harness: str,
+    payload: Mapping[str, object],
+    response: dict[str, object],
+) -> dict[str, object]:
+    submit = getattr(host.activity_writer, "submit_command_activity", None)
+    if callable(submit):
+        with suppress(Exception):
+            submit(
+                harness=harness,
+                event="PreToolUse",
+                payload=payload,
+                succeeded=True,
+                policy_action=response.get("policy_action"),
+            )
+    return response
+
+
 def _record_unavailable_native(
     host: _HookWorkerNativeHost,
     payload: dict[str, object],
@@ -187,17 +206,20 @@ class HookWorkerNativeMixin:
                 action = str(native.get("minimum_action") or "")
                 if action != "allow" or native.get("decision") != "allow":
                     native = _watch_native_pre_tool_result(native)
-                    return recording_only_pre_tool_response(
+                    response = recording_only_pre_tool_response(
                         harness,
                         reason_code=str(native.get("reason_code") or "watch_recording_only"),
                         reason=str(native.get("reason") or "Watch recorded this action without stopping it."),
                     )
+                    return _record_native_pre_activity(self, harness, payload, response)
             else:
                 action = str(native.get("minimum_action") or "")
                 if action == "review":
                     record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
-            return harness_json_from_native_pre_tool(harness, native)
+            return _record_native_pre_activity(
+                self, harness, payload, harness_json_from_native_pre_tool(harness, native)
+            )
         if recording_only:
             return _record_unavailable_native(
                 self,
@@ -298,14 +320,15 @@ class HookWorkerNativeMixin:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     native_result = _watch_native_pre_tool_result(native_result)
-                    return recording_only_pre_tool_response(
+                    response = recording_only_pre_tool_response(
                         native_harness,
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
+                    return _record_native_pre_activity(self, native_harness, payload, response)
             action = str(native_result.get("minimum_action") or "")
             if action == "review":
-                return pause_native_pre_tool_for_approval(
+                response = pause_native_pre_tool_for_approval(
                     self.store,
                     harness=native_harness,
                     payload=payload,
@@ -313,7 +336,10 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                 )
-            return harness_json_from_native_pre_tool(native_harness, native_result)
+                return _record_native_pre_activity(self, native_harness, payload, response)
+            return _record_native_pre_activity(
+                self, native_harness, payload, harness_json_from_native_pre_tool(native_harness, native_result)
+            )
         if recording_only:
             native_result = _watch_native_post_tool_result(native_result)
         self._record_post_tool_activity(

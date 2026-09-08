@@ -31,7 +31,7 @@ function CommandRow(props: {
       <td className="px-3 py-3 text-sm text-brand-dark">{commandDecisionLabel(props.item.policy_action)}</td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandExecutionLabel(props.item.execution_status)}</td>
       <td className="px-3 py-3 text-sm text-slate-600">
-        {firstRule ? safeEvidenceId(firstRule.rule_id) : "No rule match"}
+        {firstRule ? safeEvidenceId(firstRule.rule_id) : props.item.decision_reason_code === "no_match" ? "No rule match" : "Rule evidence unavailable"}
         {props.item.match_count > 1 ? <Badge tone="info">+{props.item.match_count - 1}</Badge> : null}
       </td>
       <td className="px-3 py-3 text-right">

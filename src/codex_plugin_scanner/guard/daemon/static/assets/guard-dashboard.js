@@ -25955,7 +25955,7 @@ function CommandActivityDetail(props) {
           controlling: match.rule_id === props.activity.controlling_rule_id
         },
         `${match.ordinal}:${safeEvidenceId(match.rule_id)}`
-      )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: "No rule match was recorded." })
+      )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: props.activity.decision_reason_code === "no_match" ? "No rule matched this action." : "Rule evidence is unavailable for this record." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Was this interaction expected?" }),
@@ -26398,7 +26398,7 @@ function CommandRow(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [
-      firstRule ? safeEvidenceId(firstRule.rule_id) : "No rule match",
+      firstRule ? safeEvidenceId(firstRule.rule_id) : props.item.decision_reason_code === "no_match" ? "No rule match" : "Rule evidence unavailable",
       props.item.match_count > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
         "+",
         props.item.match_count - 1
