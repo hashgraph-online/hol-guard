@@ -65,10 +65,10 @@ paths, and filename identity. The exporter checks that each sidecar belongs to a
 native contribution. These filesystem and source checks are not JSON Schema
 capabilities. URLs are references only; validation never fetches them.
 
-Use a public HTTPS hostname without credentials, a nonstandard port, or a literal
-IP address. Do not include policy, executable code, activation state, trust classes,
-private email addresses, secrets, or commands. Native contribution contracts remain
-the only source of runtime behavior.
+Use a public HTTPS hostname without credentials. Nonstandard ports and literal IP
+addresses are not accepted. Do not include policy, executable code, activation
+state, trust classes, private email addresses, secrets, or commands. Native
+contribution contracts remain the only source of runtime behavior.
 
 ### Reviewed claim authority
 
