@@ -6115,6 +6115,14 @@
     background-color: var(--color-slate-50);
   }
 
+  .disabled\:bg-slate-100:disabled {
+    background-color: var(--color-slate-100);
+  }
+
+  .disabled\:text-slate-500:disabled {
+    color: var(--color-slate-500);
+  }
+
   .disabled\:opacity-30:disabled {
     opacity: .3;
   }
