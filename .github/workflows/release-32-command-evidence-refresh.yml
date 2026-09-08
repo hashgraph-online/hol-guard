@@ -30,6 +30,23 @@ jobs:
           enable-cache: false
       - name: Install locked development environment
         run: uv sync --frozen --extra dev --python 3.12
+      - name: Correct direct .NET extension expectations
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+
+          expected_counts = {
+              Path("tests/test_guard_command_common_cli_extensions.py"): 3,
+              Path("tests/test_guard_command_common_cli_gaps.py"): 1,
+          }
+          for path, expected in expected_counts.items():
+              text = path.read_text(encoding="utf-8")
+              count = text.count("command.package.dotnet")
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} old .NET ids, found {count}")
+              path.write_text(text.replace("command.package.dotnet", "command.package-dotnet"), encoding="utf-8")
+          PY
       - name: Refresh command decision evidence
         run: |
           uv run --no-sync python tests/guard_command_decision_diff.py --write
@@ -119,6 +136,8 @@ jobs:
             src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
             tests/test_guard_command_ecosystem_setup.py \
             tests/test_guard_command_review_followup.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
             tests/test_policy_bundle_delivery_runtime.py
           uv run --no-sync ruff format --check \
             src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
@@ -131,6 +150,8 @@ jobs:
             src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
             tests/test_guard_command_ecosystem_setup.py \
             tests/test_guard_command_review_followup.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
             tests/test_policy_bundle_delivery_runtime.py
       - name: Commit evidence and remove one-shot workflow
         shell: bash
@@ -140,6 +161,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
             tests/fixtures/guard-command-corpus/decision-diff-report.json \
             contracts/managed-controls/v1/extension-projection-digest-vector.json \
             tests/test_policy_bundle_delivery_runtime.py
