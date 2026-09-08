@@ -28829,6 +28829,42 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
+const PRESENTATION_SCHEMA_VERSION = 1;
+function resolvePresentationMode(input) {
+  const revision = typeof input.revision === "number" && Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0;
+  const writable = input.writable !== false;
+  const resolved = (value, source, explicit, diagnostic = null) => ({
+    value,
+    source,
+    explicit,
+    writable,
+    schemaVersion: PRESENTATION_SCHEMA_VERSION,
+    revision,
+    diagnostic
+  });
+  if (input.readError) return resolved("everyday", "read-error", false, "presentation_settings_unavailable");
+  if (input.sessionPreview === "everyday" || input.sessionPreview === "technical") {
+    return resolved(input.sessionPreview, "session-preview", true);
+  }
+  if (input.schemaVersion !== void 0 && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION) {
+    return resolved("everyday", "default", false, "unsupported_presentation_schema_fell_back_to_everyday");
+  }
+  const persistedMode = input.value === "everyday" || input.value === "technical" ? input.value : null;
+  if (persistedMode !== null && input.explicit === true) {
+    return resolved(persistedMode, "local-explicit", true);
+  }
+  const invalidDiagnostic = input.value !== void 0 && input.value !== null && input.value !== "" && persistedMode === null ? "unknown_presentation_mode_fell_back_to_everyday" : null;
+  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
+    return resolved(input.cloudProfile, "cloud-profile", false, invalidDiagnostic);
+  }
+  if (invalidDiagnostic !== null) {
+    return resolved("everyday", "default", false, invalidDiagnostic);
+  }
+  if (persistedMode !== null) {
+    return resolved(persistedMode, "default", false);
+  }
+  return resolved("everyday", "default", false);
+}
 function ActionExplanationSummary({ explanation }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
@@ -28961,36 +28997,67 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
     ] })
   ] });
 }
-function PrimaryActionCard({ item }) {
+function useReviewPresentationMode() {
+  const [mode, setMode] = reactExports.useState("everyday");
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    void fetchSettings().then((payload) => {
+      if (cancelled) return;
+      setMode(resolvePresentationMode({
+        value: payload.settings.presentation_mode,
+        explicit: payload.settings.presentation_mode_explicit,
+        schemaVersion: payload.settings.presentation_schema_version,
+        revision: payload.settings.presentation_revision
+      }).value);
+    }).catch(() => {
+      if (!cancelled) setMode("everyday");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return mode;
+}
+function TechnicalStoppedAction({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 border-t border-slate-100 pt-4", "data-guard-technical-stopped-action": true, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Technical details" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: action.label,
+        text: action.text,
+        copyAriaLabel: "Copy full stopped action to clipboard",
+        expandAriaLabel: "Expand full stopped action",
+        collapseAriaLabel: "Collapse full stopped action"
+      },
+      item.request_id
+    ) }),
+    workingDirectory !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 font-medium text-brand-dark/70", children: "Working directory" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 break-all font-mono text-brand-dark", title: workingDirectory, children: workingDirectory })
+    ] })
+  ] });
+}
+function PrimaryActionCard({ item }) {
+  const action = buildPrimaryReviewAction(item);
   const explanation = item.action_explanation ?? null;
+  const presentationMode = useReviewPresentationMode();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
-        action.detail !== null && explanation === null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
+        action.detail !== null && explanation === null && presentationMode === "technical" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
-    explanation !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionExplanationSummary, { explanation }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        LoggedActionPanel,
-        {
-          label: action.label,
-          text: action.text,
-          copyAriaLabel: "Copy full stopped action to clipboard",
-          expandAriaLabel: "Expand full stopped action",
-          collapseAriaLabel: "Collapse full stopped action"
-        },
-        item.request_id
-      ),
-      workingDirectory !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 font-medium text-brand-dark/70", children: "Working directory" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 break-all font-mono text-brand-dark", title: workingDirectory, children: workingDirectory })
-      ] })
-    ] })
+    explanation !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionExplanationSummary, { explanation }) : presentationMode === "everyday" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Plain-language details are unavailable" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Guard paused this action, but this record does not contain a safe Everyday explanation. Technical mode can show retained local details when you deliberately enable it in Settings." })
+    ] }) : null,
+    presentationMode === "technical" && /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalStoppedAction, { item })
   ] });
 }
 function buildWhatWouldHappen(item) {
