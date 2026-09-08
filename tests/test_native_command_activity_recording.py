@@ -70,3 +70,41 @@ def test_pre_without_decision_never_becomes_execution(tmp_path: Path) -> None:
     finally:
         assert writer.stop(timeout_seconds=5)
     assert store.count_command_activities() == 0
+
+
+@pytest.mark.parametrize("action", ["review", "block", "warn", "allow"])
+def test_native_restrictive_decisions_keep_receipt_and_prompt(tmp_path: Path, action: str) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    writer = RuntimeHookEvidenceWriter(store=store)
+    try:
+        assert writer.submit_command_activity(
+            harness="grok",
+            event="PreToolUse",
+            payload={"command": "echo example"},
+            succeeded=False,
+            policy_action=action,
+            receipt_id="native-receipt-example",
+            prompted=action == "review",
+            approval_reuse_status="accepted" if action == "allow" else "not-applicable",
+        )
+    finally:
+        assert writer.stop(timeout_seconds=5)
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        row = connection.execute(
+            "SELECT policy_action, receipt_id, prompted, approval_reuse_status FROM command_activity"
+        ).fetchone()
+    assert row == (
+        action,
+        "native-receipt-example",
+        int(action == "review"),
+        "accepted" if action == "allow" else "not-applicable",
+    )
+    assert writer.stats()["failures"] == 0
+
+
+def test_grok_failure_normalization_preserves_failure() -> None:
+    from codex_plugin_scanner.guard.adapters.grok_hooks import prepare_grok_hook_payload
+    from codex_plugin_scanner.guard.cli.commands_support_command_activity import hook_post_succeeded
+
+    payload = prepare_grok_hook_payload({"hookEventName": "post_tool_use_failure"})
+    assert not hook_post_succeeded(str(payload["hook_event_name"]), payload)

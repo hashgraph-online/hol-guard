@@ -6088,6 +6088,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             payload=payload,
                             succeeded=True,
                             policy_action=activity_action,
+                            receipt_id=self._optional_string(review.receipt.get("decision_id")),
+                            prompted=review.payload.get("prompted") is True,
+                            approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
+                            or "not-applicable",
                         )
             self._write_json(review.payload)
             return

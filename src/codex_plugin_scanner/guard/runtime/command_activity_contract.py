@@ -359,6 +359,7 @@ def _validate_activity_state(activity: CommandActivity) -> None:
         activity.policy_action is not None
         and guard_action_severity(activity.policy_action) >= guard_action_severity("review")
         and activity.receipt_link_status is not ReceiptLinkStatus.LINKED
+        and not (activity.decision_reason_code is ActivityDecisionReason.POLICY and activity.parse_confidence is None)
     ):
         raise ValueError("review-or-stronger activity requires a linked receipt")
 

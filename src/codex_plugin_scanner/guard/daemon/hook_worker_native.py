@@ -86,6 +86,7 @@ def _record_native_pre_activity(
     harness: str,
     payload: Mapping[str, object],
     response: dict[str, object],
+    receipt: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     submit = getattr(host.activity_writer, "submit_command_activity", None)
     if callable(submit):
@@ -96,6 +97,9 @@ def _record_native_pre_activity(
                 payload=payload,
                 succeeded=True,
                 policy_action=response.get("policy_action"),
+                receipt_id=receipt.get("decision_id") if receipt is not None else None,
+                prompted=response.get("prompted") is True,
+                approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
             )
     return response
 
@@ -135,6 +139,7 @@ def _record_unavailable_native(
                     event=event_name,
                     payload=payload,
                     succeeded=str(response.get("policy_action") or "") != "block",
+                    policy_action=response.get("policy_action"),
                 )
     return response
 
@@ -325,7 +330,9 @@ class HookWorkerNativeMixin:
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
-                    return _record_native_pre_activity(self, native_harness, payload, response)
+                    return _record_native_pre_activity(
+                        self, native_harness, payload, response, self._last_native_decision_receipt
+                    )
             action = str(native_result.get("minimum_action") or "")
             if action == "review":
                 response = pause_native_pre_tool_for_approval(
@@ -336,9 +343,15 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                 )
-                return _record_native_pre_activity(self, native_harness, payload, response)
+                return _record_native_pre_activity(
+                    self, native_harness, payload, response, self._last_native_decision_receipt
+                )
             return _record_native_pre_activity(
-                self, native_harness, payload, harness_json_from_native_pre_tool(native_harness, native_result)
+                self,
+                native_harness,
+                payload,
+                harness_json_from_native_pre_tool(native_harness, native_result),
+                self._last_native_decision_receipt,
             )
         if recording_only:
             native_result = _watch_native_post_tool_result(native_result)

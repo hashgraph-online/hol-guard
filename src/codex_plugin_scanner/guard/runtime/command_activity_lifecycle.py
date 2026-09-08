@@ -92,6 +92,9 @@ def build_native_pre_hook_evidence(
     harness: str,
     policy_action: GuardAction,
     request_correlation: CorrelationHandle | None,
+    receipt_id: str | None = None,
+    prompted: bool = False,
+    approval_reuse_status: ActivityApprovalReuseStatus = ActivityApprovalReuseStatus.NOT_APPLICABLE,
 ) -> CommandActivityEvidence:
     """Preserve a final native action without inventing Python rule evaluation."""
 
@@ -112,12 +115,12 @@ def build_native_pre_hook_evidence(
         parse_confidence=None,
         uncertainty_class=None,
         match_count=0,
-        prompted=False,
-        approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+        prompted=prompted,
+        approval_reuse_status=approval_reuse_status,
         request_correlation=request_correlation,
         session_correlation=None,
-        receipt_link_status=ReceiptLinkStatus.NOT_APPLICABLE,
-        receipt_id=None,
+        receipt_link_status=ReceiptLinkStatus.LINKED if receipt_id is not None else ReceiptLinkStatus.NOT_APPLICABLE,
+        receipt_id=receipt_id,
         evaluation_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
         persistence_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
     )

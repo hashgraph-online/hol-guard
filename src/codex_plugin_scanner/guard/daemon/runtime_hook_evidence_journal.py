@@ -52,6 +52,9 @@ class _CommandActivityRecord:
     attempts: int = 0
     policy_action: str | None = None
     occurred_at: str | None = None
+    receipt_id: str | None = None
+    prompted: bool = False
+    approval_reuse_status: str = "not-applicable"
 
     def serialized(self) -> bytes:
         return (
@@ -75,6 +78,9 @@ class _CommandActivityRecord:
                     "succeeded": self.succeeded,
                     "policy_action": self.policy_action,
                     "occurred_at": self.occurred_at,
+                    "receipt_id": self.receipt_id,
+                    "prompted": self.prompted,
+                    "approval_reuse_status": self.approval_reuse_status,
                 },
                 separators=(",", ":"),
                 sort_keys=True,
@@ -106,6 +112,13 @@ class _CommandActivityRecord:
             except ValueError:
                 return None
         if policy_action is not None and (event != "PreToolUse" or occurred_at is None):
+            return None
+        receipt_id = fields.get("receipt_id")
+        prompted = fields.get("prompted", False)
+        reuse = fields.get("approval_reuse_status", "not-applicable")
+        if receipt_id is not None and (not isinstance(receipt_id, str) or not _SAFE_IDENTIFIER.fullmatch(receipt_id)):
+            return None
+        if type(prompted) is not bool or reuse not in ("not-applicable", "accepted", "rejected"):
             return None
         if (
             not isinstance(record_id, str)
@@ -139,6 +152,9 @@ class _CommandActivityRecord:
             0,
             policy_action=cast(str | None, policy_action),
             occurred_at=cast(str | None, occurred_at),
+            receipt_id=cast(str | None, receipt_id),
+            prompted=prompted,
+            approval_reuse_status=cast(str, reuse),
         )
         return cls(
             record.record_id,
@@ -150,6 +166,9 @@ class _CommandActivityRecord:
             len(record.serialized()),
             policy_action=cast(str | None, policy_action),
             occurred_at=cast(str | None, occurred_at),
+            receipt_id=record.receipt_id,
+            prompted=record.prompted,
+            approval_reuse_status=record.approval_reuse_status,
         )
 
 

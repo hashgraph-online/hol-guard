@@ -17,7 +17,7 @@ from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
 from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
-from ..runtime.command_activity_contract import CorrelationHandle
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
@@ -132,6 +132,9 @@ class RuntimeHookEvidenceWriter:
         payload: Mapping[str, object],
         succeeded: bool,
         policy_action: str | None = None,
+        receipt_id: str | None = None,
+        prompted: bool = False,
+        approval_reuse_status: str = "not-applicable",
     ) -> bool:
         if event == "PreToolUse" and not is_guard_action(policy_action):
             return False
@@ -153,7 +156,12 @@ class RuntimeHookEvidenceWriter:
             payload_bytes=len(encoded),
             policy_action=policy_action,
             occurred_at=datetime.now(timezone.utc).isoformat(),
+            receipt_id=receipt_id,
+            prompted=prompted,
+            approval_reuse_status=approval_reuse_status,
         )
+        if _CommandActivityRecord.from_json(json.loads(record.serialized())) is None:
+            return False
         with self._condition:
             if (
                 self._stopping
@@ -312,6 +320,9 @@ class RuntimeHookEvidenceWriter:
                                     harness=record.harness,
                                     policy_action=cast(GuardAction, record.policy_action),
                                     request_correlation=record.correlation,
+                                    receipt_id=record.receipt_id,
+                                    prompted=record.prompted,
+                                    approval_reuse_status=ActivityApprovalReuseStatus(record.approval_reuse_status),
                                 )
                                 if not self._store.is_exact_command_activity_pre_replay(evidence):
                                     _ = self._store.record_command_activity(evidence)
