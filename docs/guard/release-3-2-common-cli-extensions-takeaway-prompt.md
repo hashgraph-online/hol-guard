@@ -1,9 +1,9 @@
-# Takeaway prompt: Release 3.2 common CLI first-class Extensions
+# Takeaway prompt: Release 3.2 common CLI first-class extensions
 
 Use this prompt to resume the release/3.2 common CLI work without losing architectural or acceptance-test context.
 
 ```text
-Work in hashgraph-online/hol-guard on the existing canonical PR for release/3.2 common CLI first-class Extensions. Do not open a duplicate PR and do not retarget to main.
+Work in hashgraph-online/hol-guard on the existing canonical PR for release/3.2 common CLI first-class extensions. Do not open a duplicate PR and do not retarget to main.
 
 Goal: finish the release/3.2 common CLI coverage end to end, resolve every valid review and CI blocker, and merge only when the exact PR head is clean.
 
@@ -76,7 +76,7 @@ Review workflow:
 Merge gates:
 - focused command tests green
 - registry/directory/catalog contracts green
-- generated extension docs/catalog synchronized
+- generated command-decision and managed-controls projection evidence synchronized
 - ruff/format/quality and Sonar green
 - CodeQL/security/release/installed verification green
 - no unresolved actionable review comments
@@ -84,5 +84,6 @@ Merge gates:
 - squash merge into release/3.2
 - verify post-merge release/3.2 workflows
 
+Do not recreate temporary artifact-refresh workflows after generated evidence has been committed to the PR branch.
 Do not return early merely because one check is pending or one reviewer is unavailable. Continue fixing everything that can be fixed in the current run and merge only when GitHub shows a genuinely safe merge state.
 ```
