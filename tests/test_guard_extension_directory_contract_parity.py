@@ -84,6 +84,7 @@ def test_listing_contract_distinguishes_presentation_from_claim_authority() -> N
         (REPOSITORY / "src/codex_plugin_scanner/guard/extension_builder/listing.v1.schema.json").read_text()
     )
     public = json.loads((REPOSITORY / "contracts/extensions/listing.v1.schema.json").read_text())
+    assert schema == public
     assert packaged == public
 
 
