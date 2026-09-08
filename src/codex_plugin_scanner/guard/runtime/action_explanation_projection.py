@@ -16,7 +16,11 @@ from .action_explanation_contract import (
     GuardActionExplanationV1,
     parse_action_explanation,
 )
-from .action_explanation_semantics import ActionExplanationSemantics, derive_action_semantics
+from .action_explanation_semantics import (
+    ActionExplanationSemantics,
+    derive_action_semantics,
+    normalized_string_sequence,
+)
 from .command_model import CanonicalCommand
 
 TARGET_LABEL_MAX_LENGTH = 240
@@ -52,9 +56,7 @@ def project_action_explanation(
         "locale": "en-US",
         "kind": semantics.kind,
         "confidence": semantics.confidence,
-        "uncertainty_reasons": [
-            _safe_text(reason, 128) for reason in semantics.uncertainty_reasons[:32]
-        ],
+        "uncertainty_reasons": [_safe_text(reason, 128) for reason in semantics.uncertainty_reasons[:32]],
         "everyday": _everyday_projection(
             semantics,
             actor_label=safe_actor,
@@ -120,13 +122,9 @@ def _everyday_projection(
         "summary": _safe_text(semantics.summary, 800),
         "impact_message_id": f"guard.everyday.{kind}.impact",
         "impact": _safe_text(semantics.impact, 800),
-        "why_guard_intervened_message_id": (
-            f"guard.everyday.{kind}.why" if semantics.rule_ids else None
-        ),
+        "why_guard_intervened_message_id": (f"guard.everyday.{kind}.why" if semantics.rule_ids else None),
         "why_guard_intervened": (
-            "Guard matched a built-in protection for this action."
-            if semantics.rule_ids
-            else None
+            "Guard matched a built-in protection for this action." if semantics.rule_ids else None
         ),
         "recommendation_message_id": f"guard.everyday.{kind}.recommendation",
         "recommendation": _safe_text(semantics.recommendation, 800),
@@ -140,14 +138,13 @@ def _everyday_projection(
     }
 
 
-
 def _everyday_targets(
     semantics: ActionExplanationSemantics,
     *,
     action_envelope: Mapping[str, object],
 ) -> list[dict[str, object]]:
     if semantics.action_type == "network_request":
-        hosts = _string_sequence(action_envelope.get("network_hosts"))
+        hosts = normalized_string_sequence(action_envelope.get("network_hosts"))
         if hosts:
             return [
                 {
@@ -198,13 +195,9 @@ def _technical_projection(
         "working_scope_display": None,
         "wrappers": exact.get("wrappers", []),
         "segments": exact.get("segments", []),
-        "extension_ids": [
-            _safe_text(value, 128) for value in semantics.extension_ids[:64]
-        ],
+        "extension_ids": [_safe_text(value, 128) for value in semantics.extension_ids[:64]],
         "rule_ids": [_safe_text(value, 128) for value in semantics.rule_ids[:64]],
-        "reason_codes": [
-            _safe_text(value, 128) for value in semantics.uncertainty_reasons[:64]
-        ],
+        "reason_codes": [_safe_text(value, 128) for value in semantics.uncertainty_reasons[:64]],
         "policy_source": None,
         "parse_confidence": command.confidence if command is not None else None,
         "proof_level": None,
@@ -225,8 +218,7 @@ def _exact_command_projection(
         {
             "executable": _redacted_exact(segment.executable, 240),
             "arguments_display": [
-                _redacted_exact(argument, _ARGUMENT_DISPLAY_MAX_LENGTH) or ""
-                for argument in segment.arguments[:128]
+                _redacted_exact(argument, _ARGUMENT_DISPLAY_MAX_LENGTH) or "" for argument in segment.arguments[:128]
             ],
             "execution_context": _safe_text(segment.execution_context, 120),
             "pipeline_index": min(segment.pipeline_index, 128),
@@ -242,16 +234,11 @@ def _exact_command_projection(
         ),
         "executable": _redacted_exact(first.executable, 240) if first else None,
         "arguments_display": (
-            [
-                _redacted_exact(argument, _ARGUMENT_DISPLAY_MAX_LENGTH) or ""
-                for argument in first.arguments[:128]
-            ]
+            [_redacted_exact(argument, _ARGUMENT_DISPLAY_MAX_LENGTH) or "" for argument in first.arguments[:128]]
             if first
             else None
         ),
-        "wrappers": [
-            _safe_text(value, 120) for value in command.wrapper_chain[:32]
-        ],
+        "wrappers": [_safe_text(value, 120) for value in command.wrapper_chain[:32]],
         "segments": segments,
     }
 
@@ -266,13 +253,17 @@ def _redaction_projection(
 ) -> dict[str, object]:
     command_redaction = redact_text(raw_command) if raw_command else None
     authorized = bool(retained and exact_details_authorized and raw_command)
-    omitted = [] if authorized else [
-        "technical.command_display",
-        "technical.normalized_command_display",
-        "technical.executable",
-        "technical.arguments_display",
-        "technical.segments",
-    ]
+    omitted = (
+        []
+        if authorized
+        else [
+            "technical.command_display",
+            "technical.normalized_command_display",
+            "technical.executable",
+            "technical.arguments_display",
+            "technical.segments",
+        ]
+    )
     truncated = _truncated_fields(
         semantics,
         action_envelope=action_envelope,
@@ -280,17 +271,12 @@ def _redaction_projection(
         exact_details_authorized=authorized,
     )
     return {
-        "level": (
-            "redacted"
-            if (command_redaction and command_redaction.count) or not authorized
-            else "none"
-        ),
+        "level": ("redacted" if (command_redaction and command_redaction.count) or not authorized else "none"),
         "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
         "omitted_fields": omitted,
         "truncated_fields": truncated,
         "secret_like_values_removed": bool(command_redaction and command_redaction.count),
     }
-
 
 
 def _truncated_fields(
@@ -304,7 +290,7 @@ def _truncated_fields(
     if any(len(target.label) > TARGET_LABEL_MAX_LENGTH for target in semantics.targets):
         fields.append("everyday.targets.label")
     if semantics.action_type == "network_request":
-        hosts = _string_sequence(action_envelope.get("network_hosts"))
+        hosts = normalized_string_sequence(action_envelope.get("network_hosts"))
         if hosts and len(f"the service {hosts[0]}") > TARGET_LABEL_MAX_LENGTH:
             fields.append("everyday.targets.label")
     if exact_details_authorized and raw_command:
@@ -351,9 +337,7 @@ def _safe_optional(value: str | None, limit: int) -> str | None:
 
 def _safe_identifier(value: str, *, fallback: str) -> str:
     normalized = "".join(
-        character
-        for character in value.lower()
-        if character.isascii() and (character.isalnum() or character == "_")
+        character for character in value.lower() if character.isascii() and (character.isalnum() or character == "_")
     )[:64]
     if not normalized or not normalized[0].isalpha():
         return fallback
@@ -361,23 +345,8 @@ def _safe_identifier(value: str, *, fallback: str) -> str:
 
 
 def _safe_text(value: str, limit: int) -> str:
-    redacted = (
-        redact_text(value)
-        .text.replace("\n", " ")
-        .replace("\r", " ")
-        .replace("\x1b", "")
-    )
+    redacted = redact_text(value).text.replace("\n", " ").replace("\r", " ").replace("\x1b", "")
     return redacted[:limit]
-
-
-def _string_sequence(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(
-        item.strip()
-        for item in value
-        if isinstance(item, str) and item.strip()
-    )[:32]
 
 
 def _text(value: object) -> str | None:

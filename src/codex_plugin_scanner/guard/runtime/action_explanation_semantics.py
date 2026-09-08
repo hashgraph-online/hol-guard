@@ -11,9 +11,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import PurePath, PureWindowsPath
 
-from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from .action_explanation_rule_kinds import kind_for_rule
+from .command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    CommandSafetyExtension,
+)
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .command_rules import CommandSafetyRule
+from .kubernetes_commands import kubernetes_secret_read_source
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,67 +210,88 @@ def _derive_shell_semantics(
 ) -> ActionExplanationSemantics:
     command_text = _text(envelope.get("command"))
     if command_text is None:
-        return _unknown_semantics("shell_command", actor_label=actor_label, reason="command_not_retained")
+        return _unknown_semantics(
+            "shell_command",
+            actor_label=actor_label,
+            reason="command_not_retained",
+        )
     command = parse_shell_command(command_text)
     observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(command)
     effective = tuple(item for item in observations if item.effective_evidence)
-    uncertainty = tuple(
-        dict.fromkeys(
-            [
-                *([command.uncertainty_reason] if command.uncertainty_reason else []),
-                *(reason.value for item in observations for reason in item.uncertainty_reasons),
-            ]
+    rule_matches = _shell_rule_matches(command_text, effective)
+    uncertainty = _shell_uncertainty(command, observations)
+    if not rule_matches:
+        return _unknown_shell_semantics(
+            command,
+            actor_label=actor_label,
+            uncertainty=uncertainty,
         )
+    targets = _shell_targets(command, effective) or _fallback_shell_targets(command)
+    return _build_shell_semantics(
+        command,
+        actor_label=actor_label,
+        rule_matches=rule_matches,
+        targets=targets,
+        uncertainty=uncertainty,
     )
-    if not effective:
-        reason = uncertainty[0] if uncertainty else "semantic_rule_unavailable"
-        return replace(
-            _unknown_semantics("shell_command", actor_label=actor_label, reason=reason),
-            canonical_command=command,
-            canonical_identity=command.security_identity,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            uncertainty_reasons=uncertainty or (reason,),
-        )
 
-    rule_ids = tuple(dict.fromkeys(item.rule.rule_id for item in effective))[:64]
-    extension_ids = tuple(dict.fromkeys(item.extension.extension_id for item in effective))[:64]
-    targets = _shell_targets(command, effective)
-    if len(effective) == 1:
-        item = effective[0]
-        rule = item.rule
-        kind = _kind_for_rule(item.extension.extension_id, rule)
-        headline = rule.title
-        program = targets[0].label if targets else "the requested command"
-        summary = f"{actor_label} wants to run {program}. Guard identified {rule.title.lower()}."
-        impact = rule.description
-        alternatives = rule.safer_alternatives or item.extension.safer_alternatives
-        recommendation = alternatives[0] if alternatives else "Review the exact action before continuing."
-        consequences = (ExplanationConsequence(rule.description, rule.severity),)
+
+def _shell_rule_matches(
+    command_text: str,
+    effective: tuple[object, ...],
+) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule], ...]:
+    matches = tuple((item.extension, item.rule) for item in effective)
+    if matches:
+        return matches
+    compatibility = _presentation_compatibility_rule(command_text)
+    return (compatibility,) if compatibility is not None else ()
+
+
+def _shell_uncertainty(
+    command: CanonicalCommand,
+    observations: tuple[object, ...],
+) -> tuple[str, ...]:
+    reasons = [command.uncertainty_reason] if command.uncertainty_reason else []
+    reasons.extend(reason.value for item in observations for reason in item.uncertainty_reasons)
+    return tuple(dict.fromkeys(reasons))
+
+
+def _unknown_shell_semantics(
+    command: CanonicalCommand,
+    *,
+    actor_label: str,
+    uncertainty: tuple[str, ...],
+) -> ActionExplanationSemantics:
+    reason = uncertainty[0] if uncertainty else "semantic_rule_unavailable"
+    return replace(
+        _unknown_semantics("shell_command", actor_label=actor_label, reason=reason),
+        canonical_command=command,
+        canonical_identity=command.security_identity,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        uncertainty_reasons=uncertainty or (reason,),
+    )
+
+
+def _fallback_shell_targets(command: CanonicalCommand) -> tuple[ExplanationTarget, ...]:
+    if not command.segments:
+        return ()
+    program = _program_label(command.segments[0])
+    return (ExplanationTarget("command", program),) if program else ()
+
+
+def _build_shell_semantics(
+    command: CanonicalCommand,
+    *,
+    actor_label: str,
+    rule_matches: tuple[tuple[CommandSafetyExtension, CommandSafetyRule], ...],
+    targets: tuple[ExplanationTarget, ...],
+    uncertainty: tuple[str, ...],
+) -> ActionExplanationSemantics:
+    if len(rule_matches) == 1:
+        copy = _single_shell_copy(rule_matches[0], actor_label=actor_label, targets=targets)
     else:
-        kind = "compound_action"
-        headline = "Run several protected actions"
-        summary = f"{actor_label} wants to run a command containing {len(effective)} protected actions."
-        impact = (
-            "The command combines multiple actions that can affect files, credentials, "
-            "systems, or external services."
-        )
-        alternatives = tuple(
-            dict.fromkeys(
-                alternative
-                for item in effective
-                for alternative in (item.rule.safer_alternatives or item.extension.safer_alternatives)
-            )
-        )[:12]
-        recommendation = (
-            alternatives[0]
-            if alternatives
-            else "Review each protected action separately before continuing."
-        )
-        consequences = tuple(
-            ExplanationConsequence(item.rule.description, item.rule.severity)
-            for item in effective[:16]
-        )
-
+        copy = _compound_shell_copy(rule_matches, actor_label=actor_label)
+    kind, headline, summary, impact, recommendation, alternatives, consequences = copy
     return ActionExplanationSemantics(
         action_type="shell_command",
         kind=kind,
@@ -277,13 +303,91 @@ def _derive_shell_semantics(
         uncertainty_reasons=uncertainty,
         targets=targets or (ExplanationTarget("command", "the requested command", "unknown"),),
         consequences=consequences,
-        safer_alternatives=tuple(alternatives)[:12],
+        safer_alternatives=alternatives,
         canonical_command=command,
         canonical_identity=command.security_identity,
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        extension_ids=extension_ids,
-        rule_ids=rule_ids,
+        extension_ids=tuple(dict.fromkeys(extension.extension_id for extension, _rule in rule_matches))[:64],
+        rule_ids=tuple(dict.fromkeys(rule.rule_id for _extension, rule in rule_matches))[:64],
     )
+
+
+def _single_shell_copy(
+    match: tuple[CommandSafetyExtension, CommandSafetyRule],
+    *,
+    actor_label: str,
+    targets: tuple[ExplanationTarget, ...],
+) -> tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+    tuple[str, ...],
+    tuple[ExplanationConsequence, ...],
+]:
+    extension, rule = match
+    alternatives = tuple(rule.safer_alternatives or extension.safer_alternatives)[:12]
+    recommendation = alternatives[0] if alternatives else "Review the exact action before continuing."
+    program = targets[0].label if targets else "the requested command"
+    return (
+        kind_for_rule(extension.extension_id, rule),
+        rule.title,
+        f"{actor_label} wants to run {program}. Guard identified {rule.title.lower()}.",
+        rule.description,
+        recommendation,
+        alternatives,
+        (ExplanationConsequence(rule.description, rule.severity),),
+    )
+
+
+def _compound_shell_copy(
+    rule_matches: tuple[tuple[CommandSafetyExtension, CommandSafetyRule], ...],
+    *,
+    actor_label: str,
+) -> tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+    tuple[str, ...],
+    tuple[ExplanationConsequence, ...],
+]:
+    alternatives = tuple(
+        dict.fromkeys(
+            alternative
+            for extension, rule in rule_matches
+            for alternative in (rule.safer_alternatives or extension.safer_alternatives)
+        )
+    )[:12]
+    recommendation = alternatives[0] if alternatives else "Review each protected action separately before continuing."
+    consequences = tuple(
+        ExplanationConsequence(rule.description, rule.severity) for _extension, rule in rule_matches[:16]
+    )
+    return (
+        "compound_action",
+        "Run several protected actions",
+        f"{actor_label} wants to run a command containing {len(rule_matches)} protected actions.",
+        "The command combines multiple actions that can affect files, credentials, systems, or external services.",
+        recommendation,
+        alternatives,
+        consequences,
+    )
+
+
+def _presentation_compatibility_rule(
+    command_text: str,
+) -> tuple[CommandSafetyExtension, CommandSafetyRule] | None:
+    """Project a legacy compatibility rule without changing command enforcement."""
+
+    if kubernetes_secret_read_source(command_text) is None:
+        return None
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.kubernetes-secrets")
+    rule = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get_rule("command.kubernetes-secrets.secret-read")
+    if extension is None or rule is None:
+        return None
+    return extension, rule
 
 
 def _unknown_semantics(
@@ -299,8 +403,7 @@ def _unknown_semantics(
         kind="unknown_action",
         headline="Run an action Guard could not fully explain",
         summary=(
-            f"{actor_label} wants to perform an action. "
-            "Guard could not confirm the exact intent from retained facts."
+            f"{actor_label} wants to perform an action. Guard could not confirm the exact intent from retained facts."
         ),
         impact=impact,
         recommendation=recommendation,
@@ -341,59 +444,13 @@ def _program_label(segment: CommandSegment) -> str | None:
     return f"the {basename} command" if basename else None
 
 
-def _kind_for_rule(extension_id: str, rule: CommandSafetyRule) -> str:
-    rule_id = rule.rule_id.lower()
-    action_text = " ".join(rule.action_classes).lower()
-    if extension_id == "command.filesystem":
-        return "permission_change" if "permission" in rule_id or "ownership" in rule_id else "file_delete"
-    if extension_id == "command.git":
-        if any(token in rule_id for token in ("force-push", "push", "remote", "fetch")):
-            return "git_remote_change"
-        if any(token in rule_id for token in ("reset", "rebase", "history", "branch-delete")):
-            return "git_history_rewrite"
-        if any(token in rule_id for token in ("read", "inspect", "status", "diff", "log", "show")):
-            return "git_read"
-        return "git_local_change"
-    if "secret" in rule_id or "credential" in rule_id or "secret" in action_text or "credential" in action_text:
-        return "secret_send" if any(token in rule_id for token in ("send", "upload", "exfil")) else "secret_read"
-    if "download" in rule_id and any(token in rule_id for token in ("execute", "script", "pipe")):
-        return "download_and_execute"
-    if "download" in rule_id:
-        return "download"
-    if "package" in extension_id or "package" in rule_id:
-        if any(token in rule_id for token in ("remove", "uninstall")):
-            return "package_remove"
-        if "update" in rule_id or "upgrade" in rule_id:
-            return "package_update"
-        return "package_install"
-    if "container" in extension_id or "docker" in rule_id or "podman" in rule_id:
-        return "container_change"
-    if "kubernetes" in extension_id or "kubectl" in rule_id or "cluster" in action_text:
-        return "cluster_change"
-    if any(token in extension_id for token in ("cloud", "terraform", "aws", "azure", "gcp")):
-        return "cloud_change"
-    if "database" in extension_id or "database" in action_text or "sql" in rule_id:
-        return "database_read" if "read" in rule_id else "database_change"
-    if "guard" in extension_id or "guard" in action_text:
-        return "guard_control_change"
-    if "windows" in extension_id or "system" in extension_id:
-        return "disk_change" if any(token in rule_id for token in ("disk", "partition", "format")) else "system_change"
-    if any(token in rule_id for token in ("upload", "egress", "remote-body", "publish")):
-        return "network_send"
-    return "system_change"
-
-
 def _typed_target(envelope: Mapping[str, object], kind: str) -> ExplanationTarget:
     if kind.startswith("file_"):
-        paths = _strings(envelope.get("target_paths"))
-        label = (
-            f"the item named {_basename(paths[0])}"
-            if paths
-            else "a file or folder Guard could not safely name"
-        )
+        paths = normalized_string_sequence(envelope.get("target_paths"))
+        label = f"the item named {_basename(paths[0])}" if paths else "a file or folder Guard could not safely name"
         return ExplanationTarget("filesystem_item", label)
     if kind.startswith("network_"):
-        hosts = _strings(envelope.get("network_hosts"))
+        hosts = normalized_string_sequence(envelope.get("network_hosts"))
         return ExplanationTarget(
             "network_host",
             f"the service {hosts[0]}" if hosts else "an external service",
@@ -421,14 +478,12 @@ def _basename(value: str) -> str:
     return PurePath(clean).name or PureWindowsPath(value).name or "an item"
 
 
-def _strings(value: object) -> tuple[str, ...]:
+def normalized_string_sequence(value: object) -> tuple[str, ...]:
+    """Normalize a bounded sequence of non-empty string values."""
+
     if not isinstance(value, (list, tuple)):
         return ()
-    return tuple(
-        item.strip()
-        for item in value
-        if isinstance(item, str) and item.strip()
-    )[:32]
+    return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())[:32]
 
 
 def _text(value: object) -> str | None:

@@ -90,7 +90,7 @@ def test_shell_projection_reuses_core_command_semantics(
     assert explanation.canonical_identity
     assert explanation.catalog_digest
     assert explanation.technical.command_display is None
-    assert command not in str(explanation.everyday.to_dict())
+    assert command not in str(explanation.to_dict()["everyday"])
     assert explanation.technical.unavailable_reason
 
 
@@ -107,7 +107,7 @@ def test_safe_variant_cannot_erase_risky_sibling_from_explanation() -> None:
     assert explanation is not None
     assert "command.filesystem.recursive-delete" in explanation.technical.rule_ids
     assert explanation.kind != "unknown_action"
-    assert "./build" not in str(explanation.everyday.to_dict())
+    assert "./build" not in str(explanation.to_dict()["everyday"])
 
 
 def test_network_and_mcp_projections_use_typed_targets_only() -> None:
