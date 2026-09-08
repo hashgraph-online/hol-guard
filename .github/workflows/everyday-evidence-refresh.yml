@@ -29,7 +29,7 @@ jobs:
       - name: Generate reviewed decision evidence
         run: |
           uv sync --frozen --extra dev --python 3.12
-          uv run --no-sync python tests/guard_command_decision_diff.py
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
           uv run --no-sync python tests/guard_command_decision_diff.py --check
       - name: Commit generated evidence and self-remove
         run: |
