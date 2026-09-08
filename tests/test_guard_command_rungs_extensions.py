@@ -5,11 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_extension_matchers import executable_matcher, safe_flag_variant
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -118,6 +121,16 @@ RUNGS_SAFE_COMMANDS: tuple[str, ...] = (
     "rungs add backlog --dry-run=yes",
     "rungs add --dry-run",
     "rungs.cmd add backlog --dry-run",
+    # rungs reads the command from argv[2] alone. A switch there is an unknown
+    # command: help is printed, the exit status is 1, and nothing runs, so the
+    # matchers require the command word in that slot before any option logic.
+    "rungs --full check",
+    "rungs --fast check .",
+    "rungs --dry-run add backlog",
+    "rungs --copilot add backlog",
+    "rungs --set backlog.root=docs/backlog add backlog",
+    "rungs --apply upgrade",
+    "rungs --mystery upgrade --apply",
     # Help and inventory.
     "rungs",
     "rungs --help",
@@ -293,6 +306,48 @@ def test_rungs_out_of_scope_commands_keep_guard_fallback(tmp_path: Path) -> None
         assert _enabled_rule_ids(command, tmp_path) == set(), command
         payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
         assert payload["status"] == "no_match", command
+
+
+def test_leading_subcommand_requirement_keeps_option_logic_after_the_command(tmp_path: Path) -> None:
+    """The fixed slot rejects a leading switch; everything after the command still parses."""
+
+    def parsed(command: str):
+        return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    fixed = executable_matcher(
+        "tool",
+        "run",
+        global_flags=frozenset({"--verbose"}),
+        options_with_values=frozenset({"--config"}),
+        fail_secure_unknown_options=True,
+        require_leading_subcommands=True,
+    )
+    floating = executable_matcher(
+        "tool",
+        "run",
+        global_flags=frozenset({"--verbose"}),
+        options_with_values=frozenset({"--config"}),
+        fail_secure_unknown_options=True,
+    )
+    assert fixed.match(parsed("tool run"))
+    assert fixed.match(parsed("tool run --verbose target"))
+    assert fixed.match(parsed("tool run --config c.toml target"))
+    # A known switch, an unknown option, or a value option before the command
+    # word is a different command to the tool; the floating matcher would still
+    # find `run` behind it, which is the behaviour the requirement removes.
+    assert fixed.match(parsed("tool --verbose run")) == ()
+    assert fixed.match(parsed("tool --mystery run")) == ()
+    assert fixed.match(parsed("tool --config c.toml run")) == ()
+    assert floating.match(parsed("tool --verbose run"))
+    assert floating.match(parsed("tool --mystery run"))
+    # Safe variants inherit the requirement, and the fail-secure parse still
+    # refuses a preview an unknown option could have swallowed.
+    variant = safe_flag_variant(
+        AnyMatcher(matchers=(fixed,)), variant_id="dry-run", title="Dry run", flag="--dry-run"
+    ).matcher
+    assert variant.match(parsed("tool run --verbose --dry-run"))
+    assert variant.match(parsed("tool --dry-run run")) == ()
+    assert variant.match(parsed("tool run --mystery --dry-run")) == ()
 
 
 def test_rungs_extension_publishes_reference_and_action_risks() -> None:

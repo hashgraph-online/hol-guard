@@ -26,6 +26,7 @@ def executable_matcher(
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     fail_secure_unknown_options: bool = False,
+    require_leading_subcommands: bool = False,
 ) -> ExecutableMatcher:
     """Build a portable executable matcher with structured option handling."""
 
@@ -40,6 +41,7 @@ def executable_matcher(
         leading_options_with_values=leading_options_with_values,
         options_with_values=options_with_values,
         fail_secure_unknown_options=fail_secure_unknown_options,
+        require_leading_subcommands=require_leading_subcommands,
     )
 
 
@@ -100,6 +102,7 @@ def _clone_executable_child(
         required_option_values=required_option_values,
         required_flags_in_all_arguments=True,
         fail_secure_unknown_options=child.fail_secure_unknown_options,
+        require_leading_subcommands=child.require_leading_subcommands,
     )
 
 

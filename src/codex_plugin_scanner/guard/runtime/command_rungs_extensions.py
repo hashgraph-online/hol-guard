@@ -86,6 +86,10 @@ def _rungs(
     options_with_values: frozenset[str] = _RUNGS_OPTIONS_WITH_VALUES,
     switches: frozenset[str] = _RUNGS_SWITCHES,
 ) -> AnyMatcher:
+    # The command must sit in argv[2]: a switch before it makes rungs print
+    # help and exit 1, so `rungs --full check` runs nothing and must not
+    # review. Interspersed switches and the fail-secure parse still govern
+    # every token after the command, which is where forged previews live.
     return AnyMatcher(
         matchers=(
             executable_matcher(
@@ -95,6 +99,7 @@ def _rungs(
                 global_flags=switches,
                 options_with_values=options_with_values,
                 fail_secure_unknown_options=True,
+                require_leading_subcommands=True,
             ),
         )
     )
@@ -106,15 +111,14 @@ _RUNGS_ADD = _rungs("add")
 # `--apply=false` still applies. Guard's flag semantics would read that
 # assignment as disabled, so --apply is declared as value-taking here: every
 # spelling then counts as present, and the token it may consume matters to
-# nothing else on upgrade, which reads no other switch. No switches are
-# declared for the same reason: Guard strips every fully-known interspersed
-# `--name=value` token before it checks required flags, which would hide the
-# assigned spelling again.
+# nothing else on upgrade, which reads no other switch. It leaves the switch
+# set for the same reason: a declared switch is stripped before the required
+# flag is looked for.
 _RUNGS_UPGRADE_APPLY = _rungs(
     "upgrade",
     required_flags=frozenset({"--apply"}),
     options_with_values=_RUNGS_OPTIONS_WITH_VALUES | {"--apply"},
-    switches=_EMPTY,
+    switches=_RUNGS_SWITCHES - {"--apply"},
 )
 
 # The action-class risk map merges this the same way it merges blitcp's, so the

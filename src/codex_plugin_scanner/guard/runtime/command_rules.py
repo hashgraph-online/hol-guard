@@ -29,6 +29,11 @@ class ExecutableMatcher(_ExecutableContractBase):
     """Match executable names with optional subcommand and flag constraints."""
 
     subcommands: tuple[str, ...] = ()
+    # Some tools read their command from a fixed argv slot and treat anything
+    # else there as an unknown command. When set, the subcommands must be the
+    # first raw arguments; interspersed and fail-secure option handling still
+    # applies to everything after them.
+    require_leading_subcommands: bool = False
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -92,6 +97,12 @@ class ExecutableMatcher(_ExecutableContractBase):
             if not _segment_matches_executable(segment, self.executables):
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            if (
+                self.require_leading_subcommands
+                and self.subcommands
+                and lowered_arguments[: len(self.subcommands)] != self.subcommands
+            ):
+                continue
             subcommand_arguments = _without_options(
                 lowered_arguments,
                 self.interspersed_options_with_values,
