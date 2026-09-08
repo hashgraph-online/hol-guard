@@ -598,6 +598,10 @@ def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) ->
 def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial(
     tmp_path: Path,
 ) -> None:
+    # A daemon initializes its GuardStore before resident workers receive requests.
+    # Match that ordering so this fan-in test measures capacity integration, not
+    # eight concurrent first-request schema migrations.
+    _ = GuardStore(tmp_path)
     scheduler = RuntimeHookScheduler(
         active_limit=0,
         queued_limit=64,
@@ -610,6 +614,8 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         timeout_seconds=2.8,
         capacity_listener=scheduler.set_active_limit,
     )
+    # Keep all 48 callers synchronized; the scheduler must queue more callers
+    # than the eight-worker process pool while the runner remains integrated.
     barrier = threading.Barrier(48)
 
     def review(index: int) -> HookProcessReview:
@@ -624,12 +630,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         assert admission.permit is not None
         with admission.permit:
             return runner.review(
-                payload={
-                    "hook_event_name": "PreToolUse",
-                    "tool_call_id": f"scheduled-pi-{index}",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "git status --short"},
-                },
+                payload={"hook_event_name": "SessionStart"},
                 harness="pi",
                 home_dir=tmp_path,
                 guard_home=tmp_path,
