@@ -26,9 +26,7 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 
 _RAILWAY_WRAPPER_DESTRUCTIVE = AnyMatcher(matchers=_RAILWAY_ALIAS_DESTRUCTIVE.matchers[1:])
 _RAILWAY_WRAPPER_CHANGE = AnyMatcher(matchers=_RAILWAY_ALIAS_CHANGE.matchers[1:])
-_IAC_RUNNER_ALIAS_TEARDOWN = AnyMatcher(
-    matchers=(*_CDK_ALIAS_DESTROY.matchers[1:], *_SLS_ALIAS_REMOVE.matchers[1:])
-)
+_IAC_RUNNER_ALIAS_TEARDOWN = AnyMatcher(matchers=(*_CDK_ALIAS_DESTROY.matchers[1:], *_SLS_ALIAS_REMOVE.matchers[1:]))
 _ALT_CONTAINER_RESOURCE_REMOVAL = _path_bundle(
     ("podman", "nerdctl"),
     (("rm",), ("container", "rm"), ("image", "rm"), ("volume", "rm"), ("network", "rm")),

@@ -232,5 +232,3 @@ def _node_flag_bundle(
                     )
                 )
     return AnyMatcher(matchers=tuple(matchers))
-
-
