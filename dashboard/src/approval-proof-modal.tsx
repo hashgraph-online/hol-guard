@@ -95,6 +95,15 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
             {error}
           </p>
         ) : null}
+        {busy ? (
+          <p
+            role="status"
+            tabIndex={0}
+            className="mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+          >
+            {busyLabel}
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <ActionButton type="button" variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
