@@ -28,9 +28,9 @@ def test_package_extensions_delegate_to_existing_package_firewall() -> None:
         if extension.extension_id.startswith("command.package.")
     )
 
-    assert len(package_extensions) == 8
+    assert len(package_extensions) == 9
     assert {extension.extension_id for extension in package_extensions} == {
-        "command.package.go",
+        "command.package.dotnet", "command.package.go",
         "command.package.jvm",
         "command.package.node",
         "command.package.php",
