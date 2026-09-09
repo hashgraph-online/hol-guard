@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import BinaryIO, Concatenate, ParamSpec, TypeVar
+from typing import BinaryIO, ParamSpec, TypeVar
 
 from .durable_io import fsync_directory
 from .mdm.file_lock import acquire_file_lock, release_file_lock
@@ -69,14 +69,17 @@ def settings_write_lock(guard_home: Path) -> Iterator[None]:
 
 
 def serialize_guard_settings(
-    operation: Callable[Concatenate[Path, _P], _T],
-) -> Callable[Concatenate[Path, _P], _T]:
+    operation: Callable[_P, _T],
+) -> Callable[_P, _T]:
     """Apply one transaction boundary to each config read-modify-write entry point."""
 
     @wraps(operation)
-    def serialized(guard_home: Path, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    def serialized(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+        guard_home = kwargs.get("guard_home", args[0] if args else None)
+        if not isinstance(guard_home, Path):
+            raise TypeError("Settings writes require a local Guard home path.")
         with settings_write_lock(guard_home):
-            return operation(guard_home, *args, **kwargs)
+            return operation(*args, **kwargs)
 
     return serialized
 

@@ -17,11 +17,14 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,presentation-set,dashboard-update}",
+        metavar="{bootstrap,presentation-get,presentation-set,dashboard-update}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
     bootstrap_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    presentation_get_parser = desktop_subparsers.add_parser("presentation-get", help=argparse.SUPPRESS)
+    _add_guard_common_args(presentation_get_parser, suppress_defaults=True)
+    presentation_get_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     presentation_parser = desktop_subparsers.add_parser("presentation-set", help=argparse.SUPPRESS)
     _add_guard_common_args(presentation_parser, suppress_defaults=True)
     presentation_parser.add_argument("--mode", choices=("everyday", "technical"), required=True)

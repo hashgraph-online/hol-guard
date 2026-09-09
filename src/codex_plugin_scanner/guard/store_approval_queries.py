@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 
+from .runtime.live_action_explanation import attach_live_action_explanation
+
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
 from .store_base import *
-from .runtime.live_action_explanation import attach_live_action_explanation
 
 
 def _with_live_explanation(payload: dict[str, object] | None) -> dict[str, object] | None:
@@ -20,9 +21,7 @@ def _summary_projection_sources(connection, items: list[object]) -> dict[str, di
     request_ids = [
         request_id
         for item in items
-        if isinstance(item, dict)
-        and isinstance((request_id := item.get("request_id")), str)
-        and request_id
+        if isinstance(item, dict) and isinstance((request_id := item.get("request_id")), str) and request_id
     ]
     if not request_ids:
         return {}

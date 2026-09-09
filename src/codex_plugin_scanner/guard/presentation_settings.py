@@ -37,7 +37,10 @@ def resolve_presentation_settings_update(
     if "presentation_schema_version" in payload:
         if not requested:
             raise ValueError("presentation_schema_version requires a presentation preference change.")
-        if payload["presentation_schema_version"] != PRESENTATION_SCHEMA_VERSION:
+        if (
+            type(payload["presentation_schema_version"]) is not int
+            or payload["presentation_schema_version"] != PRESENTATION_SCHEMA_VERSION
+        ):
             raise ValueError("Unsupported presentation schema version.")
 
     mode = current_mode
@@ -55,6 +58,10 @@ def resolve_presentation_settings_update(
     changed = requested and (mode != current_mode or explicit != current_explicit)
     if requested:
         expected_revision = payload.get("presentation_revision")
+        if "presentation_revision" in payload and (
+            type(expected_revision) is not int or not 0 <= expected_revision <= 2**53 - 1
+        ):
+            raise ValueError("presentation_revision must be a non-negative safe integer.")
         if expected_revision is not None and expected_revision != current_revision:
             raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
         # Unsupported future-schema state is read-only instead of being silently downgraded.

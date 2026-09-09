@@ -44,6 +44,27 @@ def presentation_projection(config: object) -> dict[str, object]:
     }
 
 
+def run_presentation_get_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None,
+    config: GuardConfig | None,
+    output_stream: TextIO | None,
+) -> int:
+    """Read the current Core preference without starting a daemon or writing settings."""
+    from ..config import load_guard_config
+
+    resolved_home = getattr(args, "guard_home", None) or guard_home
+    if resolved_home is None and config is not None:
+        resolved_home = config.guard_home
+    if resolved_home is None:
+        raise ValueError("Guard Desktop presentation read requires a local Guard home.")
+    projected = presentation_projection(load_guard_config(resolved_home))
+    if bool(getattr(args, "json", False)):
+        print(json.dumps(projected, sort_keys=True), file=output_stream or sys.stdout)
+    return 0
+
+
 def run_presentation_set_command(
     args: argparse.Namespace,
     *,

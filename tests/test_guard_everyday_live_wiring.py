@@ -97,8 +97,7 @@ def test_raw_only_retained_command_reports_deliberate_disclosure(tmp_path) -> No
     assert isinstance(explanation, dict)
     assert explanation["technical"]["available"] is False
     assert (
-        explanation["technical"]["unavailable_reason"]
-        == "Exact technical details require deliberate local disclosure."
+        explanation["technical"]["unavailable_reason"] == "Exact technical details require deliberate local disclosure."
     )
     assert "cat /Users/alice" not in str(explanation)
 

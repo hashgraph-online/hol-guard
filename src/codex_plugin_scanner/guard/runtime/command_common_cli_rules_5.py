@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from .command_common_cli_matchers import _OC_FLAGS, _OC_OPTIONS
 from .command_common_cli_matchers_extra import (
-    DOTNET_POSITIONAL_PACKAGE,
-    MONGOSH_MUTATION,
-    SQLITE_MUTATION,
     _ARGO_ADDITIONAL_RECONCILE,
     _CDK_ALIAS_DESTROY,
     _FIREBASE_SECRET_CHANGE,
@@ -18,6 +15,9 @@ from .command_common_cli_matchers_extra import (
     _RAILWAY_ALIAS_DESTRUCTIVE,
     _SLS_ALIAS_REMOVE,
     _VAULT_ADDITIONAL_MUTATION,
+    DOTNET_POSITIONAL_PACKAGE,
+    MONGOSH_MUTATION,
+    SQLITE_MUTATION,
 )
 from .command_common_cli_rule_support import help_variants, rule
 from .command_common_cli_support import _path_bundle
@@ -26,9 +26,7 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 
 _RAILWAY_WRAPPER_DESTRUCTIVE = AnyMatcher(matchers=_RAILWAY_ALIAS_DESTRUCTIVE.matchers[1:])
 _RAILWAY_WRAPPER_CHANGE = AnyMatcher(matchers=_RAILWAY_ALIAS_CHANGE.matchers[1:])
-_IAC_RUNNER_ALIAS_TEARDOWN = AnyMatcher(
-    matchers=(*_CDK_ALIAS_DESTROY.matchers[1:], *_SLS_ALIAS_REMOVE.matchers[1:])
-)
+_IAC_RUNNER_ALIAS_TEARDOWN = AnyMatcher(matchers=(*_CDK_ALIAS_DESTROY.matchers[1:], *_SLS_ALIAS_REMOVE.matchers[1:]))
 _ALT_CONTAINER_RESOURCE_REMOVAL = _path_bundle(
     ("podman", "nerdctl"),
     (("rm",), ("container", "rm"), ("image", "rm"), ("volume", "rm"), ("network", "rm")),
@@ -68,7 +66,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.platform.railway",
         suffix="runner-alias-change",
         title="Railway runner-alias production operation",
-        description="Identifies deploy, restart, down, variable, and shell operations through the Railway binary alias.",
+        description=(
+            "Identifies deploy, restart, down, variable, and shell operations through the Railway binary alias."
+        ),
         matcher=_RAILWAY_WRAPPER_CHANGE,
         action_class="Railway production command",
         risk_classes=("execution", "network_egress", "local_secret_read"),
@@ -97,7 +97,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         matcher=_PACKAGE_PUBLICATION_GAPS,
         action_class="package publication command",
         risk_classes=("supply_chain", "network_egress", "destructive_shell"),
-        safer_alternative="Verify package identity, version, registry, provenance, and signing before publication changes.",
+        safer_alternative=(
+            "Verify package identity, version, registry, provenance, and signing before publication changes."
+        ),
         severity="critical",
         safe_variants=help_variants(_PACKAGE_PUBLICATION_GAPS),
         example_command="pnpm unpublish example-package@1.0.0",
@@ -130,7 +132,10 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.container-runtime",
         suffix="alternate-runtime-execution",
         title="Alternate container runtime execution",
-        description="Identifies ordinary Podman and nerdctl run or exec operations that can mutate container or host-adjacent state.",
+        description=(
+            "Identifies ordinary Podman and nerdctl run or exec operations that can mutate "
+            "container or host-adjacent state."
+        ),
         matcher=_ALT_CONTAINER_EXECUTION,
         action_class="docker-sensitive command",
         risk_classes=("destructive_shell", "network_egress"),
@@ -187,7 +192,9 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         extension_id="command.platform.firebase",
         suffix="secret-mutation",
         title="Firebase secret mutation",
-        description="Identifies Firebase Functions secret set and destroy operations across direct and Node-runner forms.",
+        description=(
+            "Identifies Firebase Functions secret set and destroy operations across direct and Node-runner forms."
+        ),
         matcher=_FIREBASE_SECRET_CHANGE,
         action_class="Firebase production command",
         risk_classes=("execution", "network_egress"),
