@@ -37,6 +37,7 @@ from .presentation_mode import (
 from .presentation_settings import (
     PRESENTATION_SETTING_INPUT_KEYS,
     apply_presentation_settings_update,
+    next_presentation_revision,
     resolve_presentation_settings_update,
 )
 from .protection_posture import (
@@ -804,7 +805,9 @@ def reset_guard_settings(
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
-    next_payload["presentation_revision"] = load_guard_config(guard_home).presentation_revision + 1
+    next_payload["presentation_revision"] = next_presentation_revision(
+        load_guard_config(guard_home).presentation_revision
+    )
     _write_guard_config(guard_home / "config.toml", next_payload)
     return load_guard_config(guard_home)
 
