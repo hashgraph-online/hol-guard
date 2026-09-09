@@ -66,7 +66,7 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
         bootstrap = _json_result(_run_core(executable, bootstrap_args, env=env))
         assert bootstrap["schema"] == "guard-desktop-bootstrap.v1"
         first_status = _json_result(_run_core(executable, status_args, env=env))
-        assert first_status["running"] is True
+        assert first_status["running"] is True, first_status
 
         first_stop = _json_result(_run_core(executable, stop_args, env=env))
         assert first_stop["running"] is False
