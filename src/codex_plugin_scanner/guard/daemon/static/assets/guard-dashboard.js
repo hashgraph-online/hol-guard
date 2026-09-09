@@ -38,7 +38,7 @@ function requireReactJsxRuntime_production() {
   if (hasRequiredReactJsxRuntime_production) return reactJsxRuntime_production;
   hasRequiredReactJsxRuntime_production = 1;
   var REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element"), REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment");
-  function jsxProd(type, config, maybeKey) {
+  function jsxProd(type2, config, maybeKey) {
     var key = null;
     void 0 !== maybeKey && (key = "" + maybeKey);
     void 0 !== config.key && (key = "" + config.key);
@@ -50,7 +50,7 @@ function requireReactJsxRuntime_production() {
     config = maybeKey.ref;
     return {
       $$typeof: REACT_ELEMENT_TYPE,
-      type,
+      type: type2,
       key,
       ref: void 0 !== config ? config : null,
       props: maybeKey
@@ -128,11 +128,11 @@ function requireReact_production() {
   function noop() {
   }
   var ReactSharedInternals = { H: null, A: null, T: null, S: null }, hasOwnProperty = Object.prototype.hasOwnProperty;
-  function ReactElement(type, key, props) {
+  function ReactElement(type2, key, props) {
     var refProp = props.ref;
     return {
       $$typeof: REACT_ELEMENT_TYPE,
-      type,
+      type: type2,
       key,
       ref: void 0 !== refProp ? refProp : null,
       props
@@ -178,12 +178,12 @@ function requireReact_production() {
     throw thenable;
   }
   function mapIntoArray(children, array, escapedPrefix, nameSoFar, callback) {
-    var type = typeof children;
-    if ("undefined" === type || "boolean" === type) children = null;
+    var type2 = typeof children;
+    if ("undefined" === type2 || "boolean" === type2) children = null;
     var invokeCallback = false;
     if (null === children) invokeCallback = true;
     else
-      switch (type) {
+      switch (type2) {
         case "bigint":
         case "string":
         case "number":
@@ -219,23 +219,23 @@ function requireReact_production() {
     var nextNamePrefix = "" === nameSoFar ? "." : nameSoFar + ":";
     if (isArrayImpl(children))
       for (var i = 0; i < children.length; i++)
-        nameSoFar = children[i], type = nextNamePrefix + getElementKey(nameSoFar, i), invokeCallback += mapIntoArray(
+        nameSoFar = children[i], type2 = nextNamePrefix + getElementKey(nameSoFar, i), invokeCallback += mapIntoArray(
           nameSoFar,
           array,
           escapedPrefix,
-          type,
+          type2,
           callback
         );
     else if (i = getIteratorFn(children), "function" === typeof i)
       for (children = i.call(children), i = 0; !(nameSoFar = children.next()).done; )
-        nameSoFar = nameSoFar.value, type = nextNamePrefix + getElementKey(nameSoFar, i++), invokeCallback += mapIntoArray(
+        nameSoFar = nameSoFar.value, type2 = nextNamePrefix + getElementKey(nameSoFar, i++), invokeCallback += mapIntoArray(
           nameSoFar,
           array,
           escapedPrefix,
-          type,
+          type2,
           callback
         );
-    else if ("object" === type) {
+    else if ("object" === type2) {
       if ("function" === typeof children.then)
         return mapIntoArray(
           resolveThenable(children),
@@ -380,7 +380,7 @@ function requireReact_production() {
     };
     return defaultValue;
   };
-  react_production.createElement = function(type, config, children) {
+  react_production.createElement = function(type2, config, children) {
     var propName, props = {}, key = null;
     if (null != config)
       for (propName in void 0 !== config.key && (key = "" + config.key), config)
@@ -392,10 +392,10 @@ function requireReact_production() {
         childArray[i] = arguments[i + 2];
       props.children = childArray;
     }
-    if (type && type.defaultProps)
-      for (propName in childrenLength = type.defaultProps, childrenLength)
+    if (type2 && type2.defaultProps)
+      for (propName in childrenLength = type2.defaultProps, childrenLength)
         void 0 === props[propName] && (props[propName] = childrenLength[propName]);
-    return ReactElement(type, key, props);
+    return ReactElement(type2, key, props);
   };
   react_production.createRef = function() {
     return { current: null };
@@ -411,10 +411,10 @@ function requireReact_production() {
       _init: lazyInitializer
     };
   };
-  react_production.memo = function(type, compare) {
+  react_production.memo = function(type2, compare) {
     return {
       $$typeof: REACT_MEMO_TYPE,
-      type,
+      type: type2,
       compare: void 0 === compare ? null : compare
     };
   };
@@ -1081,12 +1081,12 @@ function requireReactDomClient_production() {
     return "function" === typeof maybeIterable ? maybeIterable : null;
   }
   var REACT_CLIENT_REFERENCE = /* @__PURE__ */ Symbol.for("react.client.reference");
-  function getComponentNameFromType(type) {
-    if (null == type) return null;
-    if ("function" === typeof type)
-      return type.$$typeof === REACT_CLIENT_REFERENCE ? null : type.displayName || type.name || null;
-    if ("string" === typeof type) return type;
-    switch (type) {
+  function getComponentNameFromType(type2) {
+    if (null == type2) return null;
+    if ("function" === typeof type2)
+      return type2.$$typeof === REACT_CLIENT_REFERENCE ? null : type2.displayName || type2.name || null;
+    if ("string" === typeof type2) return type2;
+    switch (type2) {
       case REACT_FRAGMENT_TYPE:
         return "Fragment";
       case REACT_PROFILER_TYPE:
@@ -1100,26 +1100,26 @@ function requireReactDomClient_production() {
       case REACT_ACTIVITY_TYPE:
         return "Activity";
     }
-    if ("object" === typeof type)
-      switch (type.$$typeof) {
+    if ("object" === typeof type2)
+      switch (type2.$$typeof) {
         case REACT_PORTAL_TYPE:
           return "Portal";
         case REACT_CONTEXT_TYPE:
-          return type.displayName || "Context";
+          return type2.displayName || "Context";
         case REACT_CONSUMER_TYPE:
-          return (type._context.displayName || "Context") + ".Consumer";
+          return (type2._context.displayName || "Context") + ".Consumer";
         case REACT_FORWARD_REF_TYPE:
-          var innerType = type.render;
-          type = type.displayName;
-          type || (type = innerType.displayName || innerType.name || "", type = "" !== type ? "ForwardRef(" + type + ")" : "ForwardRef");
-          return type;
+          var innerType = type2.render;
+          type2 = type2.displayName;
+          type2 || (type2 = innerType.displayName || innerType.name || "", type2 = "" !== type2 ? "ForwardRef(" + type2 + ")" : "ForwardRef");
+          return type2;
         case REACT_MEMO_TYPE:
-          return innerType = type.displayName || null, null !== innerType ? innerType : getComponentNameFromType(type.type) || "Memo";
+          return innerType = type2.displayName || null, null !== innerType ? innerType : getComponentNameFromType(type2.type) || "Memo";
         case REACT_LAZY_TYPE:
-          innerType = type._payload;
-          type = type._init;
+          innerType = type2._payload;
+          type2 = type2._init;
           try {
-            return getComponentNameFromType(type(innerType));
+            return getComponentNameFromType(type2(innerType));
           } catch (x) {
           }
       }
@@ -1696,8 +1696,8 @@ function requireReactDomClient_production() {
     }
   }
   function isCheckable(elem) {
-    var type = elem.type;
-    return (elem = elem.nodeName) && "input" === elem.toLowerCase() && ("checkbox" === type || "radio" === type);
+    var type2 = elem.type;
+    return (elem = elem.nodeName) && "input" === elem.toLowerCase() && ("checkbox" === type2 || "radio" === type2);
   }
   function trackValueOnNode(node, valueField, currentValue) {
     var descriptor = Object.getOwnPropertyDescriptor(
@@ -1771,26 +1771,26 @@ function requireReactDomClient_production() {
       }
     );
   }
-  function updateInput(element, value, defaultValue, lastDefaultValue, checked, defaultChecked, type, name) {
+  function updateInput(element, value, defaultValue, lastDefaultValue, checked, defaultChecked, type2, name) {
     element.name = "";
-    null != type && "function" !== typeof type && "symbol" !== typeof type && "boolean" !== typeof type ? element.type = type : element.removeAttribute("type");
+    null != type2 && "function" !== typeof type2 && "symbol" !== typeof type2 && "boolean" !== typeof type2 ? element.type = type2 : element.removeAttribute("type");
     if (null != value)
-      if ("number" === type) {
+      if ("number" === type2) {
         if (0 === value && "" === element.value || element.value != value)
           element.value = "" + getToStringValue(value);
       } else
         element.value !== "" + getToStringValue(value) && (element.value = "" + getToStringValue(value));
     else
-      "submit" !== type && "reset" !== type || element.removeAttribute("value");
-    null != value ? setDefaultValue(element, type, getToStringValue(value)) : null != defaultValue ? setDefaultValue(element, type, getToStringValue(defaultValue)) : null != lastDefaultValue && element.removeAttribute("value");
+      "submit" !== type2 && "reset" !== type2 || element.removeAttribute("value");
+    null != value ? setDefaultValue(element, type2, getToStringValue(value)) : null != defaultValue ? setDefaultValue(element, type2, getToStringValue(defaultValue)) : null != lastDefaultValue && element.removeAttribute("value");
     null == checked && null != defaultChecked && (element.defaultChecked = !!defaultChecked);
     null != checked && (element.checked = checked && "function" !== typeof checked && "symbol" !== typeof checked);
     null != name && "function" !== typeof name && "symbol" !== typeof name && "boolean" !== typeof name ? element.name = "" + getToStringValue(name) : element.removeAttribute("name");
   }
-  function initInput(element, value, defaultValue, checked, defaultChecked, type, name, isHydrating2) {
-    null != type && "function" !== typeof type && "symbol" !== typeof type && "boolean" !== typeof type && (element.type = type);
+  function initInput(element, value, defaultValue, checked, defaultChecked, type2, name, isHydrating2) {
+    null != type2 && "function" !== typeof type2 && "symbol" !== typeof type2 && "boolean" !== typeof type2 && (element.type = type2);
     if (null != value || null != defaultValue) {
-      if (!("submit" !== type && "reset" !== type || void 0 !== value && null !== value)) {
+      if (!("submit" !== type2 && "reset" !== type2 || void 0 !== value && null !== value)) {
         track(element);
         return;
       }
@@ -1806,8 +1806,8 @@ function requireReactDomClient_production() {
     null != name && "function" !== typeof name && "symbol" !== typeof name && "boolean" !== typeof name && (element.name = name);
     track(element);
   }
-  function setDefaultValue(node, type, value) {
-    "number" === type && getActiveElement(node.ownerDocument) === node || node.defaultValue === "" + value || (node.defaultValue = "" + value);
+  function setDefaultValue(node, type2, value) {
+    "number" === type2 && getActiveElement(node.ownerDocument) === node || node.defaultValue === "" + value || (node.defaultValue = "" + value);
   }
   function updateOptions(node, multiple, propValue, setDefaultSelected) {
     node = node.options;
@@ -2703,20 +2703,20 @@ function requireReactDomClient_production() {
     });
     return workInProgress2;
   }
-  function createFiberFromTypeAndProps(type, key, pendingProps, owner, mode, lanes) {
+  function createFiberFromTypeAndProps(type2, key, pendingProps, owner, mode, lanes) {
     var fiberTag = 0;
-    owner = type;
-    if ("function" === typeof type) shouldConstruct(type) && (fiberTag = 1);
-    else if ("string" === typeof type)
+    owner = type2;
+    if ("function" === typeof type2) shouldConstruct(type2) && (fiberTag = 1);
+    else if ("string" === typeof type2)
       fiberTag = isHostHoistableType(
-        type,
+        type2,
         pendingProps,
         contextStackCursor.current
-      ) ? 26 : "html" === type || "head" === type || "body" === type ? 27 : 5;
+      ) ? 26 : "html" === type2 || "head" === type2 || "body" === type2 ? 27 : 5;
     else
-      a: switch (type) {
+      a: switch (type2) {
         case REACT_ACTIVITY_TYPE:
-          return type = createFiberImplClass(31, pendingProps, key, mode), type.elementType = REACT_ACTIVITY_TYPE, type.lanes = lanes, type;
+          return type2 = createFiberImplClass(31, pendingProps, key, mode), type2.elementType = REACT_ACTIVITY_TYPE, type2.lanes = lanes, type2;
         case REACT_FRAGMENT_TYPE:
           return createFiberFromFragment(pendingProps.children, mode, lanes, key);
         case REACT_STRICT_MODE_TYPE:
@@ -2724,14 +2724,14 @@ function requireReactDomClient_production() {
           mode |= 24;
           break;
         case REACT_PROFILER_TYPE:
-          return type = createFiberImplClass(12, pendingProps, key, mode | 2), type.elementType = REACT_PROFILER_TYPE, type.lanes = lanes, type;
+          return type2 = createFiberImplClass(12, pendingProps, key, mode | 2), type2.elementType = REACT_PROFILER_TYPE, type2.lanes = lanes, type2;
         case REACT_SUSPENSE_TYPE:
-          return type = createFiberImplClass(13, pendingProps, key, mode), type.elementType = REACT_SUSPENSE_TYPE, type.lanes = lanes, type;
+          return type2 = createFiberImplClass(13, pendingProps, key, mode), type2.elementType = REACT_SUSPENSE_TYPE, type2.lanes = lanes, type2;
         case REACT_SUSPENSE_LIST_TYPE:
-          return type = createFiberImplClass(19, pendingProps, key, mode), type.elementType = REACT_SUSPENSE_LIST_TYPE, type.lanes = lanes, type;
+          return type2 = createFiberImplClass(19, pendingProps, key, mode), type2.elementType = REACT_SUSPENSE_LIST_TYPE, type2.lanes = lanes, type2;
         default:
-          if ("object" === typeof type && null !== type)
-            switch (type.$$typeof) {
+          if ("object" === typeof type2 && null !== type2)
+            switch (type2.$$typeof) {
               case REACT_CONTEXT_TYPE:
                 fiberTag = 10;
                 break a;
@@ -2751,12 +2751,12 @@ function requireReactDomClient_production() {
             }
           fiberTag = 29;
           pendingProps = Error(
-            formatProdErrorMessage(130, null === type ? "null" : typeof type, "")
+            formatProdErrorMessage(130, null === type2 ? "null" : typeof type2, "")
           );
           owner = null;
       }
     key = createFiberImplClass(fiberTag, pendingProps, key, mode);
-    key.elementType = type;
+    key.elementType = type2;
     key.type = owner;
     key.lanes = lanes;
     return key;
@@ -2868,10 +2868,10 @@ function requireReactDomClient_production() {
     throw HydrationMismatchException;
   }
   function prepareToHydrateHostInstance(fiber) {
-    var instance = fiber.stateNode, type = fiber.type, props = fiber.memoizedProps;
+    var instance = fiber.stateNode, type2 = fiber.type, props = fiber.memoizedProps;
     instance[internalInstanceKey] = fiber;
     instance[internalPropsKey] = props;
-    switch (type) {
+    switch (type2) {
       case "dialog":
         listenToNonDelegatedEvent("cancel", instance);
         listenToNonDelegatedEvent("close", instance);
@@ -2883,8 +2883,8 @@ function requireReactDomClient_production() {
         break;
       case "video":
       case "audio":
-        for (type = 0; type < mediaEventTypes.length; type++)
-          listenToNonDelegatedEvent(mediaEventTypes[type], instance);
+        for (type2 = 0; type2 < mediaEventTypes.length; type2++)
+          listenToNonDelegatedEvent(mediaEventTypes[type2], instance);
         break;
       case "source":
         listenToNonDelegatedEvent("error", instance);
@@ -2917,8 +2917,8 @@ function requireReactDomClient_production() {
       case "textarea":
         listenToNonDelegatedEvent("invalid", instance), initTextarea(instance, props.value, props.defaultValue, props.children);
     }
-    type = props.children;
-    "string" !== typeof type && "number" !== typeof type && "bigint" !== typeof type || instance.textContent === "" + type || true === props.suppressHydrationWarning || checkForUnmatchedText(instance.textContent, type) ? (null != props.popover && (listenToNonDelegatedEvent("beforetoggle", instance), listenToNonDelegatedEvent("toggle", instance)), null != props.onScroll && listenToNonDelegatedEvent("scroll", instance), null != props.onScrollEnd && listenToNonDelegatedEvent("scrollend", instance), null != props.onClick && (instance.onclick = noop$1), instance = true) : instance = false;
+    type2 = props.children;
+    "string" !== typeof type2 && "number" !== typeof type2 && "bigint" !== typeof type2 || instance.textContent === "" + type2 || true === props.suppressHydrationWarning || checkForUnmatchedText(instance.textContent, type2) ? (null != props.popover && (listenToNonDelegatedEvent("beforetoggle", instance), listenToNonDelegatedEvent("toggle", instance)), null != props.onScroll && listenToNonDelegatedEvent("scroll", instance), null != props.onScrollEnd && listenToNonDelegatedEvent("scrollend", instance), null != props.onClick && (instance.onclick = noop$1), instance = true) : instance = false;
     instance || throwOnHydrationMismatch(fiber, true);
   }
   function popToNextHostParent(fiber) {
@@ -3115,7 +3115,7 @@ function requireReactDomClient_production() {
   var AbortControllerLocal = "undefined" !== typeof AbortController ? AbortController : function() {
     var listeners = [], signal = this.signal = {
       aborted: false,
-      addEventListener: function(type, listener) {
+      addEventListener: function(type2, listener) {
         listeners.push(listener);
       }
     };
@@ -5428,12 +5428,12 @@ function requireReactDomClient_production() {
   }
   function updateMemoComponent(current, workInProgress2, Component, nextProps, renderLanes2) {
     if (null === current) {
-      var type = Component.type;
-      if ("function" === typeof type && !shouldConstruct(type) && void 0 === type.defaultProps && null === Component.compare)
-        return workInProgress2.tag = 15, workInProgress2.type = type, updateSimpleMemoComponent(
+      var type2 = Component.type;
+      if ("function" === typeof type2 && !shouldConstruct(type2) && void 0 === type2.defaultProps && null === Component.compare)
+        return workInProgress2.tag = 15, workInProgress2.type = type2, updateSimpleMemoComponent(
           current,
           workInProgress2,
-          type,
+          type2,
           nextProps,
           renderLanes2
         );
@@ -5449,16 +5449,16 @@ function requireReactDomClient_production() {
       current.return = workInProgress2;
       return workInProgress2.child = current;
     }
-    type = current.child;
+    type2 = current.child;
     if (!checkScheduledUpdateOrContext(current, renderLanes2)) {
-      var prevProps = type.memoizedProps;
+      var prevProps = type2.memoizedProps;
       Component = Component.compare;
       Component = null !== Component ? Component : shallowEqual;
       if (Component(prevProps, nextProps) && current.ref === workInProgress2.ref)
         return bailoutOnAlreadyFinishedWork(current, workInProgress2, renderLanes2);
     }
     workInProgress2.flags |= 1;
-    current = createWorkInProgress(type, nextProps);
+    current = createWorkInProgress(type2, nextProps);
     current.ref = workInProgress2.ref;
     current.return = workInProgress2;
     return workInProgress2.child = current;
@@ -6509,9 +6509,9 @@ function requireReactDomClient_production() {
   function markUpdate(workInProgress2) {
     workInProgress2.flags |= 4;
   }
-  function preloadInstanceAndSuspendIfNeeded(workInProgress2, type, oldProps, newProps, renderLanes2) {
-    if (type = 0 !== (workInProgress2.mode & 32)) type = false;
-    if (type) {
+  function preloadInstanceAndSuspendIfNeeded(workInProgress2, type2, oldProps, newProps, renderLanes2) {
+    if (type2 = 0 !== (workInProgress2.mode & 32)) type2 = false;
+    if (type2) {
       if (workInProgress2.flags |= 16777216, (renderLanes2 & 335544128) === renderLanes2)
         if (workInProgress2.stateNode.complete) workInProgress2.flags |= 8192;
         else if (shouldRemainOnPreviousScreen()) workInProgress2.flags |= 8192;
@@ -6588,16 +6588,16 @@ function requireReactDomClient_production() {
         bubbleProperties(workInProgress2);
         return null;
       case 26:
-        var type = workInProgress2.type, nextResource = workInProgress2.memoizedState;
+        var type2 = workInProgress2.type, nextResource = workInProgress2.memoizedState;
         null === current ? (markUpdate(workInProgress2), null !== nextResource ? (bubbleProperties(workInProgress2), preloadResourceAndSuspendIfNeeded(workInProgress2, nextResource)) : (bubbleProperties(workInProgress2), preloadInstanceAndSuspendIfNeeded(
           workInProgress2,
-          type,
+          type2,
           null,
           newProps,
           renderLanes2
         ))) : nextResource ? nextResource !== current.memoizedState ? (markUpdate(workInProgress2), bubbleProperties(workInProgress2), preloadResourceAndSuspendIfNeeded(workInProgress2, nextResource)) : (bubbleProperties(workInProgress2), workInProgress2.flags &= -16777217) : (current = current.memoizedProps, current !== newProps && markUpdate(workInProgress2), bubbleProperties(workInProgress2), preloadInstanceAndSuspendIfNeeded(
           workInProgress2,
-          type,
+          type2,
           current,
           newProps,
           renderLanes2
@@ -6606,7 +6606,7 @@ function requireReactDomClient_production() {
       case 27:
         popHostContext(workInProgress2);
         renderLanes2 = rootInstanceStackCursor.current;
-        type = workInProgress2.type;
+        type2 = workInProgress2.type;
         if (null !== current && null != workInProgress2.stateNode)
           current.memoizedProps !== newProps && markUpdate(workInProgress2);
         else {
@@ -6617,13 +6617,13 @@ function requireReactDomClient_production() {
             return null;
           }
           current = contextStackCursor.current;
-          popHydrationState(workInProgress2) ? prepareToHydrateHostInstance(workInProgress2) : (current = resolveSingletonInstance(type, newProps, renderLanes2), workInProgress2.stateNode = current, markUpdate(workInProgress2));
+          popHydrationState(workInProgress2) ? prepareToHydrateHostInstance(workInProgress2) : (current = resolveSingletonInstance(type2, newProps, renderLanes2), workInProgress2.stateNode = current, markUpdate(workInProgress2));
         }
         bubbleProperties(workInProgress2);
         return null;
       case 5:
         popHostContext(workInProgress2);
-        type = workInProgress2.type;
+        type2 = workInProgress2.type;
         if (null !== current && null != workInProgress2.stateNode)
           current.memoizedProps !== newProps && markUpdate(workInProgress2);
         else {
@@ -6644,27 +6644,27 @@ function requireReactDomClient_production() {
               case 1:
                 nextResource = ownerDocument.createElementNS(
                   "http://www.w3.org/2000/svg",
-                  type
+                  type2
                 );
                 break;
               case 2:
                 nextResource = ownerDocument.createElementNS(
                   "http://www.w3.org/1998/Math/MathML",
-                  type
+                  type2
                 );
                 break;
               default:
-                switch (type) {
+                switch (type2) {
                   case "svg":
                     nextResource = ownerDocument.createElementNS(
                       "http://www.w3.org/2000/svg",
-                      type
+                      type2
                     );
                     break;
                   case "math":
                     nextResource = ownerDocument.createElementNS(
                       "http://www.w3.org/1998/Math/MathML",
-                      type
+                      type2
                     );
                     break;
                   case "script":
@@ -6681,7 +6681,7 @@ function requireReactDomClient_production() {
                     newProps.multiple ? nextResource.multiple = true : newProps.size && (nextResource.size = newProps.size);
                     break;
                   default:
-                    nextResource = "string" === typeof newProps.is ? ownerDocument.createElement(type, { is: newProps.is }) : ownerDocument.createElement(type);
+                    nextResource = "string" === typeof newProps.is ? ownerDocument.createElement(type2, { is: newProps.is }) : ownerDocument.createElement(type2);
                 }
             }
             nextResource[internalInstanceKey] = workInProgress2;
@@ -6704,7 +6704,7 @@ function requireReactDomClient_production() {
               ownerDocument = ownerDocument.sibling;
             }
             workInProgress2.stateNode = nextResource;
-            a: switch (setInitialProperties(nextResource, type, newProps), type) {
+            a: switch (setInitialProperties(nextResource, type2, newProps), type2) {
               case "button":
               case "input":
               case "select":
@@ -6740,12 +6740,12 @@ function requireReactDomClient_production() {
             current = workInProgress2.stateNode;
             renderLanes2 = workInProgress2.memoizedProps;
             newProps = null;
-            type = hydrationParentFiber;
-            if (null !== type)
-              switch (type.tag) {
+            type2 = hydrationParentFiber;
+            if (null !== type2)
+              switch (type2.tag) {
                 case 27:
                 case 5:
-                  newProps = type.memoizedProps;
+                  newProps = type2.memoizedProps;
               }
             current[internalInstanceKey] = workInProgress2;
             current = current.nodeValue === renderLanes2 || null !== newProps && true === newProps.suppressHydrationWarning || checkForUnmatchedText(current.nodeValue, renderLanes2) ? true : false;
@@ -6788,21 +6788,21 @@ function requireReactDomClient_production() {
       case 13:
         newProps = workInProgress2.memoizedState;
         if (null === current || null !== current.memoizedState && null !== current.memoizedState.dehydrated) {
-          type = popHydrationState(workInProgress2);
+          type2 = popHydrationState(workInProgress2);
           if (null !== newProps && null !== newProps.dehydrated) {
             if (null === current) {
-              if (!type) throw Error(formatProdErrorMessage(318));
-              type = workInProgress2.memoizedState;
-              type = null !== type ? type.dehydrated : null;
-              if (!type) throw Error(formatProdErrorMessage(317));
-              type[internalInstanceKey] = workInProgress2;
+              if (!type2) throw Error(formatProdErrorMessage(318));
+              type2 = workInProgress2.memoizedState;
+              type2 = null !== type2 ? type2.dehydrated : null;
+              if (!type2) throw Error(formatProdErrorMessage(317));
+              type2[internalInstanceKey] = workInProgress2;
             } else
               resetHydrationState(), 0 === (workInProgress2.flags & 128) && (workInProgress2.memoizedState = null), workInProgress2.flags |= 4;
             bubbleProperties(workInProgress2);
-            type = false;
+            type2 = false;
           } else
-            type = upgradeHydrationErrorsToRecoverable(), null !== current && null !== current.memoizedState && (current.memoizedState.hydrationErrors = type), type = true;
-          if (!type) {
+            type2 = upgradeHydrationErrorsToRecoverable(), null !== current && null !== current.memoizedState && (current.memoizedState.hydrationErrors = type2), type2 = true;
+          if (!type2) {
             if (workInProgress2.flags & 256)
               return popSuspenseHandler(workInProgress2), workInProgress2;
             popSuspenseHandler(workInProgress2);
@@ -6814,7 +6814,7 @@ function requireReactDomClient_production() {
           return workInProgress2.lanes = renderLanes2, workInProgress2;
         renderLanes2 = null !== newProps;
         current = null !== current && null !== current.memoizedState;
-        renderLanes2 && (newProps = workInProgress2.child, type = null, null !== newProps.alternate && null !== newProps.alternate.memoizedState && null !== newProps.alternate.memoizedState.cachePool && (type = newProps.alternate.memoizedState.cachePool.pool), nextResource = null, null !== newProps.memoizedState && null !== newProps.memoizedState.cachePool && (nextResource = newProps.memoizedState.cachePool.pool), nextResource !== type && (newProps.flags |= 2048));
+        renderLanes2 && (newProps = workInProgress2.child, type2 = null, null !== newProps.alternate && null !== newProps.alternate.memoizedState && null !== newProps.alternate.memoizedState.cachePool && (type2 = newProps.alternate.memoizedState.cachePool.pool), nextResource = null, null !== newProps.memoizedState && null !== newProps.memoizedState.cachePool && (nextResource = newProps.memoizedState.cachePool.pool), nextResource !== type2 && (newProps.flags |= 2048));
         renderLanes2 !== current && renderLanes2 && (workInProgress2.child.flags |= 8192);
         scheduleRetryEffect(workInProgress2, workInProgress2.updateQueue);
         bubbleProperties(workInProgress2);
@@ -6827,10 +6827,10 @@ function requireReactDomClient_production() {
         pop(suspenseStackCursor);
         newProps = workInProgress2.memoizedState;
         if (null === newProps) return bubbleProperties(workInProgress2), null;
-        type = 0 !== (workInProgress2.flags & 128);
+        type2 = 0 !== (workInProgress2.flags & 128);
         nextResource = newProps.rendering;
         if (null === nextResource)
-          if (type) cutOffTailIfNeeded(newProps, false);
+          if (type2) cutOffTailIfNeeded(newProps, false);
           else {
             if (0 !== workInProgressRootExitStatus || null !== current && 0 !== (current.flags & 128))
               for (current = workInProgress2.child; null !== current; ) {
@@ -6854,21 +6854,21 @@ function requireReactDomClient_production() {
                 }
                 current = current.sibling;
               }
-            null !== newProps.tail && now2() > workInProgressRootRenderTargetTime && (workInProgress2.flags |= 128, type = true, cutOffTailIfNeeded(newProps, false), workInProgress2.lanes = 4194304);
+            null !== newProps.tail && now2() > workInProgressRootRenderTargetTime && (workInProgress2.flags |= 128, type2 = true, cutOffTailIfNeeded(newProps, false), workInProgress2.lanes = 4194304);
           }
         else {
-          if (!type)
+          if (!type2)
             if (current = findFirstSuspended(nextResource), null !== current) {
-              if (workInProgress2.flags |= 128, type = true, current = current.updateQueue, workInProgress2.updateQueue = current, scheduleRetryEffect(workInProgress2, current), cutOffTailIfNeeded(newProps, true), null === newProps.tail && "hidden" === newProps.tailMode && !nextResource.alternate && !isHydrating)
+              if (workInProgress2.flags |= 128, type2 = true, current = current.updateQueue, workInProgress2.updateQueue = current, scheduleRetryEffect(workInProgress2, current), cutOffTailIfNeeded(newProps, true), null === newProps.tail && "hidden" === newProps.tailMode && !nextResource.alternate && !isHydrating)
                 return bubbleProperties(workInProgress2), null;
             } else
-              2 * now2() - newProps.renderingStartTime > workInProgressRootRenderTargetTime && 536870912 !== renderLanes2 && (workInProgress2.flags |= 128, type = true, cutOffTailIfNeeded(newProps, false), workInProgress2.lanes = 4194304);
+              2 * now2() - newProps.renderingStartTime > workInProgressRootRenderTargetTime && 536870912 !== renderLanes2 && (workInProgress2.flags |= 128, type2 = true, cutOffTailIfNeeded(newProps, false), workInProgress2.lanes = 4194304);
           newProps.isBackwards ? (nextResource.sibling = workInProgress2.child, workInProgress2.child = nextResource) : (current = newProps.last, null !== current ? current.sibling = nextResource : workInProgress2.child = nextResource, newProps.last = nextResource);
         }
         if (null !== newProps.tail)
           return current = newProps.tail, newProps.rendering = current, newProps.tail = current.sibling, newProps.renderingStartTime = now2(), current.sibling = null, renderLanes2 = suspenseStackCursor.current, push(
             suspenseStackCursor,
-            type ? renderLanes2 & 1 | 2 : renderLanes2 & 1
+            type2 ? renderLanes2 & 1 | 2 : renderLanes2 & 1
           ), isHydrating && pushTreeFork(workInProgress2, newProps.treeForkCount), current;
         bubbleProperties(workInProgress2);
         return null;
@@ -7084,9 +7084,9 @@ function requireReactDomClient_production() {
       else ref.current = null;
   }
   function commitHostMount(finishedWork) {
-    var type = finishedWork.type, props = finishedWork.memoizedProps, instance = finishedWork.stateNode;
+    var type2 = finishedWork.type, props = finishedWork.memoizedProps, instance = finishedWork.stateNode;
     try {
-      a: switch (type) {
+      a: switch (type2) {
         case "button":
         case "input":
         case "select":
@@ -7147,9 +7147,9 @@ function requireReactDomClient_production() {
   function commitHostSingletonAcquisition(finishedWork) {
     var singleton = finishedWork.stateNode, props = finishedWork.memoizedProps;
     try {
-      for (var type = finishedWork.type, attributes = singleton.attributes; attributes.length; )
+      for (var type2 = finishedWork.type, attributes = singleton.attributes; attributes.length; )
         singleton.removeAttributeNode(attributes[0]);
-      setInitialProperties(singleton, type, props);
+      setInitialProperties(singleton, type2, props);
       singleton[internalInstanceKey] = finishedWork;
       singleton[internalPropsKey] = props;
     } catch (error) {
@@ -10699,7 +10699,7 @@ function requireReactDomClient_production() {
       case "li":
         break;
       case "input":
-        var name = null, type = null, value = null, defaultValue = null, lastDefaultValue = null, checked = null, defaultChecked = null;
+        var name = null, type2 = null, value = null, defaultValue = null, lastDefaultValue = null, checked = null, defaultChecked = null;
         for (propKey in lastProps) {
           var lastProp = lastProps[propKey];
           if (lastProps.hasOwnProperty(propKey) && null != lastProp)
@@ -10720,7 +10720,7 @@ function requireReactDomClient_production() {
           if (nextProps.hasOwnProperty(propKey$201) && (null != propKey || null != lastProp))
             switch (propKey$201) {
               case "type":
-                type = propKey;
+                type2 = propKey;
                 break;
               case "name":
                 name = propKey;
@@ -10760,46 +10760,46 @@ function requireReactDomClient_production() {
           lastDefaultValue,
           checked,
           defaultChecked,
-          type,
+          type2,
           name
         );
         return;
       case "select":
         propKey = value = defaultValue = propKey$201 = null;
-        for (type in lastProps)
-          if (lastDefaultValue = lastProps[type], lastProps.hasOwnProperty(type) && null != lastDefaultValue)
-            switch (type) {
+        for (type2 in lastProps)
+          if (lastDefaultValue = lastProps[type2], lastProps.hasOwnProperty(type2) && null != lastDefaultValue)
+            switch (type2) {
               case "value":
                 break;
               case "multiple":
                 propKey = lastDefaultValue;
               default:
-                nextProps.hasOwnProperty(type) || setProp(
+                nextProps.hasOwnProperty(type2) || setProp(
                   domElement,
                   tag,
-                  type,
+                  type2,
                   null,
                   nextProps,
                   lastDefaultValue
                 );
             }
         for (name in nextProps)
-          if (type = nextProps[name], lastDefaultValue = lastProps[name], nextProps.hasOwnProperty(name) && (null != type || null != lastDefaultValue))
+          if (type2 = nextProps[name], lastDefaultValue = lastProps[name], nextProps.hasOwnProperty(name) && (null != type2 || null != lastDefaultValue))
             switch (name) {
               case "value":
-                propKey$201 = type;
+                propKey$201 = type2;
                 break;
               case "defaultValue":
-                defaultValue = type;
+                defaultValue = type2;
                 break;
               case "multiple":
-                value = type;
+                value = type2;
               default:
-                type !== lastDefaultValue && setProp(
+                type2 !== lastDefaultValue && setProp(
                   domElement,
                   tag,
                   name,
-                  type,
+                  type2,
                   nextProps,
                   lastDefaultValue
                 );
@@ -10822,7 +10822,7 @@ function requireReactDomClient_production() {
                 setProp(domElement, tag, defaultValue, null, nextProps, name);
             }
         for (value in nextProps)
-          if (name = nextProps[value], type = lastProps[value], nextProps.hasOwnProperty(value) && (null != name || null != type))
+          if (name = nextProps[value], type2 = lastProps[value], nextProps.hasOwnProperty(value) && (null != name || null != type2))
             switch (value) {
               case "value":
                 propKey$201 = name;
@@ -10836,7 +10836,7 @@ function requireReactDomClient_production() {
                 if (null != name) throw Error(formatProdErrorMessage(91));
                 break;
               default:
-                name !== type && setProp(domElement, tag, value, name, nextProps, type);
+                name !== type2 && setProp(domElement, tag, value, name, nextProps, type2);
             }
         updateTextarea(domElement, propKey$201, propKey);
         return;
@@ -10989,9 +10989,9 @@ function requireReactDomClient_production() {
         return 0;
     }
   }
-  function getChildHostContextProd(parentNamespace, type) {
+  function getChildHostContextProd(parentNamespace, type2) {
     if (0 === parentNamespace)
-      switch (type) {
+      switch (type2) {
         case "svg":
           return 1;
         case "math":
@@ -10999,10 +10999,10 @@ function requireReactDomClient_production() {
         default:
           return 0;
       }
-    return 1 === parentNamespace && "foreignObject" === type ? 0 : parentNamespace;
+    return 1 === parentNamespace && "foreignObject" === type2 ? 0 : parentNamespace;
   }
-  function shouldSetTextContent(type, props) {
-    return "textarea" === type || "noscript" === type || "string" === typeof props.children || "number" === typeof props.children || "bigint" === typeof props.children || "object" === typeof props.dangerouslySetInnerHTML && null !== props.dangerouslySetInnerHTML && null != props.dangerouslySetInnerHTML.__html;
+  function shouldSetTextContent(type2, props) {
+    return "textarea" === type2 || "noscript" === type2 || "string" === typeof props.children || "number" === typeof props.children || "bigint" === typeof props.children || "object" === typeof props.dangerouslySetInnerHTML && null !== props.dangerouslySetInnerHTML && null != props.dangerouslySetInnerHTML.__html;
   }
   var currentPopstateTransitionEvent = null;
   function shouldAttemptEagerTransition() {
@@ -11023,8 +11023,8 @@ function requireReactDomClient_production() {
       throw error;
     });
   }
-  function isSingletonScope(type) {
-    return "head" === type;
+  function isSingletonScope(type2) {
+    return "head" === type2;
   }
   function clearHydrationBoundary(parentInstance, hydrationInstance) {
     var node = hydrationInstance, depth = 0;
@@ -11094,20 +11094,20 @@ function requireReactDomClient_production() {
       container2.removeChild(node);
     }
   }
-  function canHydrateInstance(instance, type, props, inRootOrSingleton) {
+  function canHydrateInstance(instance, type2, props, inRootOrSingleton) {
     for (; 1 === instance.nodeType; ) {
       var anyProps = props;
-      if (instance.nodeName.toLowerCase() !== type.toLowerCase()) {
+      if (instance.nodeName.toLowerCase() !== type2.toLowerCase()) {
         if (!inRootOrSingleton && ("INPUT" !== instance.nodeName || "hidden" !== instance.type))
           break;
       } else if (!inRootOrSingleton)
-        if ("input" === type && "hidden" === instance.type) {
+        if ("input" === type2 && "hidden" === instance.type) {
           var name = null == anyProps.name ? null : "" + anyProps.name;
           if ("hidden" === anyProps.type && instance.getAttribute("name") === name)
             return instance;
         } else return instance;
       else if (!instance[internalHoistableMarker])
-        switch (type) {
+        switch (type2) {
           case "meta":
             if (!instance.hasAttribute("itemprop")) break;
             return instance;
@@ -11217,21 +11217,21 @@ function requireReactDomClient_production() {
     }
     return null;
   }
-  function resolveSingletonInstance(type, props, rootContainerInstance) {
+  function resolveSingletonInstance(type2, props, rootContainerInstance) {
     props = getOwnerDocumentFromRootContainer(rootContainerInstance);
-    switch (type) {
+    switch (type2) {
       case "html":
-        type = props.documentElement;
-        if (!type) throw Error(formatProdErrorMessage(452));
-        return type;
+        type2 = props.documentElement;
+        if (!type2) throw Error(formatProdErrorMessage(452));
+        return type2;
       case "head":
-        type = props.head;
-        if (!type) throw Error(formatProdErrorMessage(453));
-        return type;
+        type2 = props.head;
+        if (!type2) throw Error(formatProdErrorMessage(453));
+        return type2;
       case "body":
-        type = props.body;
-        if (!type) throw Error(formatProdErrorMessage(454));
-        return type;
+        type2 = props.body;
+        if (!type2) throw Error(formatProdErrorMessage(454));
+        return type2;
       default:
         throw Error(formatProdErrorMessage(451));
     }
@@ -11414,10 +11414,10 @@ function requireReactDomClient_production() {
       }, scripts.set(key, resource));
     }
   }
-  function getResource(type, currentProps, pendingProps, currentResource) {
+  function getResource(type2, currentProps, pendingProps, currentResource) {
     var JSCompiler_inline_result = (JSCompiler_inline_result = rootInstanceStackCursor.current) ? getHoistableRoot(JSCompiler_inline_result) : null;
     if (!JSCompiler_inline_result) throw Error(formatProdErrorMessage(446));
-    switch (type) {
+    switch (type2) {
       case "meta":
       case "title":
         return null;
@@ -11432,18 +11432,18 @@ function requireReactDomClient_production() {
         }, pendingProps.set(currentProps, currentResource)), currentResource) : { type: "void", instance: null, count: 0, state: null };
       case "link":
         if ("stylesheet" === pendingProps.rel && "string" === typeof pendingProps.href && "string" === typeof pendingProps.precedence) {
-          type = getStyleKey(pendingProps.href);
+          type2 = getStyleKey(pendingProps.href);
           var styles$243 = getResourcesFromRoot(
             JSCompiler_inline_result
-          ).hoistableStyles, resource$244 = styles$243.get(type);
+          ).hoistableStyles, resource$244 = styles$243.get(type2);
           resource$244 || (JSCompiler_inline_result = JSCompiler_inline_result.ownerDocument || JSCompiler_inline_result, resource$244 = {
             type: "stylesheet",
             instance: null,
             count: 0,
             state: { loading: 0, preload: null }
-          }, styles$243.set(type, resource$244), (styles$243 = JSCompiler_inline_result.querySelector(
-            getStylesheetSelectorFromKey(type)
-          )) && !styles$243._p && (resource$244.instance = styles$243, resource$244.state.loading = 5), preloadPropsMap.has(type) || (pendingProps = {
+          }, styles$243.set(type2, resource$244), (styles$243 = JSCompiler_inline_result.querySelector(
+            getStylesheetSelectorFromKey(type2)
+          )) && !styles$243._p && (resource$244.instance = styles$243, resource$244.state.loading = 5), preloadPropsMap.has(type2) || (pendingProps = {
             rel: "preload",
             as: "style",
             href: pendingProps.href,
@@ -11452,9 +11452,9 @@ function requireReactDomClient_production() {
             media: pendingProps.media,
             hrefLang: pendingProps.hrefLang,
             referrerPolicy: pendingProps.referrerPolicy
-          }, preloadPropsMap.set(type, pendingProps), styles$243 || preloadStylesheet(
+          }, preloadPropsMap.set(type2, pendingProps), styles$243 || preloadStylesheet(
             JSCompiler_inline_result,
-            type,
+            type2,
             pendingProps,
             resource$244.state
           )));
@@ -11475,7 +11475,7 @@ function requireReactDomClient_production() {
           state: null
         }, pendingProps.set(currentProps, currentResource)), currentResource) : { type: "void", instance: null, count: 0, state: null };
       default:
-        throw Error(formatProdErrorMessage(444, type));
+        throw Error(formatProdErrorMessage(444, type2));
     }
   }
   function getStyleKey(href) {
@@ -11591,37 +11591,37 @@ function requireReactDomClient_production() {
     null == scriptProps.integrity && (scriptProps.integrity = preloadProps.integrity);
   }
   var tagCaches = null;
-  function getHydratableHoistableCache(type, keyAttribute, ownerDocument) {
+  function getHydratableHoistableCache(type2, keyAttribute, ownerDocument) {
     if (null === tagCaches) {
       var cache = /* @__PURE__ */ new Map();
       var caches = tagCaches = /* @__PURE__ */ new Map();
       caches.set(ownerDocument, cache);
     } else
       caches = tagCaches, cache = caches.get(ownerDocument), cache || (cache = /* @__PURE__ */ new Map(), caches.set(ownerDocument, cache));
-    if (cache.has(type)) return cache;
-    cache.set(type, null);
-    ownerDocument = ownerDocument.getElementsByTagName(type);
+    if (cache.has(type2)) return cache;
+    cache.set(type2, null);
+    ownerDocument = ownerDocument.getElementsByTagName(type2);
     for (caches = 0; caches < ownerDocument.length; caches++) {
       var node = ownerDocument[caches];
-      if (!(node[internalHoistableMarker] || node[internalInstanceKey] || "link" === type && "stylesheet" === node.getAttribute("rel")) && "http://www.w3.org/2000/svg" !== node.namespaceURI) {
+      if (!(node[internalHoistableMarker] || node[internalInstanceKey] || "link" === type2 && "stylesheet" === node.getAttribute("rel")) && "http://www.w3.org/2000/svg" !== node.namespaceURI) {
         var nodeKey = node.getAttribute(keyAttribute) || "";
-        nodeKey = type + nodeKey;
+        nodeKey = type2 + nodeKey;
         var existing = cache.get(nodeKey);
         existing ? existing.push(node) : cache.set(nodeKey, [node]);
       }
     }
     return cache;
   }
-  function mountHoistable(hoistableRoot, type, instance) {
+  function mountHoistable(hoistableRoot, type2, instance) {
     hoistableRoot = hoistableRoot.ownerDocument || hoistableRoot;
     hoistableRoot.head.insertBefore(
       instance,
-      "title" === type ? hoistableRoot.querySelector("head > title") : null
+      "title" === type2 ? hoistableRoot.querySelector("head > title") : null
     );
   }
-  function isHostHoistableType(type, props, hostContext) {
+  function isHostHoistableType(type2, props, hostContext) {
     if (1 === hostContext || null != props.itemProp) return false;
-    switch (type) {
+    switch (type2) {
       case "meta":
       case "title":
         return true;
@@ -11634,7 +11634,7 @@ function requireReactDomClient_production() {
           break;
         switch (props.rel) {
           case "stylesheet":
-            return type = props.disabled, "string" === typeof props.precedence && null == type;
+            return type2 = props.disabled, "string" === typeof props.precedence && null == type2;
           default:
             return true;
         }
@@ -12683,7 +12683,7 @@ function IconBase(props) {
     var {
       attr,
       size,
-      title
+      title: title2
     } = props, svgProps = _objectWithoutProperties(props, _excluded);
     var computedSize = size || conf.size || "1em";
     var className;
@@ -12701,7 +12701,7 @@ function IconBase(props) {
       height: computedSize,
       width: computedSize,
       xmlns: "http://www.w3.org/2000/svg"
-    }), title && /* @__PURE__ */ React.createElement("title", null, title), props.children);
+    }), title2 && /* @__PURE__ */ React.createElement("title", null, title2), props.children);
   };
   return IconContext !== void 0 ? /* @__PURE__ */ React.createElement(IconContext.Consumer, null, (conf) => elem(conf)) : elem(DefaultContext);
 }
@@ -14332,29 +14332,29 @@ function looksLikeId(text) {
 }
 function resolveActionTitle(receipt) {
   const envelope = getEnvelope(receipt);
-  const type = resolveActionType(receipt);
+  const type2 = resolveActionType(receipt);
   const command = envelope?.command?.trim();
-  if (type === "Shell command" && command && command.length > 0) {
+  if (type2 === "Shell command" && command && command.length > 0) {
     return truncate(command, 80);
   }
   const targetPath = envelope?.target_paths?.[0]?.trim();
-  if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
+  if ((type2 === "File read" || type2 === "File write") && targetPath && targetPath.length > 0) {
     return truncate(targetPath, 80);
   }
   const promptText = (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.trim();
-  if (type === "Prompt" && promptText && promptText.length > 0) {
+  if (type2 === "Prompt" && promptText && promptText.length > 0) {
     return truncate(promptText, 80);
   }
   const host = envelope?.network_hosts?.[0]?.trim();
-  if (type === "Network request" && host && host.length > 0) {
+  if (type2 === "Network request" && host && host.length > 0) {
     return host;
   }
   const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
-  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
+  if (type2 === "Tool call" && mcpTool && mcpTool.length > 0) {
     return mcpTool;
   }
   const packageName = envelope?.package_name?.trim();
-  if (type === "Package" && packageName && packageName.length > 0) {
+  if (type2 === "Package" && packageName && packageName.length > 0) {
     return packageName;
   }
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
@@ -14377,10 +14377,10 @@ function resolveActionTitle(receipt) {
     return provenance;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
-  if (name && name.toLowerCase() !== type.toLowerCase()) {
-    return `${type}: ${name}`;
+  if (name && name.toLowerCase() !== type2.toLowerCase()) {
+    return `${type2}: ${name}`;
   }
-  return type;
+  return type2;
 }
 function resolveActionSubtitle(receipt) {
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
@@ -14389,15 +14389,15 @@ function resolveActionSubtitle(receipt) {
     return firstSignal.plain_reason;
   }
   const envelope = getEnvelope(receipt);
-  const type = resolveActionType(receipt);
+  const type2 = resolveActionType(receipt);
   const parts = [];
-  if (type === "Shell command" && envelope?.command) {
+  if (type2 === "Shell command" && envelope?.command) {
     if (envelope.tool_name) parts.push(`via ${envelope.tool_name}`);
   }
-  if ((type === "File read" || type === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
+  if ((type2 === "File read" || type2 === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
     parts.push(`${envelope.target_paths.length} paths`);
   }
-  if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
+  if (type2 === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
     parts.push(`${envelope.network_hosts.length} hosts`);
   }
   const caps = receipt.capabilities_summary?.trim();
@@ -14429,23 +14429,23 @@ function truncate(text, max) {
 }
 function plainEnglishDescription(receipt) {
   const app = harnessDisplayName(receipt.harness);
-  const type = resolveActionType(receipt);
-  const title = resolveActionTitle(receipt);
+  const type2 = resolveActionType(receipt);
+  const title2 = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
   const action = guardActionPresentation(receipt.policy_decision);
   if (action.disposition === "allowed") {
     const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
-      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
+      return subtitle ? `${app} ${pastTenseVerb(type2)} ${title2}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type2)} ${title2}. You reviewed and ${outcome}.`;
     }
     const automaticOutcome = action.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
-    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
+    return subtitle ? `${app} ${pastTenseVerb(type2)} ${title2}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type2)} ${title2}. ${automaticOutcome}`;
   }
   const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
-  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
+  return subtitle ? `${app} tried to ${infinitiveVerb(type2)} ${title2}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type2)} ${title2}. ${enforcementCopy}`;
 }
-function pastTenseVerb(type) {
-  switch (type) {
+function pastTenseVerb(type2) {
+  switch (type2) {
     case "Shell command":
       return "ran";
     case "File read":
@@ -14472,8 +14472,8 @@ function pastTenseVerb(type) {
       return "ran";
   }
 }
-function infinitiveVerb(type) {
-  switch (type) {
+function infinitiveVerb(type2) {
+  switch (type2) {
     case "Shell command":
       return "run";
     case "File read":
@@ -14950,8 +14950,8 @@ function isDisplayableHarness(harness) {
   return normalizeHarnessSlug(harness) !== null;
 }
 function resolveDecisionV2Title(item) {
-  const title = item.decision_v2_json?.user_title;
-  return title !== void 0 && title.trim().length > 0 ? title : null;
+  const title2 = item.decision_v2_json?.user_title;
+  return title2 !== void 0 && title2.trim().length > 0 ? title2 : null;
 }
 function buildPrimaryReviewAction(item) {
   return {
@@ -15364,11 +15364,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$5(value) {
+function isRecord$6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$5(raw)) {
+  if (!isRecord$6(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15430,7 +15430,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$4(value) {
+function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15449,7 +15449,7 @@ function deriveState(checks) {
   return byId.get("decision_stream") === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$4(value)) return null;
+  if (!isRecord$5(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15540,7 +15540,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$4(value)) return null;
+  if (!isRecord$5(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15548,7 +15548,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$4(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$5(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15621,7 +15621,7 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$3(value) {
+function isRecord$4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -15648,7 +15648,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$3(candidate)) continue;
+      if (!isRecord$4(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -15656,7 +15656,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$3(candidate)) continue;
+      if (!isRecord$4(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -15801,7 +15801,7 @@ function getDemoDiff(artifactId, harness) {
   }
   return demoDiff;
 }
-function isRecord$2(value) {
+function isRecord$3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString$1(value) {
@@ -15812,18 +15812,18 @@ function readString$1(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 function isSupplyChainAuditIncomplete(detail) {
-  if (!isRecord$2(detail)) {
+  if (!isRecord$3(detail)) {
     return false;
   }
   return readString$1(detail.audit_status) === "incomplete";
 }
 function resolveSupplyChainAuditFailure(detail) {
-  if (!isRecord$2(detail) || !isSupplyChainAuditIncomplete(detail)) {
+  if (!isRecord$3(detail) || !isSupplyChainAuditIncomplete(detail)) {
     return null;
   }
   const outcome = readString$1(detail.audit_outcome);
   const message = readString$1(detail.message);
-  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyChain = isRecord$3(detail.supply_chain) ? detail.supply_chain : null;
   const supplyStatus = readString$1(supplyChain?.status);
   if (outcome === "sync_required" || supplyStatus === "sync_required") {
     return message ?? "Guard supply-chain intel is not synced on this device. Run Sync, then audit again.";
@@ -15865,7 +15865,7 @@ async function readJson(input, init) {
 async function requestErrorMessage(response, fallback) {
   try {
     const payload = await response.clone().json();
-    if (!isRecord$1(payload)) {
+    if (!isRecord$2(payload)) {
       return fallback;
     }
     const message = payload["message"];
@@ -16022,7 +16022,7 @@ async function probeGuardDaemonHealth(origin) {
     if (!response.ok) {
       return false;
     }
-    if (!isRecord$1(payload)) {
+    if (!isRecord$2(payload)) {
       return false;
     }
     return payload.ok === true && payload.compatibility_version === 2;
@@ -16107,7 +16107,7 @@ function constantTimeHexEqual(left, right) {
   return difference === 0;
 }
 function parseReconnectAuthorization(payload) {
-  if (!isRecord$1(payload)) {
+  if (!isRecord$2(payload)) {
     return null;
   }
   if (payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION || payload["surface"] !== "dashboard" || !isHexDigest(payload["reconnect_id"]) || !isHexDigest(payload["verifier"]) || !isHexDigest(payload["installation_id"]) || !isHexDigest(payload["guard_home_id"]) || typeof payload["issued_at_ms"] !== "number" || typeof payload["expires_at_ms"] !== "number" || payload["expires_at_ms"] <= payload["issued_at_ms"]) {
@@ -16129,7 +16129,7 @@ function parseReconnectAuthorization(payload) {
   };
 }
 function parseReconnectChallenge(payload, authorization, candidateOrigin, clientNonce) {
-  if (!isRecord$1(payload)) {
+  if (!isRecord$2(payload)) {
     return null;
   }
   const stringFields = ["state_id"];
@@ -16265,7 +16265,7 @@ async function authenticateGuardDaemonCandidate(origin, authorization) {
       guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
       return false;
     }
-    if (!isRecord$1(verificationPayload) || verificationPayload["verified"] !== true) {
+    if (!isRecord$2(verificationPayload) || verificationPayload["verified"] !== true) {
       guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
       return false;
     }
@@ -16484,7 +16484,7 @@ function guardAuthHeadersForToken(guardToken) {
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 function parseDashboardSessionToken(payload) {
-  if (!isRecord$1(payload)) {
+  if (!isRecord$2(payload)) {
     return null;
   }
   const dashboardSessionToken = payload["dashboard_session_token"];
@@ -16533,7 +16533,7 @@ function guardAwareHref(href) {
   }
   return `${url.pathname}${url.search}${url.hash}`;
 }
-function isRecord$1(value) {
+function isRecord$2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function isGuardActionType(value) {
@@ -16555,7 +16555,7 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 function isGuardHarnessActionErrorPayload(value) {
-  return isRecord$1(value) && isNonEmptyString(value["error"]);
+  return isRecord$2(value) && isNonEmptyString(value["error"]);
 }
 function isApprovalPageStatus(value) {
   return value === "pending" || value === "resolved" || value === "all";
@@ -16569,7 +16569,7 @@ function matchingAliasedField(raw, snakeKey, camelKey) {
   return { matches: true, value: hasSnake ? raw[snakeKey] : raw[camelKey] };
 }
 function parseActionEnvelope(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
   const allowedActionFields = /* @__PURE__ */ new Set([
@@ -16629,7 +16629,7 @@ function parseActionEnvelope(raw) {
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
     return null;
   }
-  if (!isRecord$1(rawPayloadRedacted)) {
+  if (!isRecord$2(rawPayloadRedacted)) {
     return null;
   }
   return {
@@ -16679,14 +16679,14 @@ function isRiskSignalV2Array(value) {
     return false;
   }
   return value.every((item) => {
-    if (!isRecord$1(item)) {
+    if (!isRecord$2(item)) {
       return false;
     }
     return isNonEmptyString(item["signal_id"]) && isRiskSignalV2Category(item["category"]) && isRiskSignalV2Severity(item["severity"]) && isDecisionV2Confidence(item["confidence"]) && isNonEmptyString(item["detector"]) && isNonEmptyString(item["title"]) && isNonEmptyString(item["plain_reason"]) && isStringOrNull(item["technical_detail"]) && isStringOrNull(item["evidence_ref"]) && isRiskSignalV2RedactionLevel(item["redaction_level"]) && isStringOrNull(item["false_positive_hint"]) && isStringOrNull(item["advisory_id"]);
   });
 }
 function parseDecisionV2(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
   const allowedActionFields = /* @__PURE__ */ new Set(["guard_action", "action"]);
@@ -16722,7 +16722,7 @@ function parseDecisionV2(raw) {
   };
 }
 function parseLegacyPackageActionMetadata(raw) {
-  if (!isRecord$1(raw) || raw["schema_version"] !== void 0 || !("policy_action" in raw) || typeof raw["package_manager"] !== "string" || !isStringArray(raw["package_targets"]) || typeof raw["redacted_command"] !== "string") {
+  if (!isRecord$2(raw) || raw["schema_version"] !== void 0 || !("policy_action" in raw) || typeof raw["package_manager"] !== "string" || !isStringArray(raw["package_targets"]) || typeof raw["redacted_command"] !== "string") {
     return { recognized: false, action: null };
   }
   if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
@@ -16787,9 +16787,9 @@ function normalizeApprovalRequest(item) {
   const scopeContractVersion = parseOptionalString(item.scope_contract_version);
   const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
   const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
-  const rawAllowedByAction = isRecord$1(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
-  const rawRecommendedByAction = isRecord$1(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
-  const rawTaskEligibility = isRecord$1(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
+  const rawAllowedByAction = isRecord$2(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
+  const rawRecommendedByAction = isRecord$2(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
+  const rawTaskEligibility = isRecord$2(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
   const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
   const taskCapabilityEligibility = typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null ? {
     eligible: rawTaskEligibility.eligible,
@@ -16826,7 +16826,7 @@ function normalizeApprovalRequests(items) {
   return items.map(normalizeApprovalRequest);
 }
 function normalizeOptionalApprovalRequest(item) {
-  return isRecord$1(item) ? normalizeApprovalRequest(item) : null;
+  return isRecord$2(item) ? normalizeApprovalRequest(item) : null;
 }
 function normalizeApprovalPage(payload, statusFallback = "pending") {
   return {
@@ -16838,7 +16838,7 @@ function normalizeApprovalPage(payload, statusFallback = "pending") {
   };
 }
 function normalizeQueueSummary(raw, pendingCount) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return {
       active_request_id: null,
       next_request_id: null,
@@ -16864,7 +16864,7 @@ function normalizeProcessPathStatus(value) {
   return "missing";
 }
 function normalizePackageManagerProtection(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return void 0;
   }
   const pathStatus = raw["path_status"] === "in_path" ? "in_path" : raw["path_status"] === "restart_required" ? "restart_required" : "missing_from_path";
@@ -16889,7 +16889,7 @@ function normalizePackageManagerProtection(raw) {
   };
 }
 function normalizeSupplyChainSnapshot(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return void 0;
   }
   const packageManagerProtection = normalizePackageManagerProtection(raw["package_manager_protection"]);
@@ -16901,7 +16901,7 @@ function normalizeSupplyChainSnapshot(raw) {
   };
 }
 function normalizeManagedInstall(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return void 0;
   }
   const harness = raw["harness"];
@@ -16910,7 +16910,7 @@ function normalizeManagedInstall(raw) {
   }
   const active = raw["active"] === true;
   const workspace = isStringOrNull(raw["workspace"]) ? raw["workspace"] : null;
-  const manifest = isRecord$1(raw["manifest"]) ? raw["manifest"] : {};
+  const manifest = isRecord$2(raw["manifest"]) ? raw["manifest"] : {};
   const updatedAt = typeof raw["updated_at"] === "string" ? raw["updated_at"] : "";
   return {
     harness,
@@ -16934,11 +16934,11 @@ function normalizeManagedInstalls(raw) {
   return result;
 }
 function normalizeCloudCommandCapability(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return void 0;
   }
   const pending = Array.isArray(raw["pending_commands"]) ? raw["pending_commands"].flatMap((item) => {
-    if (!isRecord$1(item)) return [];
+    if (!isRecord$2(item)) return [];
     const id = item["id"];
     const operation = item["operation"];
     const issuer = item["issuer"];
@@ -16989,7 +16989,7 @@ function normalizeRuntimeSnapshot(snapshot) {
   };
 }
 function normalizeRuntimeState(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
   const sessionId = raw["session_id"];
@@ -17038,21 +17038,21 @@ function isMatchingRuntimeUrl(value, daemonHost, daemonPort) {
   }
 }
 function normalizeQueueCopy(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
-  const title = raw["title"];
+  const title2 = raw["title"];
   const body = raw["body"];
-  if (typeof title !== "string" || typeof body !== "string") {
+  if (typeof title2 !== "string" || typeof body !== "string") {
     return null;
   }
-  return { title, body };
+  return { title: title2, body };
 }
 function isCodexResumeStatus(value) {
   return typeof value === "string" && CODEX_RESUME_STATUSES.some((s) => s === value);
 }
 function normalizeCodexResume(raw) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
   const status = raw["status"];
@@ -17504,7 +17504,7 @@ async function fetchReceipts() {
   return normalizeReceipts(payload.items);
 }
 function normalizeReceiptAnalyticsBucket(raw) {
-  if (!isRecord$1(raw)) return null;
+  if (!isRecord$2(raw)) return null;
   const dateKey = raw["date_key"];
   const label = raw["label"];
   if (typeof dateKey !== "string" || typeof label !== "string") return null;
@@ -17517,13 +17517,13 @@ function normalizeReceiptAnalyticsBucket(raw) {
   };
 }
 function normalizeReceiptAnalytics(raw) {
-  if (!isRecord$1(raw)) return null;
+  if (!isRecord$2(raw)) return null;
   const dailyRaw = raw["daily_activity"];
   const trendRaw = raw["trend_buckets"];
   const harnessRaw = raw["by_harness"];
   const artifactRaw = raw["top_artifacts"];
   const daily_activity = Array.isArray(dailyRaw) ? dailyRaw.map((entry) => {
-    if (!isRecord$1(entry) || typeof entry["date_key"] !== "string") return null;
+    if (!isRecord$2(entry) || typeof entry["date_key"] !== "string") return null;
     return {
       date_key: entry["date_key"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0
@@ -17531,7 +17531,7 @@ function normalizeReceiptAnalytics(raw) {
   }).filter((entry) => entry !== null) : [];
   const trend_buckets = Array.isArray(trendRaw) ? trendRaw.map(normalizeReceiptAnalyticsBucket).filter((entry) => entry !== null) : [];
   const by_harness = Array.isArray(harnessRaw) ? harnessRaw.map((entry) => {
-    if (!isRecord$1(entry) || typeof entry["harness"] !== "string") return null;
+    if (!isRecord$2(entry) || typeof entry["harness"] !== "string") return null;
     return {
       harness: entry["harness"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
@@ -17540,7 +17540,7 @@ function normalizeReceiptAnalytics(raw) {
     };
   }).filter((entry) => entry !== null) : [];
   const top_artifacts = Array.isArray(artifactRaw) ? artifactRaw.map((entry) => {
-    if (!isRecord$1(entry) || typeof entry["name"] !== "string") return null;
+    if (!isRecord$2(entry) || typeof entry["name"] !== "string") return null;
     return {
       name: entry["name"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
@@ -17664,7 +17664,7 @@ async function publishInsightsShare(input) {
   throw new Error("Invalid insights share response");
 }
 function normalizeGuardCloudConnectStatus(value) {
-  if (!isRecord$1(value)) {
+  if (!isRecord$2(value)) {
     return { connect_required: false, connect_flow: null };
   }
   return {
@@ -17992,7 +17992,7 @@ async function resolveRequestWithQueueResult(input) {
     let payload2 = null;
     try {
       const candidate = await response.clone().json();
-      payload2 = isRecord$1(candidate) ? candidate : null;
+      payload2 = isRecord$2(candidate) ? candidate : null;
     } catch {
       payload2 = null;
     }
@@ -18100,9 +18100,9 @@ async function repairProtectionCheck(checkId) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new GuardProtectionRepairError(response.status, isRecord$1(payload) ? payload : null);
+    throw new GuardProtectionRepairError(response.status, isRecord$2(payload) ? payload : null);
   }
-  if (!isRecord$1(payload) || payload.repaired !== true || payload.repair_scope !== "local_integrity" || !Array.isArray(payload.check_ids)) {
+  if (!isRecord$2(payload) || payload.repaired !== true || payload.repair_scope !== "local_integrity" || !Array.isArray(payload.check_ids)) {
     throw new Error("Guard returned an invalid protection repair result.");
   }
   return {
@@ -18113,7 +18113,7 @@ async function repairProtectionCheck(checkId) {
   };
 }
 function normalizeGuardUpdateVersionCheck(raw) {
-  const value = isRecord$1(raw) ? raw : {};
+  const value = isRecord$2(raw) ? raw : {};
   return {
     source: stringValue$1(value.source) ?? "pypi",
     status: stringValue$1(value.status) ?? "unavailable",
@@ -18123,7 +18123,7 @@ function normalizeGuardUpdateVersionCheck(raw) {
   };
 }
 function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
-  const value = isRecord$1(raw) ? raw : {};
+  const value = isRecord$2(raw) ? raw : {};
   const versionCheck = normalizeGuardUpdateVersionCheck(value.version_check);
   const currentVersion = stringValue$1(value.current_version) ?? versionCheck.current_version ?? "unknown";
   const latestVersion = stringValue$1(value.latest_version) ?? versionCheck.latest_version;
@@ -18163,7 +18163,7 @@ async function fetchGuardUpdateStatus() {
     });
   }
   const payload = await readJson("/v1/update/status", { cache: "no-store" });
-  const declaredChannel = isRecord$1(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : null;
+  const declaredChannel = isRecord$2(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : null;
   const status = normalizeGuardUpdateStatus(payload, readRememberedGuardUpdateChannel());
   if (declaredChannel) {
     rememberGuardUpdateChannel(declaredChannel);
@@ -18208,10 +18208,10 @@ async function setGuardUpdateChannel(channel, proof) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const value = isRecord$1(payload) ? payload : {};
+    const value = isRecord$2(payload) ? payload : {};
     throw new Error(stringValue$1(value.message) ?? `Update channel failed with ${response.status}`);
   }
-  const declaredChannel = isRecord$1(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : channel;
+  const declaredChannel = isRecord$2(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : channel;
   rememberGuardUpdateChannel(declaredChannel);
   return normalizeGuardUpdateStatus(payload, declaredChannel);
 }
@@ -18264,7 +18264,7 @@ function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 function normalizePackageFirewallEntitlement(value) {
-  const record2 = isRecord$1(value) ? value : {};
+  const record2 = isRecord$2(value) ? value : {};
   return {
     allowed: booleanValue$1(record2.allowed),
     reason: stringValue$1(record2.reason) ?? "unknown",
@@ -18274,7 +18274,7 @@ function normalizePackageFirewallEntitlement(value) {
   };
 }
 function normalizePackageFirewallReceipt(value) {
-  if (!isRecord$1(value)) {
+  if (!isRecord$2(value)) {
     return null;
   }
   const id = stringValue$1(value.id);
@@ -18287,7 +18287,7 @@ function normalizePackageFirewallReceipt(value) {
   return { id, operation, status, timestamp };
 }
 function normalizePackageFirewallActions(value) {
-  if (!isRecord$1(value)) {
+  if (!isRecord$2(value)) {
     return {};
   }
   const allowedStates = /* @__PURE__ */ new Set([
@@ -18304,7 +18304,7 @@ function normalizePackageFirewallActions(value) {
   return Object.fromEntries(entries);
 }
 function normalizePackageFirewallCliFallback(value) {
-  if (!isRecord$1(value)) {
+  if (!isRecord$2(value)) {
     return null;
   }
   const fallback = {};
@@ -18327,23 +18327,23 @@ function normalizePackageFirewallCliFallback(value) {
   return Object.keys(fallback).length > 0 ? fallback : null;
 }
 function normalizePackageFirewallConnectFlow(value) {
-  if (!isRecord$1(value)) {
+  if (!isRecord$2(value)) {
     return null;
   }
   const state = value.state;
   if (state !== "idle" && state !== "starting" && state !== "running" && state !== "failed") {
     return null;
   }
-  const title = stringValue$1(value.title);
+  const title2 = stringValue$1(value.title);
   const detail = stringValue$1(value.detail);
   const actionLabel = stringValue$1(value.action_label);
   const connectUrl = stringValue$1(value.connect_url);
-  if (title === null || detail === null || actionLabel === null || connectUrl === null) {
+  if (title2 === null || detail === null || actionLabel === null || connectUrl === null) {
     return null;
   }
   return {
     state,
-    title,
+    title: title2,
     detail,
     action_label: actionLabel,
     connect_url: connectUrl,
@@ -18384,7 +18384,7 @@ function readLastInterceptProofAtByManager(status) {
     readPackageShimField(status, "last_test_at", "lastTestAt")
   ];
   for (const source of sources) {
-    if (!isRecord$1(source)) {
+    if (!isRecord$2(source)) {
       continue;
     }
     for (const [manager, timestamp] of Object.entries(source)) {
@@ -18432,9 +18432,9 @@ function normalizePackageShimEntry(manager, detail, pathStatus, coverage) {
   };
 }
 function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
-  const status = isRecord$1(value) ? value : {};
+  const status = isRecord$2(value) ? value : {};
   const managerDetailsValue = readPackageShimField(status, "manager_details", "managerDetails");
-  const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord$1) : [];
+  const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord$2) : [];
   const detailByManager = /* @__PURE__ */ new Map();
   for (const detail of detailRows) {
     const manager = stringValue$1(detail.manager);
@@ -18451,7 +18451,7 @@ function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
   const bypassesValue = readPackageShimField(status, "bypasses", "bypasses");
   if (Array.isArray(bypassesValue)) {
     for (const entry of bypassesValue) {
-      if (!isRecord$1(entry)) {
+      if (!isRecord$2(entry)) {
         continue;
       }
       const manager = stringValue$1(entry.manager);
@@ -18494,9 +18494,9 @@ function actionResultSummary(operation, detail) {
   return `${operation} completed.`;
 }
 function normalizePackageFirewallStatus(value) {
-  const record2 = isRecord$1(value) ? value : {};
+  const record2 = isRecord$2(value) ? value : {};
   const supportedManagers = normalizeStringArray(record2.supported_managers);
-  const shimStatus = isRecord$1(record2.package_shims) ? record2.package_shims : {};
+  const shimStatus = isRecord$2(record2.package_shims) ? record2.package_shims : {};
   const installedManagers = readPackageShimStringArray(shimStatus, "installed_managers", "installedManagers");
   const activeManagers = readPackageShimStringArray(shimStatus, "active_managers", "activeManagers");
   const missingManagers = readPackageShimStringArray(shimStatus, "missing_managers", "missingManagers");
@@ -18548,8 +18548,8 @@ function normalizePackageFirewallStatus(value) {
   };
 }
 function normalizePackageFirewallAction(value) {
-  const record2 = isRecord$1(value) ? value : {};
-  const result = isRecord$1(record2.result) ? record2.result : {};
+  const record2 = isRecord$2(value) ? value : {};
+  const result = isRecord$2(record2.result) ? record2.result : {};
   const operation = stringValue$1(record2.operation) ?? "unknown";
   return {
     entitlement: normalizePackageFirewallEntitlement(record2.entitlement),
@@ -18622,7 +18622,7 @@ async function activatePackageFirewallRuntime() {
     return;
   }
   const payloadBody = await response.json().catch(() => null);
-  if (isRecord$1(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+  if (isRecord$2(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }
   throw new Error("Unable to activate package protection.");
@@ -18734,7 +18734,7 @@ async function repairSupplyChainProtection(credentials) {
       isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
     );
   }
-  if (!isRecord$1(payloadBody) || !isRecord$1(payloadBody.result)) {
+  if (!isRecord$2(payloadBody) || !isRecord$2(payloadBody.result)) {
     throw new Error("Guard returned an invalid supply-chain repair result.");
   }
   const result = payloadBody.result;
@@ -18754,7 +18754,7 @@ function normalizeMcpPolicyStatus(value) {
   return "pending";
 }
 function normalizeMcpPolicyApplyResult(value) {
-  const record2 = isRecord$1(value) ? value : {};
+  const record2 = isRecord$2(value) ? value : {};
   const inserted = record2["inserted"];
   const replaced = record2["replaced"];
   return {
@@ -18766,7 +18766,7 @@ function asStringList(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 function normalizeMcpPolicyWritePlan(value) {
-  const record2 = isRecord$1(value) ? value : {};
+  const record2 = isRecord$2(value) ? value : {};
   return {
     additions: asStringList(record2["additions"]),
     replacements: asStringList(record2["replacements"]),
@@ -18774,7 +18774,7 @@ function normalizeMcpPolicyWritePlan(value) {
   };
 }
 function normalizeMcpPolicySemanticDiff(value) {
-  const record2 = isRecord$1(value) ? value : {};
+  const record2 = isRecord$2(value) ? value : {};
   const additionCount = record2["additionCount"];
   const replacementCount = record2["replacementCount"];
   const removalCount = record2["removalCount"];
@@ -18785,7 +18785,7 @@ function normalizeMcpPolicySemanticDiff(value) {
   };
 }
 function normalizeMcpPolicyRequest(raw) {
-  const record2 = isRecord$1(raw) ? raw : {};
+  const record2 = isRecord$2(raw) ? raw : {};
   const expectedPolicyGeneration = record2["expectedPolicyGeneration"];
   return {
     requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
@@ -18840,7 +18840,7 @@ async function resolveMcpPolicyRequest(input) {
       isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
     );
   }
-  const record2 = isRecord$1(payloadBody) ? payloadBody : {};
+  const record2 = isRecord$2(payloadBody) ? payloadBody : {};
   return {
     resolved: record2["resolved"] === true,
     requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
@@ -19141,7 +19141,7 @@ function anchorPropsFromButtonProps(props) {
   return rest;
 }
 const ActionButton = reactExports.forwardRef(
-  ({ children, href, variant, disabled, onClick, className: customClassName, type, ...buttonProps }, ref) => {
+  ({ children, href, variant, disabled, onClick, className: customClassName, type: type2, ...buttonProps }, ref) => {
     const className = `${actionButtonClass(variant)}${customClassName ? ` ${customClassName}` : ""}`;
     if (href) {
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19158,7 +19158,7 @@ const ActionButton = reactExports.forwardRef(
         }
       );
     }
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { ref, type: type ?? "button", className, onClick, disabled, ...buttonProps, children });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { ref, type: type2 ?? "button", className, onClick, disabled, ...buttonProps, children });
   }
 );
 ActionButton.displayName = "ActionButton";
@@ -19476,14 +19476,14 @@ function AlphaChannelDialog({
   onApprovalPasswordChange,
   onApprovalTotpCodeChange
 }) {
-  const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const title2 = useAlpha ? "Return to stable updates" : "Try alpha updates";
   const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
   const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
   const confirmDisabled = pending || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title2 }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: description })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -22647,7 +22647,7 @@ function HomeInsightsMetrics({ analytics }) {
   const items = buildInsightMetrics(analytics, "compact");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: items.map((item, index) => renderInsightMetric(item, index, true)) });
 }
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString(value) {
@@ -22685,13 +22685,13 @@ function parseAuditActionResult(result) {
       tone: "warning"
     };
   }
-  const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
+  const evaluation = isRecord$1(result.evaluation) ? result.evaluation : null;
   const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
   const manifestPaths = readStringArray(result.manifest_paths);
   const lockfilePaths = readStringArray(result.lockfile_paths);
-  const inventory = isRecord(result.inventory) ? result.inventory : null;
+  const inventory = isRecord$1(result.inventory) ? result.inventory : null;
   const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
-  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord) : [];
+  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$1) : [];
   const lines = [];
   if (manifestPaths.length > 0) {
     lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
@@ -22745,7 +22745,7 @@ function parseTestActionResult(result) {
   const interceptProved = result.intercept_proved === true;
   const testedManagers = readStringArray(result.tested_managers);
   const pathRepairRequired = readStringArray(result.path_repair_required);
-  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord) : [];
+  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
   const lines = [];
   for (const entry of managerResults) {
     const manager = readString(entry.manager) ?? "manager";
@@ -22779,18 +22779,18 @@ function parseTestActionResult(result) {
   };
 }
 function parsePackageFirewallActionResult(op, body) {
-  if (!isRecord(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
   let result;
-  if (isRecord(body.result)) {
+  if (isRecord$1(body.result)) {
     result = body.result;
-  } else if (isRecord(body.result_detail)) {
+  } else if (isRecord$1(body.result_detail)) {
     result = body.result_detail;
   } else {
     result = body;
   }
-  if (!isRecord(result)) {
+  if (!isRecord$1(result)) {
     return null;
   }
   if (op === "audit") {
@@ -22805,13 +22805,13 @@ function parsePackageFirewallActionResult(op, body) {
   return null;
 }
 function readActionResultRecord(body) {
-  if (!isRecord(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
-  if (isRecord(body.result_detail)) {
+  if (isRecord$1(body.result_detail)) {
     return body.result_detail;
   }
-  if (isRecord(body.result)) {
+  if (isRecord$1(body.result)) {
     return body.result;
   }
   return body;
@@ -22840,7 +22840,7 @@ function parseInterceptProofSnapshot(body) {
   if (result === null) {
     return null;
   }
-  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord) : [];
+  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
   const testedManagers = readStringArray(result.tested_managers);
   const pathRepairRequired = readStringArray(result.path_repair_required);
   const interceptProved = result.intercept_proved === true;
@@ -22849,7 +22849,7 @@ function parseInterceptProofSnapshot(body) {
   if (!hasProofContext && result.intercept_proved === void 0) {
     return null;
   }
-  const receipt = isRecord(body) && isRecord(body.receipt) ? body.receipt : null;
+  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
   const receiptId = receipt !== null ? readString(receipt.id) : null;
   const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
   const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
@@ -23078,7 +23078,7 @@ function ConnectStep({
   done,
   emphasis = "default",
   index,
-  title
+  title: title2
 }) {
   const prominent = emphasis === "prominent";
   let toneClass;
@@ -23110,7 +23110,7 @@ function ConnectStep({
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: titleClass, children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: titleClass, children: title2 }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: bodyClass, children: body })
     ] })
   ] }) });
@@ -25286,7 +25286,7 @@ function WorkspacePageHeaderToolbar(props) {
   ] });
 }
 function WorkspacePageHeader(props) {
-  const { eyebrow, title, description, actions } = props;
+  const { eyebrow, title: title2, description, actions } = props;
   const tabConfig = props.tabs !== void 0 ? {
     tabs: props.tabs,
     activeTab: props.activeTab,
@@ -25295,7 +25295,7 @@ function WorkspacePageHeader(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-page-header", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-page-header__layout", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-page-header__copy space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title2 }),
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WorkspacePageHeaderToolbar, { tabConfig, actions })
@@ -26109,7 +26109,7 @@ const FORBIDDEN_KEYS = /* @__PURE__ */ new Set([
 function invalid(kind) {
   throw new Error(`Invalid ${kind} payload`);
 }
-function record(value, kind) {
+function record$1(value, kind) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) invalid(kind);
   return value;
 }
@@ -26156,7 +26156,7 @@ function objectArray(value, kind, limit = 100) {
   return value;
 }
 function normalizeMatch(value) {
-  const item = record(value, "command activity");
+  const item = record$1(value, "command activity");
   return {
     ordinal: integer(item.ordinal, "command activity"),
     extension_id: stringValue(item.extension_id, "command activity"),
@@ -26172,7 +26172,7 @@ function normalizeMatch(value) {
   };
 }
 function normalizeActivity(value) {
-  const item = record(value, "command activity");
+  const item = record$1(value, "command activity");
   const matches = objectArray(item.matches, "command activity").map(normalizeMatch);
   const matchCount = integer(item.match_count, "command activity");
   if (matches.length !== matchCount) invalid("command activity");
@@ -26210,7 +26210,7 @@ function normalizeActivity(value) {
 }
 function normalizeCommandActivityPage(value) {
   rejectForbidden(value, "command activity");
-  const payload = record(value, "command activity");
+  const payload = record$1(value, "command activity");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
@@ -26220,17 +26220,17 @@ function normalizeCommandActivityPage(value) {
 }
 function countBuckets(value, kind) {
   return objectArray(value, kind, 50).map((raw) => {
-    const item = record(raw, kind);
+    const item = record$1(raw, kind);
     return { value: stringValue(item.value, kind), count: integer(item.count, kind) };
   });
 }
 function normalizeCommandActivityAnalytics(value) {
   rejectForbidden(value, "command activity analytics");
-  const payload = record(value, "command activity analytics");
-  const window2 = record(payload.window, "command activity analytics");
-  const scope = record(payload.scope, "command activity analytics");
-  const dimensions = record(payload.dimensions, "command activity analytics");
-  const health = record(payload.health, "command activity analytics");
+  const payload = record$1(value, "command activity analytics");
+  const window2 = record$1(payload.window, "command activity analytics");
+  const scope = record$1(payload.scope, "command activity analytics");
+  const dimensions = record$1(payload.dimensions, "command activity analytics");
+  const health = record$1(payload.health, "command activity analytics");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity analytics");
   const normalizedDimensions = Object.fromEntries(
     ANALYTICS_DIMENSIONS.map((name) => [name, countBuckets(dimensions[name], "command activity analytics")])
@@ -26248,13 +26248,13 @@ function normalizeCommandActivityAnalytics(value) {
     },
     commands_checked: integer(payload.commands_checked, "command activity analytics"),
     trend: objectArray(payload.trend, "command activity analytics", 397).map((raw) => {
-      const item = record(raw, "command activity analytics");
+      const item = record$1(raw, "command activity analytics");
       return { day: stringValue(item.day, "command activity analytics"), count: integer(item.count, "command activity analytics") };
     }),
     dimensions: normalizedDimensions,
     dimension_breakdowns_scope: enumValue(payload.dimension_breakdowns_scope, ["global"], "command activity analytics"),
     feedback: objectArray(payload.feedback, "command activity analytics", 2).map((raw) => {
-      const item = record(raw, "command activity analytics");
+      const item = record$1(raw, "command activity analytics");
       return {
         label: enumValue(item.label, FEEDBACK_LABELS, "command activity analytics"),
         count: integer(item.count, "command activity analytics")
@@ -26271,7 +26271,7 @@ function normalizeCommandActivityAnalytics(value) {
 }
 function normalizeCommandExtensionsPage(value) {
   rejectForbidden(value, "command extensions");
-  const payload = record(value, "command extensions");
+  const payload = record$1(value, "command extensions");
   if (payload.schema_version !== COMMAND_EXTENSION_SCHEMA_VERSION || payload.source !== "built-in") {
     invalid("command extensions");
   }
@@ -26279,9 +26279,9 @@ function normalizeCommandExtensionsPage(value) {
     schema_version: COMMAND_EXTENSION_SCHEMA_VERSION,
     source: "built-in",
     items: objectArray(payload.items, "command extensions").map((raw) => {
-      const item = record(raw, "command extensions");
+      const item = record$1(raw, "command extensions");
       const rules = objectArray(item.rules, "command extensions").map((ruleRaw) => {
-        const rule = record(ruleRaw, "command extensions");
+        const rule = record$1(ruleRaw, "command extensions");
         return {
           rule_id: stringValue(rule.rule_id, "command extensions"),
           title: stringValue(rule.title, "command extensions", 512),
@@ -26318,7 +26318,7 @@ function normalizeCommandExtensionsPage(value) {
 }
 function normalizeCommandFeedbackResult(value) {
   rejectForbidden(value, "command feedback");
-  const payload = record(value, "command feedback");
+  const payload = record$1(value, "command feedback");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command feedback");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
@@ -26330,14 +26330,14 @@ function normalizeCommandFeedbackResult(value) {
   };
 }
 function normalizedCounts(value, keys, kind) {
-  const payload = record(value, kind);
+  const payload = record$1(value, kind);
   return Object.fromEntries(keys.map((key) => [key, integer(payload[key], kind)]));
 }
 function normalizeCommandActivityDiagnostics(value) {
   rejectForbidden(value, "command activity diagnostics");
-  const payload = record(value, "command activity diagnostics");
-  const schemas = record(payload.schemas, "command activity diagnostics");
-  const stableIds = record(payload.stable_ids, "command activity diagnostics");
+  const payload = record$1(value, "command activity diagnostics");
+  const schemas = record$1(payload.schemas, "command activity diagnostics");
+  const stableIds = record$1(payload.stable_ids, "command activity diagnostics");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity diagnostics");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -26353,7 +26353,7 @@ function normalizeCommandActivityDiagnostics(value) {
       "command activity diagnostics"
     ),
     proof_coverage: objectArray(payload.proof_coverage, "command activity diagnostics", 3).map((raw) => {
-      const item = record(raw, "command activity diagnostics");
+      const item = record$1(raw, "command activity diagnostics");
       return {
         proof_level: enumValue(item.proof_level, PROOF_LEVELS, "command activity diagnostics"),
         count: integer(item.count, "command activity diagnostics")
@@ -26365,7 +26365,7 @@ function normalizeCommandActivityDiagnostics(value) {
       rules: stringArray(stableIds.rules, "command activity diagnostics", 1e3)
     },
     error_classes: objectArray(payload.error_classes, "command activity diagnostics", 4).map((raw) => {
-      const item = record(raw, "command activity diagnostics");
+      const item = record$1(raw, "command activity diagnostics");
       return {
         error_class: stringValue(item.error_class, "command activity diagnostics"),
         count: integer(item.count, "command activity diagnostics")
@@ -26375,7 +26375,7 @@ function normalizeCommandActivityDiagnostics(value) {
 }
 function normalizeCommandActivityDeletion(value) {
   rejectForbidden(value, "command activity deletion");
-  const payload = record(value, "command activity deletion");
+  const payload = record$1(value, "command activity deletion");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity deletion");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -26385,7 +26385,7 @@ function normalizeCommandActivityDeletion(value) {
 function normalizeCommandActivityInvalidation(sequence, value) {
   rejectForbidden(value, "command activity invalidation");
   const id = integer(sequence, "command activity invalidation");
-  const payload = record(value, "command activity invalidation");
+  const payload = record$1(value, "command activity invalidation");
   if (payload.event === "command_activity_invalidated") {
     return {
       sequence: id,
@@ -28829,67 +28829,355 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
-const PRESENTATION_SCHEMA_VERSION = 1;
-function resolvePresentationMode(input) {
-  const revision = typeof input.revision === "number" && Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0;
-  const writable = input.writable !== false;
-  const resolved = (value, source, explicit, diagnostic = null) => ({
-    value,
-    source,
-    explicit,
-    writable,
-    schemaVersion: PRESENTATION_SCHEMA_VERSION,
-    revision,
-    diagnostic
-  });
-  if (input.readError) return resolved("everyday", "read-error", false, "presentation_settings_unavailable");
-  if (input.sessionPreview === "everyday" || input.sessionPreview === "technical") {
-    return resolved(input.sessionPreview, "session-preview", true);
-  }
-  if (input.schemaVersion !== void 0 && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION) {
-    return resolved("everyday", "default", false, "unsupported_presentation_schema_fell_back_to_everyday");
-  }
-  const persistedMode = input.value === "everyday" || input.value === "technical" ? input.value : null;
-  if (persistedMode !== null && input.explicit === true) {
-    return resolved(persistedMode, "local-explicit", true);
-  }
-  const invalidDiagnostic = input.value !== void 0 && input.value !== null && input.value !== "" && persistedMode === null ? "unknown_presentation_mode_fell_back_to_everyday" : null;
-  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
-    return resolved(input.cloudProfile, "cloud-profile", false, invalidDiagnostic);
-  }
-  if (invalidDiagnostic !== null) {
-    return resolved("everyday", "default", false, invalidDiagnostic);
-  }
-  if (persistedMode !== null) {
-    return resolved(persistedMode, "default", false);
-  }
-  return resolved("everyday", "default", false);
-}
 function ActionExplanationSummary({ explanation }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "section",
-    {
-      className: "mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4",
-      "data-action-explanation": true,
-      "data-action-identity": explanation.action_identity,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: explanation.everyday.headline }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: explanation.everyday.summary }),
-        explanation.everyday.impact ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "What could happen?" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: explanation.everyday.impact })
-        ] }) : null,
-        explanation.everyday.recommendation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Recommended next step" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: explanation.everyday.recommendation })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-medium text-brand-blue", children: "Show technical details" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-brand-dark", children: explanation.technical.available && explanation.technical.command_display ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs", "data-exact-command": true, children: explanation.technical.command_display }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: explanation.technical.unavailable_reason ?? "Technical details are unavailable." }) })
-        ] })
-      ]
+  const { everyday, confidence, redaction } = explanation;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-3 space-y-3", "data-guard-action-explanation": explanation.schema_version, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold text-brand-dark", children: everyday.headline }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-words text-sm text-slate-600", children: everyday.summary })
+    ] }),
+    confidence === "limited" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "note", className: "text-sm font-medium text-brand-attention", children: "Guard could not confirm the full effect of this action. Review it carefully or stop it." }) : null,
+    everyday.impact ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-brand-dark", children: "Possible impact: " }),
+      everyday.impact
+    ] }) : null,
+    everyday.why_guard_intervened ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-brand-dark", children: "Why Guard intervened: " }),
+      everyday.why_guard_intervened
+    ] }) : null,
+    everyday.consequences.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "list-disc space-y-1 pl-5 text-sm text-slate-600", "aria-label": "Possible effects", children: everyday.consequences.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: item.message }, `${item.message_id}:${index}`)) }) : null,
+    everyday.recommendation ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: everyday.recommendation }) : null,
+    redaction.secret_like_values_removed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Secret-like values have been removed from this explanation." }) : null,
+    redaction.truncated_fields.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Some retained details are shortened. This explanation is not a complete copy of the action." }) : null
+  ] });
+}
+const SOURCES = /* @__PURE__ */ new Set(["default", "local-explicit", "migrated", "session-preview", "cloud-profile", "read-error"]);
+const DIAGNOSTICS = /* @__PURE__ */ new Set([
+  "presentation_not_supported_by_core",
+  "presentation_settings_unavailable",
+  "unsupported_presentation_schema_fell_back_to_everyday",
+  "unknown_presentation_mode_fell_back_to_everyday",
+  "legacy_presentation_mode_migrated"
+]);
+const READ_ONLY_DIAGNOSTICS = /* @__PURE__ */ new Set([
+  "presentation_not_supported_by_core",
+  "presentation_settings_unavailable",
+  "unsupported_presentation_schema_fell_back_to_everyday"
+]);
+const PRESENTATION_KEYS = [
+  "presentation_mode",
+  "presentation_mode_explicit",
+  "presentation_schema_version",
+  "presentation_revision",
+  "presentation",
+  "presentation_diagnostic"
+];
+function unavailablePresentation(diagnostic = "presentation_settings_unavailable") {
+  return {
+    value: "everyday",
+    source: "read-error",
+    explicit: false,
+    writable: false,
+    schema_version: 1,
+    revision: 0,
+    diagnostic
+  };
+}
+function record(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function readPresentationSettings(settings) {
+  if (!record(settings) || !record(settings.presentation)) {
+    return unavailablePresentation("presentation_not_supported_by_core");
+  }
+  const value = settings.presentation;
+  const allowed = /* @__PURE__ */ new Set(["value", "source", "explicit", "writable", "schema_version", "revision", "diagnostic"]);
+  if (Object.keys(value).some((key) => !allowed.has(key)) || value.value !== "everyday" && value.value !== "technical" || typeof value.source !== "string" || !SOURCES.has(value.source) || typeof value.explicit !== "boolean" || typeof value.writable !== "boolean" || value.schema_version !== 1 || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 || value.diagnostic !== null && (typeof value.diagnostic !== "string" || !DIAGNOSTICS.has(value.diagnostic))) {
+    return unavailablePresentation("presentation_not_supported_by_core");
+  }
+  const result = value;
+  if (result.source === "read-error") return unavailablePresentation();
+  return { ...result, writable: result.writable && !READ_ONLY_DIAGNOSTICS.has(result.diagnostic ?? "") };
+}
+function presentationWritePayload(current, mode) {
+  if (!current.writable || current.schema_version !== 1 || !Number.isSafeInteger(current.revision) || current.revision < 0 || mode !== "everyday" && mode !== "technical") {
+    throw new Error("Reload the local display preference before changing it.");
+  }
+  if ((current.value !== mode || !current.explicit) && current.revision === Number.MAX_SAFE_INTEGER) {
+    throw new Error("The display preference revision is exhausted.");
+  }
+  return { presentation_mode: mode, presentation_schema_version: 1, presentation_revision: current.revision };
+}
+function confirmsPresentationWrite(before, saved, mode) {
+  const minimum = before.revision + Number(before.value !== mode || !before.explicit);
+  return saved.writable && saved.explicit && saved.value === mode && Number.isSafeInteger(saved.revision) && saved.revision >= minimum;
+}
+function withoutPresentationSettings(settings) {
+  const result = { ...settings };
+  for (const key of PRESENTATION_KEYS) delete result[key];
+  return result;
+}
+const DEFAULT_PRESENTATION = unavailablePresentation();
+const PresentationContext = reactExports.createContext({
+  mode: "everyday",
+  presentation: DEFAULT_PRESENTATION,
+  loading: true,
+  saving: false,
+  error: null,
+  saved: false,
+  setMode: async () => {
+  },
+  refresh: async () => {
+  }
+});
+function PresentationModeProvider({ children }) {
+  const [presentation, setPresentation] = reactExports.useState(DEFAULT_PRESENTATION);
+  const [loading, setLoading] = reactExports.useState(true);
+  const [saving, setSaving] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [saved, setSaved] = reactExports.useState(false);
+  const current = reactExports.useRef(presentation);
+  const mounted = reactExports.useRef(false);
+  const pending = reactExports.useRef(false);
+  const reading = reactExports.useRef(false);
+  const generation = reactExports.useRef(0);
+  const publish = reactExports.useCallback((value2) => {
+    if (!mounted.current) return;
+    current.current = value2;
+    setPresentation(value2);
+    setLoading(false);
+  }, []);
+  const refresh = reactExports.useCallback(async () => {
+    if (pending.current || reading.current) return;
+    reading.current = true;
+    const request = ++generation.current;
+    try {
+      const payload = await fetchSettings();
+      if (request === generation.current && !pending.current) publish(readPresentationSettings(payload.settings));
+    } catch {
+      if (request === generation.current && !pending.current) {
+        publish({ ...current.current, writable: false, diagnostic: "presentation_settings_unavailable" });
+      }
+    } finally {
+      reading.current = false;
     }
-  );
+  }, [publish]);
+  const setMode = reactExports.useCallback(async (mode) => {
+    if (pending.current || !current.current.writable) return;
+    const before = current.current;
+    pending.current = true;
+    generation.current += 1;
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+    try {
+      const response = await updateSettings(presentationWritePayload(before, mode));
+      const acknowledged = readPresentationSettings(response.settings);
+      if (!confirmsPresentationWrite(before, acknowledged, mode)) throw new Error("Unconfirmed save");
+      const readback = readPresentationSettings((await fetchSettings()).settings);
+      publish(readback);
+      if (!confirmsPresentationWrite(before, readback, mode) || readback.revision < acknowledged.revision) {
+        throw new Error("Preference changed before readback");
+      }
+      if (mounted.current) setSaved(true);
+    } catch {
+      try {
+        publish(readPresentationSettings((await fetchSettings()).settings));
+      } catch {
+        publish({ ...current.current, writable: false, diagnostic: "presentation_settings_unavailable" });
+      }
+      if (mounted.current) setError("The saved preference could not be confirmed. Reload it and try again.");
+    } finally {
+      pending.current = false;
+      if (mounted.current) setSaving(false);
+    }
+  }, [publish]);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    const refreshVisible = () => {
+      if (document.visibilityState !== "hidden") void refresh();
+    };
+    refreshVisible();
+    const timer = window.setInterval(refreshVisible, 3e3);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [refresh]);
+  const value = reactExports.useMemo(() => ({
+    mode: presentation.value,
+    presentation,
+    loading,
+    saving,
+    error,
+    saved,
+    setMode,
+    refresh
+  }), [presentation, loading, saving, error, saved, setMode, refresh]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(PresentationContext.Provider, { value, children });
+}
+function usePresentationMode() {
+  return reactExports.useContext(PresentationContext);
+}
+const $defs = { "alternative": { "additionalProperties": false, "properties": { "kind": { "enum": ["review", "narrow", "preview", "backup", "isolate", "cancel", "manual"] }, "message": { "maxLength": 500, "type": "string" }, "message_id": { "pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string" } }, "required": ["message_id", "message", "kind"], "type": "object" }, "consequence": { "additionalProperties": false, "properties": { "confirmed": { "type": "boolean" }, "message": { "maxLength": 500, "type": "string" }, "message_id": { "pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string" }, "severity": { "enum": ["info", "low", "medium", "high", "critical"] } }, "required": ["message_id", "message", "severity", "confirmed"], "type": "object" }, "everyday": { "additionalProperties": false, "properties": { "actor_label": { "maxLength": 120, "type": "string" }, "consequences": { "items": { "$ref": "#/$defs/consequence" }, "maxItems": 16, "type": "array" }, "headline": { "maxLength": 240, "type": "string" }, "headline_message_id": { "pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string" }, "impact": { "$ref": "#/$defs/message" }, "impact_message_id": { "$ref": "#/$defs/messageId" }, "recommendation": { "$ref": "#/$defs/message" }, "recommendation_message_id": { "$ref": "#/$defs/messageId" }, "safer_alternatives": { "items": { "$ref": "#/$defs/alternative" }, "maxItems": 12, "type": "array" }, "summary": { "maxLength": 800, "type": "string" }, "summary_message_id": { "pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": "string" }, "targets": { "items": { "$ref": "#/$defs/target" }, "maxItems": 16, "type": "array" }, "why_guard_intervened": { "$ref": "#/$defs/message" }, "why_guard_intervened_message_id": { "$ref": "#/$defs/messageId" } }, "required": ["headline_message_id", "headline", "summary_message_id", "summary", "impact_message_id", "impact", "why_guard_intervened_message_id", "why_guard_intervened", "recommendation_message_id", "recommendation", "actor_label", "targets", "consequences", "safer_alternatives"], "type": "object" }, "message": { "maxLength": 800, "type": ["string", "null"] }, "messageId": { "pattern": "^[a-z][a-z0-9_.-]{0,127}$", "type": ["string", "null"] }, "redaction": { "additionalProperties": false, "properties": { "level": { "enum": ["none", "summary", "redacted"] }, "omitted_fields": { "items": { "maxLength": 128, "type": "string" }, "maxItems": 64, "type": "array" }, "policy_version": { "maxLength": 64, "type": "string" }, "secret_like_values_removed": { "type": "boolean" }, "truncated_fields": { "items": { "maxLength": 128, "type": "string" }, "maxItems": 64, "type": "array" } }, "required": ["level", "policy_version", "omitted_fields", "truncated_fields", "secret_like_values_removed"], "type": "object" }, "target": { "additionalProperties": false, "properties": { "kind": { "pattern": "^[a-z][a-z0-9_]{0,63}$", "type": "string" }, "label": { "maxLength": 240, "type": "string" }, "scope": { "maxLength": 120, "type": ["string", "null"] }, "sensitivity": { "enum": ["normal", "private", "secret", "unknown"] } }, "required": ["kind", "label", "scope", "sensitivity"], "type": "object" }, "technical": { "additionalProperties": false, "properties": { "action_id": { "maxLength": 512, "type": ["string", "null"] }, "action_type": { "maxLength": 120, "type": "string" }, "arguments_display": { "items": { "maxLength": 240, "type": "string" }, "maxItems": 128, "type": ["array", "null"] }, "available": { "type": "boolean" }, "command_display": { "maxLength": 4096, "type": ["string", "null"] }, "dialect": { "maxLength": 64, "type": ["string", "null"] }, "executable": { "maxLength": 240, "type": ["string", "null"] }, "extension_ids": { "items": { "maxLength": 128, "type": "string" }, "maxItems": 64, "type": "array" }, "normalized_command_display": { "maxLength": 4096, "type": ["string", "null"] }, "parse_confidence": { "maxLength": 64, "type": ["string", "null"] }, "policy_source": { "maxLength": 128, "type": ["string", "null"] }, "proof_level": { "maxLength": 64, "type": ["string", "null"] }, "reason_codes": { "items": { "maxLength": 128, "type": "string" }, "maxItems": 64, "type": "array" }, "receipt_id": { "maxLength": 256, "type": ["string", "null"] }, "rule_ids": { "items": { "maxLength": 128, "type": "string" }, "maxItems": 64, "type": "array" }, "segments": { "items": { "$ref": "#/$defs/technicalSegment" }, "maxItems": 128, "type": "array" }, "transport": { "maxLength": 64, "type": ["string", "null"] }, "unavailable_reason": { "maxLength": 240, "type": ["string", "null"] }, "working_scope_display": { "maxLength": 240, "type": ["string", "null"] }, "wrappers": { "items": { "maxLength": 120, "type": "string" }, "maxItems": 32, "type": "array" } }, "required": ["available", "unavailable_reason", "action_type", "command_display", "normalized_command_display", "executable", "arguments_display", "dialect", "transport", "working_scope_display", "wrappers", "segments", "extension_ids", "rule_ids", "reason_codes", "policy_source", "parse_confidence", "proof_level", "receipt_id", "action_id"], "type": "object" }, "technicalSegment": { "additionalProperties": false, "properties": { "arguments_display": { "items": { "maxLength": 240, "type": "string" }, "maxItems": 128, "type": "array" }, "executable": { "maxLength": 240, "type": ["string", "null"] }, "execution_context": { "maxLength": 120, "type": "string" }, "pipeline_index": { "maximum": 128, "minimum": 0, "type": "integer" } }, "required": ["executable", "arguments_display", "execution_context", "pipeline_index"], "type": "object" } };
+const $id = "https://hol.org/schemas/guard/action-explanation/v1";
+const $schema = "https://json-schema.org/draft/2020-12/schema";
+const additionalProperties = false;
+const properties = { "action_identity": { "maxLength": 512, "minLength": 1, "type": "string" }, "canonical_identity": { "maxLength": 256, "type": ["string", "null"] }, "catalog_digest": { "maxLength": 256, "type": ["string", "null"] }, "confidence": { "enum": ["exact", "derived", "limited"] }, "everyday": { "$ref": "#/$defs/everyday" }, "explanation_version": { "maxLength": 64, "minLength": 1, "type": "string" }, "kind": { "enum": ["file_read", "file_write", "file_delete", "file_move", "permission_change", "process_start", "process_stop", "system_change", "disk_change", "network_read", "network_send", "download", "download_and_execute", "package_install", "package_remove", "package_update", "package_script", "git_read", "git_local_change", "git_history_rewrite", "git_remote_change", "secret_read", "secret_send", "container_change", "cluster_change", "cloud_change", "database_read", "database_change", "mcp_tool", "browser_action", "prompt_submission", "skill_install", "extension_change", "guard_control_change", "compound_action", "unknown_action"] }, "locale": { "maxLength": 35, "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$", "type": "string" }, "redaction": { "$ref": "#/$defs/redaction" }, "renderer_version": { "maxLength": 64, "minLength": 1, "type": "string" }, "schema_version": { "const": "guard.action-explanation.v1" }, "technical": { "$ref": "#/$defs/technical" }, "uncertainty_reasons": { "items": { "pattern": "^[a-z][a-z0-9_]{0,63}$", "type": "string" }, "maxItems": 16, "type": "array" } };
+const required = ["schema_version", "explanation_version", "renderer_version", "action_identity", "canonical_identity", "catalog_digest", "locale", "kind", "confidence", "uncertainty_reasons", "everyday", "technical", "redaction"];
+const title = "GuardActionExplanationV1";
+const type = "object";
+const schemaJson = {
+  $defs,
+  $id,
+  $schema,
+  additionalProperties,
+  properties,
+  required,
+  title,
+  type
+};
+const schema = schemaJson;
+const KEYWORDS = /* @__PURE__ */ new Set([
+  "$defs",
+  "$id",
+  "$ref",
+  "$schema",
+  "title",
+  "type",
+  "const",
+  "enum",
+  "properties",
+  "required",
+  "additionalProperties",
+  "items",
+  "minLength",
+  "maxLength",
+  "maxItems",
+  "minimum",
+  "maximum",
+  "pattern"
+]);
+const patterns = /* @__PURE__ */ new Map();
+const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function typeMatches(value, type2) {
+  if (Array.isArray(type2)) return type2.some((item) => typeMatches(value, item));
+  if (type2 === "null") return value === null;
+  if (type2 === "object") return isRecord(value);
+  if (type2 === "array") return Array.isArray(value);
+  if (type2 === "integer") return typeof value === "number" && Number.isSafeInteger(value);
+  return type2 === "string" ? typeof value === "string" : type2 === "boolean" && typeof value === "boolean";
+}
+function matchesString(value, rule) {
+  const length = Array.from(value).length;
+  if (typeof rule.minLength === "number" && length < rule.minLength) return false;
+  if (typeof rule.maxLength === "number" && length > rule.maxLength) return false;
+  if (typeof rule.pattern !== "string") return true;
+  let pattern = patterns.get(rule.pattern);
+  if (!pattern) {
+    pattern = new RegExp(rule.pattern, "u");
+    patterns.set(rule.pattern, pattern);
+  }
+  return pattern.test(value);
+}
+function matchesSchema(value, rule, budget, depth = 0) {
+  if (depth > 16 || --budget.left < 0 || Object.keys(rule).some((key) => !KEYWORDS.has(key))) return false;
+  if (typeof rule.$ref === "string") {
+    if (!rule.$ref.startsWith("#/$defs/") || !isRecord(schema.$defs)) return false;
+    const resolved = schema.$defs[rule.$ref.slice(8)];
+    if (!isRecord(resolved) || !matchesSchema(value, resolved, budget, depth + 1)) return false;
+  }
+  if (rule.type !== void 0 && !typeMatches(value, rule.type)) return false;
+  if (Object.hasOwn(rule, "const") && value !== rule.const) return false;
+  if (Array.isArray(rule.enum) && !rule.enum.includes(value)) return false;
+  if (typeof value === "string" && !matchesString(value, rule)) return false;
+  if (typeof value === "number" && (!Number.isFinite(value) || typeof rule.minimum === "number" && value < rule.minimum || typeof rule.maximum === "number" && value > rule.maximum)) return false;
+  if (Array.isArray(value)) {
+    if (typeof rule.maxItems === "number" && value.length > rule.maxItems) return false;
+    if (isRecord(rule.items) && !value.every((item) => matchesSchema(item, rule.items, budget, depth + 1))) return false;
+  }
+  if (isRecord(value)) {
+    const properties2 = isRecord(rule.properties) ? rule.properties : {};
+    if (Array.isArray(rule.required) && rule.required.some((key) => typeof key !== "string" || !Object.hasOwn(value, key))) return false;
+    for (const [key, item] of Object.entries(value)) {
+      if (!Object.hasOwn(properties2, key)) {
+        if (rule.additionalProperties === false) return false;
+        continue;
+      }
+      if (!isRecord(properties2[key]) || !matchesSchema(item, properties2[key], budget, depth + 1)) return false;
+    }
+  }
+  return true;
+}
+function parseActionExplanation(value) {
+  try {
+    if (!isRecord(value) || !matchesSchema(value, schema, { left: 25e3 })) return null;
+    const explanation = value;
+    if (explanation.explanation_version !== "1.0.0" || explanation.renderer_version !== "1.0.0" || explanation.redaction.policy_version !== "1" || !/^act_[a-f0-9]{64}$/.test(explanation.action_identity) || explanation.technical.action_id !== explanation.action_identity) return null;
+    return explanation;
+  } catch {
+    return null;
+  }
+}
+async function opaqueExplanationIdentity(actionIdentity) {
+  if (!actionIdentity.trim() || actionIdentity.length > 65536 || !globalThis.crypto?.subtle) return null;
+  const bytes = new TextEncoder().encode(`hol-guard:action-explanation:v1\0${actionIdentity.trim()}`);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return `act_${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+function useActionExplanation(item) {
+  const identity = item.action_identity ?? "";
+  const explanation = reactExports.useMemo(() => parseActionExplanation(item.action_explanation), [item.action_explanation]);
+  const [binding, setBinding] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!identity) {
+      setBinding(null);
+      return;
+    }
+    void opaqueExplanationIdentity(identity).then((opaque) => {
+      if (!cancelled) setBinding({ identity, opaque });
+    }).catch(() => {
+      if (!cancelled) setBinding({ identity, opaque: null });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [identity]);
+  const matched = binding?.identity === identity && binding.opaque !== null && explanation?.action_identity === binding.opaque;
+  return {
+    explanation: matched ? explanation : null,
+    pending: explanation !== null && identity !== "" && binding?.identity !== identity,
+    invalid: item.action_explanation != null && (!explanation || binding?.identity === identity && !matched)
+  };
+}
+function GuardTechnicalDisclosure({ mode, children }) {
+  const [open, setOpen] = reactExports.useState(mode === "technical");
+  const id = reactExports.useId();
+  const button = reactExports.useRef(null);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 border-t border-slate-200 pt-3", "data-guard-technical-disclosure": true, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        ref: button,
+        type: "button",
+        "aria-expanded": open,
+        "aria-controls": id,
+        className: "min-h-11 rounded-lg px-2 text-sm font-semibold text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
+        onClick: () => {
+          if (open) button.current?.focus();
+          setOpen((value) => !value);
+        },
+        children: open ? "Hide technical details" : "Show technical details"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id, hidden: !open, children: open ? children : null })
+  ] });
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -28997,27 +29285,6 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
     ] })
   ] });
 }
-function useReviewPresentationMode() {
-  const [mode, setMode] = reactExports.useState("everyday");
-  reactExports.useEffect(() => {
-    let cancelled = false;
-    void fetchSettings().then((payload) => {
-      if (cancelled) return;
-      setMode(resolvePresentationMode({
-        value: payload.settings.presentation_mode,
-        explicit: payload.settings.presentation_mode_explicit,
-        schemaVersion: payload.settings.presentation_schema_version,
-        revision: payload.settings.presentation_revision
-      }).value);
-    }).catch(() => {
-      if (!cancelled) setMode("everyday");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return mode;
-}
 function TechnicalStoppedAction({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
@@ -29043,8 +29310,8 @@ function TechnicalStoppedAction({ item }) {
 }
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
-  const explanation = item.action_explanation ?? null;
-  const presentationMode = useReviewPresentationMode();
+  const { explanation, pending, invalid: invalid2 } = useActionExplanation(item);
+  const { mode: presentationMode } = usePresentationMode();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -29054,24 +29321,27 @@ function PrimaryActionCard({ item }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
     explanation !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionExplanationSummary, { explanation }) : presentationMode === "everyday" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Plain-language details are unavailable" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Guard paused this action, but this record does not contain a safe Everyday explanation. Technical mode can show retained local details when you deliberately enable it in Settings." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: pending ? "Checking the action explanation…" : "Plain-language details are unavailable" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
+        invalid2 ? "This explanation could not be matched to the retained action, so Guard is not showing it. " : "This record does not yet have a verified plain-language explanation. ",
+        "You can open retained technical details below without changing your display preference."
+      ] })
     ] }) : null,
-    presentationMode === "technical" && /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalStoppedAction, { item })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(GuardTechnicalDisclosure, { mode: presentationMode, children: /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalStoppedAction, { item }) }, `${item.request_id}:${item.action_identity ?? ""}:${presentationMode}`)
   ] });
 }
 function buildWhatWouldHappen(item) {
-  const type = item.artifact_type;
-  if (type?.includes("file_write") || type?.includes("file_read")) {
+  const type2 = item.artifact_type;
+  if (type2?.includes("file_write") || type2?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
   }
-  if (type?.includes("shell") || type?.includes("command")) {
+  if (type2?.includes("shell") || type2?.includes("command")) {
     return `Without Guard, this shell command would run immediately. Guard paused it so you can review what it does first.`;
   }
-  if (type?.includes("network") || type?.includes("request")) {
+  if (type2?.includes("network") || type2?.includes("request")) {
     return `Without Guard, this request would go to the network immediately. Guard paused it so you can review the destination first.`;
   }
-  if (type?.includes("mcp") || type?.includes("tool")) {
+  if (type2?.includes("mcp") || type2?.includes("tool")) {
     return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
   }
   return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
@@ -29576,7 +29846,9 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const riskLevel = riskLevelFromScore(risk);
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
-  const preview = queueItemPreview(item);
+  const { mode } = usePresentationMode();
+  const { explanation, pending } = useActionExplanation(item);
+  const preview = mode === "technical" ? queueItemPreview(item) : explanation?.everyday.summary ?? (pending ? "Checking the action explanation…" : "Review this action. Plain-language details are unavailable.");
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const showCheckbox = selectionMode;
@@ -31777,7 +32049,7 @@ if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
 clientExports.createRoot(container).render(
-  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
+  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(PresentationModeProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) })
 );
 export {
   readJson as $,
@@ -31809,7 +32081,7 @@ export {
   HiMiniWrenchScrewdriver as Z,
   HiMiniExclamationCircle as _,
   EvidenceActivityHeatmapMini as a,
-  DEFAULT_FILTER_STATE as a$,
+  HiMiniHome as a$,
   HiMiniArrowPath as a0,
   HiMiniGlobeAlt as a1,
   HiMiniShieldExclamation as a2,
@@ -31820,142 +32092,144 @@ export {
   HiMiniClipboard as a7,
   PROTECTION_POSTURE_COPY as a8,
   POSTURE_OUTCOME_COLUMNS as a9,
-  isProtectionPosture as aA,
-  deriveProtectionPosture as aB,
-  Tag as aC,
-  approvalGateCooldownLabel as aD,
-  fetchLocalCliApi as aE,
-  fetchExtensionControlApi as aF,
-  useResolvedApprovalGate as aG,
-  HiMiniInformationCircle as aH,
-  isApprovalProofSubmitDisabled as aI,
-  ApprovalProofFieldInputs as aJ,
-  buildApprovalProofCredentials as aK,
-  GenIcon as aL,
-  HiMiniCube as aM,
-  HiMiniServerStack as aN,
-  HiMiniFolder as aO,
-  FaWindows as aP,
-  FaAws as aQ,
-  approvalProofRecentlySatisfied as aR,
-  HiMiniArrowLeft as aS,
-  HiMiniPlus as aT,
-  HiMiniNoSymbol as aU,
-  HiMiniArrowTopRightOnSquare as aV,
-  guardAwareHref as aW,
-  fetchApprovalPage as aX,
-  fetchPolicy as aY,
-  HiMiniHome as aZ,
-  guardActionPresentation as a_,
+  WorkspacePageHeader as aA,
+  HiMiniMagnifyingGlass as aB,
+  isProtectionPosture as aC,
+  deriveProtectionPosture as aD,
+  Tag as aE,
+  approvalGateCooldownLabel as aF,
+  fetchLocalCliApi as aG,
+  fetchExtensionControlApi as aH,
+  useResolvedApprovalGate as aI,
+  HiMiniInformationCircle as aJ,
+  isApprovalProofSubmitDisabled as aK,
+  ApprovalProofFieldInputs as aL,
+  buildApprovalProofCredentials as aM,
+  GenIcon as aN,
+  HiMiniCube as aO,
+  HiMiniServerStack as aP,
+  HiMiniFolder as aQ,
+  FaWindows as aR,
+  FaAws as aS,
+  approvalProofRecentlySatisfied as aT,
+  HiMiniArrowLeft as aU,
+  HiMiniPlus as aV,
+  HiMiniNoSymbol as aW,
+  HiMiniArrowTopRightOnSquare as aX,
+  guardAwareHref as aY,
+  fetchApprovalPage as aZ,
+  fetchPolicy as a_,
   getDefaultExportFromCjs as aa,
   React as ab,
   HiMiniKey as ac,
-  HiMiniLockClosed as ad,
-  HiMiniBellAlert as ae,
-  HiMiniAdjustmentsHorizontal as af,
-  HiMiniCircleStack as ag,
-  TabBar as ah,
-  resolveProtectionLevelCopy as ai,
-  fetchSettings as aj,
-  fetchRuntimeSnapshot as ak,
-  clearPolicy as al,
-  clearReviewQueue as am,
-  revokeApprovalGateCooldown as an,
-  disableApprovalGateTotp as ao,
-  importSettings as ap,
-  resetSettings as aq,
-  enrollApprovalGateTotp as ar,
-  verifyApprovalGateTotp as as,
-  clearEvidence as at,
-  exportDiagnostics as au,
-  repairApprovalCenter as av,
-  exportSettings as aw,
-  setupDesktopNotifications as ax,
-  WorkspacePageHeader as ay,
-  HiMiniMagnifyingGlass as az,
+  usePresentationMode as ad,
+  HiMiniAdjustmentsHorizontal as ae,
+  HiMiniLockClosed as af,
+  HiMiniBellAlert as ag,
+  HiMiniCircleStack as ah,
+  TabBar as ai,
+  resolveProtectionLevelCopy as aj,
+  fetchSettings as ak,
+  fetchRuntimeSnapshot as al,
+  withoutPresentationSettings as am,
+  clearPolicy as an,
+  clearReviewQueue as ao,
+  revokeApprovalGateCooldown as ap,
+  disableApprovalGateTotp as aq,
+  importSettings as ar,
+  resetSettings as as,
+  enrollApprovalGateTotp as at,
+  verifyApprovalGateTotp as au,
+  clearEvidence as av,
+  exportDiagnostics as aw,
+  repairApprovalCenter as ax,
+  exportSettings as ay,
+  setupDesktopNotifications as az,
   HiMiniCommandLine as b,
-  HiMiniArrowDownTray as b$,
-  filterEvidence as b0,
-  sortEvidence as b1,
-  computeMetrics as b2,
-  CommandActivityWorkspace as b3,
-  EvidenceFilterBar as b4,
-  EvidenceInsightStrip as b5,
-  EvidenceActionList as b6,
-  EvidenceActionDetail as b7,
-  policyIdentityKey as b8,
-  HiMiniChartBar as b9,
-  startPackageFirewallConnect as bA,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bB,
-  repairSupplyChainProtection as bC,
-  runPackageFirewallAction as bD,
-  parseInterceptProofSnapshot as bE,
-  activatePackageFirewallRuntime as bF,
-  EntitlementNotice as bG,
-  fetchReceipts as bH,
-  lazyWorkspace as bI,
-  __vitePreload as bJ,
-  scopeLabel as bK,
-  HiMiniDocumentText as bL,
-  HiMiniCloudArrowUp as bM,
-  HiMiniCheck as bN,
-  HiMiniCodeBracket as bO,
-  HiMiniClipboardDocument as bP,
-  HiMiniUsers as bQ,
-  HiMiniIdentification as bR,
-  policyActionLabel as bS,
-  createCloudExceptionRequest as bT,
-  HiMiniArrowRight as bU,
-  HiMiniPuzzlePiece as bV,
-  fetchCloudExceptions as bW,
-  fetchCloudExceptionRequests as bX,
-  downloadBlob as bY,
-  PolicyStatField as bZ,
-  PaginationControls as b_,
-  runHarnessAction as ba,
-  GuardHarnessActionError as bb,
-  HiMiniRocketLaunch as bc,
-  HiMiniTrash as bd,
-  clearLabelForScope as be,
-  formatHarnessCommand as bf,
-  isGuardDemoMode as bg,
-  fetchGuardApi as bh,
-  isSupplyChainAuditIncomplete as bi,
-  isSupplyChainAuditEvidence as bj,
-  readString$1 as bk,
-  isRecord$2 as bl,
-  HiMiniClock as bm,
-  IconActionButton as bn,
-  HiMiniBeaker as bo,
-  ActivationSummary as bp,
-  ActionResultPanel as bq,
-  HiMiniBugAnt as br,
-  GuardModalLayer as bs,
-  ConnectFlowCard as bt,
-  ApprovalProofInline as bu,
-  HiMiniCloudArrowDown as bv,
-  fetchPackageFirewallStatus as bw,
-  runPackageAudit as bx,
-  resolveSupplyChainAuditFailure as by,
-  runPackageSync as bz,
+  PolicyStatField as b$,
+  guardActionPresentation as b0,
+  DEFAULT_FILTER_STATE as b1,
+  filterEvidence as b2,
+  sortEvidence as b3,
+  computeMetrics as b4,
+  CommandActivityWorkspace as b5,
+  EvidenceFilterBar as b6,
+  EvidenceInsightStrip as b7,
+  EvidenceActionList as b8,
+  EvidenceActionDetail as b9,
+  resolveSupplyChainAuditFailure as bA,
+  runPackageSync as bB,
+  startPackageFirewallConnect as bC,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bD,
+  repairSupplyChainProtection as bE,
+  runPackageFirewallAction as bF,
+  parseInterceptProofSnapshot as bG,
+  activatePackageFirewallRuntime as bH,
+  EntitlementNotice as bI,
+  fetchReceipts as bJ,
+  lazyWorkspace as bK,
+  __vitePreload as bL,
+  scopeLabel as bM,
+  HiMiniDocumentText as bN,
+  HiMiniCloudArrowUp as bO,
+  HiMiniCheck as bP,
+  HiMiniCodeBracket as bQ,
+  HiMiniClipboardDocument as bR,
+  HiMiniUsers as bS,
+  HiMiniIdentification as bT,
+  policyActionLabel as bU,
+  createCloudExceptionRequest as bV,
+  HiMiniArrowRight as bW,
+  HiMiniPuzzlePiece as bX,
+  fetchCloudExceptions as bY,
+  fetchCloudExceptionRequests as bZ,
+  downloadBlob as b_,
+  policyIdentityKey as ba,
+  HiMiniChartBar as bb,
+  runHarnessAction as bc,
+  GuardHarnessActionError as bd,
+  HiMiniRocketLaunch as be,
+  HiMiniTrash as bf,
+  clearLabelForScope as bg,
+  formatHarnessCommand as bh,
+  isGuardDemoMode as bi,
+  fetchGuardApi as bj,
+  isSupplyChainAuditIncomplete as bk,
+  isSupplyChainAuditEvidence as bl,
+  readString$1 as bm,
+  isRecord$3 as bn,
+  HiMiniClock as bo,
+  IconActionButton as bp,
+  HiMiniBeaker as bq,
+  ActivationSummary as br,
+  ActionResultPanel as bs,
+  HiMiniBugAnt as bt,
+  GuardModalLayer as bu,
+  ConnectFlowCard as bv,
+  ApprovalProofInline as bw,
+  HiMiniCloudArrowDown as bx,
+  fetchPackageFirewallStatus as by,
+  runPackageAudit as bz,
   HiMiniChevronRight as c,
-  HiMiniQueueList as c0,
-  Surface as c1,
-  HiMiniCheckBadge as c2,
-  fetchMcpPolicyRequest as c3,
-  resolveMcpPolicyRequest as c4,
-  HiMiniDocumentPlus as c5,
-  HiMiniDocumentMagnifyingGlass as c6,
-  fetchSupplyChainBundle as c7,
-  isSupplyChainScannerEvidence as c8,
-  isBlockedGuardAction as c9,
-  HiMiniComputerDesktop as ca,
-  HiMiniChevronLeft as cb,
-  HiMiniFunnel as cc,
-  HiMiniArrowDown as cd,
-  HiMiniArrowUp as ce,
-  runAuditRemediation as cf,
-  HiMiniSignal as cg,
+  PaginationControls as c0,
+  HiMiniArrowDownTray as c1,
+  HiMiniQueueList as c2,
+  Surface as c3,
+  HiMiniCheckBadge as c4,
+  fetchMcpPolicyRequest as c5,
+  resolveMcpPolicyRequest as c6,
+  HiMiniDocumentPlus as c7,
+  HiMiniDocumentMagnifyingGlass as c8,
+  fetchSupplyChainBundle as c9,
+  isSupplyChainScannerEvidence as ca,
+  isBlockedGuardAction as cb,
+  HiMiniComputerDesktop as cc,
+  HiMiniChevronLeft as cd,
+  HiMiniFunnel as ce,
+  HiMiniArrowDown as cf,
+  HiMiniArrowUp as cg,
+  runAuditRemediation as ch,
+  HiMiniSignal as ci,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

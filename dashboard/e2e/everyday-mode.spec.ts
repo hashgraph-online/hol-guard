@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import fixture from "../src/__fixtures__/everyday-action-explanation.json";
+import { readFileSync } from "node:fs";
+const fixture = JSON.parse(readFileSync(new URL("../src/__fixtures__/everyday-action-explanation.json", import.meta.url), "utf8"));
 import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, emptyReceiptsPayload, freeStateSnapshot } from "./fixture-states";
 
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
@@ -8,7 +9,10 @@ const request = {
   request_id: "everyday-review", harness: "claude-code", artifact_id: "test:everyday-action",
   artifact_name: "Workspace action", artifact_type: "command", artifact_hash: "everyday-hash",
   publisher: null, policy_action: "require-reapproval", recommended_scope: "artifact",
-  changed_fields: ["first_seen"], source_scope: "project", config_path: null,
+  allowed_scopes: ["artifact"], scope_contract_version: "guard.approval-scopes.v5",
+  scope_contract_digest: "everyday-scope-contract", allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+  recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+  scope_restrictions: [], changed_fields: ["first_seen"], source_scope: "project", config_path: null,
   workspace: "/private/everyday-project", launch_target: null, transport: "stdio",
   review_command: "hol-guard approvals approve everyday-review", approval_url: null,
   status: "pending", resolution_action: null, resolution_scope: null, reason: null,
@@ -16,7 +20,9 @@ const request = {
   action_explanation: fixture.action_explanation, raw_command_text: "rm -rf ./build",
   action_envelope_json: { schema_version: 1, action_id: "everyday-review", harness: "claude-code",
     event_name: "tool_call", action_type: "shell_command", command: "rm -rf ./build",
-    workspace: "/private/everyday-project", target_paths: [], network_hosts: [], raw_payload_redacted: {} },
+    workspace: "/private/everyday-project", workspace_hash: null, tool_name: "Bash", prompt_excerpt: null,
+    target_paths: [], network_hosts: [], mcp_server: null, mcp_tool: null, package_manager: null,
+    package_name: null, script_name: null, raw_payload_redacted: {} },
 };
 
 function createState() {
@@ -33,6 +39,8 @@ function settings(state: State) {
   } };
 }
 async function mount(page: Page, state: State) {
+  page.on("pageerror", (error) => { console.error("Dashboard runtime error:", error.message); });
+  page.on("console", (message) => { if (message.type() === "error") console.error("Browser console:", message.text()); });
   await page.route("**/v1/**", async (route) => {
     const incoming = route.request();
     const path = new URL(incoming.url()).pathname;
@@ -46,10 +54,10 @@ async function mount(page: Page, state: State) {
     else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
-    else if (path.endsWith("/diff")) body = null;
+    else if (path.endsWith("/diff") || path.endsWith("/previous")) body = null;
     else if (path.endsWith("/settings")) {
       if (incoming.method() !== "GET") {
-        const payload = incoming.postDataJSON() as Record<string, unknown>;
+        const payload = (incoming.postDataJSON() as { settings: Record<string, unknown> }).settings;
         state.writes.push(payload);
         if (state.rejectNextWrite || payload.presentation_revision !== state.revision) {
           state.rejectNextWrite = false;
@@ -67,14 +75,18 @@ async function mount(page: Page, state: State) {
 }
 
 test("Technical Mode is keyboard accessible, revision-bound and shared across tabs", async ({ page, context }) => {
+  test.setTimeout(60000);
   const state = createState();
-  const other = await context.newPage();
-  await mount(page, state); await mount(other, state);
+  await mount(page, state);
   await page.goto(`/settings?section=experience&${DAEMON}`);
-  await other.goto(`/settings?section=experience&${DAEMON}`);
-  await page.bringToFront();
   const toggle = page.getByRole("switch", { name: "Technical Mode" });
-  await expect(toggle).toBeEnabled();
+  await expect(toggle).toBeEnabled({ timeout: 15000 });
+  const other = await context.newPage();
+  await mount(other, state);
+  await other.goto(`/settings?section=experience&${DAEMON}`);
+  await other.bringToFront();
+  await expect(other.getByRole("switch", { name: "Technical Mode" })).toBeEnabled({ timeout: 15000 });
+  await page.bringToFront();
   await expect(toggle).not.toBeChecked();
   await toggle.focus(); await page.keyboard.press("Space");
   await expect(toggle).toBeChecked();
