@@ -71,48 +71,6 @@ def test_resident_runtime_reuses_one_contained_service(monkeypatch: pytest.Monke
         assert not any((guard_home / "native-runtime").glob("*.sock"))
 
 
-def test_close_resident_native_runtimes_is_scoped_to_guard_home(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_a = tmp_path / "guard-a"
-    home_b = tmp_path / "guard-b"
-    home_a.mkdir()
-    home_b.mkdir()
-    closed: list[str] = []
-
-    class FakeService:
-        def __init__(self, label: str) -> None:
-            self.label = label
-
-        def close(self) -> bool:
-            closed.append(self.label)
-            return True
-
-    key_a = ("runtime-a", "identity-a", str(home_a))
-    key_b = ("runtime-b", "identity-b", str(home_b))
-    with resident._SERVICES_LOCK:
-        original = dict(resident._SERVICES)
-        resident._SERVICES.clear()
-        resident._SERVICES.update(
-            {
-                key_a: FakeService("a"),
-                key_b: FakeService("b"),
-            }
-        )
-    monkeypatch.setattr(resident, "close_native_residents", lambda _guard_home: True)
-    try:
-        assert resident.close_resident_native_runtimes(home_a)
-        assert closed == ["a"]
-        with resident._SERVICES_LOCK:
-            assert key_a not in resident._SERVICES
-            assert key_b in resident._SERVICES
-    finally:
-        with resident._SERVICES_LOCK:
-            resident._SERVICES.clear()
-            resident._SERVICES.update(original)
-
-
 def test_start_lock_wait_stays_inside_request_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     real_start_lock = resident._resident_start_lock  # pyright: ignore[reportPrivateUsage]
 

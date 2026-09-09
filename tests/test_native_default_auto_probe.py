@@ -215,7 +215,7 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
             raise subprocess.TimeoutExpired(command, timeout=2)
         return subprocess.CompletedProcess(command, returncode=int(outcome == "failure"))
 
-    monkeypatch.setattr(probe, "close_resident_native_runtimes", close_clients)
+    monkeypatch.setattr(probe, "close_native_residents", close_clients)
     monkeypatch.setattr(probe, "_native_state_files", lambda _home: [tmp_path / "generation.json"])
     monkeypatch.setattr(probe.subprocess, "run", stop_resident)
     if outcome == "success":
@@ -277,7 +277,7 @@ def test_probe_cleans_both_homes_without_masking_failures(
     monkeypatch.setattr(probe, "native_runtime_health", lambda home: health)
     monkeypatch.setattr(probe, "_native_state_files", lambda home: [tmp_path / "generation.json"])
     monkeypatch.setattr(probe, "_installed_hook_corpus", lambda root: {"route_count": 21})
-    monkeypatch.setattr(probe, "close_resident_native_runtimes", close_clients)
+    monkeypatch.setattr(probe, "close_native_residents", close_clients)
     monkeypatch.setattr(probe.subprocess, "run", stop_resident)
     identity = probe.NativeRuntimeIdentity(path=tmp_path / "hol-guard-runtime", size=0, mtime_ns=0, sha256="0" * 64)
     expected_error = "smoke check failed" if smoke_fails else "client close failed" if client_fails else None
@@ -314,7 +314,7 @@ def test_probe_retries_supervisor_join_after_authenticated_stop(
         assert kwargs == {"check": False, "capture_output": True, "timeout": 2}
         return subprocess.CompletedProcess(command, returncode=0)
 
-    monkeypatch.setattr(probe, "close_resident_native_runtimes", close_supervisor)
+    monkeypatch.setattr(probe, "close_native_residents", close_supervisor)
     monkeypatch.setattr(probe, "_native_state_files", lambda _home: [tmp_path / "generation.json"])
     monkeypatch.setattr(probe.subprocess, "run", stop_resident)
 

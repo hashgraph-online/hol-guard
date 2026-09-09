@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
+    close_native_residents,
     native_resident_client_failure_code,
 )
 from codex_plugin_scanner.guard.native_runtime import (
@@ -38,7 +39,6 @@ from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
 )
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts.native_probe_receipts import (
@@ -117,7 +117,7 @@ def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
     # Join the scoped Python supervisor before the authenticated Rust stop.
     cleanup_error: OSError | RuntimeError | None = None
     try:
-        contained = close_resident_native_runtimes(guard_home)
+        contained = close_native_residents(guard_home)
     except (OSError, RuntimeError) as exc:
         contained = False
         cleanup_error = exc
@@ -131,7 +131,7 @@ def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
     # first bounded join is still unwinding its process handles.
     if cleanup_error is None and not contained:
         try:
-            contained = close_resident_native_runtimes(guard_home)
+            contained = close_native_residents(guard_home)
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
     if cleanup_error is not None:
