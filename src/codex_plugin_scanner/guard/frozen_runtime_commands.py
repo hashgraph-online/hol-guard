@@ -159,7 +159,7 @@ def consume_frozen_daemon_serve_gate(
     gate_stream = cast(BinaryIO, getattr(stream, "buffer", stream))
     try:
         gate = gate_stream.read(1)
-    except (AttributeError, OSError, ValueError):
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
         gate = b""
     if gate != b"1":
         raise SystemExit(70)

@@ -637,6 +637,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $dist = Join-Path $env:RUNNER_TEMP "hol-guard-frozen"
           $work = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-work"
           $spec = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-spec"
@@ -647,13 +649,22 @@ jobs:
           uv run --no-sync python scripts/mdm/windows/write-version-info.py `
             --version $version --output $versionFile
           uv run --no-sync python -I scripts/release/stage_guard_cloud_review_artifacts.py `
-            --source-root (Get-Location).Path | Out-Null
+            --source-root (Get-Location).Path
+          if ($LASTEXITCODE -ne 0) {
+            throw "Staging Guard cloud review artifacts failed with exit code $LASTEXITCODE"
+          }
           uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
             --version-file $versionFile `
             --distpath $dist --workpath $work --specpath $spec `
             scripts/mdm/hol-guard-entry.py
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller failed with exit code $LASTEXITCODE"
+          }
           $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE = Join-Path $dist "hol-guard/hol-guard.exe"
+          if (-not (Test-Path -LiteralPath $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE -PathType Leaf)) {
+            throw "Frozen hol-guard executable was not produced"
+          }
           uv run --no-sync pytest tests/test_frozen_windows_daemon_bootstrap.py --tb=short
 
   windows-updater:

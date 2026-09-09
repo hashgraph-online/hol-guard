@@ -2522,7 +2522,7 @@ def _frozen_daemon_serve_context(parts: list[str]) -> tuple[Path, Path, int] | N
         return None
     try:
         return decode_frozen_daemon_serve_payload(parts[2])
-    except ValueError:
+    except (OSError, RuntimeError, TypeError, ValueError):
         return None
 
 
@@ -2602,7 +2602,24 @@ def _malformed_command_may_launch_guard(command_line: str) -> bool:
         quote = trimmed_command[0]
         closing_quote = trimmed_command.find(quote, 1)
         if closing_quote <= 1:
-            return False
+            lowered = trimmed_command.lower()
+            launcher_names = (
+                "hol-guard",
+                "hol-guard.exe",
+                "plugin-guard",
+                "plugin-guard.exe",
+            )
+            launcher_present = any(
+                re.search(
+                    rf"(?:^|[\\/\s]){re.escape(name)}(?:$|[\\/\s\"'])",
+                    lowered,
+                )
+                for name in launcher_names
+            )
+            if FROZEN_DAEMON_SERVE_ARG in lowered:
+                return launcher_present
+            daemon_invocation = re.search(r"(?:^|\s)(?:guard\s+)?daemon\s+--serve(?:\s|$)", lowered)
+            return daemon_invocation is not None and launcher_present
         first_token = trimmed_command[1:closing_quote]
     else:
         first_token = trimmed_command.split(maxsplit=1)[0]
