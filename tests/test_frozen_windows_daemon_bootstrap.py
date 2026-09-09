@@ -57,7 +57,15 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
         }
     )
 
-    bootstrap_args = ["desktop", "bootstrap", "--json"]
+    bootstrap_args = [
+        "desktop",
+        "bootstrap",
+        "--guard-home",
+        str(guard_home),
+        "--home",
+        str(home_dir),
+        "--json",
+    ]
     status_args = ["daemon", "status", "--guard-home", str(guard_home), "--json"]
     stop_args = ["daemon", "stop", "--guard-home", str(guard_home), "--json"]
     repair_args = ["daemon", "repair", "--guard-home", str(guard_home), "--json"]
