@@ -7,6 +7,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMA
 from codex_plugin_scanner.guard.runtime.command_path_set_matcher import ExecutablePathSetMatcher
 from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher
 from codex_plugin_scanner.guard.runtime.extension_directory_operations import (
+    _merge_command_signatures,
     command_signatures_for_matcher,
     public_operations,
 )
@@ -24,6 +25,13 @@ def test_command_signatures_use_canonical_executable_and_required_flags() -> Non
         "aws s3 rm",
         "aws s3 sync --delete",
         "aws s3api delete-object",
+    )
+
+
+def test_conjunctive_merge_keeps_repeated_option_values() -> None:
+    assert (
+        _merge_command_signatures("tool --source prod", "tool --destination prod")
+        == "tool --source prod --destination prod"
     )
 
 

@@ -109,12 +109,14 @@ def _merge_command_signatures(left: str, right: str) -> str | None:
     right_parts = right.split()
     if not left_parts or not right_parts or left_parts[0] != right_parts[0]:
         return None
-    seen = set(left_parts)
+    seen_flags = {token for token in left_parts if token.startswith("-")}
     merged = list(left_parts)
     for token in right_parts[1:]:
-        if token not in seen:
-            seen.add(token)
-            merged.append(token)
+        if token.startswith("-"):
+            if token in seen_flags:
+                continue
+            seen_flags.add(token)
+        merged.append(token)
     joined = " ".join(merged)
     if len(joined) > _MAX_COMMAND:
         return None
@@ -198,7 +200,9 @@ def command_signatures_for_matcher(matcher: object | None, *, limit: int = _MAX_
             producers = collect(node.producer)
             consumers = collect(node.consumer)
             if producers and consumers:
-                add(f"{producers[0]} | {consumers[0]}")
+                for producer in producers:
+                    for consumer in consumers:
+                        add(f"{producer} | {consumer}")
             return
         if hasattr(node, "match"):
             add(example_for_matcher(cast(CommandMatcher, node)))
@@ -234,7 +238,8 @@ def _safe_variant_labels(rule: CommandSafetyRule) -> list[str]:
     base_flags = set(_required_flags(rule.matcher))
     for variant in rule.safe_variants:
         added = tuple(flag for flag in _required_flags(variant.matcher) if flag not in base_flags)
-        candidates = added or (variant.variant_id,)
+        combined = " ".join(added)
+        candidates = (combined,) if combined and len(combined) <= _MAX_SAFE_VARIANT else (variant.variant_id,)
         for candidate in candidates:
             label = _bounded(candidate, _MAX_SAFE_VARIANT)
             if not label or label in seen:
