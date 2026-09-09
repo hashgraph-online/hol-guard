@@ -226,8 +226,10 @@ jobs:
         run: |
           shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
+          # This process-pool timing contract is owned by scheduling-sensitive, which runs it untraced.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
             uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
+            --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
         if: always()

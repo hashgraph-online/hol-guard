@@ -12,7 +12,6 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import ClassVar, Protocol, TextIO, cast, final
 from unittest.mock import MagicMock, call
@@ -38,101 +37,25 @@ from codex_plugin_scanner.guard.daemon import hook_process_slot_review as hook_s
 from codex_plugin_scanner.guard.daemon import hook_process_spawner as hook_spawner_module
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon.hook_process_protocol import (
-    as_string_object_dict,
-    capture_hook_command,
-    is_pair,
-)
+from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
+from tests.guard_capacity_protocol_worker import capacity_protocol_worker_main
 
 
 class _MutableUnicodeBuffer(Protocol):
     value: str
 
 
-def _capacity_protocol_worker_main(
-    connection: Connection,
-    _configured_guard_home: str | None,
-) -> None:
-    """Serve the runner/scheduler capacity contract without policy evaluation.
-
-    This test worker retains the production process isolation handshake and IPC
-    lifecycle. The real evaluator and its storage work are covered by the
-    neighboring integration tests; this fixture keeps the 48-call capacity
-    test deterministic under constrained CI runners.
-    """
-
-    windows_job = None
-    try:
-        if os.name == "nt":
-            windows_job = windows_job_module.assign_current_process_to_windows_hook_job()
-            if windows_job is None:
-                connection.send(("isolation_failed", None))
-                return
-        else:
-            try:
-                os.setsid()
-            except OSError:
-                connection.send(("isolation_failed", None))
-                return
-        connection.send(
-            (
-                "isolated",
-                {
-                    "process_group_id": os.getpid() if os.name != "nt" else None,
-                    "windows_job_contained": windows_job is not None,
-                },
-            )
-        )
-        connection.send(("ready", None))
-        while True:
-            raw_message = cast(object, connection.recv())
-            if is_pair(raw_message) and raw_message[0] == "stop":
-                return
-            if not is_pair(raw_message):
-                connection.send(
-                    (
-                        "result",
-                        {"payload": None, "reason_code": "daemon_hook_process_invalid_request"},
-                    )
-                )
-                continue
-            message_type, raw_request = raw_message
-            if message_type != "review" or as_string_object_dict(raw_request) is None:
-                connection.send(
-                    (
-                        "result",
-                        {"payload": None, "reason_code": "daemon_hook_process_invalid_request"},
-                    )
-                )
-                continue
-            connection.send(
-                (
-                    "result",
-                    {
-                        "payload": {"decision": "allow", "test_worker": "capacity"},
-                        "reason_code": None,
-                    },
-                )
-            )
-    except (BrokenPipeError, EOFError, OSError):
-        return
-    finally:
-        with suppress(Exception):
-            connection.close()
-        _ = windows_job
-
-
 def _spawn_capacity_protocol_worker(guard_home: Path | None) -> HookWorkerSlot:
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=True)
     process = context.Process(
-        target=_capacity_protocol_worker_main,
+        target=capacity_protocol_worker_main,
         args=(child_connection, str(guard_home) if guard_home is not None else None),
         name="hol-guard-capacity-test-worker",
         daemon=False,
