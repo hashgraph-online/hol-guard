@@ -230,6 +230,18 @@ class TestNoHardcodedSecrets:
             assert result.passed is False
             assert result.findings[0].file_path == "src/app.py"
 
+    def test_ignores_env_interpolations_in_scripts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            scripts_dir = root / "scripts"
+            scripts_dir.mkdir()
+            (scripts_dir / "x.sh").write_text('API_KEY="${GEMINI_API_KEY:-}"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+            assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
     def test_detects_plain_provider_token_examples_without_illustrative_context(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

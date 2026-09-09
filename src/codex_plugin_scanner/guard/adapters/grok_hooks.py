@@ -135,6 +135,8 @@ def prepare_grok_hook_payload(payload: Mapping[str, object]) -> dict[str, object
     raw_event = _raw_hook_event_name(normalized)
     if raw_event:
         normalized["hook_event_name"] = _canonical_grok_event_name(raw_event)
+        if raw_event.replace("_", "").replace("-", "").lower() == "posttoolusefailure":
+            normalized["failed"] = True
     tool_name = normalized.get("tool_name")
     if tool_name is None:
         tool_name = normalized.get("toolName")

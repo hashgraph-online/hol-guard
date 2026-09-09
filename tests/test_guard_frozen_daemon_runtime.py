@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from codex_plugin_scanner.guard import frozen_daemon_runtime
+from codex_plugin_scanner.guard import frozen_daemon_runtime, frozen_runtime_commands
 from codex_plugin_scanner.guard.daemon import manager
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +54,85 @@ def test_frozen_entrypoint_dispatches_multiprocessing_before_guard_imports(
         "private-command",
         "public-cli",
     ]
+
+
+def test_frozen_entrypoint_rejects_held_gate_before_guard_package_import(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "guard-imported"
+    package = tmp_path / "codex_plugin_scanner"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "import os\nfrom pathlib import Path\nPath(os.environ['GUARD_IMPORT_MARKER']).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    payload = json.dumps(
+        {
+            "guard_home": str(guard_home.resolve()),
+            "home_dir": str(home_dir.resolve()),
+            "port": 4781,
+        },
+        separators=(",", ":"),
+    )
+    invocation = (
+        "import sys; "
+        f"sys.argv=[sys.executable,{'--_hol-guard-daemon-serve'!r},{payload!r}]; "
+        f"entrypoint={str(FROZEN_ENTRYPOINT)!r}; "
+        "exec(compile(open(entrypoint, 'rb').read(), entrypoint, 'exec'), "
+        "{'__name__':'__main__','__file__':entrypoint})"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path)
+    environment["GUARD_IMPORT_MARKER"] = str(marker)
+    result = subprocess.run(
+        [sys.executable, "-c", invocation],
+        input=b"",
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert result.returncode == 70
+    assert not marker.exists()
+
+    marker.unlink(missing_ok=True)
+    released = subprocess.run(
+        [sys.executable, "-c", invocation],
+        input=b"1",
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert released.returncode != 70
+    assert marker.exists()
+
+
+def test_frozen_runtime_gate_fails_closed_on_stream_runtime_error(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    payload = json.dumps(
+        {
+            "guard_home": str(guard_home.resolve()),
+            "home_dir": str(home_dir.resolve()),
+            "port": 4781,
+        },
+        separators=(",", ":"),
+    )
+
+    class RuntimeErrorStream:
+        def read(self, _size: int) -> bytes:
+            raise RuntimeError("stream closed unexpectedly")
+
+    with pytest.raises(SystemExit) as exit_info:
+        frozen_runtime_commands.consume_frozen_daemon_serve_gate(
+            [sys.executable, frozen_runtime_commands.FROZEN_DAEMON_SERVE_ARG, payload],
+            stdin=RuntimeErrorStream(),
+        )
+
+    assert exit_info.value.code == 70
 
 
 def test_frozen_runtime_proves_same_executable_bootloader_parent(

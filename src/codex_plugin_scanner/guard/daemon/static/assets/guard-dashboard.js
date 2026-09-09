@@ -19674,7 +19674,7 @@ function GuardHero(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: props.subheadline })
           ] })
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
           props.cta,
           props.secondaryCta
         ] })
@@ -19734,6 +19734,9 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
   return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
+  const instanceId = reactExports.useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
   const handleTotpChange = reactExports.useCallback((event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
@@ -19743,31 +19746,37 @@ function ApprovalProofFieldInputs(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
         ref: props.passwordRef,
+        id: passwordFieldId,
         type: "password",
         autoComplete: "current-password",
+        name: "password",
+        enterKeyHint: "done",
         value: props.approvalPassword,
         onChange: props.onApprovalPasswordChange,
         className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       }
     )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: totpFieldId, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "input",
       {
+        id: totpFieldId,
         type: "text",
         inputMode: "numeric",
         pattern: "[0-9]*",
         maxLength: 6,
         autoComplete: "one-time-code",
         name: "one-time-code",
+        enterKeyHint: "done",
         autoFocus: true,
+        "aria-required": "true",
         value: props.approvalTotpCode,
         onChange: handleTotpChange,
         className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
@@ -20035,14 +20044,15 @@ function useFocusTrap(active, containerRef) {
     const container2 = containerRef.current;
     if (!container2) return;
     previouslyFocusedRef.current = document.activeElement;
-    const focusable = getFocusableElements(container2);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (first) {
-      first.focus();
+    const initial = getFocusableElements(container2);
+    if (initial[0]) {
+      initial[0].focus();
     }
     function handleKeyDown(event) {
       if (event.key !== "Tab") return;
+      const focusable = getFocusableElements(container2);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (focusable.length === 0) {
         event.preventDefault();
         return;
@@ -20052,11 +20062,9 @@ function useFocusTrap(active, containerRef) {
           event.preventDefault();
           last?.focus();
         }
-      } else {
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     }
     container2.addEventListener("keydown", handleKeyDown);
@@ -20142,26 +20150,12 @@ function GuardModalLayer({
     overlayRoot
   );
 }
-const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-[11px] font-semibold leading-4 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
-const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-brand-blue/30 bg-white px-2.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_CONTROL_TEXT_CLASS = "text-[11px] font-semibold leading-4";
+const GUARD_UPDATE_CHANNEL_CONTROL_CLASS = "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-sm px-0.5 text-brand-blue transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
+const GUARD_UPDATE_ACTION_BUTTON_CLASS = "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-brand-blue/30 bg-white px-2.5 text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60";
 function GuardUpdateChannelSummary(props) {
-  let channelStatus = null;
-  if (props.useAlpha) {
-    channelStatus = /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "span",
-      {
-        className: "inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-4 text-brand-blue",
-        role: "status",
-        "aria-label": "Alpha updates enabled",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: "Alpha updates" })
-        ]
-      }
-    );
-  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-1.5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1.5", children: [
       props.version ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "span",
         {
@@ -20173,7 +20167,18 @@ function GuardUpdateChannelSummary(props) {
           ]
         }
       ) : null,
-      channelStatus
+      props.useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "span",
+        {
+          className: "inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue",
+          role: "status",
+          "aria-label": "Alpha updates enabled",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-2.5 w-2.5", "aria-hidden": "true" }),
+            "Alpha"
+          ]
+        }
+      ) : null
     ] }),
     props.useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
@@ -20185,7 +20190,7 @@ function GuardUpdateChannelSummary(props) {
         title: "Manage alpha updates",
         "data-testid": "guard-alpha-updates-control",
         className: GUARD_UPDATE_CHANNEL_CONTROL_CLASS,
-        children: "Manage"
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Manage" })
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -20196,8 +20201,8 @@ function GuardUpdateChannelSummary(props) {
         "data-testid": "guard-alpha-updates-control",
         className: GUARD_UPDATE_CHANNEL_CONTROL_CLASS,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-          "Try alpha updates"
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Try alpha updates" })
         ]
       }
     )
@@ -20279,57 +20284,63 @@ function GuardUpdatePanel(props) {
       version
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-1.5", children: [
-    updateChannelSummary,
-    props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
-      showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: props.onUpdateGuard,
-          "aria-label": "Update Guard to the latest version",
-          className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-            "Update"
-          ]
-        }
-      ) : null
-    ] }) : null,
-    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
-    showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: props.onReinstallGuard,
-        className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-          "Reinstall from PyPI"
-        ]
-      }
-    ) : null,
-    busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
-      phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-    ] }),
-    alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      AlphaChannelDialog,
-      {
-        useAlpha,
-        pending: alphaSavePending,
-        error: alphaSaveError,
-        approvalGate: props.approvalGate ?? null,
-        approvalPassword: alphaApprovalPassword,
-        approvalTotpCode: alphaApprovalTotpCode,
-        onClose: handleCloseAlphaModal,
-        onConfirm: handleConfirmAlphaChannel,
-        onApprovalPasswordChange: handleApprovalPasswordChange,
-        onApprovalTotpCodeChange: handleApprovalTotpCodeChange
-      }
-    ) }) : null
-  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
+      children: [
+        updateChannelSummary,
+        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
+          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onUpdateGuard,
+              "aria-label": "Update Guard to the latest version",
+              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
+              ]
+            }
+          ) : null
+        ] }) : null,
+        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
+        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onReinstallGuard,
+            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
+            ]
+          }
+        ) : null,
+        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
+          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+        ] }),
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AlphaChannelDialog,
+          {
+            useAlpha,
+            pending: alphaSavePending,
+            error: alphaSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: alphaApprovalPassword,
+            approvalTotpCode: alphaApprovalTotpCode,
+            onClose: handleCloseAlphaModal,
+            onConfirm: handleConfirmAlphaChannel,
+            onApprovalPasswordChange: handleApprovalPasswordChange,
+            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+          }
+        ) }) : null
+      ]
+    }
+  );
 }
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
@@ -25952,7 +25963,7 @@ function CommandActivityDetail(props) {
           controlling: match.rule_id === props.activity.controlling_rule_id
         },
         `${match.ordinal}:${safeEvidenceId(match.rule_id)}`
-      )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: "No rule match was recorded." })
+      )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: props.activity.decision_reason_code === "no_match" ? "No rule matched this action." : "Rule evidence is unavailable for this record." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Was this interaction expected?" }),
@@ -26389,13 +26400,19 @@ function CommandRow(props) {
     props.onSelect(props.item.activity_id);
   }, [props.item.activity_id, props.onSelect]);
   const firstRule = props.item.matches[0];
+  let ruleLabel = "Rule evidence unavailable";
+  if (firstRule) {
+    ruleLabel = safeEvidenceId(firstRule.rule_id);
+  } else if (props.item.decision_reason_code === "no_match") {
+    ruleLabel = "No rule match";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [
-      firstRule ? safeEvidenceId(firstRule.rule_id) : "No rule match",
+      ruleLabel,
       props.item.match_count > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
         "+",
         props.item.match_count - 1

@@ -2386,6 +2386,9 @@ function addDialogSubmitLabel(input) {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
   }
+  if (input.busy && input.recognized.surface === "mcp" && input.step !== "confirm") {
+    return "Listing tools…";
+  }
   if (input.step !== "confirm") {
     return "Continue";
   }
@@ -2432,11 +2435,14 @@ function blockActionLabel(surface) {
   if (surface === "package-scripts") return "Block these scripts";
   return "Block this tool";
 }
-function dialogIntro(hasProjects, surface, discovering = false) {
+function dialogIntro(hasProjects, surface, discovering = false, mcpHasTools = true) {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
+    if (!mcpHasTools) {
+      return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
+    }
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
   }
   if (discovering) {
@@ -2446,6 +2452,36 @@ function dialogIntro(hasProjects, surface, discovering = false) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
+}
+function listToolsAgainLabel() {
+  return "List tools again";
+}
+function mcpListingBusyCopy(name) {
+  return `Listing tools from ${name}. This can take a few seconds.`;
+}
+function mcpListingRetryFailedCopy() {
+  return "Guard still could not list tools. You can add the server anyway.";
+}
+function mcpCatalogHasTools(commands) {
+  return commands.some((entry) => entry.command_id !== "other");
+}
+function mcpListingRetryError(helpStatus, commands) {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
+}
+function McpListingStatus(props) {
+  if (props.busy) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 max-w-xl text-sm leading-6 text-brand-dark/70", role: "status", "aria-live": "polite", children: mcpListingBusyCopy(props.name) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: props.onRetry,
+      className: "mt-4 min-h-11 text-sm font-semibold text-brand-blue",
+      children: listToolsAgainLabel()
+    }
+  );
 }
 function filterCountCopy(visible, total) {
   if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
@@ -3485,7 +3521,7 @@ function AddCustomExtensionWorkspace(props) {
     setReviewingScripts(false);
     setStep("review");
   }, []);
-  const runRecognize = reactExports.useCallback(async (commandText, cliId, silent = false) => {
+  const runRecognize = reactExports.useCallback(async (commandText, cliId, silent = false, keepOnError = false) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
@@ -3494,12 +3530,18 @@ function AddCustomExtensionWorkspace(props) {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : void 0);
       if (recognizeGeneration.current !== generation) return;
       markRecognized(result.item, result.summary);
-      setError(null);
+      if (keepOnError) {
+        setError(mcpListingRetryError(result.help_status, result.item.commands));
+      } else {
+        setError(null);
+      }
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
-      setRecognized(null);
-      setSummary(null);
-      setStep("pick");
+      if (!keepOnError) {
+        setRecognized(null);
+        setSummary(null);
+        setStep("pick");
+      }
       if (!silent) {
         setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
       }
@@ -3524,6 +3566,10 @@ function AddCustomExtensionWorkspace(props) {
   const findTool = reactExports.useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  const retryMcpListing = reactExports.useCallback(() => {
+    if (recognized === null) return;
+    void runRecognize(command.trim() || recognized.example_label, recognized.cli_id, false, true);
+  }, [command, recognized, runRecognize]);
   reactExports.useEffect(() => {
     if (props.discovering === true) sawDiscovering.current = true;
     if (!sawDiscovering.current || props.discovering === true || command.trim() !== "") return;
@@ -3637,6 +3683,8 @@ function AddCustomExtensionWorkspace(props) {
   const showingMcpCatalog = recognized?.surface === "mcp";
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const mcpHasTools = mcpCatalogHasTools(enrollable);
+  const showMcpRetry = showingMcpCatalog && !mcpHasTools;
   const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(enrollable, command) : commands;
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
@@ -3681,7 +3729,8 @@ function AddCustomExtensionWorkspace(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(
               rememberedProjects.length > 0,
               recognized?.surface ?? null,
-              props.discovering === true && recognized === null
+              props.discovering === true && recognized === null,
+              !showMcpRetry
             ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: commandFieldLabel(recognized?.surface ?? null) }),
@@ -3702,8 +3751,9 @@ function AddCustomExtensionWorkspace(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-selected", className: "text-xl font-semibold tracking-tight text-brand-dark", children: recognized.name }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-xs text-brand-dark/70", children: recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label }),
             summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: summary }) : null,
-            showingCatalog && enrollable.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk }) : null,
-            showingCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk }) : null,
+            showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(McpListingStatus, { name: recognized.name, busy, onRetry: retryMcpListing }) : null,
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               CatalogPreview,
               {
                 query: command,

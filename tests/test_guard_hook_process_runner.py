@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import multiprocessing
 import os
 import queue
 import signal
 import subprocess
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -42,10 +44,34 @@ from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHook
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
+from tests.guard_capacity_protocol_worker import capacity_protocol_worker_main
 
 
 class _MutableUnicodeBuffer(Protocol):
     value: str
+
+
+def _spawn_capacity_protocol_worker(guard_home: Path | None) -> HookWorkerSlot:
+    context = multiprocessing.get_context("spawn")
+    parent_connection, child_connection = context.Pipe(duplex=True)
+    process = context.Process(
+        target=capacity_protocol_worker_main,
+        args=(child_connection, str(guard_home) if guard_home is not None else None),
+        name="hol-guard-capacity-test-worker",
+        daemon=False,
+    )
+    try:
+        process.start()
+    except BaseException:
+        parent_connection.close()
+        child_connection.close()
+        raise
+    child_connection.close()
+    return HookWorkerSlot(
+        process=process,
+        connection=parent_connection,
+        isolation_ready=False,
+    )
 
 
 def test_default_review_deadline_stays_inside_pi_host_budget() -> None:
@@ -597,7 +623,12 @@ def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) ->
 
 def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A daemon initializes its GuardStore before resident workers receive requests.
+    # Match that ordering so this fan-in test measures capacity integration, not
+    # eight concurrent first-request schema migrations.
+    _ = GuardStore(tmp_path)
     scheduler = RuntimeHookScheduler(
         active_limit=0,
         queued_limit=64,
@@ -610,32 +641,33 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         timeout_seconds=2.8,
         capacity_listener=scheduler.set_active_limit,
     )
+    # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
+    # expensive policy evaluator in this high-fan-in capacity contract test.
+    monkeypatch.setattr(hook_runner_module, "spawn_hook_worker", _spawn_capacity_protocol_worker)
+    # Keep all 48 callers synchronized; the scheduler must queue more callers
+    # than the eight-worker process pool while the runner remains integrated.
     barrier = threading.Barrier(48)
+    timing_scale = under_coverage_scale(4.0)
 
     def review(index: int) -> HookProcessReview:
-        barrier.wait(timeout=3)
+        barrier.wait(timeout=3 * timing_scale)
         admission = scheduler.acquire(
             harness="pi",
             client_key=f"client-{index % 6}",
             lane="decision",
             payload_bytes=1,
-            deadline=time.monotonic() + 10,
+            deadline=time.monotonic() + 10 * timing_scale,
         )
         assert admission.permit is not None
         with admission.permit:
             return runner.review(
-                payload={
-                    "hook_event_name": "PreToolUse",
-                    "tool_call_id": f"scheduled-pi-{index}",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "git status --short"},
-                },
+                payload={"hook_event_name": "SessionStart"},
                 harness="pi",
                 home_dir=tmp_path,
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4,
+                deadline=time.monotonic() + 4 * timing_scale,
             )
 
     try:
@@ -645,8 +677,14 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     finally:
         runner.close()
 
-    failures = [result.reason_code for result in results if result.payload is None]
-    assert set(failures) <= {"daemon_hook_process_not_ready"}, runner.stats()
+    assert len(results) == 48
+    result_reason_codes = Counter(result.reason_code for result in results)
+    assert all(result.reason_code is None for result in results), {
+        "runner_stats": runner.stats(),
+        "result_reason_codes": dict(result_reason_codes),
+    }
+    assert all(result.payload is not None for result in results), runner.stats()
+    assert all(result.payload.get("test_worker") == "capacity" for result in results if result.payload is not None)
     assert scheduler.stats()["completed"] == 48
     assert scheduler.stats()["rejected"] == {}
 

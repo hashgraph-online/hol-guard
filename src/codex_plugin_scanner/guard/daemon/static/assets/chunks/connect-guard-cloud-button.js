@@ -1,5 +1,11 @@
 import { Y as openPackageFirewallAuthorizeFallback, Z as waitForCloudConnection, U as waitForAuthorizeUrl, V as startOrRecoverCloudConnect, j as jsxRuntimeExports, A as ActionButton, bO as HiMiniCloudArrowUp, r as reactExports, X as safeCloudConnectUrl, bD as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE } from "../guard-dashboard.js";
 const SIGN_IN_PENDING_MESSAGE = "Sign-in is still pending. Complete it in the opened window, or open sign-in again.";
+function cloudConnectErrorMessage(message) {
+  if (/CERTIFICATE_VERIFY_FAILED|certificate verify failed/i.test(message)) {
+    return "Guard could not verify the secure connection to Guard Cloud. Check your network or proxy certificate settings and make sure Guard is up to date, then retry. Your local protection settings have not changed.";
+  }
+  return message;
+}
 function cloudConnectPendingMessage(opened) {
   return opened ? "Complete sign-in in the opened window. This page will update automatically." : PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE;
 }
@@ -111,6 +117,8 @@ function ConnectGuardCloudButton({
     buttonLabel = workingLabel;
   } else if (state.status === "connected") {
     buttonLabel = connectedLabel;
+  } else if (state.status === "error") {
+    buttonLabel = "Retry connection";
   }
   let statusLine = null;
   if (state.status === "pending" || state.status === "error") {
@@ -118,9 +126,9 @@ function ConnectGuardCloudButton({
       "span",
       {
         role: "status",
-        className: `flex flex-wrap items-center justify-end gap-1.5 text-xs leading-relaxed ${state.status === "error" ? "text-red-600" : "text-slate-500"}`,
+        className: `flex flex-wrap items-center gap-1.5 text-sm leading-relaxed ${state.status === "error" ? "text-red-600" : "text-slate-500"}`,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: state.message }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 [overflow-wrap:anywhere]", children: cloudConnectErrorMessage(state.message) }),
           state.manualUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "a",
             {
@@ -135,7 +143,7 @@ function ConnectGuardCloudButton({
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex flex-col items-end gap-1", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 max-w-full flex-col items-start gap-2 sm:max-w-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       ActionButton,
       {

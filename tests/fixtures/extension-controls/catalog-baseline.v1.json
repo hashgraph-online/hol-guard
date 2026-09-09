@@ -8,6 +8,7 @@
     "effective"
   ],
   "catalog_digest": "af038e480adf08d5d6ca29e87af565c270527c9f946b6960511e8d87aaf2aa68",
+  "catalog_digest": "1f518ed1c8f42e07ffd3dcd565045f6b9fe491bec67de74515e10593d6c5b5b2",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [

@@ -31,7 +31,9 @@ def stub_authenticated_urlopen(
 ) -> None:
     """Route both public and authenticated urllib paths through one test double."""
 
-    monkeypatch.setattr(urllib.request, "urlopen", callback)
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda request, timeout=None, context=None: callback(request, timeout)
+    )
     monkeypatch.setattr(
         urllib.request,
         "build_opener",

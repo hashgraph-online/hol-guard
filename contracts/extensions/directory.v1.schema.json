@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/guard/contracts/extension-directory.v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "guard.extension-directory.v1"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "runtimeExtensionId",
+          "kind",
+          "version",
+          "name",
+          "description",
+          "tagline",
+          "category",
+          "tags",
+          "limitations",
+          "documentationUrl",
+          "protectionModel",
+          "trustClass",
+          "claimPolicy",
+          "maintainerGithubIds",
+          "sourcePath",
+          "contributionDigest",
+          "executables",
+          "actionClasses",
+          "ruleCount",
+          "permissionCount",
+          "toolStates"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^(command|mcp)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+          },
+          "runtimeExtensionId": {
+            "type": "string",
+            "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 264
+          },
+          "kind": {
+            "enum": [
+              "command",
+              "mcp"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 140
+          },
+          "category": {
+            "enum": [
+              "core-safety",
+              "cloud-infrastructure",
+              "data-resilience",
+              "delivery-remote",
+              "managed-services",
+              "package-supply-chain",
+              "specialized-tools",
+              "other"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 30,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 400
+            }
+          },
+          "documentationUrl": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1024,
+            "pattern": "^https://",
+            "format": "uri"
+          },
+          "protectionModel": {
+            "enum": [
+              "required",
+              "built-in",
+              "package-firewall",
+              "external-opt-in"
+            ]
+          },
+          "trustClass": {
+            "enum": [
+              "first-party",
+              "trusted-library",
+              "external"
+            ]
+          },
+          "claimPolicy": {
+            "enum": [
+              "project",
+              "provenance"
+            ]
+          },
+          "maintainerGithubIds": {
+            "description": "Reviewed numeric GitHub IDs authorized to manage this extension's publisher profile. For claimPolicy provenance, only IDs in this accepted array are eligible for automatic claims or elevated transfers; an empty array means no automatic claimant. Pull-request authorship is attribution evidence only. For claimPolicy project, this array grants no third-party claim authority.",
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            }
+          },
+          "sourcePath": {
+            "type": "string",
+            "maxLength": 288,
+            "pattern": "^(contributions/(extensions|mcp-servers)/(command|mcp)\\.[a-z0-9.-]+\\.json|src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry\\.py)$"
+          },
+          "contributionDigest": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            ]
+          },
+          "executables": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "actionClasses": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "ruleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "permissionCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "toolStates": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "state"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "state": {
+                  "enum": [
+                    "inherit",
+                    "allow",
+                    "block"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

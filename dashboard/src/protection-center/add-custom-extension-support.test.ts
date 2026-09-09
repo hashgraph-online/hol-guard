@@ -6,6 +6,11 @@ import {
   dialogIntro,
   enrollConfirmCopy,
   filterCountCopy,
+  listToolsAgainLabel,
+  mcpCatalogHasTools,
+  mcpListingBusyCopy,
+  mcpListingRetryError,
+  mcpListingRetryFailedCopy,
   suggestionSummary,
 } from "./add-custom-extension-support";
 
@@ -41,15 +46,38 @@ const packageItem: LocalCliItem = {
   ],
 };
 
+const mcpItem: LocalCliItem = {
+  ...packageItem,
+  cli_id: "local-cli.mcp-abcdef12",
+  name: "chrome-devtools",
+  example_label: "npx -y chrome-devtools-mcp@latest",
+  surface: "mcp",
+  source_label: "Grok, OpenCode",
+  commands: [],
+};
+
 assert.match(dialogIntro(true, "package-scripts"), /Allow these scripts/);
 assert.match(dialogIntro(false, "mcp"), /Allow all/);
+assert.match(dialogIntro(false, "mcp", false, false), /List tools again/);
 assert.match(dialogIntro(false, null, true), /Looking for project scripts/);
 assert.match(dialogIntro(true, null, true), /Looking for project scripts/);
 assert.match(filterCountCopy(1, 8), /1 of 8 scripts match/);
 assert.match(suggestionSummary(packageItem), /1 script from ads-app/);
+assert.equal(listToolsAgainLabel(), "List tools again");
+assert.match(mcpListingBusyCopy("chrome-devtools"), /This can take a few seconds/);
+assert.match(mcpListingRetryFailedCopy(), /still could not list tools/);
+assert.equal(mcpCatalogHasTools(mcpItem.commands), false);
+assert.equal(mcpCatalogHasTools(packageItem.commands), true);
+assert.equal(mcpListingRetryError("failed", mcpItem.commands), mcpListingRetryFailedCopy());
+assert.equal(mcpListingRetryError("empty", mcpItem.commands), null);
+assert.equal(mcpListingRetryError("ok", packageItem.commands), null);
 assert.equal(
   addDialogSubmitLabel({ recognized: packageItem, busy: false, pending: "allowed" }),
   "Continue",
+);
+assert.equal(
+  addDialogSubmitLabel({ recognized: mcpItem, busy: true, pending: "allowed" }),
+  "Listing tools…",
 );
 assert.equal(
   addDialogSubmitLabel({ recognized: packageItem, busy: false, pending: "allowed", step: "confirm" }),

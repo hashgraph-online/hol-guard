@@ -63,6 +63,24 @@ class FakeFetcher:
         return response
 
 
+class SequencedFetcher:
+    def __init__(self, url: str, responses: list[bytes | Exception]) -> None:
+        self.url = url
+        self.responses = responses
+        self.calls: list[str] = []
+
+    def __call__(self, url: str) -> bytes:
+        self.calls.append(url)
+        if url != self.url:
+            raise AssertionError(f"Unexpected fetch: {url}")
+        if not self.responses:
+            raise AssertionError("Fetcher response sequence was exhausted")
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
 def _project_url(registry: Registry, project_name: str = "hol-guard") -> str:
     return f"https://{registry.api_host}/pypi/{project_name}/json"
 
@@ -202,13 +220,75 @@ def test_listing_registry_versions_fails_closed_on_invalid_data(response: bytes)
 
     with pytest.raises(RegistryVerificationError):
         list_registry_versions(Registry.PYPI, fetcher=fetcher)
+    assert fetcher.calls == [_project_url(Registry.PYPI)]
 
 
 def test_listing_registry_versions_fails_closed_on_network_error() -> None:
     fetcher = FakeFetcher({_project_url(Registry.PYPI): urllib.error.URLError("offline")})
 
     with pytest.raises(RegistryVerificationError, match="Registry request failed"):
-        list_registry_versions(Registry.PYPI, fetcher=fetcher)
+        list_registry_versions(Registry.PYPI, fetcher=fetcher, retry_attempts=1)
+
+
+@pytest.mark.parametrize(
+    "transient_error",
+    [
+        urllib.error.URLError("offline"),
+        _http_error(_project_url(Registry.PYPI), 503),
+    ],
+)
+def test_listing_registry_versions_retries_transient_errors(transient_error: Exception) -> None:
+    url = _project_url(Registry.PYPI)
+    payload = json.dumps({"releases": {"2.2.0": []}}).encode()
+    fetcher = SequencedFetcher(url, [transient_error, payload])
+    delays: list[float] = []
+
+    assert list_registry_versions(
+        Registry.PYPI,
+        fetcher=fetcher,
+        retry_attempts=2,
+        retry_initial_delay_seconds=0,
+        retry_max_delay_seconds=0,
+        sleep=delays.append,
+    ) == ("2.2.0",)
+    assert fetcher.calls == [url, url]
+    assert delays == [0]
+
+
+def test_listing_registry_versions_exhausts_transient_retries() -> None:
+    url = _project_url(Registry.PYPI)
+    fetcher = SequencedFetcher(url, [urllib.error.URLError("offline"), urllib.error.URLError("offline")])
+    delays: list[float] = []
+
+    with pytest.raises(RegistryVerificationError, match="Registry request failed"):
+        list_registry_versions(
+            Registry.PYPI,
+            fetcher=fetcher,
+            retry_attempts=2,
+            retry_initial_delay_seconds=0,
+            retry_max_delay_seconds=0,
+            sleep=delays.append,
+        )
+    assert fetcher.calls == [url, url]
+    assert delays == [0]
+
+
+def test_listing_registry_versions_fails_fast_on_permanent_http_error() -> None:
+    url = _project_url(Registry.PYPI)
+    fetcher = FakeFetcher({url: _http_error(url, 401)})
+    delays: list[float] = []
+
+    with pytest.raises(RegistryVerificationError, match="HTTP 401"):
+        list_registry_versions(
+            Registry.PYPI,
+            fetcher=fetcher,
+            retry_attempts=2,
+            retry_initial_delay_seconds=0,
+            retry_max_delay_seconds=0,
+            sleep=delays.append,
+        )
+    assert fetcher.calls == [url]
+    assert delays == []
 
 
 def test_stdlib_fetch_rejects_oversized_chunked_responses(monkeypatch: pytest.MonkeyPatch) -> None:

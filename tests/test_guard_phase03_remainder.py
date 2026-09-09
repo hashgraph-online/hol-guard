@@ -298,7 +298,7 @@ def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.Monkey
             read_limits.append(limit)
             return b'{"info":{"version":"2.0.1"}}'
 
-    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+    def fake_urlopen(request: object, timeout: float, *, context=None) -> FakeResponse:
         timeouts.append(timeout)
         return FakeResponse()
 
@@ -383,7 +383,7 @@ def test_bounded_version_read_enforces_total_deadline(monkeypatch: pytest.Monkey
 
 
 def test_latest_version_lookup_handles_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_urlopen(request: object, timeout: float) -> object:
+    def fake_urlopen(request: object, timeout: float, *, context=None) -> object:
         raise http.client.IncompleteRead(partial=b'{"info":')
 
     monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)

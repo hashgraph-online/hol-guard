@@ -28,6 +28,11 @@ from typing import BinaryIO, Literal, TypedDict
 
 from ...version import __version__
 from .. import windows_processes
+from ..frozen_runtime_commands import (
+    FROZEN_DAEMON_SERVE_ARG,
+    decode_frozen_daemon_serve_payload,
+    frozen_daemon_serve_command,
+)
 from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
 from ..private_file_io import private_regular_file_is_valid, read_private_regular_text
@@ -313,7 +318,16 @@ def _guard_daemon_launch_command(
         if not launch.is_absolute() or not launch.is_file():
             raise RuntimeError("Frozen Guard daemon requires the signed Guard executable.")
         if gate_on_stdin:
-            raise RuntimeError("Frozen Guard daemon gated launch is unavailable on this platform.")
+            if not bool(getattr(sys, "frozen", False)):
+                raise RuntimeError("Frozen Guard daemon gated launch requires the signed Guard executable.")
+            return list(
+                frozen_daemon_serve_command(
+                    guard_home,
+                    trusted_home,
+                    port,
+                    executable=str(launch.resolve(strict=True)),
+                )
+            )
         return [
             str(launch.resolve(strict=True)),
             "daemon",
@@ -2411,6 +2425,9 @@ def _guard_home_from_command(command: str) -> Path | None:
 
 
 def _guard_home_from_command_parts(parts: list[str]) -> Path | None:
+    frozen_context = _frozen_daemon_serve_context(parts)
+    if frozen_context is not None:
+        return frozen_context[0]
     for index, part in enumerate(parts):
         if part == "--guard-home" and index + 1 < len(parts):
             return Path(parts[index + 1])
@@ -2421,6 +2438,9 @@ def _guard_daemon_port_from_command(command: str) -> int | None:
     parts = _split_process_command(command)
     if parts is None:
         return None
+    frozen_context = _frozen_daemon_serve_context(parts)
+    if frozen_context is not None:
+        return frozen_context[2]
     for index, part in enumerate(parts):
         if part.startswith("--port="):
             try:
@@ -2455,6 +2475,8 @@ def _split_process_command(command: str) -> list[str] | None:
 
 
 def _guard_daemon_command_parts_match(parts: list[str]) -> bool:
+    if _frozen_daemon_serve_context(parts) is not None:
+        return True
     for index in range(len(parts) - 1):
         prefix = parts[:index]
         if parts[index : index + 2] == ["daemon", "--serve"]:
@@ -2485,6 +2507,23 @@ def _guard_daemon_command_parts_match(parts: list[str]) -> bool:
         }:
             return True
     return False
+
+
+def _frozen_daemon_serve_context(parts: list[str]) -> tuple[Path, Path, int] | None:
+    if len(parts) != 3 or parts[1] != FROZEN_DAEMON_SERVE_ARG:
+        return None
+    launcher_name = ntpath.basename(parts[0]).lower()
+    if launcher_name not in {
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+    }:
+        return None
+    try:
+        return decode_frozen_daemon_serve_payload(parts[2])
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
 
 
 def _guard_daemon_process_inventory_for_guard_home(
@@ -2556,9 +2595,43 @@ def _guard_daemon_process_inventory_for_guard_home(
 
 
 def _malformed_command_may_launch_guard(command_line: str) -> bool:
-    first_token = command_line.lstrip().split(maxsplit=1)[0].strip("\"'")
+    trimmed_command = command_line.lstrip()
+    if not trimmed_command:
+        return False
+    if trimmed_command[0] in {'"', "'"}:
+        quote = trimmed_command[0]
+        closing_quote = trimmed_command.find(quote, 1)
+        if closing_quote <= 1:
+            lowered = trimmed_command.lower()
+            launcher_names = (
+                "hol-guard",
+                "hol-guard.exe",
+                "plugin-guard",
+                "plugin-guard.exe",
+            )
+            launcher_present = any(
+                re.search(
+                    rf"(?:^|[\\/\s]){re.escape(name)}(?:$|[\\/\s\"'])",
+                    lowered,
+                )
+                for name in launcher_names
+            )
+            if FROZEN_DAEMON_SERVE_ARG in lowered:
+                return launcher_present
+            daemon_invocation = re.search(r"(?:^|\s)(?:guard\s+)?daemon\s+--serve(?:\s|$)", lowered)
+            return daemon_invocation is not None and launcher_present
+        first_token = trimmed_command[1:closing_quote]
+    else:
+        first_token = trimmed_command.split(maxsplit=1)[0]
     launcher = ntpath.basename(first_token).lower()
     lowered = command_line.lower()
+    if FROZEN_DAEMON_SERVE_ARG in lowered:
+        return launcher in {
+            "hol-guard",
+            "hol-guard.exe",
+            "plugin-guard",
+            "plugin-guard.exe",
+        }
     daemon_invocation = re.search(r"(?:^|\s)(?:guard\s+)?daemon\s+--serve(?:\s|$)", lowered)
     if daemon_invocation is None:
         return False
