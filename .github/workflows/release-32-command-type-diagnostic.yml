@@ -42,7 +42,6 @@ jobs:
             src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
             src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_4.py \
             src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
-            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_6.py \
             src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
             src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
             --project=pyproject.toml --outputjson > /tmp/pyright.json
