@@ -1,0 +1,69 @@
+name: Release 3.2 extension catalog baseline refresh
+
+on:
+  push:
+    branches:
+      - fix/3.2-command-review-followup
+    paths:
+      - .github/workflows/release-32-extension-catalog-baseline-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/3.2-command-review-followup
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.13'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: false
+      - name: Install locked development environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Refresh canonical extension-control baseline
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+          from tests.test_guard_extension_control_catalog_detail import _identity_snapshot
+
+          path = Path('tests/fixtures/extension-controls/catalog-baseline.v1.json')
+          baseline = json.loads(path.read_text(encoding='utf-8'))
+          baseline.update(_identity_snapshot())
+          path.write_text(json.dumps(baseline, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          print(json.dumps({
+              'catalog_digest': baseline['catalog_digest'],
+              'extension_count': baseline['extension_count'],
+              'permission_count': baseline['permission_count'],
+              'rule_count': baseline['rule_count'],
+          }))
+          PY
+      - name: Verify catalog baseline and command contracts
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_extension_control_catalog_detail.py \
+            tests/test_guard_command_ecosystem_setup.py::test_package_extensions_delegate_to_existing_package_firewall \
+            tests/test_guard_command_review_followup.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            --tb=short
+          uv run --no-sync basedpyright --level error
+          uv run --no-sync python -m ruff check src/ tests/test_guard_extension_control_catalog_detail.py
+      - name: Commit refreshed baseline and remove helper
+        run: |
+          git rm .github/workflows/release-32-extension-catalog-baseline-refresh.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/fixtures/extension-controls/catalog-baseline.v1.json
+          git commit -m 'test(commands): refresh extension catalog baseline'
+          git push origin HEAD:fix/3.2-command-review-followup
