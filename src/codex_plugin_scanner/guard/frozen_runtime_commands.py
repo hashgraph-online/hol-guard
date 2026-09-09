@@ -6,6 +6,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import BinaryIO, cast
 
 from .stable_guard_cli import resolve_frozen_guard_cli
 
@@ -155,7 +156,7 @@ def consume_frozen_daemon_serve_gate(
     except (OSError, RuntimeError) as error:
         raise ValueError("Frozen daemon serve executable is not trusted") from error
     stream = sys.stdin if stdin is None else stdin
-    gate_stream = getattr(stream, "buffer", stream)
+    gate_stream = cast(BinaryIO, getattr(stream, "buffer", stream))
     try:
         gate = gate_stream.read(1)
     except (AttributeError, OSError, ValueError):

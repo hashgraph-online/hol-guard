@@ -646,6 +646,8 @@ jobs:
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
           uv run --no-sync python scripts/mdm/windows/write-version-info.py `
             --version $version --output $versionFile
+          uv run --no-sync python -I scripts/release/stage_guard_cloud_review_artifacts.py `
+            --source-root (Get-Location).Path | Out-Null
           uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
             --version-file $versionFile `
