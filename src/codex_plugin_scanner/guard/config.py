@@ -37,6 +37,7 @@ from .presentation_mode import (
 from .presentation_settings import (
     PRESENTATION_SETTING_INPUT_KEYS,
     apply_presentation_settings_update,
+    next_presentation_revision,
     resolve_presentation_settings_update,
 )
 from .protection_posture import (
@@ -49,6 +50,7 @@ from .protection_posture import (
     dual_write_from_posture,
     resolve_posture_defaults,
 )
+from .settings_write_lock import atomic_write_settings, serialize_guard_settings
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 VALID_UPDATE_CHANNELS = frozenset({"stable", "alpha"})
@@ -681,6 +683,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
     }
 
 
+@serialize_guard_settings
 def update_guard_settings(
     guard_home: Path,
     payload: dict[str, object],
@@ -770,6 +773,7 @@ def update_guard_settings(
     return updated
 
 
+@serialize_guard_settings
 def update_guard_update_channel(
     guard_home: Path,
     update_channel: object,
@@ -790,6 +794,7 @@ def update_guard_update_channel(
     return load_guard_config(guard_home)
 
 
+@serialize_guard_settings
 def reset_guard_settings(
     guard_home: Path,
     *,
@@ -800,21 +805,14 @@ def reset_guard_settings(
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
+    next_payload["presentation_revision"] = next_presentation_revision(
+        load_guard_config(guard_home).presentation_revision
+    )
     _write_guard_config(guard_home / "config.toml", next_payload)
     return load_guard_config(guard_home)
 
 
 def _coerce_editable_setting(key: str, value: object) -> object:
-    if key == "presentation_mode":
-        return coerce_presentation_mode_write(value)
-    if key == "presentation_mode_explicit":
-        if isinstance(value, bool):
-            return value
-        raise ValueError("presentation_mode_explicit must be true or false.")
-    if key == "presentation_schema_version":
-        if value == PRESENTATION_SCHEMA_VERSION:
-            return value
-        raise ValueError("Unsupported presentation schema version.")
     if key == "mode":
         if isinstance(value, str) and value in VALID_GUARD_MODES:
             return value
@@ -1102,7 +1100,7 @@ def _incoming_selects_protection_posture(
 def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = _toml_lines_for_table(payload, ())
-    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    atomic_write_settings(path, "\n".join(lines).strip() + "\n")
 
 
 def _toml_lines_for_table(payload: Mapping[str, object], path: tuple[str, ...]) -> list[str]:

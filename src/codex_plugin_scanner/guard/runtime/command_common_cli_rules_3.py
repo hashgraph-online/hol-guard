@@ -16,14 +16,15 @@ from .command_common_cli_matchers import (
 )
 from .command_common_cli_matchers_extra import ANSIBLE_EXECUTION_REFINED
 from .command_common_cli_rule_support import help_variants, rule
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_rules import AnyMatcher, CommandSafetyRule, ExecutableMatcher
 
 _CLOUD_CREDENTIAL_MUTATION_REFINED = AnyMatcher(
     matchers=tuple(
         matcher
         for matcher in _CLOUD_CREDENTIAL_MUTATION.matchers
         if not (
-            "gcloud" in matcher.executables
+            isinstance(matcher, ExecutableMatcher)
+            and "gcloud" in matcher.executables
             and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
         )
     )
@@ -144,7 +145,10 @@ COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
         extension_id="command.cloud-secrets",
         suffix="credential-mutation",
         title="Cloud credential mutation",
-        description="Identifies access-key or service-account credential creation, deletion, or reset without stealing provider-owned deletion operations.",
+        description=(
+            "Identifies access-key or service-account credential creation, deletion, or reset "
+            "without stealing provider-owned deletion operations."
+        ),
         matcher=_CLOUD_CREDENTIAL_MUTATION_REFINED,
         action_class="cloud credential mutation command",
         risk_classes=("destructive_shell", "network_egress"),

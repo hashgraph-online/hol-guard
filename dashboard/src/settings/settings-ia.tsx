@@ -9,6 +9,7 @@ import {
 
 export type LocalSettingsTabKey =
   | "protection"
+  | "experience"
   | "approval"
   | "notifications"
   | "rules"
@@ -46,6 +47,10 @@ const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="
 const ICON_MAINTENANCE = <HiMiniCircleStack className="h-4 w-4" aria-hidden="true" />;
 
 export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
+  {
+    key: "experience", label: "Experience", mobileLabel: "Display",
+    summary: "Everyday explanations and Technical Mode.", group: "local", icon: ICON_RISK,
+  },
   {
     key: "protection",
     label: "Protection",
@@ -95,6 +100,7 @@ export const localSettingsMobileTabLabels: Record<LocalSettingsTabKey, string> =
 
 export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   protection: "Protection",
+  experience: "Experience",
   approval: "Approval gate",
   notifications: "Notifications",
   rules: "Protection rules",
@@ -103,10 +109,16 @@ export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
 
 export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabKey {
   return (
-    value === "protection"
+    value === "experience"
+    || value === "protection"
     || value === "approval"
     || value === "notifications"
     || value === "rules"
     || value === "maintenance"
   );
+}
+
+export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
+  const section = new URLSearchParams(search).get("section");
+  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
 }

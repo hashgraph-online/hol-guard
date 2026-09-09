@@ -6,7 +6,7 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-assert(localSettingsNavItems.length === 5, "local settings should expose five focused sections");
+assert(localSettingsNavItems.length === 6, "local settings should expose Experience alongside the five protection sections");
 assert(
   localSettingsNavItems.some((item) => item.key === "protection"),
   "protection tab should exist",
@@ -24,3 +24,5 @@ assert(!isLocalSettingsTabKey("billing"), "cloud-only tabs should not validate l
 assert(!isLocalSettingsTabKey("advanced"), "legacy advanced tab key should not validate locally");
 
 console.log("settings-ia.test.ts: all tests passed");
+
+assert(isLocalSettingsTabKey("experience"), "Experience must be a valid local settings route");

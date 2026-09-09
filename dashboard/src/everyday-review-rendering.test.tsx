@@ -1,0 +1,23 @@
+import { strict as assert } from "node:assert";
+import { renderToStaticMarkup } from "react-dom/server";
+import { GuardTechnicalDisclosure } from "./guard-technical-disclosure";
+import { ActionExplanationSummary } from "./action-explanation-summary";
+import { parseActionExplanation } from "./action-explanation-validation";
+import fixture from "./__fixtures__/everyday-action-explanation.json";
+
+const raw = "private-retained-command --token=private-test-value";
+const everyday = renderToStaticMarkup(<GuardTechnicalDisclosure mode="everyday"><pre>{raw}</pre></GuardTechnicalDisclosure>);
+assert.ok(everyday.includes('aria-expanded="false"'));
+assert.ok(everyday.includes("Show technical details"));
+assert.ok(!everyday.includes(raw), "closed details must not leak into DOM, hidden text, or the accessibility tree");
+const technical = renderToStaticMarkup(<GuardTechnicalDisclosure mode="technical"><pre>{raw}</pre></GuardTechnicalDisclosure>);
+assert.ok(technical.includes('aria-expanded="true"'));
+assert.ok(technical.includes(raw));
+const explanation = parseActionExplanation(fixture.action_explanation);
+assert.ok(explanation);
+const html = renderToStaticMarkup(<ActionExplanationSummary explanation={{ ...explanation, confidence: "limited" }} />);
+assert.ok(html.includes("Guard could not confirm the full effect"));
+assert.ok(!html.includes("rm -rf"));
+assert.ok(!html.includes("act_"));
+assert.ok(!html.includes("command.file"));
+console.log("everyday-review-rendering.test.tsx: all tests passed");

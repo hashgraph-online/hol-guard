@@ -22,6 +22,7 @@ from .desktop_presentation import (
     presentation_projection as _presentation_projection,
 )
 from .desktop_presentation import (
+    run_presentation_get_command,
     run_presentation_set_command,
     unsupported_presentation_projection,
 )
@@ -396,10 +397,12 @@ def _run_guard_desktop_command(
             argv.append("--alpha")
         return dashboard_update_main(argv)
     desktop_command = getattr(args, "desktop_command", None)
+    if desktop_command == "presentation-get":
+        return run_presentation_get_command(args, guard_home=guard_home, config=config, output_stream=output_stream)
     if desktop_command == "presentation-set":
         return run_presentation_set_command(args, guard_home=guard_home, config=config, output_stream=output_stream)
     if desktop_command != "bootstrap":
-        print("Choose desktop bootstrap or presentation-set.", file=sys.stderr)
+        print("Choose desktop bootstrap, presentation-get or presentation-set.", file=sys.stderr)
         return 2
     if context is None or store is None or config is None:
         raise RuntimeError("Guard Desktop bootstrap requires local Guard context")

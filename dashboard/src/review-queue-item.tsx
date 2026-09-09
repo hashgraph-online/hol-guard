@@ -33,6 +33,8 @@ import {
   riskScore,
   type QueueCategoryId,
 } from "./queue-state";
+import { usePresentationMode } from "./presentation-mode-provider";
+import { useActionExplanation } from "./use-action-explanation";
 import type { RequestReadState } from "./request-read-state";
 
 type RiskLevel = "high" | "medium" | "low";
@@ -64,7 +66,10 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   const riskLevel = riskLevelFromScore(risk);
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
-  const preview = queueItemPreview(item);
+  const { mode } = usePresentationMode();
+  const { explanation, pending } = useActionExplanation(item);
+  const preview = mode === "technical" ? queueItemPreview(item)
+    : explanation?.everyday.summary ?? (pending ? "Checking the action explanation…" : "Review this action. Plain-language details are unavailable.");
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   // Checkboxes render whenever bulk selection is active so the affordance is

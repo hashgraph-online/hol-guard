@@ -45,9 +45,7 @@ _DIRECT_EXTENSION_CATALOGS = (
 # all rule tuples remain additive. This lets a release expand one capability
 # boundary without creating a duplicate registry identity.
 _DIRECT_EXTENSION_SPEC_BY_ID = {
-    spec.extension_id: spec
-    for specs, _rules in _DIRECT_EXTENSION_CATALOGS
-    for spec in specs
+    spec.extension_id: spec for specs, _rules in _DIRECT_EXTENSION_CATALOGS for spec in specs
 }
 _DIRECT_COMMAND_RULES = tuple(rule for _specs, rules in _DIRECT_EXTENSION_CATALOGS for rule in rules)
 

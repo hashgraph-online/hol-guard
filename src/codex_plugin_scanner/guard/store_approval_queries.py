@@ -2,9 +2,82 @@
 
 from __future__ import annotations
 
+import json
+
+from .runtime.live_action_explanation import attach_live_action_explanation
+
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
 from .store_base import *
+
+
+def _with_live_explanation(payload: dict[str, object] | None) -> dict[str, object] | None:
+    if payload is None:
+        return None
+    return attach_live_action_explanation(payload)
+
+
+def _summary_projection_sources(connection, items: list[object]) -> dict[str, dict[str, object]]:
+    request_ids = [
+        request_id
+        for item in items
+        if isinstance(item, dict) and isinstance((request_id := item.get("request_id")), str) and request_id
+    ]
+    if not request_ids:
+        return {}
+    placeholders = ",".join("?" for _ in request_ids)
+    rows = connection.execute(
+        f"""
+        select request_id, harness, action_identity, action_envelope_json, raw_command_text
+        from approval_requests
+        where request_id in ({placeholders})
+        """,
+        tuple(request_ids),
+    ).fetchall()
+    sources: dict[str, dict[str, object]] = {}
+    for row in rows:
+        request_id = str(row["request_id"])
+        envelope_raw = row["action_envelope_json"]
+        envelope: dict[str, object] | None = None
+        if isinstance(envelope_raw, str) and envelope_raw:
+            try:
+                parsed = json.loads(envelope_raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                envelope = parsed
+        sources[request_id] = {
+            "request_id": request_id,
+            "harness": row["harness"],
+            "action_identity": row["action_identity"],
+            "action_envelope_json": envelope,
+            "raw_command_text": row["raw_command_text"],
+        }
+    return sources
+
+
+def _with_live_summary_explanations(
+    connection,
+    page: dict[str, object],
+) -> dict[str, object]:
+    items = page.get("items")
+    if not isinstance(items, list):
+        return page
+    sources = _summary_projection_sources(connection, items)
+    decorated: list[dict[str, object]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        request_id = item.get("request_id")
+        source = sources.get(request_id) if isinstance(request_id, str) else None
+        decorated.append(
+            attach_live_action_explanation(
+                item,
+                list_projection=True,
+                source_payload=source,
+            )
+        )
+    return {**page, "items": decorated}
 
 
 class StoreApprovalQueriesMixin:
@@ -18,14 +91,17 @@ class StoreApprovalQueriesMixin:
         search: str | None = None,
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
-            return load_approval_requests(
-                connection,
-                status=status,
-                harness=harness,
-                limit=limit,
-                cursor=cursor,
-                search=search,
-            )
+            return [
+                attach_live_action_explanation(item)
+                for item in load_approval_requests(
+                    connection,
+                    status=status,
+                    harness=harness,
+                    limit=limit,
+                    cursor=cursor,
+                    search=search,
+                )
+            ]
 
     def list_pending_approval_summaries(
         self,
@@ -38,7 +114,7 @@ class StoreApprovalQueriesMixin:
         exclude_watch_only: bool = False,
     ) -> dict[str, object]:
         with self._connect() as connection:
-            return load_pending_approval_summaries(
+            page = load_pending_approval_summaries(
                 connection,
                 limit=limit,
                 cursor=cursor,
@@ -47,6 +123,7 @@ class StoreApprovalQueriesMixin:
                 include_totals=include_totals,
                 exclude_watch_only=exclude_watch_only,
             )
+            return _with_live_summary_explanations(connection, page)
 
     def list_approval_request_page(
         self,
@@ -60,7 +137,7 @@ class StoreApprovalQueriesMixin:
         exclude_watch_only: bool = False,
     ) -> dict[str, object]:
         with self._connect() as connection:
-            return load_approval_request_page(
+            page = load_approval_request_page(
                 connection,
                 status=status,
                 limit=limit,
@@ -70,10 +147,11 @@ class StoreApprovalQueriesMixin:
                 include_totals=include_totals,
                 exclude_watch_only=exclude_watch_only,
             )
+            return _with_live_summary_explanations(connection, page)
 
     def get_approval_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
-            return load_approval_request(connection, request_id)
+            return _with_live_explanation(load_approval_request(connection, request_id))
 
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
         with self._connect() as connection:
@@ -104,7 +182,7 @@ class StoreApprovalQueriesMixin:
 
     def get_next_pending_request(self, *, exclude_ids: set[str] | None = None) -> dict[str, object] | None:
         with self._connect() as connection:
-            return load_next_pending_request(connection, exclude_ids=exclude_ids)
+            return _with_live_explanation(load_next_pending_request(connection, exclude_ids=exclude_ids))
 
     def count_approval_requests(
         self,

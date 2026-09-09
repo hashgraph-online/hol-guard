@@ -23,6 +23,15 @@ class PresentationSettingsUpdate:
     explicit: bool
 
 
+def next_presentation_revision(current_revision: int) -> int:
+    """Advance the local compare-and-swap counter without leaving the wire range."""
+    if type(current_revision) is not int or current_revision < 0:
+        raise ValueError("presentation_revision must be a non-negative safe integer.")
+    if current_revision >= 2**53 - 1:
+        raise ValueError("The presentation revision is exhausted; settings were not changed.")
+    return current_revision + 1
+
+
 def resolve_presentation_settings_update(
     payload: dict[str, object],
     *,
@@ -37,7 +46,10 @@ def resolve_presentation_settings_update(
     if "presentation_schema_version" in payload:
         if not requested:
             raise ValueError("presentation_schema_version requires a presentation preference change.")
-        if payload["presentation_schema_version"] != PRESENTATION_SCHEMA_VERSION:
+        if (
+            type(payload["presentation_schema_version"]) is not int
+            or payload["presentation_schema_version"] != PRESENTATION_SCHEMA_VERSION
+        ):
             raise ValueError("Unsupported presentation schema version.")
 
     mode = current_mode
@@ -55,11 +67,17 @@ def resolve_presentation_settings_update(
     changed = requested and (mode != current_mode or explicit != current_explicit)
     if requested:
         expected_revision = payload.get("presentation_revision")
+        if "presentation_revision" in payload and (
+            type(expected_revision) is not int or not 0 <= expected_revision <= 2**53 - 1
+        ):
+            raise ValueError("presentation_revision must be a non-negative safe integer.")
         if expected_revision is not None and expected_revision != current_revision:
             raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
         # Unsupported future-schema state is read-only instead of being silently downgraded.
         if changed and not current_writable:
             raise ValueError("Presentation settings use a newer schema and cannot be changed by this Guard version.")
+    if changed:
+        next_presentation_revision(current_revision)
     return PresentationSettingsUpdate(
         requested=requested,
         changed=changed,
@@ -76,7 +94,8 @@ def apply_presentation_settings_update(
 ) -> None:
     if not update.changed:
         return
+    next_revision = next_presentation_revision(current_revision)
     payload["presentation_mode"] = update.mode
     payload["presentation_mode_explicit"] = update.explicit
     payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
-    payload["presentation_revision"] = current_revision + 1
+    payload["presentation_revision"] = next_revision

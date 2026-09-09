@@ -26,6 +26,7 @@ def test_package_extensions_delegate_to_existing_package_firewall() -> None:
         extension
         for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
         if extension.extension_id.startswith("command.package.")
+        and extension.delegated_protection == "package-firewall"
     )
 
     assert len(package_extensions) == 8
@@ -191,3 +192,14 @@ def test_command_setup_plain_text_count_matches_recommendation_rows(
 
     assert "Recommended command ecosystems (0)" in output
     assert "command.package.python - recommended" not in output
+
+
+def test_dotnet_package_extension_owns_rules_instead_of_delegating() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.package.dotnet")
+    assert extension is not None
+    assert extension.delegated_protection is None
+    assert {rule.rule_id for rule in extension.rules} == {
+        "command.package.dotnet.package-mutation",
+        "command.package.dotnet.positional-project-package",
+        "command.package.dotnet.publication",
+    }

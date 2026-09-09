@@ -1,0 +1,90 @@
+{
+  "action_identity": "everyday-fixture-action",
+  "action_explanation": {
+    "action_identity": "act_abe5fa412a113e961a3830095b19988fd4ccb7d6734706038fb755f37bf457db",
+    "kind": "file_delete",
+    "confidence": "exact",
+    "everyday": {
+      "headline_message_id": "guard.everyday.file_delete.headline",
+      "headline": "Recursive filesystem deletion",
+      "summary_message_id": "guard.everyday.file_delete.summary",
+      "summary": "claude-code wants to run the rm command. Guard identified recursive filesystem deletion.",
+      "impact_message_id": "guard.everyday.file_delete.impact",
+      "impact": "Identifies recursive deletion that can remove a directory tree in one operation.",
+      "why_guard_intervened_message_id": "guard.everyday.file_delete.why",
+      "why_guard_intervened": "Guard matched a built-in protection for this action.",
+      "recommendation_message_id": "guard.everyday.file_delete.recommendation",
+      "recommendation": "List the exact target tree first, then remove only reviewed paths.",
+      "actor_label": "claude-code",
+      "targets": [
+        {
+          "kind": "command",
+          "label": "the rm command",
+          "scope": null,
+          "sensitivity": "normal"
+        }
+      ],
+      "consequences": [
+        {
+          "message_id": "guard.everyday.file_delete.consequence.0",
+          "message": "Identifies recursive deletion that can remove a directory tree in one operation.",
+          "severity": "high",
+          "confirmed": false
+        }
+      ],
+      "safer_alternatives": [
+        {
+          "message_id": "guard.everyday.file_delete.alternative.0",
+          "message": "List the exact target tree first, then remove only reviewed paths.",
+          "kind": "review"
+        }
+      ]
+    },
+    "technical": {
+      "available": false,
+      "unavailable_reason": "Exact technical details require deliberate local disclosure.",
+      "action_type": "shell_command",
+      "command_display": null,
+      "normalized_command_display": null,
+      "executable": null,
+      "arguments_display": null,
+      "dialect": "posix",
+      "transport": "shell_string",
+      "working_scope_display": null,
+      "wrappers": [],
+      "segments": [],
+      "extension_ids": [
+        "command.filesystem"
+      ],
+      "rule_ids": [
+        "command.filesystem.recursive-delete"
+      ],
+      "reason_codes": [],
+      "policy_source": null,
+      "parse_confidence": "exact",
+      "proof_level": null,
+      "receipt_id": null,
+      "action_id": "act_abe5fa412a113e961a3830095b19988fd4ccb7d6734706038fb755f37bf457db"
+    },
+    "redaction": {
+      "level": "redacted",
+      "policy_version": "1",
+      "omitted_fields": [
+        "technical.command_display",
+        "technical.normalized_command_display",
+        "technical.executable",
+        "technical.arguments_display",
+        "technical.segments"
+      ],
+      "truncated_fields": [],
+      "secret_like_values_removed": false
+    },
+    "canonical_identity": "command-security-v2:28802fa836d52d844826b0ef874fb168039d75bfeac73473e676eca4eb80a41f",
+    "catalog_digest": "0341b0ffd5cc1cf10719e8e6d2364eaf7ae6f96f530c4f85389ccd917cf2c6f1",
+    "locale": "en-US",
+    "uncertainty_reasons": [],
+    "schema_version": "guard.action-explanation.v1",
+    "explanation_version": "1.0.0",
+    "renderer_version": "1.0.0"
+  }
+}

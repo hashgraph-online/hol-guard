@@ -1,4 +1,4 @@
-import { a8 as PROTECTION_POSTURE_COPY, a9 as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, aa as getDefaultExportFromCjs, ab as React, K as useFocusTrap, ac as HiMiniKey, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, ad as HiMiniLockClosed, ae as HiMiniBellAlert, af as HiMiniAdjustmentsHorizontal, ag as HiMiniCircleStack, ah as TabBar, c as HiMiniChevronRight, ai as resolveProtectionLevelCopy, aj as fetchSettings, ak as fetchRuntimeSnapshot, e as updateSettings, al as clearPolicy, am as clearReviewQueue, an as revokeApprovalGateCooldown, ao as disableApprovalGateTotp, ap as importSettings, aq as resetSettings, ar as enrollApprovalGateTotp, as as verifyApprovalGateTotp, at as clearEvidence, au as exportDiagnostics, av as repairApprovalCenter, aw as exportSettings, ax as setupDesktopNotifications, m as EmptyState, ay as WorkspacePageHeader, W as WatchProtectionBanner, az as HiMiniMagnifyingGlass, C as HiMiniChevronDown, o as HiMiniCheckCircle, M as HiMiniExclamationTriangle, aA as isProtectionPosture, aB as deriveProtectionPosture, aC as Tag, aD as approvalGateCooldownLabel, z as HiMiniXMark } from "../guard-dashboard.js";
+import { a8 as PROTECTION_POSTURE_COPY, a9 as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, aa as getDefaultExportFromCjs, ab as React, K as useFocusTrap, ac as HiMiniKey, S as SectionLabel, A as ActionButton, ad as usePresentationMode, ae as HiMiniAdjustmentsHorizontal, t as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniCircleStack, ai as TabBar, c as HiMiniChevronRight, aj as resolveProtectionLevelCopy, ak as fetchSettings, al as fetchRuntimeSnapshot, am as withoutPresentationSettings, e as updateSettings, an as clearPolicy, ao as clearReviewQueue, ap as revokeApprovalGateCooldown, aq as disableApprovalGateTotp, ar as importSettings, as as resetSettings, at as enrollApprovalGateTotp, au as verifyApprovalGateTotp, av as clearEvidence, aw as exportDiagnostics, ax as repairApprovalCenter, ay as exportSettings, az as setupDesktopNotifications, m as EmptyState, aA as WorkspacePageHeader, W as WatchProtectionBanner, aB as HiMiniMagnifyingGlass, C as HiMiniChevronDown, o as HiMiniCheckCircle, M as HiMiniExclamationTriangle, aC as isProtectionPosture, aD as deriveProtectionPosture, aE as Tag, aF as approvalGateCooldownLabel, z as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
@@ -2245,6 +2245,58 @@ function SettingsSaveProofModal(props) {
     }
   );
 }
+function PresentationModeSettings() {
+  const { mode, presentation, loading, saving, error, saved, setMode, refresh } = usePresentationMode();
+  const labelId = reactExports.useId();
+  const descriptionId = reactExports.useId();
+  const technical = mode === "technical";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-5", "aria-label": "Experience", "data-presentation-settings": true, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Experience" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Choose how much detail Guard shows. Your protection and approval rules stay the same." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "font-medium text-brand-dark", children: "Technical Mode" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "mt-1 text-sm text-slate-600", children: "Off: plain-language explanations first. On: retained local details open by default." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            role: "switch",
+            "aria-checked": technical,
+            "aria-labelledby": labelId,
+            "aria-describedby": descriptionId,
+            disabled: loading || saving || !presentation.writable,
+            onClick: () => {
+              void setMode(technical ? "everyday" : "technical");
+            },
+            className: "inline-flex min-h-11 min-w-14 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue disabled:cursor-not-allowed disabled:opacity-50",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: `relative block h-7 w-12 rounded-full ${technical ? "bg-brand-blue" : "bg-slate-300"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-sm ${technical ? "translate-x-5" : "translate-x-0"}` }) })
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: "This display preference is free and saved on this device. It does not enable Cloud sync. You can open technical details for one action without turning on Technical Mode." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "status", "aria-live": "polite", className: "text-sm text-slate-600", children: loading ? "Reading your local display preference…" : saving ? "Saving display preference…" : saved && !error ? "Saved on this device." : `Current view: ${technical ? "Technical Mode" : "Everyday Mode"}.` }),
+    !loading && !presentation.writable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: presentation.diagnostic === "presentation_not_supported_by_core" || presentation.diagnostic === "unsupported_presentation_schema_fell_back_to_everyday" ? "Update HOL Guard Core to change this preference. The current view is read-only." : "The local display preference is unavailable. Reconnect to Core and reload it." }) : null,
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-brand-attention", children: error }) : null,
+    error || !presentation.writable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          void refresh();
+        },
+        disabled: loading || saving,
+        className: "min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-medium text-brand-dark",
+        children: "Reload display preference"
+      }
+    ) : null
+  ] });
+}
 const localSettingsNavGroups = [
   {
     key: "local",
@@ -2258,6 +2310,14 @@ const ICON_NOTIFICATIONS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBellAlert
 const ICON_RISK = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_MAINTENANCE = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-4 w-4", "aria-hidden": "true" });
 const localSettingsNavItems = [
+  {
+    key: "experience",
+    label: "Experience",
+    mobileLabel: "Display",
+    summary: "Everyday explanations and Technical Mode.",
+    group: "local",
+    icon: ICON_RISK
+  },
   {
     key: "protection",
     label: "Protection",
@@ -2303,7 +2363,11 @@ const localSettingsMobileTabLabels = Object.fromEntries(
   localSettingsNavItems.map((item) => [item.key, item.mobileLabel ?? item.label])
 );
 function isLocalSettingsTabKey(value) {
-  return value === "protection" || value === "approval" || value === "notifications" || value === "rules" || value === "maintenance";
+  return value === "experience" || value === "protection" || value === "approval" || value === "notifications" || value === "rules" || value === "maintenance";
+}
+function resolveInitialSettingsTab(search) {
+  const section = new URLSearchParams(search).get("section");
+  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
 }
 function SettingsSectionNavItem({ active, item, onSelect }) {
   const handleClick = reactExports.useCallback(() => {
@@ -2389,7 +2453,7 @@ function SettingsSectionShell({
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: activeItem.label }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: activeItem.summary })
               ] }) : null,
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col", children })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col", children: activeTab === "experience" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PresentationModeSettings, {}) : children })
             ]
           }
         )
@@ -2476,10 +2540,6 @@ function SettingsSelectRow({
   ] });
 }
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
-function resolveInitialSettingsTab(search) {
-  const section = new URLSearchParams(search).get("section");
-  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
-}
 function resolveSecurityLevelCardDescription(level) {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
   if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
@@ -3084,7 +3144,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
       };
       const settingsToSave = {
-        ...draft,
+        ...withoutPresentationSettings(draft),
         risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
         approval_gate: approvalGateUpdate
       };
@@ -3572,7 +3632,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       WorkspacePageHeader,
       {
         eyebrow: "This machine",
-        title: "Protection",
+        title: activeTab === "experience" ? "Experience" : "Protection",
         description: "Guard stops dangerous actions automatically and asks once about new or unknown work."
       }
     ),
@@ -3931,6 +3991,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         className: "sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4",
         role: "region",
         "aria-label": "Save settings",
+        hidden: activeTab === "experience",
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving || saveSuccess, children: saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [

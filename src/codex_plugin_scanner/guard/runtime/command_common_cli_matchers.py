@@ -54,9 +54,7 @@ _GLAB_DESTRUCTIVE = _path_bundle(
     options=_GLAB_OPTIONS,
     flags=_GLAB_FLAGS,
 )
-_GLAB_MERGE = _path_bundle(
-    ("glab",), (("mr", "merge"), ("mr", "rebase")), options=_GLAB_OPTIONS, flags=_GLAB_FLAGS
-)
+_GLAB_MERGE = _path_bundle(("glab",), (("mr", "merge"), ("mr", "rebase")), options=_GLAB_OPTIONS, flags=_GLAB_FLAGS)
 _GLAB_VARIABLE = _path_bundle(
     ("glab",), (("variable", "get"), ("variable", "set")), options=_GLAB_OPTIONS, flags=_GLAB_FLAGS
 )
@@ -64,9 +62,7 @@ _GLAB_VARIABLE = _path_bundle(
 # HashiCorp Vault
 _VAULT_OPTIONS = frozenset({"-address", "-namespace", "-output-format"})
 _VAULT_FLAGS = frozenset({"-h", "--help"})
-_VAULT_READ = _path_bundle(
-    ("vault",), (("kv", "get"), ("read",)), options=_VAULT_OPTIONS, flags=_VAULT_FLAGS
-)
+_VAULT_READ = _path_bundle(("vault",), (("kv", "get"), ("read",)), options=_VAULT_OPTIONS, flags=_VAULT_FLAGS)
 _VAULT_MUTATION = _path_bundle(
     ("vault",),
     (("kv", "put"), ("kv", "patch"), ("kv", "delete"), ("kv", "destroy"), ("kv", "rollback"), ("delete",)),
@@ -376,16 +372,12 @@ _CLOUD_CREDENTIAL_MUTATION = AnyMatcher(
 _ALT_CONTAINER_CLEANUP = _path_bundle(
     ("podman", "nerdctl"), (("system", "prune"), ("container", "prune"), ("image", "prune"), ("volume", "prune"))
 )
-_ALT_CONTAINER_PRIVILEGED = _flag_bundle(
-    ("podman", "nerdctl"), (("run",),), required_flags=frozenset({"--privileged"})
-)
+_ALT_CONTAINER_PRIVILEGED = _flag_bundle(("podman", "nerdctl"), (("run",),), required_flags=frozenset({"--privileged"}))
 _OC_OPTIONS = frozenset(
     {"--as", "--as-group", "--cluster", "--context", "--kubeconfig", "--namespace", "-n", "--server", "--user"}
 )
 _OC_FLAGS = frozenset({"--help", "-h"})
-_OC_DESTRUCTIVE = _path_bundle(
-    ("oc",), (("delete",), ("adm", "drain")), options=_OC_OPTIONS, flags=_OC_FLAGS
-)
+_OC_DESTRUCTIVE = _path_bundle(("oc",), (("delete",), ("adm", "drain")), options=_OC_OPTIONS, flags=_OC_FLAGS)
 _OC_EXECUTION = _path_bundle(("oc",), (("exec",), ("rsh",)), options=_OC_OPTIONS, flags=_OC_FLAGS)
 _OC_TUNNEL = _path_bundle(("oc",), (("port-forward",),), options=_OC_OPTIONS, flags=_OC_FLAGS)
 _OC_TRANSFER = _path_bundle(("oc",), (("rsync",),), options=_OC_OPTIONS, flags=_OC_FLAGS)
@@ -405,5 +397,3 @@ _PSQL_DROP = ArgumentCommandMatcher(
 _MYSQL_DROP = ArgumentCommandMatcher(
     executables=executable_names("mysql"), command="drop", minimum_abbreviation_length=4, minimum_position=1
 )
-
-
