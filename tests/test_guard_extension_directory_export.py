@@ -43,6 +43,7 @@ def test_every_native_extension_appears_once_with_unchanged_authority() -> None:
         assert row["trustClass"] == trust_class_for(extension.extension_id)
         assert row["ruleCount"] == len(extension.rules)
         assert row["permissionCount"] == len(extension.permissions)
+        assert len(row["operations"]) == len(extension.rules)
         assert (row["claimPolicy"] == "provenance") == (row["trustClass"] == "external")
         if row["claimPolicy"] == "provenance":
             assert row["protectionModel"] == "external-opt-in"
