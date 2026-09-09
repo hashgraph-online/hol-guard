@@ -5,6 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
+SCHEDULING_SENSITIVE_NODE = (
+    "tests/test_guard_hook_process_runner.py::"
+    "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial"
+)
 SPEC = importlib.util.spec_from_file_location("pytest_shard", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 pytest_shard = importlib.util.module_from_spec(SPEC)
@@ -33,6 +37,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     plan_job = _workflow_job(workflow, "test-plan", "tests")
     tests_job = _workflow_job(workflow, "tests", "duration-manifest-candidate")
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
+    scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
 
     assert "cancel-in-progress: true" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
@@ -56,6 +61,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
+    assert f"--deselect {SCHEDULING_SENSITIVE_NODE}" in tests_job
+    assert SCHEDULING_SENSITIVE_NODE in scheduling_job
 
     cache_consumers = (
         ("compatibility", "deep-compatibility", 1),
