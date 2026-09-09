@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -51,6 +54,46 @@ def test_frozen_entrypoint_dispatches_multiprocessing_before_guard_imports(
         "private-command",
         "public-cli",
     ]
+
+
+def test_frozen_entrypoint_rejects_held_gate_before_guard_package_import(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "guard-imported"
+    package = tmp_path / "codex_plugin_scanner"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "import os\nfrom pathlib import Path\nPath(os.environ['GUARD_IMPORT_MARKER']).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    payload = json.dumps(
+        {
+            "guard_home": str(guard_home.resolve()),
+            "home_dir": str(home_dir.resolve()),
+            "port": 4781,
+        },
+        separators=(",", ":"),
+    )
+    invocation = (
+        "import runpy,sys; "
+        f"sys.argv=[sys.executable,{'--_hol-guard-daemon-serve'!r},{payload!r}]; "
+        f"runpy.run_path({str(FROZEN_ENTRYPOINT)!r},run_name='__main__')"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path)
+    environment["GUARD_IMPORT_MARKER"] = str(marker)
+    result = subprocess.run(
+        [sys.executable, "-c", invocation],
+        input=b"",
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert result.returncode == 70
+    assert not marker.exists()
 
 
 def test_frozen_runtime_proves_same_executable_bootloader_parent(
