@@ -39,6 +39,7 @@ jobs:
           expected_counts = {
               Path("tests/test_guard_command_common_cli_extensions.py"): 3,
               Path("tests/test_guard_command_common_cli_gaps.py"): 1,
+              Path("docs/guard/release-3-2-common-cli-extensions-takeaway-prompt.md"): 1,
           }
           for path, expected in expected_counts.items():
               text = path.read_text(encoding="utf-8")
@@ -47,6 +48,12 @@ jobs:
                   raise SystemExit(f"{path}: expected {expected} old .NET ids, found {count}")
               path.write_text(text.replace("command.package.dotnet", "command.package-dotnet"), encoding="utf-8")
           PY
+      - name: Normalize touched test formatting
+        run: |
+          uv run --no-sync ruff format \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_policy_bundle_delivery_runtime.py
       - name: Refresh command decision evidence
         run: |
           uv run --no-sync python tests/guard_command_decision_diff.py --write
@@ -114,7 +121,6 @@ jobs:
           if n_catalog != 1 or n_projection != 1:
               raise SystemExit("managed-controls digest constants were not updated exactly once")
           test_path.write_text(text, encoding="utf-8")
-          print(json.dumps({"catalogDigest": catalog_digest, "projectionDigest": projection_digest}))
           PY
       - name: Verify focused contracts
         run: |
@@ -163,6 +169,7 @@ jobs:
           git add \
             tests/test_guard_command_common_cli_extensions.py \
             tests/test_guard_command_common_cli_gaps.py \
+            docs/guard/release-3-2-common-cli-extensions-takeaway-prompt.md \
             tests/fixtures/guard-command-corpus/decision-diff-report.json \
             contracts/managed-controls/v1/extension-projection-digest-vector.json \
             tests/test_policy_bundle_delivery_runtime.py
