@@ -267,12 +267,23 @@ def stop_native_resident(
     )
 
 
-def close_native_residents() -> None:
-    """Stop Rust-managed residents created by this Python process."""
-    close_native_resident_clients()
+def close_native_residents(guard_home: Path | None = None) -> bool:
+    """Stop this process's residents, optionally limited to one Guard home."""
+
+    resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
+    close_native_resident_clients(guard_home)
     with _RESIDENTS_LOCK:
-        residents = list(_RESIDENTS.items())
-    remaining: dict[tuple[Path, Path], Mapping[str, str]] = {}
+        residents = [
+            (key, environment)
+            for key, environment in _RESIDENTS.items()
+            if resolved_guard_home is None or key[1].parent == resolved_guard_home
+        ]
+        remaining = {
+            key: environment
+            for key, environment in _RESIDENTS.items()
+            if resolved_guard_home is not None and key[1].parent != resolved_guard_home
+        }
+    all_contained = True
     for (executable, state_dir), environment in residents:
         if _state_files(state_dir) and not stop_native_resident(
             executable=executable,
@@ -280,9 +291,12 @@ def close_native_residents() -> None:
             environment=environment,
         ):
             remaining[(executable, state_dir)] = environment
+            all_contained = False
     with _RESIDENTS_LOCK:
-        _RESIDENTS.clear()
+        for key, _environment in residents:
+            _RESIDENTS.pop(key, None)
         _RESIDENTS.update(remaining)
+    return all_contained
 
 
 def _legacy_native_resident_client_request(

@@ -476,16 +476,25 @@ def resident_service_starts(*, executable: Path, identity_sha256: str, guard_hom
     return service.starts if service is not None else 0
 
 
-def close_resident_native_runtimes() -> None:
-    """Stop every resident runtime through the contained launcher path."""
+def close_resident_native_runtimes(guard_home: Path | None = None) -> bool:
+    """Stop resident runtimes, optionally limited to one Guard home."""
+
+    resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
     with _SERVICES_LOCK:
-        services = list(_SERVICES.items())
+        services = [
+            (key, service)
+            for key, service in _SERVICES.items()
+            if resolved_guard_home is None or Path(key[2]) == resolved_guard_home
+        ]
+    all_contained = True
     for key, service in services:
         if service.close():
             with _SERVICES_LOCK:
                 if _SERVICES.get(key) is service:
                     _SERVICES.pop(key, None)
-    close_native_residents()
+        else:
+            all_contained = False
+    return close_native_residents(guard_home) and all_contained
 
 
 atexit.register(close_resident_native_runtimes)
