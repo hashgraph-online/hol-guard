@@ -1,4 +1,4 @@
-"""Regression coverage for release/3.2 command review aliases and forms."""
+"""Regression coverage for release/3.2 command review aliases and argument forms."""
 
 from __future__ import annotations
 
