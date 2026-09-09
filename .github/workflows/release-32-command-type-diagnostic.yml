@@ -34,7 +34,18 @@ jobs:
         shell: bash
         run: |
           set +e
-          uv run --no-sync basedpyright --warnings scripts ci src/codex_plugin_scanner tests --project=pyproject.toml --outputjson > /tmp/pyright.json
+          uv run --no-sync basedpyright --warnings \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers_extra.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_1.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_2.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_4.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_6.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            --project=pyproject.toml --outputjson > /tmp/pyright.json
           status=$?
           uv run --no-sync python - <<'PY'
           import json
@@ -42,13 +53,10 @@ jobs:
 
           data = json.loads(Path('/tmp/pyright.json').read_text(encoding='utf-8'))
           for item in data.get('generalDiagnostics', []):
-              file = item.get('file', '')
-              if 'command_common_cli' not in file:
-                  continue
               start = item.get('range', {}).get('start', {})
               line = int(start.get('line', 0)) + 1
               character = int(start.get('character', 0)) + 1
-              print(f"{file}:{line}:{character}: {item.get('severity')}: {item.get('message')}")
+              print(f"{item.get('file')}:{line}:{character}: {item.get('severity')}: {item.get('message')}")
           print(data.get('summary', {}))
           PY
           exit "$status"
