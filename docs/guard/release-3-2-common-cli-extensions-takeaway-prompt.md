@@ -29,7 +29,7 @@ command.database.prisma
 command.platform.firebase
 command.gitops.argocd
 command.gitops.flux
-command.package.dotnet
+command.package-dotnet
 command.database.bigquery
 command.platform.fly
 command.platform.railway
