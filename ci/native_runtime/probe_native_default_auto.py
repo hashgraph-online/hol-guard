@@ -27,7 +27,7 @@ from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
-    close_native_resident_clients,
+    close_native_residents,
     native_resident_client_failure_code,
 )
 from codex_plugin_scanner.guard.native_runtime import (
@@ -114,14 +114,33 @@ def _native_state_files(guard_home: Path) -> list[Path]:
 
 
 def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
-    # Close scoped lease writers before stopping the resident.
+    # Join the scoped Python supervisor before the authenticated Rust stop.
+    cleanup_error: OSError | RuntimeError | None = None
     try:
-        close_native_resident_clients(guard_home)
-    finally:
-        _stop_native_process(runtime, guard_home)
+        contained = close_native_residents(guard_home)
+    except (OSError, RuntimeError) as exc:
+        contained = False
+        cleanup_error = exc
+    if _native_state_files(guard_home):
+        try:
+            if not _stop_native_process(runtime, guard_home):
+                cleanup_error = cleanup_error or RuntimeError("native resident stop did not complete")
+        except (OSError, RuntimeError) as exc:
+            cleanup_error = cleanup_error or exc
+    # The authenticated stop can release the child while the supervisor's
+    # first bounded join is still unwinding its process handles.
+    if cleanup_error is None and not contained:
+        try:
+            contained = close_native_residents(guard_home)
+        except (OSError, RuntimeError) as exc:
+            cleanup_error = exc
+    if cleanup_error is not None:
+        raise cleanup_error
+    if not contained:
+        raise RuntimeError("native resident containment did not complete")
 
 
-def _stop_native_process(runtime: Path, guard_home: Path) -> None:
+def _stop_native_process(runtime: Path, guard_home: Path) -> bool:
     try:
         result = subprocess.run(
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
@@ -131,12 +150,22 @@ def _stop_native_process(runtime: Path, guard_home: Path) -> None:
         )
     except subprocess.TimeoutExpired:
         print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
-        return
-    if result.returncode != 0:
-        print(
-            f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
-            file=sys.stderr,
-        )
+        return False
+    if result.returncode == 0:
+        return True
+    # Rust maps the authenticated idempotent "no resident" result to exit 2;
+    # accept it only with the exact documented error and no remaining state.
+    if (
+        result.returncode == 2
+        and result.stderr.strip() == b"native_resident_stop_unavailable"
+        and not _native_state_files(guard_home)
+    ):
+        return True
+    print(
+        f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _ownership_routes() -> dict[str, dict[str, str]]:

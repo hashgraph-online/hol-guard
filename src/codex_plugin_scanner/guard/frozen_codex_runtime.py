@@ -30,6 +30,9 @@ from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
     FROZEN_DAEMON_RECOVERY_WORKER_ARG,
+    FROZEN_DAEMON_SERVE_ARG,
+    consume_frozen_daemon_serve_gate,
+    decode_frozen_daemon_serve_payload,
     frozen_daemon_recovery_command,
     is_frozen_guard_runtime,
 )
@@ -37,6 +40,7 @@ from .frozen_runtime_commands import (
 _FROZEN_BRIDGE_ARG = FROZEN_CODEX_BRIDGE_ARG
 _FROZEN_DAEMON_RECOVER_ARG = FROZEN_DAEMON_RECOVER_ARG
 _FROZEN_DAEMON_RECOVERY_WORKER_ARG = FROZEN_DAEMON_RECOVERY_WORKER_ARG
+_FROZEN_DAEMON_SERVE_ARG = FROZEN_DAEMON_SERVE_ARG
 
 
 def _decode_private_payload(raw: str, *, label: str) -> dict[str, object]:
@@ -130,7 +134,11 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     return True
 
 
-def run_frozen_internal_command(argv: Sequence[str] | None = None) -> int | None:
+def run_frozen_internal_command(
+    argv: Sequence[str] | None = None,
+    *,
+    gate_already_released: bool = False,
+) -> int | None:
     """Run one private frozen-runtime operation before the public CLI parser."""
 
     process_argv = tuple(sys.argv if argv is None else argv)
@@ -157,7 +165,30 @@ def run_frozen_internal_command(argv: Sequence[str] | None = None) -> int | None
         return _schedule_frozen_daemon_recovery(raw_payload)
     if operation == _FROZEN_DAEMON_RECOVERY_WORKER_ARG:
         return _run_frozen_daemon_recovery_worker(raw_payload)
+    if operation == _FROZEN_DAEMON_SERVE_ARG:
+        if not gate_already_released:
+            consume_frozen_daemon_serve_gate(process_argv)
+        return _run_frozen_daemon_serve(raw_payload)
     return None
+
+
+def _run_frozen_daemon_serve(raw_payload: str) -> int:
+    guard_home, home_dir, port = decode_frozen_daemon_serve_payload(raw_payload)
+
+    from codex_plugin_scanner.cli import main
+
+    return main(
+        [
+            "daemon",
+            "--serve",
+            "--guard-home",
+            str(guard_home),
+            "--home",
+            str(home_dir),
+            "--port",
+            str(port),
+        ]
+    )
 
 
 def _schedule_frozen_daemon_recovery(raw_payload: str) -> int:

@@ -144,6 +144,21 @@ def test_malformed_process_command_only_blocks_proven_daemon_launchers() -> None
 
     assert not daemon_manager_module._malformed_command_may_launch_guard(pytest_command)
     assert daemon_manager_module._malformed_command_may_launch_guard(daemon_command)
+    assert daemon_manager_module._malformed_command_may_launch_guard(
+        "hol-guard.exe --_hol-guard-daemon-serve '{broken'"
+    )
+
+
+def test_frozen_daemon_inventory_rejects_payload_resolution_errors(monkeypatch) -> None:
+    parts = ["hol-guard.exe", daemon_manager_module.FROZEN_DAEMON_SERVE_ARG, "{}"]
+
+    for error_type in (OSError, RuntimeError, TypeError, ValueError):
+
+        def raise_error(_payload: str, error_type=error_type):
+            raise error_type("malformed payload")
+
+        monkeypatch.setattr(daemon_manager_module, "decode_frozen_daemon_serve_payload", raise_error)
+        assert daemon_manager_module._frozen_daemon_serve_context(parts) is None
 
 
 def test_frozen_daemon_launch_uses_signed_guard_executable(tmp_path, monkeypatch) -> None:
@@ -177,7 +192,7 @@ def test_frozen_daemon_launch_uses_signed_guard_executable(tmp_path, monkeypatch
     assert "-I" not in command
 
 
-def test_frozen_daemon_launch_rejects_unreleased_windows_gate(tmp_path, monkeypatch) -> None:
+def test_frozen_daemon_launch_uses_signed_command_for_windows_gate(tmp_path, monkeypatch) -> None:
     executable = tmp_path / "hol-guard"
     executable.write_bytes(b"guard")
     executable.chmod(0o755)
@@ -187,13 +202,56 @@ def test_frozen_daemon_launch_rejects_unreleased_windows_gate(tmp_path, monkeypa
     monkeypatch.setattr(daemon_manager_module.sys, "frozen", True, raising=False)
     monkeypatch.setattr(daemon_manager_module.sys, "executable", str(executable))
 
-    with pytest.raises(RuntimeError, match="gated launch is unavailable"):
-        daemon_manager_module._guard_daemon_launch_command(
-            guard_home,
-            4781,
-            home_dir=tmp_path,
-            gate_on_stdin=True,
-        )
+    command = daemon_manager_module._guard_daemon_launch_command(
+        guard_home,
+        4781,
+        home_dir=tmp_path,
+        gate_on_stdin=True,
+    )
+
+    assert command[0] == str(executable.resolve())
+    assert command[1] == "--_hol-guard-daemon-serve"
+    assert json.loads(command[2]) == {
+        "guard_home": str(guard_home.resolve()),
+        "home_dir": str(tmp_path.resolve()),
+        "port": 4781,
+    }
+    assert "-c" not in command
+    assert "daemon" not in command
+
+
+def test_frozen_private_daemon_command_is_inventory_compatible(tmp_path) -> None:
+    executable = tmp_path / "hol-guard"
+    executable.write_bytes(b"guard")
+    executable.chmod(0o755)
+    guard_home = tmp_path / "guard home"
+    home_dir = tmp_path / "user home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+
+    command = daemon_manager_module.frozen_daemon_serve_command(
+        guard_home,
+        home_dir,
+        4781,
+        executable=str(executable),
+    )
+    rendered_command = (
+        subprocess.list2cmdline(list(command)) if os.name == "nt" else daemon_manager_module.shlex.join(command)
+    )
+
+    assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
+    assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home.resolve()
+    assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 4781
+
+    tampered_payload = json.loads(command[2])
+    tampered_payload["port"] = 0
+    tampered_parts = (command[0], command[1], json.dumps(tampered_payload))
+    tampered_command = (
+        subprocess.list2cmdline(list(tampered_parts))
+        if os.name == "nt"
+        else daemon_manager_module.shlex.join(tampered_parts)
+    )
+    assert not daemon_manager_module._guard_daemon_command_matches(tampered_command)
 
 
 def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
@@ -3061,6 +3119,18 @@ def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_pa
     )
 
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "command_line",
+    (
+        '"C:\\Program Files\\HOL Guard\\hol-guard.exe" --_hol-guard-daemon-serve "{broken',
+        '"C:\\Program Files\\HOL Guard\\hol-guard.exe --_hol-guard-daemon-serve {broken',
+    ),
+)
+def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(command_line: str) -> None:
+
+    assert daemon_manager_module._malformed_command_may_launch_guard(command_line)
 
 
 def test_inventoried_windows_daemon_termination_is_bound_to_sampled_creation_time(tmp_path, monkeypatch) -> None:

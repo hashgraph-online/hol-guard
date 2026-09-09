@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
 import shlex
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -17,6 +19,7 @@ from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
     frozen_daemon_recovery_worker_command,
+    frozen_daemon_serve_command,
 )
 
 
@@ -137,6 +140,89 @@ def test_frozen_recovery_worker_releases_its_reservation(
     assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
     assert recovered == [(guard_home, home_dir, "overload")]
     assert cleared == [(guard_home, "recovery-token")]
+
+
+@pytest.mark.parametrize("gate_input", [b"", b"0"])
+def test_frozen_daemon_serve_gate_fails_closed_before_cli_import(
+    tmp_path: Path,
+    gate_input: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    command = frozen_daemon_serve_command(guard_home, home_dir, 4781, executable=sys.executable)
+    monkeypatch.setattr(frozen_codex_runtime.sys, "stdin", io.BytesIO(gate_input))
+
+    with pytest.raises(SystemExit) as exit_info:
+        frozen_codex_runtime.run_frozen_internal_command(command)
+
+    assert exit_info.value.code == 70
+
+
+def test_frozen_daemon_serve_gate_rejects_different_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    executable = tmp_path / "other-hol-guard"
+    executable.write_bytes(b"signed-peer")
+    command = frozen_daemon_serve_command(guard_home, home_dir, 4781, executable=str(executable))
+    monkeypatch.setattr(frozen_codex_runtime.sys, "stdin", io.BytesIO(b"1"))
+
+    with pytest.raises(ValueError, match="current executable"):
+        frozen_codex_runtime.run_frozen_internal_command(command)
+
+
+def test_frozen_daemon_serve_gate_releases_only_signed_private_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    command = frozen_daemon_serve_command(guard_home, home_dir, 4781, executable=sys.executable)
+    observed: list[list[str]] = []
+    cli_module = ModuleType("codex_plugin_scanner.cli")
+    cli_module.main = lambda argv: observed.append(argv) or 0  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.cli", cli_module)
+    monkeypatch.setattr(frozen_codex_runtime.sys, "stdin", io.BytesIO(b"1"))
+
+    assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
+    assert observed == [
+        [
+            "daemon",
+            "--serve",
+            "--guard-home",
+            str(guard_home.resolve()),
+            "--home",
+            str(home_dir.resolve()),
+            "--port",
+            "4781",
+        ]
+    ]
+
+
+def test_frozen_daemon_serve_gate_rejects_noncanonical_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    command = frozen_daemon_serve_command(guard_home, home_dir, 4781, executable=sys.executable)
+    payload = json.loads(command[2])
+    payload["port"] = True
+    monkeypatch.setattr(frozen_codex_runtime.sys, "stdin", io.BytesIO(b"1"))
+
+    with pytest.raises(ValueError, match="port is invalid"):
+        frozen_codex_runtime.run_frozen_internal_command((command[0], command[1], json.dumps(payload)))
 
 
 def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
