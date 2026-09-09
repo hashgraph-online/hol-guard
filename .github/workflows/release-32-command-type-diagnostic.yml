@@ -1,0 +1,54 @@
+name: Release 3.2 command type diagnostic
+
+on:
+  push:
+    branches:
+      - fix/3.2-command-review-followup
+    paths:
+      - .github/workflows/release-32-command-type-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/3.2-command-review-followup
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.13'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: false
+      - name: Install locked development environment
+        run: uv sync --frozen --extra dev --python 3.12 --quiet
+      - name: Print command type diagnostics only
+        shell: bash
+        run: |
+          set +e
+          uv run --no-sync basedpyright --warnings scripts ci src/codex_plugin_scanner tests --project=pyproject.toml --outputjson > /tmp/pyright.json
+          status=$?
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/pyright.json').read_text(encoding='utf-8'))
+          for item in data.get('generalDiagnostics', []):
+              file = item.get('file', '')
+              if 'command_common_cli' not in file:
+                  continue
+              start = item.get('range', {}).get('start', {})
+              line = int(start.get('line', 0)) + 1
+              character = int(start.get('character', 0)) + 1
+              print(f"{file}:{line}:{character}: {item.get('severity')}: {item.get('message')}")
+          print(data.get('summary', {}))
+          PY
+          exit "$status"
