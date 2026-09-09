@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   HiMiniArrowPath,
   HiMiniCheckCircle,
@@ -22,11 +21,12 @@ import type {
   GuardRuntimeSnapshot,
 } from "./guard-types";
 import { normalizeGuardAction } from "./guard-action";
-import { fetchSettings } from "./guard-api";
 import { LoggedActionPanel } from "./logged-action-panel";
-import { resolvePresentationMode } from "./presentation-mode";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { ActionExplanationSummary } from "./action-explanation-summary";
+import { usePresentationMode } from "./presentation-mode-provider";
+import { useActionExplanation } from "./use-action-explanation";
+import { GuardTechnicalDisclosure } from "./guard-technical-disclosure";
 
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -200,30 +200,6 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
   );
 }
 
-function useReviewPresentationMode(): GuardPresentationMode {
-  const [mode, setMode] = useState<GuardPresentationMode>("everyday");
-  useEffect(() => {
-    let cancelled = false;
-    void fetchSettings()
-      .then((payload) => {
-        if (cancelled) return;
-        setMode(resolvePresentationMode({
-          value: payload.settings.presentation_mode,
-          explicit: payload.settings.presentation_mode_explicit,
-          schemaVersion: payload.settings.presentation_schema_version,
-          revision: payload.settings.presentation_revision,
-        }).value);
-      })
-      .catch(() => {
-        if (!cancelled) setMode("everyday");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return mode;
-}
-
 function TechnicalStoppedAction({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
@@ -255,8 +231,8 @@ function TechnicalStoppedAction({ item }: { item: GuardApprovalRequest }) {
 
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
-  const explanation = item.action_explanation ?? null;
-  const presentationMode = useReviewPresentationMode();
+  const { explanation, pending, invalid } = useActionExplanation(item);
+  const { mode: presentationMode } = usePresentationMode();
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -278,14 +254,17 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
         <ActionExplanationSummary explanation={explanation} />
       ) : presentationMode === "everyday" ? (
         <div className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-4">
-          <p className="text-sm font-semibold text-brand-dark">Plain-language details are unavailable</p>
+          <p className="text-sm font-semibold text-brand-dark">{pending ? "Checking the action explanation…" : "Plain-language details are unavailable"}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Guard paused this action, but this record does not contain a safe Everyday explanation. Technical mode can show retained local details when you deliberately enable it in Settings.
+            {invalid ? "This explanation could not be matched to the retained action, so Guard is not showing it. " : "This record does not yet have a verified plain-language explanation. "}
+            You can open retained technical details below without changing your display preference.
           </p>
         </div>
       ) : null}
 
-      {presentationMode === "technical" && <TechnicalStoppedAction item={item} />}
+      <GuardTechnicalDisclosure key={`${item.request_id}:${item.action_identity ?? ""}:${presentationMode}`} mode={presentationMode}>
+        <TechnicalStoppedAction item={item} />
+      </GuardTechnicalDisclosure>
     </div>
   );
 }

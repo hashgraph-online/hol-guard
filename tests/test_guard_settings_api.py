@@ -340,11 +340,11 @@ def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch
     assert reset_status == 200
     assert reset_payload["settings"]["security_level"] == "balanced"
     assert reset_payload["settings"]["sync"] is False
-    assert import_status == 200
-    assert import_payload["settings"]["mode"] == "enforce"
-    assert import_payload["settings"]["security_level"] == "strict"
-    assert import_payload["settings"]["billing"] is True
-    assert import_payload["settings"]["sync"] is True
+    assert import_status == 200, import_payload
+    restored = import_payload["settings"]
+    assert restored["mode"] == "enforce" and restored["security_level"] == "strict"
+    assert restored["billing"] is True and restored["sync"] is True
+    assert restored["presentation_revision"] >= reset_payload["settings"]["presentation_revision"] > 0
 
 
 def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monkeypatch) -> None:

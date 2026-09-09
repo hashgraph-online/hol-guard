@@ -686,12 +686,12 @@ function isScannerEvidenceRecord(value: unknown): value is Record<string, unknow
   return value !== null && typeof value === "object";
 }
 
-export function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
+export function isRiskSignalEvidence(signal: unknown): signal is RiskSignalV2 {
   return isScannerEvidenceRecord(signal) && typeof signal.signal_id === "string";
 }
 
 export function isSupplyChainScannerEvidence(
-  value: ReceiptScannerEvidence,
+  value: unknown,
 ): value is GuardSupplyChainScannerEvidence {
   return isScannerEvidenceRecord(value) && typeof value.operation === "string";
 }
@@ -703,7 +703,7 @@ export function isSupplyChainAuditEvidence(
 }
 
 export function isPackageExecutionContextEvidence(
-  value: GuardScannerEvidence,
+  value: unknown,
 ): value is PackageExecutionContextEvidence {
   return (
     isScannerEvidenceRecord(value) &&

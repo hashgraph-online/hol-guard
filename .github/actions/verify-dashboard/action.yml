@@ -1,0 +1,33 @@
+name: Verify distributable dashboard
+description: Test presentation behavior and retain a commit-bound, reproducible dashboard bundle.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: cd dashboard && bun install --frozen-lockfile
+    - shell: bash
+      run: cd dashboard && bun run test
+    - name: Build the distributable dashboard
+      shell: bash
+      run: cd dashboard && bun run build
+    - name: Retain the exact dashboard bundle for this commit
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: guard-dashboard-bundle-${{ github.event.pull_request.head.sha || github.sha }}
+        path: src/codex_plugin_scanner/guard/daemon/static
+        retention-days: 7
+        if-no-files-found: error
+    - name: Install the browser for presentation contract tests
+      shell: bash
+      run: cd dashboard && bunx playwright install --with-deps chromium
+    - name: Verify production presentation interactions
+      shell: bash
+      run: cd dashboard && bunx playwright test e2e/everyday-mode.spec.ts --workers=1
+    - name: Verify committed bundle reproducibility and size
+      shell: bash
+      run: |
+        git diff --exit-code -- src/codex_plugin_scanner/guard/daemon/static
+        bundle_dir=src/codex_plugin_scanner/guard/daemon/static/assets
+        js_size=$(du -sh "$bundle_dir/guard-dashboard.js" | awk '{print $1}')
+        css_size=$(du -sh "$bundle_dir/guard-dashboard.css" | awk '{print $1}')
+        echo "Bundle JS: $js_size, CSS: $css_size"

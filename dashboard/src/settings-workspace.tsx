@@ -73,16 +73,14 @@ import type {
   GuardSettingsExport,
   GuardSettingsPayload,
 } from "./guard-types";
+import { withoutPresentationSettings } from "./presentation-mode-state";
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
-import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
+import { resolveInitialSettingsTab, type LocalSettingsTabKey } from "./settings/settings-ia";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
-export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
-  const section = new URLSearchParams(search).get("section");
-  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
-}
+export { resolveInitialSettingsTab };
 
 export function resolveSecurityLevelCardDescription(level: "relaxed" | "balanced" | "strict" | "custom"): string {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
@@ -816,7 +814,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
       const settingsToSave: Partial<GuardSettings> = {
-        ...draft,
+        ...withoutPresentationSettings(draft),
         risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
         approval_gate: approvalGateUpdate,
       };
@@ -1347,7 +1345,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
       <WorkspacePageHeader
         eyebrow="This machine"
-        title="Protection"
+        title={activeTab === "experience" ? "Experience" : "Protection"}
         description="Guard stops dangerous actions automatically and asks once about new or unknown work."
       />
       {selectedPosture === "watch" ? (
@@ -1752,6 +1750,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         className="sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4"
         role="region"
         aria-label="Save settings"
+        hidden={activeTab === "experience"}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

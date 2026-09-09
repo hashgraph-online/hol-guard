@@ -4994,7 +4994,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     gate_payload,
                     approval_gate_grant=approval_gate_grant,
                 )
-            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
+            config_settings = {k: v for k, v in settings.items() if k not in {"approval_gate", "presentation_revision"}}
             entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
             config = update_guard_settings(
                 guard_home,

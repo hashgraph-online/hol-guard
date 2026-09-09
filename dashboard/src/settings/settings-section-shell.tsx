@@ -1,6 +1,7 @@
 import { useCallback, type ReactNode } from "react";
 import { HiMiniChevronRight } from "react-icons/hi2";
 import { TabBar } from "../approval-center-primitives";
+import { PresentationModeSettings } from "./presentation-mode-settings";
 import {
   localSettingsMobileTabLabels,
   localSettingsNavGroups,
@@ -132,7 +133,7 @@ export function SettingsSectionShell({
                 <p className="mt-1 text-sm text-slate-500">{activeItem.summary}</p>
               </header>
             ) : null}
-            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+            <div className="flex min-h-0 flex-1 flex-col">{activeTab === "experience" ? <PresentationModeSettings /> : children}</div>
           </div>
         </div>
       </div>

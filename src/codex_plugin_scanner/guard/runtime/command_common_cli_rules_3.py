@@ -16,14 +16,16 @@ from .command_common_cli_matchers import (
 )
 from .command_common_cli_matchers_extra import ANSIBLE_EXECUTION_REFINED
 from .command_common_cli_rule_support import help_variants, rule
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_rules import AnyMatcher, CommandSafetyRule, ExecutableMatcher
 
 _CLOUD_CREDENTIAL_MUTATION_REFINED = AnyMatcher(
     matchers=tuple(
         matcher
         for matcher in _CLOUD_CREDENTIAL_MUTATION.matchers
         if not (
-            "gcloud" in matcher.executables and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
+            isinstance(matcher, ExecutableMatcher)
+            and "gcloud" in matcher.executables
+            and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
         )
     )
 )

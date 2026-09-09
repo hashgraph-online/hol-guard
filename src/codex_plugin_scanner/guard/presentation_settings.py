@@ -67,6 +67,8 @@ def resolve_presentation_settings_update(
         # Unsupported future-schema state is read-only instead of being silently downgraded.
         if changed and not current_writable:
             raise ValueError("Presentation settings use a newer schema and cannot be changed by this Guard version.")
+    if changed and current_revision >= 2**53 - 1:
+        raise ValueError("The presentation revision is exhausted; settings were not changed.")
     return PresentationSettingsUpdate(
         requested=requested,
         changed=changed,

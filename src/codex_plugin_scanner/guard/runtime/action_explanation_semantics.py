@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import PurePath, PureWindowsPath
 
 from .action_explanation_rule_kinds import kind_for_rule
+from .command_extension_observations import CommandExtensionObservation
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
@@ -238,7 +239,7 @@ def _derive_shell_semantics(
 
 def _shell_rule_matches(
     command_text: str,
-    effective: tuple[object, ...],
+    effective: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
 ) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule], ...]:
     matches = tuple((item.extension, item.rule) for item in effective)
     if matches:
@@ -249,7 +250,7 @@ def _shell_rule_matches(
 
 def _shell_uncertainty(
     command: CanonicalCommand,
-    observations: tuple[object, ...],
+    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
 ) -> tuple[str, ...]:
     reasons = [command.uncertainty_reason] if command.uncertainty_reason else []
     reasons.extend(reason.value for item in observations for reason in item.uncertainty_reasons)
@@ -417,7 +418,7 @@ def _unknown_semantics(
 
 def _shell_targets(
     command: CanonicalCommand,
-    observations: tuple[object, ...],
+    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
 ) -> tuple[ExplanationTarget, ...]:
     indexes: list[int] = []
     for observation in observations:

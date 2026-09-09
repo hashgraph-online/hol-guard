@@ -172,3 +172,27 @@ def test_atomic_config_replace_failure_preserves_the_old_snapshot(
         atomic_write_settings(path, 'presentation_mode = "technical"\n')
     assert path.read_bytes() == previous
     assert not list(tmp_path.glob(".config-*"))
+
+
+def test_exhausted_presentation_revision_never_writes_an_unreadable_wire_value(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'presentation_mode = "everyday"\npresentation_mode_explicit = true\npresentation_revision = 9007199254740991\n'
+    )
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="revision is exhausted"):
+        update_guard_settings(
+            tmp_path, {"presentation_mode": "technical", "presentation_revision": 2**53 - 1}, skip_approval_gate=True
+        )
+    assert path.read_bytes() == before
+
+
+def test_unsupported_presentation_schema_rejects_an_actual_mode_change(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('presentation_mode = "everyday"\npresentation_schema_version = 2\n')
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="newer schema"):
+        update_guard_settings(
+            tmp_path, {"presentation_mode": "technical", "presentation_mode_explicit": True}, skip_approval_gate=True
+        )
+    assert path.read_bytes() == before
