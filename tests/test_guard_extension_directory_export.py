@@ -95,3 +95,7 @@ def test_public_directory_matches_cross_repository_contract() -> None:
 
     schema = json.loads((REPOSITORY / "contracts/extensions/directory.v1.schema.json").read_text())
     Draft202012Validator(schema).validate(exporter.export_directory())
+    catalog = exporter.export_directory()
+    entry = dict(catalog["entries"][0])
+    entry.pop("operations", None)
+    Draft202012Validator(schema).validate({"schemaVersion": catalog["schemaVersion"], "entries": [entry]})

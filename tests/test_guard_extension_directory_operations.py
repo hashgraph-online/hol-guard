@@ -77,6 +77,41 @@ def test_aws_s3_operations_list_commands_and_default_floors() -> None:
     assert operations["command.storage.aws-s3.sync"]["commands"] == ["aws s3 sync"]
 
 
+def test_all_matcher_and_pipeline_signatures_stay_conjunctive() -> None:
+    probe = next(
+        item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions if item.extension_id == "command.probe"
+    )
+    encoded = next(
+        item
+        for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        if item.extension_id == "command.encoded-execution"
+    )
+    container = next(
+        item
+        for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        if item.extension_id == "command.container-runtime"
+    )
+    search = next(
+        item
+        for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        if item.extension_id == "command.search.elasticsearch"
+    )
+    probe_ops = {row["id"]: row for row in public_operations(probe)}
+    assert probe_ops["command.probe.request-output"]["commands"] == ["probe request run --output"]
+    encoded_ops = {row["id"]: row for row in public_operations(encoded)}
+    commands = encoded_ops["command.encoded-execution.decode-and-execute"]["commands"]
+    assert isinstance(commands, list)
+    assert any(" | " in command for command in commands)
+    container_ops = {row["id"]: row for row in public_operations(container)}
+    cleanup = container_ops["command.container-runtime.compose-destructive-cleanup"]["commands"]
+    assert isinstance(cleanup, list)
+    assert any(command.endswith("--rmi all") for command in cleanup)
+    search_ops = {row["id"]: row for row in public_operations(search)}
+    assert search_ops["command.search.elasticsearch.delete"]["commands"] == [
+        "curl -X DELETE 'https://localhost:9200/logs-old'"
+    ]
+
+
 def test_required_critical_rules_publish_a_block_floor() -> None:
     extension = next(
         item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions if item.extension_id == "command.filesystem"

@@ -83,6 +83,65 @@ def _signature(executable: str, tokens: tuple[str, ...]) -> str | None:
     return joined
 
 
+def _bounded_command(value: str | None) -> str | None:
+    if not value:
+        return None
+    bounded = _bounded(value, _MAX_COMMAND)
+    return bounded or None
+
+
+def _option_value_tokens(
+    required_flags: frozenset[str],
+    required_option_values: tuple[tuple[str, frozenset[str]], ...],
+) -> tuple[str, ...]:
+    option_names = {option for option, _values in required_option_values}
+    flags = tuple(sorted(flag for flag in required_flags if flag not in option_names))
+    values: list[str] = []
+    for option, allowed in required_option_values:
+        if not allowed:
+            continue
+        values.extend((option, sorted(allowed)[0]))
+    return (*flags, *values)
+
+
+def _merge_command_signatures(left: str, right: str) -> str | None:
+    left_parts = left.split()
+    right_parts = right.split()
+    if not left_parts or not right_parts or left_parts[0] != right_parts[0]:
+        return None
+    seen = set(left_parts)
+    merged = list(left_parts)
+    for token in right_parts[1:]:
+        if token not in seen:
+            seen.add(token)
+            merged.append(token)
+    joined = " ".join(merged)
+    if len(joined) > _MAX_COMMAND:
+        return None
+    return joined
+
+
+def _conjunctive_signatures(groups: tuple[tuple[str, ...], ...], *, limit: int) -> tuple[str, ...]:
+    if not groups or any(not group for group in groups):
+        return ()
+    combined = list(groups[0])
+    for group in groups[1:]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for left in combined:
+            for right in group:
+                candidate = _merge_command_signatures(left, right)
+                if candidate and candidate not in seen:
+                    seen.add(candidate)
+                    merged.append(candidate)
+                    if len(merged) >= limit:
+                        return tuple(merged)
+        if not merged:
+            return ()
+        combined = merged
+    return tuple(combined[:limit])
+
+
 def command_signatures_for_matcher(matcher: object | None, *, limit: int = _MAX_COMMANDS) -> tuple[str, ...]:
     """Return deterministic public command signatures for one matcher tree."""
 
@@ -90,10 +149,14 @@ def command_signatures_for_matcher(matcher: object | None, *, limit: int = _MAX_
     seen: set[str] = set()
 
     def add(value: str | None) -> None:
-        if not value or value in seen or len(found) >= limit:
+        bounded = _bounded_command(value)
+        if not bounded or bounded in seen or len(found) >= limit:
             return
-        seen.add(value)
-        found.append(value)
+        seen.add(bounded)
+        found.append(bounded)
+
+    def collect(node: object | None) -> tuple[str, ...]:
+        return command_signatures_for_matcher(node, limit=limit)
 
     def walk(node: object | None) -> None:
         if node is None or len(found) >= limit:
@@ -102,15 +165,15 @@ def command_signatures_for_matcher(matcher: object | None, *, limit: int = _MAX_
             add(
                 _signature(
                     _canonical_executable(node.executables),
-                    (*node.subcommands, *sorted(node.required_flags)),
+                    (*node.subcommands, *_option_value_tokens(node.required_flags, node.required_option_values)),
                 )
             )
             return
         if isinstance(node, ExecutablePathSetMatcher):
             executable = _canonical_executable(node.executables)
-            flags = tuple(sorted(node.required_flags))
+            extras = _option_value_tokens(node.required_flags, node.required_option_values)
             for path in sorted(node.paths, key=lambda item: (len(item), item)):
-                add(_signature(executable, (*path, *flags)))
+                add(_signature(executable, (*path, *extras)))
             return
         if isinstance(node, ArgumentMatcher):
             add(
@@ -120,13 +183,22 @@ def command_signatures_for_matcher(matcher: object | None, *, limit: int = _MAX_
                 )
             )
             return
-        if isinstance(node, (AnyMatcher, AllMatcher)):
+        if isinstance(node, AnyMatcher):
             for child in node.matchers:
                 walk(child)
             return
+        if isinstance(node, AllMatcher):
+            for signature in _conjunctive_signatures(
+                tuple(collect(child) for child in node.matchers),
+                limit=limit,
+            ):
+                add(signature)
+            return
         if isinstance(node, PipelineMatcher):
-            walk(node.producer)
-            walk(node.consumer)
+            producers = collect(node.producer)
+            consumers = collect(node.consumer)
+            if producers and consumers:
+                add(f"{producers[0]} | {consumers[0]}")
             return
         if hasattr(node, "match"):
             add(example_for_matcher(cast(CommandMatcher, node)))
@@ -200,9 +272,10 @@ def public_operations(extension: CommandSafetyExtension) -> list[dict[str, objec
     for rule in extension.rules:
         permission = _permission_for_rule(extension, rule)
         commands = list(command_signatures_for_matcher(rule.matcher))
-        example = rule.example_command or (commands[0] if commands else None)
-        if example:
-            example = _bounded(example, _MAX_COMMAND) or None
+        example = rule.example_command or (permission.example_command if permission is not None else None)
+        example = _bounded_command(example) or (commands[0] if commands else None)
+        if not commands and example:
+            commands = [example]
         title = _bounded(rule.title, _MAX_TITLE) or rule.rule_id
         description = _bounded(rule.description, _MAX_DESCRIPTION) or title
         permission_id = None
