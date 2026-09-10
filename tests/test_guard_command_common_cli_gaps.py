@@ -57,7 +57,7 @@ REVIEWED_GAP_CASES: tuple[tuple[str, str, str], ...] = (
     (
         "dotnet add MyApp.csproj package Newtonsoft.Json",
         ".NET package mutation command",
-        "command.package-dotnet.positional-project-package",
+        "command.package.dotnet.positional-project-package",
     ),
     (
         "yarn publish",
