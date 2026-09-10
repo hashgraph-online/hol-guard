@@ -98,7 +98,7 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
             artifact_id=None,
             artifact_name=None,
             event_file=None,
-            harness="grok",
+            harness="cursor",
             json=True,
             policy_action=None,
             runtime_harness=None,

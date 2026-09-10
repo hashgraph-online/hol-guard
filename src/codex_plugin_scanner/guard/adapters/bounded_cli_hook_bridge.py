@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
@@ -428,11 +430,71 @@ def _daemon_response_to_native(
             if permission_decision != "allow" or "unreachable" in reason.lower():
                 hook_specific_output["permissionDecisionReason"] = reason or f"HOL Guard {policy_action} this action"
         payload["hookSpecificOutput"] = hook_specific_output
+        if canonical in {"grok", "openclaw"} and permission_decision is not None:
+            payload["decision"] = "allow" if permission_decision == "allow" else "deny"
+            payload["policy_action"] = policy_action
+            if permission_decision != "allow" and reason:
+                payload["reason"] = reason
+            for key in (
+                "reason_code",
+                "approval_url",
+                "approval_request_id",
+                "primary_approval_request_id",
+                "primary_approval_url",
+                "guardApprovalRequestId",
+                "guardApprovalUrl",
+                "approval_requests",
+            ):
+                value = daemon_response.get(key)
+                if value is not None:
+                    payload[key] = value
 
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
     stderr = reason if exit_code == 2 and canonical == "kimi" else ""
     return stdout, stderr, exit_code
+
+
+def _apply_grok_bridge_approval_wait(
+    *,
+    guard_home: Path,
+    harness: str,
+    input_text: str,
+    stdout: str,
+    stderr: str,
+    exit_code: int,
+    timeout_seconds: float | None = None,
+) -> tuple[str, str, int]:
+    """Wait for Grok review after a fast daemon decision, inside the hook budget."""
+
+    if harness.strip().lower() != "grok" or _event_name(input_text) != "PreToolUse":
+        return stdout, stderr, exit_code
+    payload = _json_object(stdout)
+    if payload is None:
+        return stdout, stderr, exit_code
+    if str(payload.get("policy_action") or "") not in {"review", "require-reapproval"}:
+        return stdout, stderr, exit_code
+    try:
+        from ..config import load_guard_config
+        from ..store import GuardStore
+        from .grok_approval_resume import apply_grok_pretool_approval_wait
+
+        configured = load_guard_config(guard_home).approval_wait_timeout_seconds
+        wait_seconds = configured
+        if timeout_seconds is not None:
+            wait_seconds = min(configured, max(0, int(timeout_seconds)))
+        updated = apply_grok_pretool_approval_wait(
+            payload,
+            event_name="PreToolUse",
+            store=GuardStore(guard_home),
+            timeout_seconds=wait_seconds,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
+        return stdout, stderr, exit_code
+    rewritten = json.dumps(updated, ensure_ascii=True, separators=(",", ":")) + "\n"
+    if updated.get("decision") == "allow":
+        return rewritten, stderr, 0
+    return rewritten, stderr, exit_code
 
 
 def _try_daemon_hook(
@@ -443,9 +505,6 @@ def _try_daemon_hook(
     timeout_seconds: float,
 ) -> tuple[str, str, int] | None:
     """POST the hook payload to the running daemon; return native stdout or None."""
-    if harness.strip().lower() == "grok" and _event_name(input_text) == "PreToolUse":
-        return None
-
     endpoint = _daemon_hook_endpoint(guard_home, harness)
     if endpoint is None:
         return None
@@ -548,6 +607,7 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             package_root,
             _cli_args_with_json(cli_args),
         )
+    deadline = time.monotonic() + float(timeout_seconds)
     daemon_result = _try_daemon_hook(
         guard_home=guard_home,
         harness=harness,
@@ -555,7 +615,16 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         timeout_seconds=float(timeout_seconds),
     )
     if daemon_result is not None:
-        daemon_stdout, daemon_stderr, daemon_exit = daemon_result
+        remaining = max(0.0, deadline - time.monotonic())
+        daemon_stdout, daemon_stderr, daemon_exit = _apply_grok_bridge_approval_wait(
+            guard_home=guard_home,
+            harness=harness,
+            input_text=input_text,
+            stdout=daemon_result[0],
+            stderr=daemon_result[1],
+            exit_code=daemon_result[2],
+            timeout_seconds=remaining,
+        )
         if daemon_stdout:
             _ = sys.stdout.write(daemon_stdout)
         if daemon_stderr:
