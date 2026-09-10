@@ -96,6 +96,38 @@ def test_grok_live_wait_allows_after_approval(tmp_path: Path) -> None:
     assert metadata["grok_hook_waits_for_approval"] is True
 
 
+def test_grok_live_wait_reads_singular_approval_request_id(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request(tmp_path, "req-grok-singular"), "2026-05-08T10:00:00+00:00")
+    payload: dict[str, object] = {"approval_request_id": "req-grok-singular"}
+
+    def approve() -> None:
+        time.sleep(0.15)
+        apply_approval_resolution(
+            store=store,
+            request_id="req-grok-singular",
+            action="allow",
+            scope="artifact",
+            workspace=str(tmp_path),
+            reason="reviewed",
+            now="2026-05-08T10:00:01+00:00",
+        )
+
+    thread = threading.Thread(target=approve)
+    thread.start()
+    decision = wait_for_grok_live_approval(
+        event_name="PreToolUse",
+        policy_action="review",
+        response_payload=payload,
+        store=store,
+        timeout_seconds=4,
+        json_mode=False,
+        payload=payload,
+    )
+    thread.join(timeout=5)
+    assert decision == "allow"
+
+
 def test_grok_live_wait_blocks_after_denial(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request(tmp_path, "req-grok-block"), "2026-05-08T10:00:00+00:00")

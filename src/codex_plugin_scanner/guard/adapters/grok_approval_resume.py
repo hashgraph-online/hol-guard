@@ -160,8 +160,11 @@ def _approval_request_ids(payload: Mapping[str, object]) -> list[str]:
                     ids.append(request_id)
     if ids:
         return ids
-    primary = _optional_string(payload.get("primary_approval_request_id"))
-    return [primary] if primary is not None else []
+    for key in ("primary_approval_request_id", "approval_request_id", "guardApprovalRequestId"):
+        request_id = _optional_string(payload.get(key))
+        if request_id is not None:
+            return [request_id]
+    return []
 
 
 def _existing_request_ids(operation: Mapping[str, object], request_id: str) -> list[str]:
