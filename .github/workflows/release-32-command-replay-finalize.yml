@@ -1,0 +1,209 @@
+name: Release 3.2 command replay finalizer
+
+on:
+  push:
+    branches:
+      - fix/3.2-command-review-followup-v2
+    paths:
+      - .github/workflows/release-32-command-replay-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/3.2-command-review-followup-v2
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.13'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: false
+      - name: Install locked development environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Normalize replayed command files
+        run: |
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers_extra.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_1.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_2.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py
+      - name: Refresh test-suite ratchet
+        shell: bash
+        run: |
+          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+
+          inventory = json.loads(Path('test-inventory.json').read_text(encoding='utf-8'))
+          payload = {
+              'schema_version': 1,
+              'maximum_collected_cases': inventory['inventory']['collected_cases'],
+              'maximum_test_source_lines': inventory['test_source_lines'],
+          }
+          Path('ci/test-suite-ratchet-baseline.json').write_text(
+              json.dumps(payload, indent=2) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(payload))
+          PY
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory test-inventory.json
+      - name: Refresh extension catalog baseline
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+          from tests.test_guard_extension_control_catalog_detail import _identity_snapshot
+
+          path = Path('tests/fixtures/extension-controls/catalog-baseline.v1.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          payload.update(_identity_snapshot())
+          path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          print(json.dumps({'catalog_digest': payload['catalog_digest'], 'extension_count': payload['extension_count']}))
+          PY
+          uv run --no-sync pytest -q \
+            tests/test_guard_extension_control_catalog_detail.py::test_catalog_identity_matches_generated_baseline_fixture
+      - name: Refresh command decision evidence
+        run: |
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+      - name: Refresh managed-controls projection evidence
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import re
+          from pathlib import Path
+
+          from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
+              signed_cloud_extension_projection_digest,
+              signed_cloud_extension_projection_json,
+          )
+          from codex_plugin_scanner.guard.runtime import runner
+          from tests.managed_controls_activation_support import parse_managed_bundle
+
+          root = Path.cwd()
+          vector_dir = root / 'contracts/managed-controls/v1'
+          source_name = 'policy-bundle-v2-extension-signature-vector.json'
+          source = json.loads((vector_dir / source_name).read_text(encoding='utf-8'))
+          bundle = source['bundle']
+          catalog_digest = runner.build_builtin_extension_catalog_wire(
+              guard_version='test', generated_at='2026-08-25T12:00:00Z'
+          )['catalogDigest']
+          parsed = parse_managed_bundle(bundle)
+          projection = signed_cloud_extension_projection_json(parsed, catalog_digest=catalog_digest)
+          projection_digest = signed_cloud_extension_projection_digest(parsed, catalog_digest=catalog_digest)
+          payload = {
+              'schemaVersion': 'guard.signed-cloud-extension-projection-vector.v1',
+              'sourceBundleVector': source_name,
+              'catalogDigest': catalog_digest,
+              'canonicalProjectionJson': projection,
+              'expectedExtensionProjectionDigest': projection_digest,
+          }
+          (vector_dir / 'extension-projection-digest-vector.json').write_text(
+              json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8'
+          )
+
+          test_path = root / 'tests/test_policy_bundle_delivery_runtime.py'
+          text = test_path.read_text(encoding='utf-8')
+          text, n_catalog = re.subn(
+              r'_GUARD_RELEASE_CATALOG_DIGEST = "[0-9a-f]{64}"',
+              f'_GUARD_RELEASE_CATALOG_DIGEST = "{catalog_digest}"',
+              text,
+              count=1,
+          )
+          text, n_projection = re.subn(
+              r'_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:[0-9a-f]{64}"',
+              f'_GUARD_RELEASE_PROJECTION_DIGEST = "{projection_digest}"',
+              text,
+              count=1,
+          )
+          if n_catalog != 1 or n_projection != 1:
+              raise SystemExit('managed-controls digest constants were not updated exactly once')
+          test_path.write_text(text, encoding='utf-8')
+          print(json.dumps({'catalogDigest': catalog_digest, 'projectionDigest': projection_digest}))
+          PY
+      - name: Verify current-base dashboard count stays dynamic
+        run: |
+          grep -q 'const expectedExtensionCount = catalogPayload.extensions?.length ?? 0;' \
+            dashboard/e2e/installed-extension-control-center.spec.ts
+      - name: Verify quality and focused contracts
+        run: |
+          uv run --no-sync python -m ruff check \
+            src/ \
+            scripts/ci/code_quality_*.py \
+            tests/test_code_quality_audit.py \
+            tests/test_guard_durable_io.py \
+            tests/test_guard_managed_install_context.py \
+            tests/test_guard_node_semver.py \
+            tests/test_guard_private_file_io.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py
+          uv run --no-sync python -m ruff format --check \
+            src/ \
+            scripts/ci/code_quality_*.py \
+            tests/test_code_quality_audit.py \
+            tests/test_guard_durable_io.py \
+            tests/test_guard_managed_install_context.py \
+            tests/test_guard_node_semver.py \
+            tests/test_guard_private_file_io.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py
+          uv run --no-sync basedpyright --level error
+          uv run --no-sync pytest -q \
+            tests/test_guard_command_ecosystem_setup.py::test_package_extensions_delegate_to_existing_package_firewall \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py \
+            tests/test_guard_extension_control_catalog_detail.py::test_catalog_identity_matches_generated_baseline_fixture \
+            tests/test_policy_bundle_delivery_runtime.py::test_signed_cloud_extension_projection_matches_shared_vector
+      - name: Commit final evidence and remove helper
+        shell: bash
+        run: |
+          digest="$(uv run --no-sync python tests/guard_command_decision_diff.py --metrics | uv run --no-sync python -c 'import json,sys; print(json.load(sys.stdin)["report_framed_sha256"])')"
+          git rm .github/workflows/release-32-command-replay-finalize.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_matchers_extra.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_1.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_2.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_3.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_rules_5.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_specs.py \
+            src/codex_plugin_scanner/guard/runtime/command_common_cli_support.py \
+            tests/test_guard_command_common_cli_extensions.py \
+            tests/test_guard_command_common_cli_gaps.py \
+            tests/test_guard_command_review_followup.py \
+            ci/test-suite-ratchet-baseline.json \
+            tests/fixtures/extension-controls/catalog-baseline.v1.json \
+            tests/fixtures/guard-command-corpus/decision-diff-report.json \
+            contracts/managed-controls/v1/extension-projection-digest-vector.json \
+            tests/test_policy_bundle_delivery_runtime.py
+          git commit -m 'chore(commands): finalize replayed 3.2 evidence' -m "Decision-Diff-Framed-SHA256: ${digest}"
+          git push origin HEAD:fix/3.2-command-review-followup-v2
