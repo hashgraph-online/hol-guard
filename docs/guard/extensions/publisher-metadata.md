@@ -115,9 +115,11 @@ uv run python scripts/render_command_extension_directory.py --check
 
 The compact generated [`catalog.v1.json`](catalog.v1.json) follows
 [`directory.v1.schema.json`](../../../contracts/extensions/directory.v1.schema.json).
-It carries contribution IDs and digests, runtime IDs, coverage counts, MCP
-inheritance, native trust classes, and presentation fields. It carries no activation
-decisions, installation counts, ratings, certification claims, or secrets.
+It carries contribution IDs and digests, runtime IDs, coverage counts, matcher-derived
+command operations with catalog default floors, MCP inheritance, native trust classes,
+and presentation fields. Catalog default floors describe the shipped rule baseline
+(`allow`, `warn`, `review`, `require-reapproval`, `sandbox-required`, `block`); they are
+not workspace activation, installation counts, ratings, certification claims, or secrets.
 
 The exporter reads each contribution once through the bounded regular-file reader,
 validates that payload, and hashes the same bytes. Catalog writes stage a complete

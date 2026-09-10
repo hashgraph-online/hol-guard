@@ -220,6 +220,113 @@
                 }
               }
             }
+          },
+          "operations": {
+            "description": "Matcher-derived command signatures and catalog default floors for this extension. These rows document coverage; they are not workspace activation, enablement, or a safety rating.",
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "title",
+                "description",
+                "commands",
+                "example",
+                "severity",
+                "defaultMode",
+                "defaultAction",
+                "safeVariants",
+                "permissionId"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "commands": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "example": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  ]
+                },
+                "severity": {
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "defaultMode": {
+                  "enum": [
+                    "required",
+                    "enforce",
+                    "review",
+                    "monitor",
+                    "disabled"
+                  ]
+                },
+                "defaultAction": {
+                  "enum": [
+                    "allow",
+                    "warn",
+                    "review",
+                    "require-reapproval",
+                    "sandbox-required",
+                    "block"
+                  ]
+                },
+                "safeVariants": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "permissionId": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 288
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }

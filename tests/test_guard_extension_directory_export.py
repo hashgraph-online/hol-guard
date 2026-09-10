@@ -43,6 +43,7 @@ def test_every_native_extension_appears_once_with_unchanged_authority() -> None:
         assert row["trustClass"] == trust_class_for(extension.extension_id)
         assert row["ruleCount"] == len(extension.rules)
         assert row["permissionCount"] == len(extension.permissions)
+        assert len(row["operations"]) == len(extension.rules)
         assert (row["claimPolicy"] == "provenance") == (row["trustClass"] == "external")
         if row["claimPolicy"] == "provenance":
             assert row["protectionModel"] == "external-opt-in"
@@ -94,3 +95,7 @@ def test_public_directory_matches_cross_repository_contract() -> None:
 
     schema = json.loads((REPOSITORY / "contracts/extensions/directory.v1.schema.json").read_text())
     Draft202012Validator(schema).validate(exporter.export_directory())
+    catalog = exporter.export_directory()
+    entry = dict(catalog["entries"][0])
+    entry.pop("operations", None)
+    Draft202012Validator(schema).validate({"schemaVersion": catalog["schemaVersion"], "entries": [entry]})
