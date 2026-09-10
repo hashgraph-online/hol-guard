@@ -89,9 +89,9 @@ def action_preview(payload: Mapping[str, object]) -> str | None:
     command = re.sub(r"(?i)(\b[a-z][a-z0-9+.-]*://)[^\s/@'\"]+@", r"\1[redacted]@", command)
     command = re.sub(
         r"([?&#])([^=&#\s\"']+)=([^&#\s\"']*)",
-        lambda match: f"{match[1]}{match[2]}=[redacted]"
-        if _SENSITIVE_QUERY_NAME_RE.search(unquote_plus(match[2]))
-        else match[0],
+        lambda match: (
+            f"{match[1]}{match[2]}=[redacted]" if _SENSITIVE_QUERY_NAME_RE.search(unquote_plus(match[2])) else match[0]
+        ),
         command,
     )
 
