@@ -243,7 +243,7 @@ def test_saved_package_allow_only_resolves_the_identical_package_context(tmp_pat
 
     assert (
         store.resolve_policy_decision(
-            "codex",
+            "guard-cli",
             artifact_id,
             "package-context-sha256",
             consume_one_shot=False,
@@ -252,9 +252,18 @@ def test_saved_package_allow_only_resolves_the_identical_package_context(tmp_pat
     )
     assert (
         store.resolve_policy_decision(
-            "codex",
+            "guard-cli",
             artifact_id,
             "changed-package-context-sha256",
+            consume_one_shot=False,
+        )
+        is None
+    )
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            artifact_id,
+            "package-context-sha256",
             consume_one_shot=False,
         )
         is None
