@@ -29,8 +29,12 @@ from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_r
         ". .env",
         "/bin/cat .env",
         "bash -c 'cat .env'",
+        "ksh -c 'cat .env'",
+        "ash -c 'cat .env'",
         "cat .env | head -n 1",
         "python3 -c 'print(open(\".env\").read())'",
+        "python3.11 -c 'print(open(\".env\").read())'",
+        "python3.12 -c 'print(open(\".env\").read())'",
         'node -e \'console.log(require("fs").readFileSync(".env", "utf8"))\'',
     ),
 )
@@ -63,7 +67,14 @@ def test_mentions_and_test_arguments_are_not_secret_reads(command: str, tmp_path
 
 
 @pytest.mark.parametrize(
-    "launch", ("bash scripts/check.sh", "sh scripts/check.sh", "./scripts/check.sh", "source scripts/check.sh")
+    "launch",
+    (
+        "bash scripts/check.sh",
+        "sh scripts/check.sh",
+        "ash scripts/check.sh",
+        "./scripts/check.sh",
+        "source scripts/check.sh",
+    ),
 )
 def test_local_script_reads_are_found_without_a_network_sink(launch: str, tmp_path: Path) -> None:
     script = tmp_path / "scripts/check.sh"
@@ -93,6 +104,52 @@ def test_no_detected_secret_does_not_authorize_arbitrary_scripts(source: str, tm
     result = evaluate_command("bash check.sh", cwd=tmp_path, home_dir=tmp_path)
     assert result.minimum_action == "review"
     assert result.decision_plane.action == "require-reapproval"
+
+
+def test_shell_command_strings_retain_review_and_are_scanned(tmp_path: Path) -> None:
+    harmless = evaluate_command("ksh -c 'echo harmless'", cwd=tmp_path, home_dir=tmp_path)
+    assert harmless.minimum_action == "review"
+    secret = assess_shell_reads("ksh -c 'cat .env'", cwd=tmp_path, home_dir=tmp_path)
+    assert secret.sensitive_paths == (str(tmp_path / ".env"),)
+    oversized = "echo x; " * 1200 + "cat .env"
+    result = assess_shell_reads(f"bash -c {oversized!r}", cwd=tmp_path, home_dir=tmp_path)
+    assert result.requires_review
+    assert result.sensitive_paths == (str(tmp_path / ".env"),)
+
+
+def test_python_flags_before_script_do_not_hide_local_execution(tmp_path: Path) -> None:
+    script = tmp_path / "check.py"
+    script.write_text('open(".env").read()\n')
+    for command in ("python3 -s check.py", "python3 -I check.py"):
+        assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
+        assert assessment.script_requested
+        assert assessment.sensitive_paths == (str(tmp_path / ".env"),)
+        assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+
+
+def test_extensionless_local_executable_requires_review(tmp_path: Path) -> None:
+    script = tmp_path / "check"
+    script.write_text("#!/bin/sh\ncat .env\n")
+    script.chmod(0o755)
+    assessment = assess_shell_reads("./check", cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.script_requested
+    assert assessment.requires_review
+    assert evaluate_command("./check", cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+
+
+def test_post_cd_reads_use_the_execution_directory(tmp_path: Path) -> None:
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    (ssh_dir / "config").write_text("Host example\n")
+    result = assess_shell_reads("cd .ssh && cat config", cwd=tmp_path, home_dir=tmp_path)
+    assert result.sensitive_paths == (str(ssh_dir / "config"),)
+
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    (tmp_path / ".env").write_text("FAKE_TEST_SECRET=synthetic\n")
+    (subdir / "notes.txt").symlink_to(tmp_path / ".env")
+    alias = assess_shell_reads("cd subdir && cat notes.txt", cwd=tmp_path, home_dir=tmp_path)
+    assert alias.sensitive_paths == (str(tmp_path / ".env"),)
 
 
 def test_script_changes_change_the_request_identity(tmp_path: Path) -> None:
