@@ -15,7 +15,7 @@
       "source-01febcca4015bcd1b7aeebc7": "08e437fd34ddf3aeb0c330d74f39c75fea17aa296976f464afcb8b83e062cba6",
       "source-02697a55adfb35c263740ec9": "70763bb670c4a0afaa87f9929dc77a66086fd70c5d6611525209754b710e2ce3",
       "source-02aeab3ad023a11ada3b7743": "8f17243327917aee95fc5bdd03ad8704978bc6fb3e8c4038b76945a8969aad00",
-      "source-02c7cfdf8b65ef460436b48e": "cbaf8e7dc8ae24e0f7a1b44f97b338fbf0d190fba9a0cb15a903bd08cb5adb7c",
+      "source-02c7cfdf8b65ef460436b48e": "4a1029d937ca907dbbf2a397c665e7cb5dee06550a1230e857c7e47d1a6519ee",
       "source-0429e31ae96305c50a2b1eb2": "90885f6b63e09ea744cab236e9774a8e44c0920ed30011de2642f3a6691c7835",
       "source-044f1c0e4b5a9e1cedfa7065": "038c2531b51bdb9e777ce27eddd9eb47ba9d2d5d29bb173c917f4383a9a74797",
       "source-05328ef847b0e979fa3bd03c": "64858338b8722344a1a30da5fbeda1cd6325e790d83979e4701229deeb68eda5",
@@ -65,7 +65,7 @@
       "source-22d03d37b90d3ea5b13cd269": "5ab90cd20a4f6c8ffd2b943a2a41fd60bed3b535d71d28a4e1af00b8c6006459",
       "source-22e104ac5e06bb68e1ba15ca": "7fb6ab3a7a7f41a4bab839eff22b7e5965ab3b180e3f85c02ad3a420646ba0cb",
       "source-22eb58bf27256c65c9320387": "d19ebed1242cd9a02fe2b55c998a6895a2e36a43981ea027b2ef623fcc3b7cc9",
-      "source-23616d79b71b09adb22886a6": "0ec1cb22983d0657276dfa7256c4bb7bd52fc97b7a4bd16e752547c7f50dd1ae",
+      "source-23616d79b71b09adb22886a6": "284135b05651db9cfdf3247a1f45f55d512d93f764265775784252cf7e1c5916",
       "source-252ba76646ecac2001db344a": "1670fe35f8ffd51ecaffbe979cec82ab022bb7113cc5cee9d9c6753c5b1dd75f",
       "source-276bba672d177da8d8c8fb5a": "b9a616d4309e1168aa64a341ee398e6fce503e28768e110efa89a3de101b57e1",
       "source-2878eae08fec02ea0f2c1b3e": "167efbf9152be44b23c45e46d15cc33ea9ca73dda54a955384759982571c2ac2",
@@ -94,7 +94,7 @@
       "source-3506ec008cf67151fe65d0ac": "3eb3883cb3cf12b6d92ecd40261bc7615c17b6eb8b1dcdff2d7b674db06001e7",
       "source-365c1f6c588d640a2e424186": "19bb41f320ab6bacca840fc8bc96c4052b0fc298129b290a494467568e5ef820",
       "source-375a71294dfc2be170c48d2c": "68bf97eac10f0b8a8e704422f547aa2a0ea9b7c522ed198afdebb5372bae7228",
-      "source-38bf44d9f7c394fed6ff0831": "9b669f6983711f8d90419fa7bb61a8a6b721cb540ae1f3cfd0c50e011692a983",
+      "source-38bf44d9f7c394fed6ff0831": "851c13984a4f0cc39ae4d9a3ec92a4b5a66a9707942a433580b3ea21e832bae8",
       "source-39e5e6525c6016d35ad07153": "32b71a07eabe9ca5d6a12a380957cbfcf1647c58aa34e61795e950a09b74612f",
       "source-3a0c405b3ff5461e64418238": "6d345356e176a5af5b1e96e35131ff830808fdf690df138c173f5978882bb924",
       "source-3a1e2ef0d28c4d4920118119": "b309ca354f55e1611565ba3f2cccfdc0d5a5ee60e61ce6825544f955ca0852cb",
@@ -109,7 +109,7 @@
       "source-3f9788fead933ffa81c3d7b1": "b623e86db3f370b70b7048aae30b22cc873701429298852139b4c72c1c4417a3",
       "source-3fd7139cc5c5898f6fea88ef": "2a9d712045884648a3134c690367e5c84322ffbfb5c538523ccb6dc8531916ee",
       "source-4057c6ccbc337eeddb9e3baf": "33f9abe328a197d3b061f826d521d02bb08b96d6693cf3249ecd4bfed0db705f",
-      "source-4123bb2ad5e990017103f584": "5dd6da2c5e01dafb5bac5ba3371731db661c6a9401b557107897458ed71f851c",
+      "source-4123bb2ad5e990017103f584": "defbd1c1e2c3a635c57261ec3d0c69de4205fdd29024759e73cbf59623495e8d",
       "source-428592a1fe5e0ccc69960aa4": "7989e8688d03a2bdecfe89b26b297431db8edbf9568944cca114957c8fc309b5",
       "source-434e0403b7e3063c6e300bd9": "7d387d165fd4c4ba6002c12e18ad044c8ee6e242ad497e03bebd9ddb1e4f4360",
       "source-443ee15cec0a4c41a8ca1916": "31afc3f1e610cff18b9dccc75086f0936f49855888db18b9f2ca8bb9f72ec303",
@@ -136,6 +136,7 @@
       "source-5252fd793b49a537852d881d": "718973d25bf5d91943a27453c26ec505c00c0b89e827757e1ae6edf362955be5",
       "source-52870a8c6d89146820e8a067": "524d92e15a2e89c51cc1fcdb69c379208f2e5684e836cc885b7dc02e1d47cc90",
       "source-5384753b6f0132290e82a624": "23cdf9e4d27d0fe7c669d575108319121b02597ccafd9de77109f785800b3b49",
+      "source-5392a6fb1493c13aac80c872": "7ae40070b4a0cbf730d1589e5b1ede28827788a2e53e7bd5a2104acdac455c96",
       "source-53955d708b1f26505c7d4767": "db7bde370c9682b5c24e3fca3f266317660e3c966cedfdca548a6f1a524cca6d",
       "source-54b8965ce6adb239b24474a4": "282c3284ae3cec6a373c11f8b19694a7fad809bd59aa2fd633f0e4c3b41f5218",
       "source-54ca9f8f882d1002ba7d7bac": "47d191710b9a903f539375d25b3b356057d09480874f862ec676173727595ecb",
@@ -183,6 +184,7 @@
       "source-73d0caa37b794d4ebe2e75e1": "737ad25cd527fc27b2e25a551f41e254ed82821319fb1089cbaa41743793a442",
       "source-74b98bc81483ed8d03c484a6": "18f4bfd4d9789e7c770913cf538b4460d303c9ed0b624f96ab98b291b0d1c97a",
       "source-7529727395c09d6688a4400c": "de8b93c43542658bc3a3035354fb3584e40a7a9efd922475b5b1664ad216dbde",
+      "source-7670f7faa16d508fc9af0218": "7258bf710fc2c151ce91910d349ad1313e849f3675ca9fcf89a532416fd71f9a",
       "source-767ad2fab18199cd68af8311": "5378f65925a646a5c3880014438e0febedb440707e287d4b1a0e5e37a253e22b",
       "source-773ffe7f1e0629db33ffc724": "add027e42d1e6f1172f22c918f73bb5156da9122b57350b8b966ce93295e28f3",
       "source-78e4f02ac8afc2b22f30e1a1": "0f5d5b6ede978d1f7fc9cc155712bbbec23bd2d4609b9beef2b79f2791f91d70",
@@ -378,7 +380,7 @@
       "source-fa1c7edb4cb91b4668678cb8": "75a7e2512f76406b07d39d5d5f71e12f9033f18715681fa6638a4a44c7147550",
       "source-fa65f3e0f35e64b335723d66": "21a28f61980579edae2071891d3ec47f141626959f7f3df8b6c60fce695d8093",
       "source-fa7cde061537ff5db22167a8": "75c27889d288446bbfcb4a22856d9ebd5bc73939707ea131619995f584baa634",
-      "source-fafa7f71ebb206956fc5a4cc": "715228b0409fc3b9593fe03653ab4db1dd55b8952619dd65f6562599aff1be10",
+      "source-fafa7f71ebb206956fc5a4cc": "ce51335074860f430baa8b2c219f5964ff33b362311397f132c30d6e84245b41",
       "source-fb97a304d7cc9aff6e2beb9d": "bc4ecf98743126af413e4c9f562b91461f331287af2dfe85f2830e543ab5b469",
       "source-fc4a6e808db3721ddc75a103": "2c49c1e507a496a91ce112d9b1709d0e72e80f9f85e6c7a4fdb1a8d74e57c871",
       "source-fd574f276bab46bf8a942a21": "a368c262da8f2a3a9e277c8cb83abba32a2c6a81868f78d8ad03ab0de1c4dcb1",
@@ -426,8 +428,8 @@
         "key": "allow|block"
       },
       {
-        "case_ids_framed_sha256": "d5aa52fda7a3307e63f71bae82638fc6c04f1e29db4aeb1d54293abbcf046de7",
-        "count": 16691,
+        "case_ids_framed_sha256": "072ec9e70924e7a9b6889c771aabfcd97087bfe952c0ea0bd2235f6ad080874f",
+        "count": 8358,
         "key": "allow|require-reapproval"
       },
       {
@@ -444,6 +446,11 @@
         "case_ids_framed_sha256": "2080d21b3c09cc9c1315b612f42257a1d00ab1d82270a177e40faad60fa0c4a2",
         "count": 19794,
         "key": "review|block"
+      },
+      {
+        "case_ids_framed_sha256": "c67b626707a9a9443c2d660e5286e93905a5d13c2b14fc7485f9750dc710bc53",
+        "count": 8333,
+        "key": "review|require-reapproval"
       },
       {
         "case_ids_framed_sha256": "6d67e6ec738da1aa29472119f0ceba141f2c5b7abaf5096d477f55e77caaf2c0",
@@ -465,13 +472,13 @@
         "key": "strengthened_meets_oracle|allow|block|block|CDX-066"
       },
       {
-        "case_ids_framed_sha256": "502623f4aa807befa15775efc221af1e689b021731151f7fe005902b1753b50d",
-        "count": 8333,
+        "case_ids_framed_sha256": "23e236acfa6d4427b74d173e350c33ee842e3537f2bec696b915410f7570f461",
+        "count": 4166,
         "key": "strengthened_meets_oracle|allow|require-reapproval|require-reapproval|CDX-065"
       },
       {
-        "case_ids_framed_sha256": "b9302015a817d9d5dc40f76344238dca29eb7aa7428e7845cc2e03c460ad72b0",
-        "count": 8358,
+        "case_ids_framed_sha256": "7d7f294c20b7c3bdded6b571e8e61ae2b72651d90bde5e1e1a76ee82764b6e3b",
+        "count": 4192,
         "key": "strengthened_meets_oracle|allow|require-reapproval|require-reapproval|CDX-066"
       },
       {
@@ -503,6 +510,16 @@
         "case_ids_framed_sha256": "6daaacc140304b87364910f1bb4aaabf2b2e119f49e2e2e58ee5d55340372f56",
         "count": 7293,
         "key": "strengthened_meets_oracle|review|block|block|CDX-066"
+      },
+      {
+        "case_ids_framed_sha256": "b3552161a47bd35642eb0677ac5f530d576cbcb5a7a551326627d02b96252dd6",
+        "count": 4167,
+        "key": "strengthened_meets_oracle|review|require-reapproval|require-reapproval|CDX-065"
+      },
+      {
+        "case_ids_framed_sha256": "0c1b559b4b239f126d8ea52f0a84213a9c39757f0fd5482d00436a0612eb83b1",
+        "count": 4166,
+        "key": "strengthened_meets_oracle|review|require-reapproval|require-reapproval|CDX-066"
       },
       {
         "case_ids_framed_sha256": "e91580f6db609ddf6782ad9b6a33df9425b21b72e4e23833127d53c13b55fd43",
