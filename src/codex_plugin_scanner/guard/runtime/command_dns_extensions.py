@@ -9,6 +9,7 @@ from .command_extension_matchers import executable_matcher, executable_path_set_
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
 from .extension_control_contract import (
+    ControlState,
     ControlTarget,
     ControlTargetKind,
     ExtensionControl,
@@ -184,6 +185,7 @@ _AZ_RESOLVER = _az_paths(
     ("dns-resolver", "outbound-endpoint", "delete"),
     ("dns-resolver", "forwarding-ruleset", "delete"),
     ("dns-resolver", "forwarding-rule", "delete"),
+    ("dns-resolver", "vnet-link", "delete"),
     ("dns-resolver", "domain-list", "delete"),
 )
 
@@ -416,17 +418,33 @@ def expand_legacy_dns_target(target: ControlTarget) -> tuple[ControlTarget, ...]
 
 
 def expand_legacy_dns_layers(layers: tuple[ExtensionControlLayer, ...]) -> tuple[ExtensionControlLayer, ...]:
-    """Rewrite persisted aggregate DNS controls onto the provider-specific replacements."""
+    """Rewrite persisted aggregate DNS controls onto the provider-specific replacements.
+
+    Expansion-induced collisions (legacy aggregate plus an already-present provider
+    target) merge with disable dominance. Duplicate original targets stay duplicated
+    so composition can still fail closed.
+    """
 
     rewritten: list[ExtensionControlLayer] = []
     for layer in layers:
-        expanded: list[ExtensionControl] = []
-        seen: set[ControlTarget] = set()
+        merged: dict[ControlTarget, ControlState] = {}
+        order: list[ControlTarget] = []
+        extras: list[ExtensionControl] = []
+        seen_originals: set[ControlTarget] = set()
         for control in layer.controls:
-            for target in expand_legacy_dns_target(control.target):
-                if target in seen:
-                    continue
-                seen.add(target)
-                expanded.append(ExtensionControl(target, control.state))
+            expanded_targets = expand_legacy_dns_target(control.target)
+            if control.target in seen_originals:
+                extras.extend(ExtensionControl(target, control.state) for target in expanded_targets)
+                continue
+            seen_originals.add(control.target)
+            for target in expanded_targets:
+                previous = merged.get(target)
+                if previous is None:
+                    order.append(target)
+                    merged[target] = control.state
+                elif previous is ControlState.DISABLED or control.state is ControlState.DISABLED:
+                    merged[target] = ControlState.DISABLED
+        expanded = [ExtensionControl(target, merged[target]) for target in order]
+        expanded.extend(extras)
         rewritten.append(replace(layer, controls=tuple(expanded)))
     return tuple(rewritten)

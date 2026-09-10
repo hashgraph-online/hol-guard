@@ -89,6 +89,11 @@ DNS_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "Azure DNS destructive command",
         "command.dns.azure.resolver-deletion",
     ),
+    (
+        "az dns-resolver vnet-link delete -g app --ruleset-name office -n link",
+        "Azure DNS destructive command",
+        "command.dns.azure.resolver-deletion",
+    ),
 )
 
 DNS_SAFE_COMMANDS: tuple[str, ...] = (
@@ -172,6 +177,62 @@ def test_legacy_dns_controls_expand_onto_provider_extensions() -> None:
     targets = {control.target.target_id for control in expanded[0].controls}
     assert targets == {"command.dns.aws", "command.dns.gcp", "command.dns.azure"}
     assert all(control.state is ControlState.DISABLED for control in expanded[0].controls)
+
+
+def test_legacy_dns_expansion_merges_provider_collision_and_keeps_original_duplicates() -> None:
+    from codex_plugin_scanner.guard.runtime.command_dns_extensions import expand_legacy_dns_layers
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind,
+        ControlState,
+        ControlTarget,
+        ControlTargetKind,
+        ExtensionControl,
+        ExtensionControlLayer,
+    )
+
+    def _layer(*controls: ExtensionControl) -> ExtensionControlLayer:
+        return ExtensionControlLayer(
+            schema_version=CONTROL_SCHEMA_VERSION,
+            kind=ControlLayerKind.LOCAL_ADMIN,
+            catalog_digest="a" * 64,
+            global_lockdown=False,
+            controls=controls,
+        )
+
+    def _control(target_id: str, state: ControlState) -> ExtensionControl:
+        return ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, target_id), state)
+
+    for controls in (
+        (
+            _control("command.dns", ControlState.ENABLED),
+            _control("command.dns.aws", ControlState.DISABLED),
+        ),
+        (
+            _control("command.dns.aws", ControlState.DISABLED),
+            _control("command.dns", ControlState.ENABLED),
+        ),
+    ):
+        merged = expand_legacy_dns_layers((_layer(*controls),))
+        merged_states = {control.target.target_id: control.state for control in merged[0].controls}
+        assert merged_states == {
+            "command.dns.aws": ControlState.DISABLED,
+            "command.dns.gcp": ControlState.ENABLED,
+            "command.dns.azure": ControlState.ENABLED,
+        }
+
+    duplicated = expand_legacy_dns_layers(
+        (
+            _layer(
+                _control("command.dns.aws", ControlState.DISABLED),
+                _control("command.dns.aws", ControlState.DISABLED),
+            ),
+        )
+    )
+    assert [control.target.target_id for control in duplicated[0].controls] == [
+        "command.dns.aws",
+        "command.dns.aws",
+    ]
 
 
 def test_dns_extensions_are_provider_specific() -> None:

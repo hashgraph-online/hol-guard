@@ -10,9 +10,9 @@ commands remain safe.
 
 | Extension | Reviewed operations | Safe counterparts |
 | --- | --- | --- |
-| `command.dns.aws` | Route 53 hosted-zone, record-change, health-check, traffic-policy, DNSSEC, and Resolver deletions | List, get, and help |
+| `command.dns.aws` | Route 53 hosted-zone, record-change, health-check, traffic-policy, DNSSEC, DNS Firewall, and Resolver deletions | List, get, and help |
 | `command.dns.gcp` | Cloud DNS managed-zone, record-set, policy, and response-policy deletions and updates | Describe, list, and help |
-| `command.dns.azure` | Public DNS zone and record-set deletion, private DNS zone, record-set, and VNet-link deletion, and DNS resolver deletion | Show, list, and help |
+| `command.dns.azure` | Public DNS zone and record-set deletion, private DNS zone, record-set, and VNet-link deletion, and DNS resolver and resolver VNet-link deletion | Show, list, and help |
 
 Provider-global account, project, subscription, region, output, query, and authentication options are
 normalized before matching.
