@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.vttforge",
+  "version": "1.0.0",
+  "name": "VTTForge",
+  "description": "Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.vttforge",
+    "displayName": "Community"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#B45309"
+  },
+  "homepage": "https://vttforge.dev",
+  "license": "MIT",
+  "executables": [
+    "vttforge"
+  ],
+  "ecosystemIds": [
+    "vttforge"
+  ],
+  "riskClasses": [
+    "destructive_shell"
+  ],
+  "actionClasses": [
+    "VTTForge project scaffold command",
+    "VTTForge lint fix command",
+    "VTTForge migration write command"
+  ],
+  "referenceUrls": [
+    "https://github.com/vttforge/vttforge",
+    "https://vttforge.dev/docs/guide/cli"
+  ],
+  "saferAlternatives": [
+    "Run the preview forms first: `vttforge migrate` and `vttforge lint` without --write or --fix.",
+    "Run the writing forms on a clean git tree and review the diff."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_vttforge_extensions"
+  }
+}
