@@ -20,16 +20,20 @@ not reasons to classify arbitrary code as harmless.
 ## Native approval retries
 
 A resolved inbox row is not permanent command authorization. A verified
-harness Accept may authorize one matching retry for five minutes. The retry
-is bound to the harness, complete request input, workspace, native decision
-and inspected script hashes. Only top-level transport timestamps are ignored.
-The consume operation is transactional, so concurrent requests cannot spend
-one approval twice. Legacy unbound rows do not match. A later denial for the
-same identity supersedes an older allow.
+harness Accept may authorize one matching retry for five minutes. Eligible
+retries are bound to the Rust-owned semantic request digest, workspace and
+native decision fields. The request digest excludes only root transport
+metadata such as event aliases and timestamps. Commands that can execute
+mutable local code, commands with leading environment assignments, and
+multi-command or redirected shell forms are not eligible for Python-side retry
+reuse. The consume operation is transactional, so concurrent requests cannot
+spend one approval twice. Legacy unbound rows do not match. A later denial for
+the same identity supersedes an older allow.
 
-This binds the evidence available to the hook. It does not make an unrestricted
-process immune to filesystem changes between inspection and execution, nor
-does it bind every dynamic import or ambient environment value.
+This binds the evidence available to the native hook. It does not make an
+unrestricted process immune to filesystem changes between review and execution,
+nor does it bind every dynamic import or ambient environment value. Mutable-code
+execution therefore remains outside this compatibility reuse path.
 
 ## Contained Node runners
 
