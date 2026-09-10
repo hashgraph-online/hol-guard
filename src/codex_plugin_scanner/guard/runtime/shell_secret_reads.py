@@ -33,7 +33,9 @@ _SCRIPT_SUFFIXES = (
     ".rb",
     ".pl",
 )
-_OTHER_READERS = frozenset({"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"})
+_OTHER_READERS = frozenset(
+    {"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"}
+)
 _MAX_SCRIPTS = 16
 _MAX_DEPTH = 4
 _MAX_TOTAL_BYTES = 128 * 1024
@@ -178,9 +180,7 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
         index = 0
         while index < len(args):
             arg = args[index]
-            if arg in {"-c", "-e", "--eval", "-m", "--command"} or (
-                is_shell and arg == "-s"
-            ) or (
+            if arg in {"-c", "-e", "--eval", "-m", "--command"} or (is_shell and arg == "-s") or (
                 is_shell and arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]
             ):
                 return None
@@ -199,11 +199,24 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
         return args[0], False
     if executable.endswith(_SCRIPT_SUFFIXES) and ("/" in executable or executable.startswith(".")):
         return executable, executable.endswith((".sh", ".bash", ".zsh", ".ksh", ".fish"))
-    if "/" in executable or executable.startswith("."):
-        # A path-qualified local executable may be an extensionless shebang
-        # script or binary. Without an execution-bound identity, it is code.
-        return executable, False
     return None
+
+
+def _local_executable_operand(
+    executable: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    roots: tuple[Path, ...],
+) -> str | None:
+    """Return a path-qualified executable only when it is inside a guarded local root."""
+
+    if not executable or not ("/" in executable or "\\" in executable or executable.startswith(".")):
+        return None
+    lexical = Path(normalize_path(expand_home(executable, home_dir), cwd))
+    if not lexical.is_absolute() or not any(lexical.is_relative_to(root) for root in roots):
+        return None
+    return executable
 
 
 def _parse_execution_segment(
@@ -246,7 +259,12 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
         "ruby",
         "perl",
     }
-    return executable in readers or _python_executable(executable) or "/" in execution.tokens[0]
+    return (
+        executable in readers
+        or _python_executable(executable)
+        or "/" in execution.tokens[0]
+        or "\\" in execution.tokens[0]
+    )
 
 
 def assess_shell_reads(
@@ -309,7 +327,15 @@ def assess_shell_reads(
                     pending.append((payload, effective_cwd, depth + 1))
             invocation = _script_operand(primary.executable or "", primary.arguments)
             if invocation is None:
-                continue
+                local_executable = _local_executable_operand(
+                    primary.executable or "",
+                    cwd=effective_cwd,
+                    home_dir=home_dir,
+                    roots=roots,
+                )
+                if local_executable is None:
+                    continue
+                invocation = (local_executable, False)
             requested = True
             operand, is_shell = invocation
             direct = _sensitive_path(operand, cwd=effective_cwd, home_dir=home_dir)
