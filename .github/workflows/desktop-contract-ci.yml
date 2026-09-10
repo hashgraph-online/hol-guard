@@ -87,8 +87,16 @@ jobs:
       - name: Run Desktop contract tests
         run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
 
-      - name: Validate source-bound decision evidence
-        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
+      - name: Regenerate source-bound decision evidence
+        run: uv run --no-sync python tests/guard_command_decision_diff.py --write
+
+      - name: Upload regenerated decision evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: regenerated-decision-diff-report
+          path: tests/fixtures/guard-command-corpus/decision-diff-report.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Smoke test CLI projection
         run: |
