@@ -57,6 +57,7 @@ _PATH_READ = re.compile(
 _SHORT_CIRCUITING_CD_FAILURES = frozenset(
     {SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY, SHELL_CWD_UNREADABLE_DIRECTORY}
 )
+_FLOW_OPERATORS = frozenset({"&&", "||", "|", ";", "&"})
 
 
 def _literal_read_paths(source: str) -> tuple[str, ...]:
@@ -356,17 +357,31 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
     )
 
 
-def _unreachable_after_failed_literal_cd(execution: ShellExecutionSegment) -> bool:
-    """A failing literal `cd ... &&` prevents this segment from executing.
+def _flow_operator_before(execution: ShellExecutionSegment) -> str | None:
+    return next((token for token in reversed(execution.control_before) if token in _FLOW_OPERATORS), None)
 
-    The context model has already proven the directory is absent, not a
-    directory, or unreadable in the current filesystem snapshot. Treating the
-    right-hand side as an attempted secret read creates false positives for
-    ordinary navigation/test pipelines even though the shell cannot reach it.
-    Other unresolved cwd states remain fail-closed.
+
+def _short_circuited_after_failed_literal_cd(
+    execution: ShellExecutionSegment,
+    *,
+    already_short_circuited: bool,
+) -> bool:
+    """Track the whole `cd missing && command | command` branch as unreachable.
+
+    A literal cd failure makes the RHS of `&&` unreachable. Pipelines and
+    subsequent `&&` terms in that RHS are unreachable too. `||`, `;` and `&`
+    begin control-flow that may run despite the failure, so uncertainty remains
+    fail-closed there rather than being silently skipped.
     """
 
-    return execution.reason_code in _SHORT_CIRCUITING_CD_FAILURES and "&&" in execution.control_before
+    if execution.reason_code not in _SHORT_CIRCUITING_CD_FAILURES:
+        return False
+    operator = _flow_operator_before(execution)
+    if operator == "&&":
+        return True
+    if operator == "|" and already_short_circuited:
+        return True
+    return False
 
 
 def assess_shell_reads(
@@ -400,11 +415,16 @@ def assess_shell_reads(
             if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
                 incomplete = True
             continue
+        short_circuited_by_cd = False
         for execution in context.segments:
+            short_circuited_by_cd = _short_circuited_after_failed_literal_cd(
+                execution,
+                already_short_circuited=short_circuited_by_cd,
+            )
+            if short_circuited_by_cd:
+                continue
             model = _parse_execution_segment(execution, home_dir=home_dir)
             if model is None:
-                if _unreachable_after_failed_literal_cd(execution):
-                    continue
                 if _segment_may_touch_local_data(execution):
                     requested = True
                     incomplete = True
