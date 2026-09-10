@@ -318,7 +318,9 @@ class HookWorkerNativeMixin:
                 guard_home=guard_home,
                 recording_only=recording_only,
             )
-        accepted_receipt = self._record_native_decision_receipt(edge.get("receipt"))
+        raw_receipt = edge.get("receipt")
+        native_receipt = raw_receipt if isinstance(raw_receipt, Mapping) else None
+        accepted_receipt = self._record_native_decision_receipt(raw_receipt)
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             if recording_only:
@@ -338,6 +340,7 @@ class HookWorkerNativeMixin:
                     harness=native_harness,
                     payload=payload,
                     native_result=native_result,
+                    native_receipt=native_receipt,
                     workspace=workspace,
                     guard_home=guard_home,
                 )

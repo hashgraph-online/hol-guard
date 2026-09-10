@@ -52,7 +52,9 @@ _PROTECTED_WORD_PAIRS: Final = frozenset({("api", "key"), ("private", "key"), ("
 _SSH_PRIVATE_KEY_NAMES: Final = frozenset({"id_dsa", "id_ecdsa", "id_ed25519", "id_rsa"})
 
 
-def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[ContainmentInput, ...]]:
+def complete_workspace_snapshot(
+    workspace: Path, *, exclude_protected: bool = False
+) -> tuple[str, tuple[ContainmentInput, ...]]:
     """Capture every eligible workspace file or reject the command for review."""
 
     canonical_workspace = _canonical_directory(workspace)
@@ -72,6 +74,9 @@ def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[Containment
                 exclusions.append((relative.as_posix(), "protected-state"))
                 continue
             if _is_protected(relative):
+                if exclude_protected:
+                    exclusions.append((relative.as_posix(), "protected-content"))
+                    continue
                 raise ValueError("protected workspace content requires Guard review")
             if entry.is_dir(follow_symlinks=False) and entry.name == ".bin" and "node_modules" in lowered_parts:
                 exclusions.append((relative.as_posix(), "package-bin-links"))

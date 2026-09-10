@@ -199,3 +199,60 @@ def test_growing_or_oversized_json_identity_is_never_complete(
 
     assert evidence is not None
     assert evidence.status == "incomplete"
+
+
+@pytest.mark.parametrize("lock_name", ("package-lock.json", "bun.lock"))
+@pytest.mark.parametrize("reporter_args", (("--reporter=dot",), ("--reporter", "dot")))
+def test_bunx_stdout_reporter_has_bound_local_launch_evidence(
+    tmp_path: Path,
+    manager_path: Path,
+    lock_name: str,
+    reporter_args: tuple[str, ...],
+) -> None:
+    _write(manager_path / "bunx", "#!/bin/sh\nexit 99\n", executable=True)
+    workspace = _workspace(tmp_path, "vitest")
+    if lock_name == "bun.lock":
+        (workspace / "package-lock.json").unlink()
+        _write(
+            workspace / lock_name,
+            "{ // Bun JSONC\n"
+            + json.dumps(
+                {
+                    "lockfileVersion": 1,
+                    "packages": {"vitest": ["vitest@1.2.3", "", {}, _INTEGRITY]},
+                }
+            )[1:-1]
+            + ",\n}",
+        )
+    argv = ("vitest", "run", "src/example.test.ts", *reporter_args)
+    intent = parse_package_intent(" ".join(("bunx", *argv)), workspace=workspace)
+    assert intent is not None and len(intent.local_executions) == 1
+    evidence = build_local_node_runner_evidence("bunx", argv, intent.local_executions[0], workspace=workspace)
+    assert evidence is not None and evidence.status == "complete", evidence
+    assert evidence.lockfile_name == lock_name
+    assert evidence.runner_args == argv[1:]
+    assert evidence.direct_silent_verification is False
+    assert evidence.review_disposition == "review_required"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    (
+        ("--reporter=./custom.js",),
+        ("--reporter=json",),
+        ("--reporter=dot", "--outputFile=result.json"),
+        ("--config=custom.ts",),
+        ("--coverage",),
+        ("--reporter",),
+        ("--reporter=dot", "--reporter=dot"),
+    ),
+)
+def test_vitest_reporter_does_not_open_custom_code_or_write_flags(
+    tmp_path: Path,
+    manager_path: Path,
+    extra: tuple[str, ...],
+) -> None:
+    del manager_path
+    workspace = _workspace(tmp_path, "vitest")
+    evidence = _evidence(workspace, ("--no-install", "vitest", "run", "src/example.test.ts", *extra))
+    assert evidence is None or evidence.status == "incomplete"

@@ -6,6 +6,8 @@ from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
+    "local secret read shell command": ("local_secret_read",),
+    "local script execution": ("execution",),
     "credential exfiltration shell command": (
         "data_flow_exfiltration",
         "credential_exfiltration",
