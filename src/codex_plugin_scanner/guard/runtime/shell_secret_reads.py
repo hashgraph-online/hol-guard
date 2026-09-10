@@ -382,9 +382,7 @@ def _short_circuited_after_failed_literal_cd(
     operator = _flow_operator_before(execution)
     if operator == "&&":
         return True
-    if operator == "|" and already_short_circuited:
-        return True
-    return False
+    return bool(operator == "|" and already_short_circuited)
 
 
 def assess_shell_reads(
