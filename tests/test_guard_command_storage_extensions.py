@@ -157,6 +157,11 @@ STORAGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage.aws-s3.bucket-configuration",
     ),
     (
+        "aws s3api update-bucket-metadata-annotation-table-configuration --bucket archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.bucket-configuration",
+    ),
+    (
         "aws s3api put-object-tagging --bucket archive --key private.json --tagging TagSet=[{Key=env,Value=prod}]",
         "AWS storage destructive command",
         "command.storage.aws-s3.object-tagging",

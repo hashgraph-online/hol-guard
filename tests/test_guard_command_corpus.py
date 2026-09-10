@@ -357,7 +357,9 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
         if isinstance(value, list)
     }
     assert actual == expected
-    assert isinstance(report["elapsed"], int | float) and report["elapsed"] < 60
+    assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
+        load_seed_manifest()["evaluation_budget_seconds"]
+    )
     assert isinstance(report["rss_mib"], int | float) and report["rss_mib"] < 512
 
 

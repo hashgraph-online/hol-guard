@@ -92,6 +92,10 @@ def test_aws_s3_operations_list_commands_and_default_floors() -> None:
     assert operations["command.storage.aws-s3.sync"]["commands"] == ["aws s3 sync"]
     assert "aws s3api create-bucket" in operations["command.storage.aws-s3.mb"]["commands"]
     assert "aws s3api put-object" in operations["command.storage.aws-s3.object-write"]["commands"]
+    assert (
+        "aws s3api update-bucket-metadata-annotation-table-configuration"
+        in operations["command.storage.aws-s3.bucket-configuration"]["commands"]
+    )
     assert operations["command.storage.aws-s3.download"]["commands"] == ["aws s3api get-object"]
     assert operations["command.storage.aws-s3.download"]["defaultMode"] == "review"
     assert operations["command.storage.aws-s3.access-control"]["severity"] == "critical"

@@ -79,6 +79,7 @@ _AWS_BUCKET_CONFIG = _s3api(
     "put-bucket-tagging",
     "put-bucket-versioning",
     "put-bucket-website",
+    "update-bucket-metadata-annotation-table-configuration",
     "update-bucket-metadata-inventory-table-configuration",
     "update-bucket-metadata-journal-table-configuration",
 )
