@@ -100,6 +100,60 @@ def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> s
     return match.path if match is not None else None
 
 
+def _unwrap_execution_builtin(
+    executable: str,
+    args: tuple[str, ...],
+) -> tuple[str | None, tuple[str, ...], bool]:
+    """Unwrap literal command/exec prefixes or report ambiguous execution."""
+
+    name = Path(executable or "").name.lower()
+    if name == "command":
+        index = 0
+        lookup_only = False
+        while index < len(args):
+            arg = args[index]
+            if arg == "--":
+                index += 1
+                break
+            if arg == "-p":
+                index += 1
+                continue
+            if arg in {"-v", "-V"}:
+                lookup_only = True
+                index += 1
+                continue
+            if arg.startswith("-"):
+                return None, (), True
+            break
+        if lookup_only:
+            return None, (), False
+        if index >= len(args):
+            return None, (), False
+        return args[index], args[index + 1 :], False
+    if name == "exec":
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg == "--":
+                index += 1
+                break
+            if arg == "-a":
+                if index + 1 >= len(args):
+                    return None, (), True
+                index += 2
+                continue
+            if arg in {"-c", "-l"}:
+                index += 1
+                continue
+            if arg.startswith("-"):
+                return None, (), True
+            break
+        if index >= len(args):
+            return None, (), False
+        return args[index], args[index + 1 :], False
+    return executable, args, False
+
+
 def direct_secret_read_paths(
     command: CanonicalCommand,
     *,
@@ -112,17 +166,23 @@ def direct_secret_read_paths(
 
     candidates: list[str] = []
     for segment in command.segments:
-        name = "." if segment.executable == "." else Path(segment.executable or "").name.lower()
-        args = list(segment.arguments)
-        candidates.extend(_shell_segment_file_operand_tokens([name, *args]))
+        executable, args, ambiguous = _unwrap_execution_builtin(
+            segment.executable or "",
+            segment.arguments,
+        )
+        if ambiguous or executable is None:
+            continue
+        name = "." if executable == "." else Path(executable).name.lower()
+        args_list = list(args)
+        candidates.extend(_shell_segment_file_operand_tokens([name, *args_list]))
         if name in _OTHER_READERS:
-            candidates.extend(arg for arg in args if not arg.startswith("-"))
+            candidates.extend(arg for arg in args_list if not arg.startswith("-"))
         if name in {"source", "."}:
-            candidates.extend(args[:1])
+            candidates.extend(args_list[:1])
         if name in {"node", "bun", "ruby", "perl"} or _python_executable(name):
-            for index, arg in enumerate(args[:-1]):
+            for index, arg in enumerate(args_list[:-1]):
                 if arg in {"-c", "-e", "--eval", "-p", "--print"}:
-                    candidates.extend(_literal_read_paths(args[index + 1]))
+                    candidates.extend(_literal_read_paths(args_list[index + 1]))
                 elif arg.startswith(("--eval=", "--print=")):
                     candidates.extend(_literal_read_paths(arg.split("=", 1)[1]))
     for redirect in command.redirects:
@@ -202,6 +262,22 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
     return None
 
 
+def _python_module_launch(executable: str, args: tuple[str, ...]) -> bool:
+    """Return True when Python can import mutable workspace code via -m."""
+
+    name = Path(executable or "").name.lower()
+    if not _python_executable(name):
+        return False
+    for arg in args:
+        if arg == "--":
+            return False
+        if arg == "-m":
+            return True
+        if not arg.startswith("-"):
+            return False
+    return False
+
+
 def _local_executable_operand(
     executable: str,
     *,
@@ -247,11 +323,14 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
         "egrep",
         "fgrep",
         "head",
+        "read",
         "rg",
         "sed",
         "tail",
         "source",
         ".",
+        "command",
+        "exec",
         *_OTHER_READERS,
         *_SHELLS,
         "node",
@@ -259,8 +338,10 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
         "ruby",
         "perl",
     }
+    has_input_redirect = any(token in {"<", "<>", "<<", "<<<"} for token in execution.tokens)
     return (
         executable in readers
+        or has_input_redirect
         or _python_executable(executable)
         or "/" in execution.tokens[0]
         or "\\" in execution.tokens[0]
@@ -315,20 +396,31 @@ def assess_shell_reads(
             primary = model.segments[0] if model.segments else None
             if primary is None:
                 continue
-            payload, command_string_requested = _shell_command_string(
+            executable, arguments, unwrap_incomplete = _unwrap_execution_builtin(
                 primary.executable or "",
                 primary.arguments,
             )
+            if unwrap_incomplete:
+                requested = True
+                incomplete = True
+                continue
+            if executable is None:
+                continue
+            payload, command_string_requested = _shell_command_string(executable, arguments)
             if command_string_requested:
                 requested = True
                 if payload is None or len(payload.encode("utf-8")) > _MAX_INLINE_SCRIPT_BYTES or depth >= _MAX_DEPTH:
                     incomplete = True
                 else:
                     pending.append((payload, effective_cwd, depth + 1))
-            invocation = _script_operand(primary.executable or "", primary.arguments)
+            if _python_module_launch(executable, arguments):
+                requested = True
+                incomplete = True
+                continue
+            invocation = _script_operand(executable, arguments)
             if invocation is None:
                 local_executable = _local_executable_operand(
-                    primary.executable or "",
+                    executable,
                     cwd=effective_cwd,
                     home_dir=home_dir,
                     roots=roots,
@@ -342,16 +434,8 @@ def assess_shell_reads(
             if direct is not None:
                 sensitive.append(direct)
                 continue
-            literal_source = (
-                len(model.segments) == 1
-                and primary.executable in {"source", "."}
-                and effective_cwd is not None
-            )
-            if (
-                (not context.complete and not literal_source)
-                or depth >= _MAX_DEPTH
-                or len(visited) >= _MAX_SCRIPTS
-            ):
+            literal_source = len(model.segments) == 1 and executable in {"source", "."} and effective_cwd is not None
+            if (not context.complete and not literal_source) or depth >= _MAX_DEPTH or len(visited) >= _MAX_SCRIPTS:
                 incomplete = True
                 continue
             source = _resolved_runtime_path(
