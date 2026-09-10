@@ -355,7 +355,9 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         payload["hooks"] = hooks
 
         state_payload = _json_payload(state_path) if state_path.is_file() else {}
-        hooks_enabled_before = _stored_hooks_enabled_snapshot(state_payload)
+        hooks_enabled_before = None
+        if state_payload.get("managed_config_path") == str(config_path):
+            hooks_enabled_before = _stored_hooks_enabled_snapshot(state_payload)
         if hooks_enabled_before is None:
             hooks_enabled_before = _hooks_enabled_snapshot(hooks)
         # ZCode does not construct its hook runner while this feature flag is

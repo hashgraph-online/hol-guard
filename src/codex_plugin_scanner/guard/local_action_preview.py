@@ -66,11 +66,35 @@ def action_preview(payload: Mapping[str, object]) -> str | None:
                 return None
             command = command.replace(value, "[redacted]")
 
+    for index, token in enumerate(tokens):
+        credential = None
+        if token in {"-u", "-U", "--user", "--proxy-user"} and index + 1 < len(tokens):
+            credential = tokens[index + 1]
+        elif token.startswith(("--user=", "--proxy-user=")):
+            credential = token.partition("=")[2]
+        elif token.startswith(("-u", "-U")) and len(token) > 2 and not token.startswith("--"):
+            credential = token[2:]
+        elif token.lower().startswith(("authorization:", "proxy-authorization:")):
+            credential = token.partition(":")[2].strip()
+        if credential:
+            if credential not in command:
+                return None
+            command = command.replace(credential, "[redacted]")
+
+    command = re.sub(r"(?i)(\b[a-z][a-z0-9+.-]*://)[^\s/@'\"]+@", r"\1[redacted]@", command)
+
     redacted_command = _SENSITIVE_ARGUMENT_RE.sub(
         lambda match: f"{match.group('prefix')}[redacted]",
         command,
     )
-    return redact_sensitive_text(redact_text(redacted_command).text)[:MAX_PREVIEW_LENGTH].strip() or None
+    preview = redact_sensitive_text(redact_text(redacted_command).text)
+    # The dashboard measures string bounds in UTF-16 code units.
+    return (
+        preview.encode("utf-16-le", errors="replace")[: MAX_PREVIEW_LENGTH * 2]
+        .decode("utf-16-le", errors="ignore")
+        .strip()
+        or None
+    )
 
 
 def ensure_local_action_preview_schema(connection: sqlite3.Connection) -> None:

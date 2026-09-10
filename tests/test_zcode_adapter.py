@@ -382,6 +382,27 @@ class TestZCodeInstallUninstall:
         restored = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         assert restored["hooks"] == {"enabled": False}
 
+    def test_install_scopes_enabled_snapshot_to_managed_config_path(self, tmp_path: Path, monkeypatch) -> None:
+        guard_home = tmp_path / "guard-home"
+        ctx_a = HarnessContext(home_dir=tmp_path / "home-a", workspace_dir=None, guard_home=guard_home)
+        ctx_b = HarnessContext(home_dir=tmp_path / "home-b", workspace_dir=None, guard_home=guard_home)
+        _write_cli_config(ctx_a.home_dir, {"hooks": {"enabled": False}})
+        config_b = _write_cli_config(ctx_b.home_dir, {"hooks": {"enabled": True}})
+        self._patch_shims(monkeypatch, ctx_a)
+        adapter = ZCodeHarnessAdapter()
+
+        adapter.install(ctx_a)
+        adapter.install(ctx_b)
+
+        state_path = guard_home / "managed" / "zcode" / "install.state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["managed_config_path"] == str(config_b)
+        assert state["hooks_enabled_before"] == {"present": True, "value": True}
+
+        adapter.uninstall(ctx_b)
+        restored_b = json.loads(config_b.read_text(encoding="utf-8"))
+        assert restored_b["hooks"] == {"enabled": True}
+
     def test_install_hook_command_uses_bounded_bridge_for_interpreters(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)

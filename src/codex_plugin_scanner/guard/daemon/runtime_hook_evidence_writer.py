@@ -291,6 +291,7 @@ class RuntimeHookEvidenceWriter:
                         self._append_journal(record)
                     except OSError:
                         with self._condition:
+                            self._local_previews.pop(record.record_id, None)
                             self._dropped += 1
                             self._failures += 1
                             if isinstance(record, _NativeDecisionReceiptRecord):

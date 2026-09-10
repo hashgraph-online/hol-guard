@@ -46,6 +46,9 @@ export function redactDisplayText(value: string): string | null {
   if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
 
   const redacted = trimmed
+    .replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]")
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'\"]+@/gi, "$1[redacted]@")
+    .replace(/((?:^|\s)(?:--user|--proxy-user)(?:=|\s+)|(?:^|\s)-[uU]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s]+)/g, "$1[redacted]")
     .replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]")
     .replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2")
     .replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");

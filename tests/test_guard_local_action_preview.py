@@ -29,6 +29,11 @@ def test_preview_excludes_file_contents_and_redacts_credentials() -> None:
         ('tool --password "quoted password"', "quoted password"),
         ("tool --credential 'quoted credential'", "quoted credential"),
         ('tool --password = "spaced equals password"', "spaced equals password"),
+        ("curl -u alice:password https://example.invalid", "alice:password"),
+        ("curl --user=alice:password https://example.invalid", "alice:password"),
+        ("curl -ualice:password https://example.invalid", "alice:password"),
+        ("curl https://alice:password@example.invalid", "alice:password"),
+        ('curl -H "Authorization: Basic YWxpY2U6cGFzc3dvcmQ=" https://example.invalid', "YWxpY2U6cGFzc3dvcmQ="),
     ),
 )
 def test_preview_redacts_sensitive_arguments(command: str, secret: str) -> None:
@@ -41,6 +46,25 @@ def test_preview_redacts_sensitive_arguments(command: str, secret: str) -> None:
 
 def test_preview_omits_malformed_shell_input() -> None:
     assert action_preview({"toolInput": {"command": 'tool --password "unterminated'}}) is None
+
+
+def test_preview_bounds_match_dashboard_utf16_units() -> None:
+    preview = action_preview({"command": "echo " + "\U0001f600" * 2048})
+    assert preview is not None
+    assert len(preview.encode("utf-16-le")) <= 4096
+
+
+def test_journal_failure_discards_in_memory_preview(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    writer = RuntimeHookEvidenceWriter(store=store)
+    with patch.object(writer, "_append_journal", side_effect=OSError("disk unavailable")):
+        assert writer.submit_command_activity(
+            harness="codex", event="PreToolUse", succeeded=True,
+            policy_action="allow", payload={"command": "git status"},
+        )
+        writer.stop(timeout_seconds=5)
+    assert writer.stats()["dropped"] == 1
+    assert not writer._local_previews
 
 
 @pytest.mark.parametrize("container", ["tool_input", "toolInput", "arguments"])

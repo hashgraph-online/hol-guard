@@ -17,6 +17,16 @@ assert.equal(resolveActionCommand({ ...receipt, provenance_summary: "Command det
 const shellEnvelope = (command: string): GuardActionEnvelope =>
   ({ action_type: "shell_command", command } as unknown as GuardActionEnvelope);
 
+for (const [command, secret] of [
+  ["curl -u alice:password https://example.invalid", "alice:password"],
+  ["curl --user=alice:password https://example.invalid", "alice:password"],
+  ["curl https://alice:password@example.invalid", "alice:password"],
+  ['curl -H "Authorization: Basic YWxpY2U6cGFzc3dvcmQ=" https://example.invalid', "YWxpY2U6cGFzc3dvcmQ="],
+]) {
+  const preview = resolveActionCommand({ ...receipt, action_envelope_json: shellEnvelope(command) });
+  assert.ok(preview && !preview.includes(secret));
+}
+
 const credentialCommand =
   "bun run deploy --password synthetic-password-value --credential='synthetic credential value' PASSWORD=synthetic-env-value";
 const credentialReceipt: GuardReceipt = {
