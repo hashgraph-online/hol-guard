@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import datetime, timezone
@@ -102,6 +103,21 @@ def _queue_package_approval(
     )
     assert len(queued) == 1
     return queued[0]
+
+
+def _install_fake_package_manager(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    package_manager: str,
+) -> None:
+    package_bin = tmp_path / "package-bin"
+    package_bin.mkdir()
+    executable = package_bin / (f"{package_manager}.cmd" if os.name == "nt" else package_manager)
+    executable.write_text("@echo off\r\nexit /b 0\r\n" if os.name == "nt" else "#!/bin/sh\nexit 0\n")
+    if os.name != "nt":
+        executable.chmod(0o755)
+    inherited_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, (str(package_bin), inherited_path))))
 
 
 @pytest.mark.parametrize("origin", ["environment", "parent_process"])
@@ -292,6 +308,7 @@ def test_package_approval_reuses_under_policy_harness_after_invoking_harness_rev
     install_fake_system_keyring,
 ) -> None:
     install_fake_system_keyring()
+    _install_fake_package_manager(monkeypatch, tmp_path, package_manager)
     if persist_policy is None:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.local_supply_chain.subprocess.run",
@@ -361,6 +378,9 @@ def test_package_approval_reuses_under_policy_harness_after_invoking_harness_rev
         dry_run=persist_policy is not None,
         allow_saved_approval_execution=persist_policy is None,
     )
+    retry_reasons = retry["supply_chain_evaluation"]["reasons"]
+    assert isinstance(retry_reasons, list)
+    assert retry_reasons[0]["code"] == "saved_package_approval"
     assert retry_rc == 0
     assert retry["verdict"]["action"] == "allow"
     assert retry["receipt"]["harness"] == "zcode"
