@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
 from pathlib import Path
+
+import tomllib
 
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
@@ -80,6 +84,59 @@ VTTFORGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "VTTForge migration write command",
         "command.vttforge.migrate-write",
     ),
+    # The exec and xargs wrappers keep the executable.
+    (
+        "exec vttforge init my-system",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
+    (
+        "xargs -n 1 vttforge lint --fix",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "exec vttforge migrate --write",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
+    (
+        "xargs vttforge migrate ./my-system $FLAGS",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
+    # An expanded subcommand next to a literal writing flag goes to that rule.
+    (
+        "vttforge $SUBCOMMAND --fix",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "vttforge $(pick) ./my-system --write --strict",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
+    # An expanded subcommand with no literal writing flag may still be init.
+    (
+        "vttforge $VTTFORGE_ARGS",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
+    (
+        "vttforge ${SUB} my-system --yes",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
+    (
+        "vttforge `cat sub` $FLAGS",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
+    (
+        "exec vttforge $ARGS",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
 )
 
 
@@ -117,6 +174,19 @@ VTTFORGE_SAFE_COMMANDS: tuple[str, ...] = (
     "vttforge init -h",
     "vttforge lint --help",
     "vttforge migrate --help",
+    # --help ends the command before anything runs, whatever else is on the line.
+    "vttforge lint --fix --help",
+    "vttforge migrate --write --help",
+    "vttforge init my-system --yes -h",
+    "vttforge lint $FLAGS --help",
+    "vttforge migrate ${FLAGS} --help",
+    "vttforge $SUBCOMMAND --help",
+    "vttforge $(pick) --write --help",
+    "exec vttforge $ARGS --help",
+    "xargs -n 1 vttforge lint $FLAGS --help",
+    # Read-only subcommands take no writing flag, expanded or not.
+    "vttforge audit $FLAGS",
+    "xargs vttforge audit ./my-system",
 )
 
 
@@ -129,3 +199,47 @@ def test_vttforge_extension_publishes_official_reference() -> None:
     assert extension is not None
     assert extension.reference_urls
     assert all(url.startswith("https://") for url in extension.reference_urls)
+
+
+def test_expanded_subcommand_is_attributed_to_one_rule(tmp_path: Path) -> None:
+    """A line that may expand into a write is reviewed under exactly one VTTForge rule."""
+
+    for command, expected_rule in (
+        ("vttforge $SUBCOMMAND --fix", "command.vttforge.lint-fix"),
+        ("vttforge $SUBCOMMAND --write", "command.vttforge.migrate-write"),
+        ("vttforge $SUBCOMMAND", "command.vttforge.init"),
+    ):
+        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
+            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+        )
+        matched = sorted(
+            item.rule.rule_id
+            for item in observations
+            if item.extension.extension_id == "command.vttforge" and item.effective_evidence
+        )
+        assert matched == [expected_rule], command
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_CONTRIBUTION = "contributions/extensions/command.vttforge.json"
+_PACKAGED_CONTRIBUTION = "extensions/contributions/command.vttforge.json"
+
+
+def test_vttforge_contribution_ships_in_wheel_and_frozen_builds() -> None:
+    """Packaged builds carry the contribution, so the catalog matches a source checkout."""
+
+    pyproject = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    force_include = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert force_include[_CONTRIBUTION] == f"codex_plugin_scanner/guard/contracts/data/{_PACKAGED_CONTRIBUTION}"
+
+    script = _REPO_ROOT / "scripts/release/stage_guard_cloud_review_artifacts.py"
+    spec = importlib.util.spec_from_file_location("stage_guard_cloud_review_artifacts", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._ARTIFACTS[_CONTRIBUTION] == _PACKAGED_CONTRIBUTION
+
+    contribution = json.loads((_REPO_ROOT / _CONTRIBUTION).read_text(encoding="utf-8"))
+    assert contribution["id"] == "command.vttforge"
+    assert contribution["publisher"]["id"]
+    assert contribution["icon"]["name"]
