@@ -6,12 +6,17 @@ import re
 import sqlite3
 from collections.abc import Mapping
 from typing import cast
+from urllib.parse import unquote_plus
 
 from .redaction import redact_sensitive_text, redact_text
 from .runtime.command_tokens import shell_tokens
 
 MAX_PREVIEW_LENGTH = 2048
 _SENSITIVE_NAME_RE = re.compile(r"api_?key|token|secret|password|credential|authorization|cookie", re.IGNORECASE)
+_SENSITIVE_QUERY_NAME_RE = re.compile(
+    r"api[-_]?key|token|secret|password|credential|authorization|cookie|signature|^(?:key|sig|auth)$",
+    re.IGNORECASE,
+)
 
 _SENSITIVE_ARGUMENT_RE = re.compile(
     r"""
@@ -82,6 +87,13 @@ def action_preview(payload: Mapping[str, object]) -> str | None:
             command = command.replace(credential, "[redacted]")
 
     command = re.sub(r"(?i)(\b[a-z][a-z0-9+.-]*://)[^\s/@'\"]+@", r"\1[redacted]@", command)
+    command = re.sub(
+        r"([?&#])([^=&#\s\"']+)=([^&#\s\"']*)",
+        lambda match: f"{match[1]}{match[2]}=[redacted]"
+        if _SENSITIVE_QUERY_NAME_RE.search(unquote_plus(match[2]))
+        else match[0],
+        command,
+    )
 
     redacted_command = _SENSITIVE_ARGUMENT_RE.sub(
         lambda match: f"{match.group('prefix')}[redacted]",

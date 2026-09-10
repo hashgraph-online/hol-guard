@@ -14316,10 +14316,17 @@ const QUOTED_ASSIGNMENT_PATTERN = /((?:^|\s)(["'])[A-Za-z0-9_-]*(?:api[-_]?key|t
 const SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])["']?[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
 const UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*)([^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
 const REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN = /(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*\[redacted\][^"']+\1/i;
+const SENSITIVE_QUERY_NAME = /api[-_]?key|token|secret|password|credential|authorization|cookie|signature|^(?:key|sig|auth)$/i;
+function redactQueryAssignments(value) {
+  return value.replace(/([?&#])([^=&#\s"']+)=([^&#\s"']*)/g, (assignment, separator, key) => {
+    const decodedKey = new URLSearchParams(`${key}=`).keys().next().value ?? key;
+    return SENSITIVE_QUERY_NAME.test(decodedKey) ? `${separator}${key}=[redacted]` : assignment;
+  });
+}
 function redactDisplayText(value) {
   const trimmed = value.trim();
   if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
-  const redacted = trimmed.replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]").replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'\"]+@/gi, "$1[redacted]@").replace(/((?:^|\s)(?:--user|--proxy-user)(?:=|\s+)|(?:^|\s)-[uU]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s]+)/g, "$1[redacted]").replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]").replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2").replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");
+  const redacted = redactQueryAssignments(trimmed).replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]").replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'\"]+@/gi, "$1[redacted]@").replace(/((?:^|\s)(?:--user|--proxy-user)(?:=|\s+)|(?:^|\s)-[uU]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s]+)/g, "$1[redacted]").replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]").replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2").replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");
   return REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN.test(redacted) ? null : redacted;
 }
 function hasAmbiguousUnquotedAssignment(value) {

@@ -10,10 +10,50 @@ import {
 
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
 const SECRET_SENTINEL = "secret_sentinel_value";
+const QUERY_CREDENTIAL_SENTINEL = "query_secret_sentinel_value";
+const QUERY_COMMAND = `curl https://example.invalid/?access_token=${QUERY_CREDENTIAL_SENTINEL}&limit=10`;
+const REDACTED_QUERY_COMMAND = QUERY_COMMAND.replace(QUERY_CREDENTIAL_SENTINEL, "[redacted]");
+const QUERY_ACTION_ENVELOPE = {
+  schema_version: 1,
+  action_id: "action:query-credential",
+  harness: "codex",
+  event_name: "shell_command",
+  action_type: "shell_command",
+  workspace: null,
+  workspace_hash: null,
+  tool_name: null,
+  command: QUERY_COMMAND,
+  prompt_excerpt: null,
+  prompt_text: null,
+  target_paths: [],
+  network_hosts: [],
+  mcp_server: null,
+  mcp_tool: null,
+  package_manager: null,
+  package_name: null,
+  script_name: null,
+  raw_payload_redacted: {},
+};
+const QUERY_RECEIPT = {
+  receipt_id: "receipt:query-credential",
+  harness: "codex",
+  artifact_id: "codex:query-credential",
+  artifact_hash: "sha256:query-credential",
+  policy_decision: "allow",
+  capabilities_summary: "network read",
+  changed_capabilities: [],
+  provenance_summary: QUERY_COMMAND,
+  user_override: null,
+  artifact_name: "curl",
+  artifact_type: "command",
+  source_scope: null,
+  timestamp: "2026-07-19T12:00:00+00:00",
+  action_envelope_json: QUERY_ACTION_ENVELOPE,
+};
 
 const activity = {
   activity_id: "activity:01",
-  action_preview: "git status --short",
+  action_preview: REDACTED_QUERY_COMMAND,
   occurred_at: "2026-07-19T12:00:00+00:00",
   harness: "codex",
   hook_phase: "pre",
@@ -59,7 +99,7 @@ const dimensions = {
   latency: [{ value: "le_2_ms", count: 1 }],
 };
 
-async function mountCommandFixture(page: Page): Promise<{
+async function mountCommandFixture(page: Page, options: { receiptsPayload?: unknown } = {}): Promise<{
   activityQueries: string[];
   feedbackLabels: string[];
   setActivityDelay: (milliseconds: number) => void;
@@ -78,7 +118,7 @@ async function mountCommandFixture(page: Page): Promise<{
     let body: unknown = {};
     if (path.includes("/initialize")) body = { auth_token: "e2e-command-token" };
     else if (path.endsWith("/runtime")) body = freeStateSnapshot;
-    else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
+    else if (path.endsWith("/receipts")) body = options.receiptsPayload ?? emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
     else if (path.endsWith("/settings")) body = defaultSettingsPayload;
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
@@ -147,7 +187,8 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   const fixture = await mountCommandFixture(page);
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "git status --short", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: REDACTED_QUERY_COMMAND, exact: true })).toBeVisible();
+  await expect(page.getByText(QUERY_CREDENTIAL_SENTINEL)).toHaveCount(0);
   await expect(page.getByRole("cell", { name: "Allowed; execution not confirmed" })).toBeVisible();
   const trend = page.getByRole("img", { name: /2026-07-18: 0; 2026-07-19: 1$/ });
   await expect(trend).toBeVisible();
@@ -163,14 +204,34 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await detailsButton.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeFocused();
-  await expect(page.getByRole("complementary", { name: "Command activity detail" }).getByText("git status --short", { exact: true })).toBeVisible();
+  const detail = page.getByRole("complementary", { name: "Command activity detail" });
+  await expect(detail.getByText(REDACTED_QUERY_COMMAND, { exact: true })).toBeVisible();
   await expect(page.getByText("Other recorded reason")).toBeVisible();
+  await expect(detail.getByText(QUERY_CREDENTIAL_SENTINEL)).toHaveCount(0);
   await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
   await page.getByRole("button", { name: "Should not have interrupted" }).click();
   await expect.poll(() => fixture.feedbackLabels).toEqual(["should_not_have_interrupted"]);
   await page.getByRole("button", { name: "Close command activity detail" }).click();
   await expect(detailsButton).toBeFocused();
   await expect.poll(() => new URL(page.url()).searchParams.get("guardDaemon")).toBe("http://127.0.0.1:4175");
+});
+
+test("All actions redacts query credentials in receipt rows and details", async ({ page }) => {
+  await mountCommandFixture(page, { receiptsPayload: { items: [QUERY_RECEIPT] } });
+  await page.goto(`/evidence?${DAEMON}`);
+  await expect(page.getByRole("heading", { name: "All actions" })).toBeVisible();
+
+  const table = page.getByRole("table", { name: "Evidence actions" });
+  const row = table.getByRole("row").filter({ hasText: "curl https://example.invalid" });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(REDACTED_QUERY_COMMAND);
+  await expect(row).not.toContainText(QUERY_CREDENTIAL_SENTINEL);
+
+  await row.click();
+  const detail = page.getByRole("dialog", { name: "Evidence action detail" });
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText(REDACTED_QUERY_COMMAND);
+  await expect(detail).not.toContainText(QUERY_CREDENTIAL_SENTINEL);
 });
 
 test("Commands exposes bounded empty and error states", async ({ page }) => {

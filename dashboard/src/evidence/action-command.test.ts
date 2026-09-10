@@ -19,6 +19,17 @@ const shellEnvelope = (command: string): GuardActionEnvelope =>
 
 const syntheticUserinfo = ["fixture-user", "fixture-password"].join(":");
 const syntheticBasic = Buffer.from(syntheticUserinfo).toString("base64");
+for (const key of ["access_token", "access%5Ftoken", "API-KEY", "X-Amz-Signature", "sig"]) {
+  const command = `curl 'https://example.invalid/data?page=2&${key}=fixture-query-value&limit=3'`;
+  for (const entry of [
+    { ...receipt, action_envelope_json: shellEnvelope(command) },
+    { ...receipt, artifact_name: "curl", provenance_summary: command },
+  ]) {
+    const preview = resolveActionCommand(entry);
+    assert.ok(preview && !preview.includes("fixture-query-value"));
+    assert.ok(preview.includes("page=2") && preview.includes("limit=3"));
+  }
+}
 for (const [command, secret] of [
   [`curl -u ${syntheticUserinfo} https://example.invalid`, syntheticUserinfo],
   [`curl --user=${syntheticUserinfo} https://example.invalid`, syntheticUserinfo],

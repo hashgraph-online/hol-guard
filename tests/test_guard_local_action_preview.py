@@ -52,6 +52,15 @@ def test_preview_omits_malformed_shell_input() -> None:
     assert action_preview({"toolInput": {"command": 'tool --password "unterminated'}}) is None
 
 
+@pytest.mark.parametrize("key", ["access_token", "access%5Ftoken", "API-KEY", "X-Amz-Signature", "sig"])
+def test_preview_redacts_query_credentials(key: str) -> None:
+    command = f"curl 'https://example.invalid/data?page=2&{key}=fixture-query-value&limit=3'"
+    preview = action_preview({"command": command})
+    assert preview is not None
+    assert "fixture-query-value" not in preview
+    assert "https://example.invalid/data?page=2" in preview
+
+
 def test_preview_bounds_match_dashboard_utf16_units() -> None:
     preview = action_preview({"command": "echo " + "\U0001f600" * 2048})
     assert preview is not None
