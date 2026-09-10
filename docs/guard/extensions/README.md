@@ -51,7 +51,9 @@ Protection model meanings:
 | `command.cloud.aws` | Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination. | 1 | Built in |
 | `command.cloud.azure` | Reviews a validated Azure CLI operation matrix for permanent resource deletion across subscription, identity, network, compute, application, data, messaging, and AI services. | 1 | Built in |
 | `command.cloud.gcp` | Reviews a validated gcloud operation matrix for permanent resource deletion across stable and supported release tracks. | 1 | Built in |
-| `command.dns` | Reviews hosted-zone deletion through supported cloud CLIs. | 1 | Built in |
+| `command.dns.aws` | Reviews AWS Route 53 hosted-zone, record, health-check, traffic-policy, DNSSEC, and Resolver deletions. | 6 | Built in |
+| `command.dns.azure` | Reviews Azure public DNS, private DNS, virtual-network link, and DNS resolver deletion through Azure CLI. | 6 | Built in |
+| `command.dns.gcp` | Reviews gcloud Cloud DNS managed-zone, record-set, policy, and response-policy deletions and updates. | 6 | Built in |
 | `command.infrastructure-as-code` | Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi. | 1 | Built in |
 | `command.kubernetes-operations` | Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, and Helm lifecycle operations. | 28 | Built in |
 | `command.load-balancer` | Reviews load-balancer and forwarding-rule deletion through supported cloud CLIs. | 1 | Built in |

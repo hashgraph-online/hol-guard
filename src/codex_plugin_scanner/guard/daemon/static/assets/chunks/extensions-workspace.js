@@ -24,6 +24,7 @@ function parseExtensionRoute(pathname) {
   if (!encoded || encoded.includes("/")) return { kind: "invalid" };
   try {
     const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
     if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
     return { kind: "detail", extensionId: decoded };
   } catch {
@@ -3035,7 +3036,9 @@ const BY_EXTENSION_ID = {
   "command.platform.vercel": ["vercel"],
   "command.platform.netlify": ["netlify"],
   "command.platform.heroku": ["heroku"],
-  "command.dns": CLOUD_CLUSTER,
+  "command.dns.aws": ["aws"],
+  "command.dns.gcp": ["gcp"],
+  "command.dns.azure": ["azure"],
   "command.cdn": CLOUD_CLUSTER,
   "command.api-gateway": CLOUD_CLUSTER,
   "command.load-balancer": CLOUD_CLUSTER,
