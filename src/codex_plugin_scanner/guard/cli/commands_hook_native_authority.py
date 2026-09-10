@@ -122,12 +122,15 @@ def try_native_or_source_ref_hook(
     )
     if native_result is not None:
         if str(args.harness).strip().lower().replace("_", "-") == "grok":
+            wait_config = config
+            if wait_config is None:
+                wait_config = load_guard_config(context.guard_home, workspace=runtime_workspace)
             with suppress(OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
                 native_result = apply_grok_pretool_approval_wait(
                     native_result,
                     event_name=runtime_hook_event_name(payload),
                     store=store,
-                    timeout_seconds=load_guard_config(context.guard_home).approval_wait_timeout_seconds,
+                    timeout_seconds=wait_config.approval_wait_timeout_seconds,
                 )
         _emit("hook", native_result, getattr(args, "json", False))
         return 0

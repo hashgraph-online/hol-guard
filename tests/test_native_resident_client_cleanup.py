@@ -43,6 +43,11 @@ def test_stream_close_does_not_stop_shared_resident(
         "stop_native_resident",
         lambda *, state_dir, **_kwargs: stopped.append(state_dir) or True,
     )
+    monkeypatch.setattr(
+        client_module,
+        "_state_files",
+        lambda _state_dir: (tmp_path / "native-runtime" / "generation.json",),
+    )
     pool = _PersistentNativeClientPool(
         executable=tmp_path / "runtime",
         state_dir=tmp_path / "native-runtime",
