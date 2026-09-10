@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, safe_flag_variant, safe_option_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleMode, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
 
@@ -61,6 +61,7 @@ _MC_FLAGS = frozenset(
     {"--debug", "--disable-pager", "--dp", "--dtrace", "--insecure", "--json", "--no-color", "--quiet"}
 )
 _NONE: frozenset[str] = frozenset()
+_AWS_SKELETON_VALUES = frozenset({"input", "output", "yaml-input"})
 _WRITE = "Inspect the destination and confirm overwrite or versioning controls first."
 _READ = "Listing or reading objects does not change stored data."
 _DELETE = "List the exact objects and confirm retention or recovery controls before deletion."
@@ -121,15 +122,106 @@ def _join(*groups: AnyMatcher) -> AnyMatcher:
     return AnyMatcher(matchers=tuple(child for group in groups for child in group.matchers))
 
 
+def _s3api(*operations: str) -> AnyMatcher:
+    return _join(*(_aws("s3api", operation) for operation in operations))
+
+
 _AWS_DELETE = _join(
     _aws("s3", "rm"),
     _aws("s3", "rb"),
     _aws("s3", "sync", required=frozenset({"--delete"})),
-    _aws("s3api", "delete-object"),
-    _aws("s3api", "delete-objects"),
-    _aws("s3api", "delete-bucket"),
+    _s3api(
+        "abort-multipart-upload",
+        "delete-bucket",
+        "delete-bucket-analytics-configuration",
+        "delete-bucket-cors",
+        "delete-bucket-encryption",
+        "delete-bucket-intelligent-tiering-configuration",
+        "delete-bucket-inventory-configuration",
+        "delete-bucket-lifecycle",
+        "delete-bucket-metadata-configuration",
+        "delete-bucket-metadata-table-configuration",
+        "delete-bucket-metrics-configuration",
+        "delete-bucket-ownership-controls",
+        "delete-bucket-policy",
+        "delete-bucket-replication",
+        "delete-bucket-tagging",
+        "delete-bucket-website",
+        "delete-object",
+        "delete-object-annotation",
+        "delete-object-tagging",
+        "delete-objects",
+        "delete-public-access-block",
+    ),
 )
 _AWS_DRY = _join(_aws("s3", "rm"), _aws("s3", "sync", required=frozenset({"--delete"})))
+_AWS_OBJECT_WRITE = _s3api(
+    "complete-multipart-upload",
+    "copy-object",
+    "create-multipart-upload",
+    "put-object",
+    "rename-object",
+    "restore-object",
+    "update-object-encryption",
+    "upload-part",
+    "upload-part-copy",
+    "write-get-object-response",
+)
+_AWS_ACCESS_CONTROL = _s3api(
+    "put-bucket-abac",
+    "put-bucket-acl",
+    "put-bucket-policy",
+    "put-object-acl",
+    "put-object-legal-hold",
+    "put-object-lock-configuration",
+    "put-object-retention",
+    "put-public-access-block",
+)
+_AWS_BUCKET_CONFIG = _s3api(
+    "create-bucket-metadata-configuration",
+    "create-bucket-metadata-table-configuration",
+    "put-bucket-accelerate-configuration",
+    "put-bucket-analytics-configuration",
+    "put-bucket-cors",
+    "put-bucket-encryption",
+    "put-bucket-intelligent-tiering-configuration",
+    "put-bucket-inventory-configuration",
+    "put-bucket-lifecycle",
+    "put-bucket-lifecycle-configuration",
+    "put-bucket-logging",
+    "put-bucket-metrics-configuration",
+    "put-bucket-notification-configuration",
+    "put-bucket-ownership-controls",
+    "put-bucket-replication",
+    "put-bucket-request-payment",
+    "put-bucket-tagging",
+    "put-bucket-versioning",
+    "put-bucket-website",
+    "update-bucket-metadata-inventory-table-configuration",
+    "update-bucket-metadata-journal-table-configuration",
+)
+_AWS_OBJECT_TAGGING = _s3api("put-object-annotation", "put-object-tagging")
+_AWS_LIST = _join(
+    _aws("s3", "ls"),
+    _s3api(
+        "list-buckets",
+        "list-directory-buckets",
+        "list-multipart-uploads",
+        "list-object-versions",
+        "list-objects",
+        "list-objects-v2",
+        "list-parts",
+    ),
+)
+_AWS_GET = _s3api(
+    "get-bucket-acl",
+    "get-bucket-policy",
+    "get-object",
+    "get-object-acl",
+    "get-public-access-block",
+    "head-bucket",
+    "head-object",
+)
 _GCS_DELETE = _join(
     _gcloud("storage", "rm"),
     _gcloud("storage", "buckets", "delete"),
@@ -170,6 +262,16 @@ def _rule(
             variants.append(
                 safe_flag_variant(
                     dry_matcher, variant_id="dry-run", title=f"{title} dry run", flag=flag, inverse_flag=inverse
+                )
+            )
+        if family == "aws-s3":
+            variants.append(
+                safe_option_variant(
+                    matcher,
+                    variant_id="generate-cli-skeleton",
+                    title=f"{title} request skeleton",
+                    option="--generate-cli-skeleton",
+                    allowed_values=_AWS_SKELETON_VALUES,
                 )
             )
         variants.extend(extra_safe)
@@ -224,7 +326,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_AWS}.ls",
         "Amazon S3 list",
-        _aws("s3", "ls"),
+        _AWS_LIST,
         _AWS_ACT,
         "aws-s3",
         mode="disabled",
@@ -232,7 +334,13 @@ STORAGE_COMMAND_RULES = (
         safer=_READ,
         example="aws s3 ls",
     ),
-    _rule(f"{_AWS}.mb", "Amazon S3 make bucket", _aws("s3", "mb"), _AWS_ACT, "aws-s3"),
+    _rule(
+        f"{_AWS}.mb",
+        "Amazon S3 make bucket",
+        _join(_aws("s3", "mb"), _aws("s3api", "create-bucket")),
+        _AWS_ACT,
+        "aws-s3",
+    ),
     _rule(
         f"{_AWS}.mv",
         "Amazon S3 move",
@@ -251,6 +359,51 @@ STORAGE_COMMAND_RULES = (
     ),
     _rule(f"{_AWS}.sync", "Amazon S3 sync", _AWS_SYNC, _AWS_ACT, "aws-s3", dry=(_AWS_SYNC, "--dryrun", "--no-dryrun")),
     _rule(f"{_AWS}.website", "Amazon S3 website", _aws("s3", "website"), _AWS_ACT, "aws-s3"),
+    _rule(
+        f"{_AWS}.object-write",
+        "Amazon S3 object write",
+        _AWS_OBJECT_WRITE,
+        _AWS_ACT,
+        "aws-s3",
+        example="aws s3api put-object",
+    ),
+    _rule(
+        f"{_AWS}.access-control",
+        "Amazon S3 access control",
+        _AWS_ACCESS_CONTROL,
+        _AWS_ACT,
+        "aws-s3",
+        severity="critical",
+        safer="Inspect the bucket policy, ACL, and public-access block before changing access.",
+        example="aws s3api put-bucket-policy",
+    ),
+    _rule(
+        f"{_AWS}.bucket-configuration",
+        "Amazon S3 bucket configuration",
+        _AWS_BUCKET_CONFIG,
+        _AWS_ACT,
+        "aws-s3",
+        example="aws s3api put-bucket-versioning",
+    ),
+    _rule(
+        f"{_AWS}.object-tagging",
+        "Amazon S3 object tagging",
+        _AWS_OBJECT_TAGGING,
+        _AWS_ACT,
+        "aws-s3",
+        example="aws s3api put-object-tagging",
+    ),
+    _rule(
+        f"{_AWS}.get",
+        "Amazon S3 object and bucket reads",
+        _AWS_GET,
+        _AWS_ACT,
+        "aws-s3",
+        mode="disabled",
+        severity="low",
+        safer=_READ,
+        example="aws s3api get-object",
+    ),
     _rule(
         f"{_GCS}.deletion",
         "Google Cloud Storage deletion",
@@ -371,7 +524,10 @@ STORAGE_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id=_AWS,
         name="Amazon S3 command protection",
-        description="Reviews AWS CLI S3 commands including copy, list, sync, website, and deletion.",
+        description=(
+            "Reviews AWS CLI high-level S3 commands and S3 API object, bucket, access-control, "
+            "and configuration operations including copy, list, sync, website, and deletion."
+        ),
         action_classes=(_AWS_ACT,),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("List matching objects and inspect bucket recovery controls before deletion.",),
@@ -379,7 +535,10 @@ STORAGE_COMMAND_EXTENSION_SPECS = (
             "https://docs.aws.amazon.com/cli/latest/reference/s3/index.html",
             "https://docs.aws.amazon.com/cli/latest/reference/s3/rm.html",
             "https://docs.aws.amazon.com/cli/latest/reference/s3/sync.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/s3api/index.html",
             "https://docs.aws.amazon.com/cli/latest/reference/s3api/delete-objects.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/s3api/put-object.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-policy.html",
         ),
     ),
     CommandExtensionSpec(
