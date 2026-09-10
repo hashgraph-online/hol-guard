@@ -105,7 +105,7 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         example_command="pnpm unpublish example-package@1.0.0",
     ),
     rule(
-        extension_id="command.package-dotnet",
+        extension_id="command.package.dotnet",
         suffix="positional-project-package",
         title=".NET positional-project package mutation",
         description="Identifies `dotnet add <PROJECT> package <PACKAGE>` dependency ingress.",
@@ -133,8 +133,8 @@ COMMON_CLI_COMMAND_RULES_5: tuple[CommandSafetyRule, ...] = (
         suffix="alternate-runtime-execution",
         title="Alternate container runtime execution",
         description=(
-            "Identifies ordinary Podman and nerdctl run or exec operations that can mutate container or "
-            "host-adjacent state."
+            "Identifies ordinary Podman and nerdctl run or exec operations that can mutate "
+            "container or host-adjacent state."
         ),
         matcher=_ALT_CONTAINER_EXECUTION,
         action_class="docker-sensitive command",

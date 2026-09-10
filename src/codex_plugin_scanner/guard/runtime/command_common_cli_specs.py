@@ -70,7 +70,7 @@ COMMON_CLI_COMMAND_EXTENSION_SPECS: tuple[CommandExtensionSpec, ...] = (
         ("https://fluxcd.io/flux/cmd/",),
     ),
     spec(
-        "command.package-dotnet",
+        "command.package.dotnet",
         ".NET and NuGet package command protection",
         "Reviews package dependency ingress plus NuGet publication and deletion.",
         (".NET package mutation command", ".NET package publication command"),

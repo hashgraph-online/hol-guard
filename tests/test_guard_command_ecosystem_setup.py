@@ -195,11 +195,11 @@ def test_command_setup_plain_text_count_matches_recommendation_rows(
 
 
 def test_dotnet_package_extension_owns_rules_instead_of_delegating() -> None:
-    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.package-dotnet")
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.package.dotnet")
     assert extension is not None
     assert extension.delegated_protection is None
     assert {rule.rule_id for rule in extension.rules} == {
-        "command.package-dotnet.package-mutation",
-        "command.package-dotnet.positional-project-package",
-        "command.package-dotnet.publication",
+        "command.package.dotnet.package-mutation",
+        "command.package.dotnet.positional-project-package",
+        "command.package.dotnet.publication",
     }
