@@ -78,6 +78,17 @@ DNS_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "Azure DNS destructive command",
         "command.dns.azure.resolver-deletion",
     ),
+    (
+        "aws route53resolver delete-firewall-rule --firewall-rule-group-id rslvr-frg-123 "
+        "--firewall-domain-list-id rslvr-fdl-123",
+        "AWS DNS destructive command",
+        "command.dns.aws.resolver-deletion",
+    ),
+    (
+        "az dns-resolver inbound-endpoint delete -g app --dns-resolver-name office -n inbound",
+        "Azure DNS destructive command",
+        "command.dns.azure.resolver-deletion",
+    ),
 )
 
 DNS_SAFE_COMMANDS: tuple[str, ...] = (
@@ -130,6 +141,37 @@ def test_help_redirection_target_does_not_hide_dns_command(command: str, rule_id
 
 def test_lumped_dns_extension_is_not_registered() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.dns") is None
+
+
+def test_legacy_dns_controls_expand_onto_provider_extensions() -> None:
+    from codex_plugin_scanner.guard.runtime.command_dns_extensions import expand_legacy_dns_layers
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind,
+        ControlState,
+        ControlTarget,
+        ControlTargetKind,
+        ExtensionControl,
+        ExtensionControlLayer,
+    )
+
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest="a" * 64,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.EXTENSION, "command.dns"),
+                ControlState.DISABLED,
+            ),
+        ),
+    )
+    expanded = expand_legacy_dns_layers((layer,))
+    assert len(expanded) == 1
+    targets = {control.target.target_id for control in expanded[0].controls}
+    assert targets == {"command.dns.aws", "command.dns.gcp", "command.dns.azure"}
+    assert all(control.state is ControlState.DISABLED for control in expanded[0].controls)
 
 
 def test_dns_extensions_are_provider_specific() -> None:

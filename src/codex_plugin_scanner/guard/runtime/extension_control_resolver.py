@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from itertools import islice
 from typing import cast
 
+from .command_dns_extensions import expand_legacy_dns_layers
 from .command_extensions import CommandSafetyExtensionRegistry
 from .effect_contract import DecisionBasis
 from .effect_decision import DecisionFactor, DecisionFactorSource
@@ -77,7 +78,7 @@ def resolve_extension_controls(
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
 
-    layer_values = tuple(islice(layers, MAX_CONTROL_LAYERS + 1))
+    layer_values = expand_legacy_dns_layers(tuple(islice(layers, MAX_CONTROL_LAYERS + 1)))
     composed = compose_control_layers(layer_values)
     failures = set(composed.failures)
     if authority_failure is not None and surface is not ControlSurface.TRUSTED_LOCAL_PROOF:

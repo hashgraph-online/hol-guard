@@ -63,6 +63,12 @@ _GCLOUD_FLAGS = frozenset(
 )
 _AZURE_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
+AWS_CLI_GLOBAL_OPTIONS = _AWS_OPTIONS
+AWS_CLI_GLOBAL_FLAGS = _AWS_FLAGS
+GCLOUD_CLI_GLOBAL_OPTIONS = _GCLOUD_OPTIONS
+GCLOUD_CLI_GLOBAL_FLAGS = _GCLOUD_FLAGS
+AZURE_CLI_GLOBAL_OPTIONS = _AZURE_OPTIONS
+AZURE_CLI_GLOBAL_FLAGS = _AZURE_FLAGS
 _LDCLI_OPTIONS = frozenset(
     {
         "--access-token",

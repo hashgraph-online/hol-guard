@@ -2,67 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from . import command_managed_service_extensions as _cloud_cli
 from .command_extension_matchers import executable_matcher, executable_path_set_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
+from .extension_control_contract import (
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 
-_AWS_OPT = frozenset(
-    {
-        "--ca-bundle",
-        "--cli-binary-format",
-        "--cli-connect-timeout",
-        "--cli-read-timeout",
-        "--color",
-        "--endpoint-url",
-        "--output",
-        "--profile",
-        "--query",
-        "--region",
-    }
-)
-_AWS_FLAGS = frozenset(
-    {
-        "--cli-auto-prompt",
-        "--debug",
-        "--no-cli-auto-prompt",
-        "--no-cli-pager",
-        "--no-color",
-        "--no-paginate",
-        "--no-sign-request",
-        "--no-verify-ssl",
-    }
-)
-_GCLOUD_OPT = frozenset(
-    {
-        "--access-token-file",
-        "--account",
-        "--billing-project",
-        "--configuration",
-        "--filter",
-        "--flags-file",
-        "--flatten",
-        "--format",
-        "--impersonate-service-account",
-        "--limit",
-        "--page-size",
-        "--project",
-        "--sort-by",
-        "--trace-token",
-        "--verbosity",
-    }
-)
-_GCLOUD_FLAGS = frozenset(
-    {
-        "--log-http",
-        "--no-log-http",
-        "--quiet",
-        "-q",
-        "--user-output-enabled",
-        "--no-user-output-enabled",
-    }
-)
-_AZ_OPT = frozenset({"--output", "-o", "--query", "--subscription"})
-_AZ_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
+_AWS_OPT = _cloud_cli.AWS_CLI_GLOBAL_OPTIONS
+_AWS_FLAGS = _cloud_cli.AWS_CLI_GLOBAL_FLAGS
+_GCLOUD_OPT = _cloud_cli.GCLOUD_CLI_GLOBAL_OPTIONS
+_GCLOUD_FLAGS = _cloud_cli.GCLOUD_CLI_GLOBAL_FLAGS
+_AZ_OPT = _cloud_cli.AZURE_CLI_GLOBAL_OPTIONS
+_AZ_FLAGS = _cloud_cli.AZURE_CLI_GLOBAL_FLAGS
 _PUBLIC_RECORD_TYPES = ("a", "aaaa", "caa", "cname", "ds", "mx", "ns", "ptr", "srv", "tlsa", "txt")
 _PRIVATE_RECORD_TYPES = ("a", "aaaa", "cname", "mx", "ptr", "srv", "txt")
 _DELETE = "Export records and confirm recovery or delegation controls before deletion."
@@ -198,6 +156,8 @@ _AWS_RESOLVER = _aws_paths(
     ("route53resolver", "delete-resolver-rule"),
     ("route53resolver", "delete-resolver-query-log-config"),
     ("route53resolver", "delete-firewall-rule-group"),
+    ("route53resolver", "delete-firewall-rule"),
+    ("route53resolver", "delete-firewall-domain-list"),
     ("route53resolver", "delete-outpost-resolver"),
 )
 _GCP_ZONE = _gcloud("dns", "managed-zones", "delete")
@@ -218,7 +178,14 @@ _AZ_PRIVATE_RECORDS = _az_paths(
     *(("network", "private-dns", "record-set", record_type, "delete") for record_type in _PRIVATE_RECORD_TYPES)
 )
 _AZ_PRIVATE_LINK = _az("network", "private-dns", "link", "vnet", "delete")
-_AZ_RESOLVER = _az("dns-resolver", "delete")
+_AZ_RESOLVER = _az_paths(
+    ("dns-resolver", "delete"),
+    ("dns-resolver", "inbound-endpoint", "delete"),
+    ("dns-resolver", "outbound-endpoint", "delete"),
+    ("dns-resolver", "forwarding-ruleset", "delete"),
+    ("dns-resolver", "forwarding-rule", "delete"),
+    ("dns-resolver", "domain-list", "delete"),
+)
 
 DNS_COMMAND_RULES = (
     _rule(
@@ -423,3 +390,43 @@ DNS_COMMAND_EXTENSION_SPECS = (
         executables=("az",),
     ),
 )
+
+LEGACY_DNS_EXTENSION_ID = "command.dns"
+LEGACY_DNS_PERMISSION_ID = "command.dns.permission.delete"
+DNS_PROVIDER_EXTENSION_IDS = (_AWS, _GCP, _AZURE)
+DNS_ZONE_PERMISSION_IDS = (
+    f"{_AWS}.permission.zone-deletion",
+    f"{_GCP}.permission.zone-deletion",
+    f"{_AZURE}.permission.public-zone-deletion",
+)
+
+
+def expand_legacy_dns_target(target: ControlTarget) -> tuple[ControlTarget, ...]:
+    """Expand the retired aggregate DNS identifiers onto provider-specific targets."""
+
+    if target.kind is ControlTargetKind.EXTENSION and target.target_id == LEGACY_DNS_EXTENSION_ID:
+        return tuple(
+            ControlTarget(ControlTargetKind.EXTENSION, extension_id) for extension_id in DNS_PROVIDER_EXTENSION_IDS
+        )
+    if target.kind is ControlTargetKind.PERMISSION and target.target_id == LEGACY_DNS_PERMISSION_ID:
+        return tuple(
+            ControlTarget(ControlTargetKind.PERMISSION, permission_id) for permission_id in DNS_ZONE_PERMISSION_IDS
+        )
+    return (target,)
+
+
+def expand_legacy_dns_layers(layers: tuple[ExtensionControlLayer, ...]) -> tuple[ExtensionControlLayer, ...]:
+    """Rewrite persisted aggregate DNS controls onto the provider-specific replacements."""
+
+    rewritten: list[ExtensionControlLayer] = []
+    for layer in layers:
+        expanded: list[ExtensionControl] = []
+        seen: set[ControlTarget] = set()
+        for control in layer.controls:
+            for target in expand_legacy_dns_target(control.target):
+                if target in seen:
+                    continue
+                seen.add(target)
+                expanded.append(ExtensionControl(target, control.state))
+        rewritten.append(replace(layer, controls=tuple(expanded)))
+    return tuple(rewritten)

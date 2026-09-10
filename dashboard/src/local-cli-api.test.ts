@@ -133,6 +133,7 @@ assert.deepEqual(parseProtectionRoute("/extensions/local-cli/local-cli.cwv-py-ab
 assert.equal(parseProtectionRoute("/extensions/add").kind, "add-custom");
 assert.equal(addCustomExtensionHref(), "/extensions/add");
 assert.equal(parseProtectionRoute("/extensions/command.git").kind, "detail");
+assert.equal(parseProtectionRoute("/extensions/command.dns").kind, "overview");
 assert.equal(localCliHref("local-cli.cwv-py-abcdef12"), "/extensions/local-cli/local-cli.cwv-py-abcdef12");
 assert.equal(addedCustomExtensions(list.items).length, 1);
 assert.equal(suggestedCustomExtensions(list.items).length, 0);
