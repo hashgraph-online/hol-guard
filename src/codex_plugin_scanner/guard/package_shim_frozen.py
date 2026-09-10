@@ -46,22 +46,36 @@ def package_shim_shell_wrapper(python_path: Path) -> str:
     )
 
 
-def package_shim_wrapper_interpreter(wrapper: bytes) -> Path | None:
-    """Return the Guard CLI path baked into a package-shim wrapper, if any."""
-
+def _package_shim_wrapper_argv(wrapper: bytes) -> list[str] | None:
     try:
         text = wrapper.decode("utf-8")
     except UnicodeDecodeError:
         return None
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("exec "):
-            try:
-                tokens = shlex.split(stripped)
-            except ValueError:
-                return None
-            if len(tokens) >= 2 and tokens[0] == "exec":
-                return Path(tokens[1])
+        if not stripped.startswith("exec "):
+            continue
+        try:
+            tokens = shlex.split(stripped)
+        except ValueError:
+            return None
+        if len(tokens) >= 2 and tokens[0] == "exec":
+            return tokens
+    return None
+
+
+def package_shim_wrapper_interpreter(wrapper: bytes) -> Path | None:
+    """Return the Guard CLI path baked into a package-shim wrapper, if any."""
+
+    tokens = _package_shim_wrapper_argv(wrapper)
+    if tokens is not None:
+        return Path(tokens[1])
+    try:
+        text = wrapper.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    for line in text.splitlines():
+        stripped = line.strip()
         if stripped.startswith("#!") and not stripped.startswith("#!/bin/sh"):
             interpreter = stripped[2:].strip()
             if interpreter:
@@ -115,6 +129,22 @@ def _package_shim_base_command(content: bytes) -> list[str] | None:
     return None
 
 
+def _package_shim_wrapper_matches_generated(installed: bytes, expected: bytes) -> bool:
+    installed_argv = _package_shim_wrapper_argv(installed)
+    expected_argv = _package_shim_wrapper_argv(expected)
+    if installed_argv is None or expected_argv is None:
+        return False
+    return installed_argv[:1] + installed_argv[2:] == expected_argv[:1] + expected_argv[2:]
+
+
+def _package_shim_base_args_match_generated(installed: bytes, expected: bytes) -> bool:
+    installed_command = _package_shim_base_command(installed)
+    expected_command = _package_shim_base_command(expected)
+    if installed_command is None or expected_command is None:
+        return False
+    return installed_command[1:] == expected_command[1:]
+
+
 def package_shim_runtime_binding_is_current(
     *,
     shim_dir: Path,
@@ -163,16 +193,20 @@ def _package_shim_content_matches_generated(
     if current == expected:
         return True
     expected_wrapper = expected_package_shim_executable_bytes(python_source, shim_dir, command)
+    if not package_shim_needs_shell_wrapper():
+        return normalized_package_shim_content(installed_wrapper) == normalized_package_shim_content(expected_wrapper)
+    if not _package_shim_wrapper_matches_generated(installed_wrapper, expected_wrapper):
+        return False
     if normalized_package_shim_content(installed_wrapper) != normalized_package_shim_content(expected_wrapper):
         return False
-    if not package_shim_needs_shell_wrapper():
-        return True
     sidecar_path = frozen_package_shim_python_path(shim_dir, command)
     if sidecar_path.is_symlink() or not sidecar_path.is_file():
         return False
-    return normalized_package_shim_content(sidecar_path.read_bytes()) == normalized_package_shim_content(
-        python_source.encode("utf-8")
-    )
+    sidecar = sidecar_path.read_bytes()
+    expected_sidecar = python_source.encode("utf-8")
+    if not _package_shim_base_args_match_generated(sidecar, expected_sidecar):
+        return False
+    return normalized_package_shim_content(sidecar) == normalized_package_shim_content(expected_sidecar)
 
 
 def expected_package_shim_executable_bytes(
