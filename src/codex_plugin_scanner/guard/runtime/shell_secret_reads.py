@@ -16,19 +16,33 @@ from pathlib import Path
 from .command_model import CanonicalCommand, parse_shell_command
 from .home_path_text import expand_home, normalize_path
 from .secret_sensitivity import classify_secret_path
-from .shell_execution_context import model_shell_execution_context
+from .shell_execution_context import ShellExecutionSegment, model_shell_execution_context
 
-_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh", "fish", "source", "."})
-_SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh", ".fish", ".py", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl")
+_SHELLS = frozenset({"sh", "bash", "dash", "ash", "zsh", "ksh", "fish", "source", "."})
+_SCRIPT_SUFFIXES = (
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".ksh",
+    ".fish",
+    ".py",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".rb",
+    ".pl",
+)
 _OTHER_READERS = frozenset({"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"})
 _MAX_SCRIPTS = 16
 _MAX_DEPTH = 4
 _MAX_TOTAL_BYTES = 128 * 1024
+_MAX_INLINE_SCRIPT_BYTES = 64 * 1024
+_PYTHON_EXECUTABLE = re.compile(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
 _LITERAL_READ = re.compile(
     r"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bBun\.file|\bload_dotenv)"
     r"\s*\(\s*(['\"])([^'\"\n\x00]{1,4096})\1"
 )
-
 _PATH_READ = re.compile(
     r"\bPath\s*\(\s*(['\"])([^'\"\n\x00]{1,4096})\1\s*\)"
     r"\s*\.\s*(?:read_text|read_bytes|open)\s*\("
@@ -36,6 +50,8 @@ _PATH_READ = re.compile(
 
 
 def _literal_read_paths(source: str) -> tuple[str, ...]:
+    """Return bounded literal file operands from supported inline runtimes."""
+
     return tuple(match.group(2) for pattern in (_LITERAL_READ, _PATH_READ) for match in pattern.finditer(source))
 
 
@@ -48,20 +64,28 @@ class ShellReadAssessment:
 
     @property
     def requires_review(self) -> bool:
-        return bool(self.sensitive_paths) or self.script_requested
+        """Keep uncertainty fail-closed once this classifier owns the request."""
+
+        return bool(self.sensitive_paths) or self.script_requested or self.incomplete
 
     @property
     def identity_sha256(self) -> str:
+        """Bind approvals to both discovered paths and inspected source bytes."""
+
         payload = (self.sensitive_paths, self.script_sources, self.script_requested, self.incomplete)
         return hashlib.sha256(json.dumps(payload, separators=(",", ":")).encode()).hexdigest()
 
 
+def _python_executable(name: str) -> bool:
+    return _PYTHON_EXECUTABLE.fullmatch(name) is not None
+
+
 def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> str | None:
+    """Classify a literal or metadata-resolved alias without opening secrets."""
+
     match = classify_secret_path(value, cwd=cwd, home_dir=home_dir)
     if match is not None:
         return match.path
-    # An innocent filename may be a symlink to a credential. Resolve metadata
-    # only; never open the target to decide whether it is protected.
     lexical = Path(normalize_path(expand_home(value, home_dir), cwd))
     roots = tuple(root for root in (cwd, home_dir) if root is not None)
     if not lexical.is_absolute() or not any(lexical.is_relative_to(root) for root in roots):
@@ -74,8 +98,14 @@ def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> s
     return match.path if match is not None else None
 
 
-def direct_secret_read_paths(command: CanonicalCommand, *, cwd: Path | None, home_dir: Path | None) -> tuple[str, ...]:
-    # A grep pattern or a test filename containing "secret" is not a file read.
+def direct_secret_read_paths(
+    command: CanonicalCommand,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[str, ...]:
+    """Find direct credential reads for a command whose cwd is already proven."""
+
     from .secret_file_request_services.local_read_operands import _shell_segment_file_operand_tokens
 
     candidates: list[str] = []
@@ -87,29 +117,70 @@ def direct_secret_read_paths(command: CanonicalCommand, *, cwd: Path | None, hom
             candidates.extend(arg for arg in args if not arg.startswith("-"))
         if name in {"source", "."}:
             candidates.extend(args[:1])
-        if name in {"python", "python3", "node", "bun", "ruby", "perl"}:
+        if name in {"node", "bun", "ruby", "perl"} or _python_executable(name):
             for index, arg in enumerate(args[:-1]):
                 if arg in {"-c", "-e", "--eval", "-p", "--print"}:
                     candidates.extend(_literal_read_paths(args[index + 1]))
+                elif arg.startswith(("--eval=", "--print=")):
+                    candidates.extend(_literal_read_paths(arg.split("=", 1)[1]))
     for redirect in command.redirects:
         if redirect.operator in {"<", "<>"}:
             candidates.append(redirect.target)
     return tuple(
         dict.fromkeys(
-            path for value in candidates if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
+            path
+            for value in candidates
+            if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
         )
     )
 
 
+def _shell_command_string(executable: str, args: tuple[str, ...]) -> tuple[str | None, bool]:
+    """Return a literal shell command string and whether command-string mode was requested."""
+
+    name = "." if executable == "." else Path(executable).name.lower()
+    if name not in _SHELLS:
+        return None, False
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return None, False
+        if arg == "--command":
+            return (args[index + 1] if index + 1 < len(args) else None), True
+        if arg.startswith("--command="):
+            return arg.split("=", 1)[1], True
+        if arg == "-s":
+            return None, True
+        if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
+            cluster = arg[1:]
+            command_index = cluster.index("c")
+            attached = cluster[command_index + 1 :]
+            if attached:
+                return attached, True
+            return (args[index + 1] if index + 1 < len(args) else None), True
+        if arg in {"-o", "-O", "+o", "+O", "--rcfile", "--init-file"}:
+            index += 2
+            continue
+        if not arg.startswith(("-", "+")):
+            return None, False
+        index += 1
+    return None, False
+
+
 def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] | None:
+    """Return one literal local script operand that can be inspected safely."""
+
     name = "." if executable == "." else Path(executable).name.lower()
     is_shell = name in _SHELLS
-    is_interpreter = name in {"python", "python3", "node", "ruby", "perl"} or bool(re.fullmatch(r"python3\.\d+", name))
+    is_interpreter = name in {"node", "ruby", "perl"} or _python_executable(name)
     if is_shell or is_interpreter:
         index = 0
         while index < len(args):
             arg = args[index]
-            if arg in {"-c", "-e", "--eval", "-m", "-s", "--command"} or (
+            if arg in {"-c", "-e", "--eval", "-m", "--command"} or (
+                is_shell and arg == "-s"
+            ) or (
                 is_shell and arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]
             ):
                 return None
@@ -128,12 +199,64 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
         return args[0], False
     if executable.endswith(_SCRIPT_SUFFIXES) and ("/" in executable or executable.startswith(".")):
         return executable, executable.endswith((".sh", ".bash", ".zsh", ".ksh", ".fish"))
+    if "/" in executable or executable.startswith("."):
+        # A path-qualified local executable may be an extensionless shebang
+        # script or binary. Without an execution-bound identity, it is code.
+        return executable, False
     return None
 
 
+def _parse_execution_segment(
+    execution: ShellExecutionSegment,
+    *,
+    home_dir: Path | None,
+) -> CanonicalCommand | None:
+    """Parse one context segment only after its effective cwd is proven."""
+
+    if not execution.complete or execution.effective_cwd is None:
+        return None
+    return parse_shell_command(
+        execution.command_text,
+        cwd=execution.effective_cwd,
+        home_dir=home_dir,
+    )
+
+
+def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
+    """Recognize segments where losing cwd/parse alignment must fail closed."""
+
+    if not execution.tokens:
+        return False
+    executable = Path(execution.tokens[0]).name.lower()
+    readers = {
+        "cat",
+        "grep",
+        "egrep",
+        "fgrep",
+        "head",
+        "rg",
+        "sed",
+        "tail",
+        "source",
+        ".",
+        *_OTHER_READERS,
+        *_SHELLS,
+        "node",
+        "bun",
+        "ruby",
+        "perl",
+    }
+    return executable in readers or _python_executable(executable) or "/" in execution.tokens[0]
+
+
 def assess_shell_reads(
-    command_text: str, *, cwd: Path | None = None, home_dir: Path | None = None
+    command_text: str,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
 ) -> ShellReadAssessment:
+    """Assess direct and script-mediated reads without executing inspected code."""
+
     from .secret_file_request_services.credential_exfiltration import _read_small_runtime_text_file
     from .secret_file_request_services.sensitive_read_pipeline import _resolved_runtime_path, _runtime_read_roots
 
@@ -147,14 +270,44 @@ def assess_shell_reads(
     total_bytes = 0
     while pending:
         text, current_cwd, depth = pending.pop()
-        model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir)
-        sensitive.extend(direct_secret_read_paths(model, cwd=current_cwd, home_dir=home_dir))
-        context = model_shell_execution_context(text, cwd=current_cwd, workspace_root=cwd, home_dir=home_dir)
-        contexts = iter(context.segments)
-        for segment in model.segments:
-            execution = next(contexts, None)
-            effective_cwd = execution.effective_cwd if execution is not None else current_cwd
-            invocation = _script_operand(segment.executable or "", segment.arguments)
+        context = model_shell_execution_context(
+            text,
+            cwd=current_cwd,
+            workspace_root=cwd,
+            home_dir=home_dir,
+        )
+        if not context.segments:
+            if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
+                incomplete = True
+            continue
+        for execution in context.segments:
+            model = _parse_execution_segment(execution, home_dir=home_dir)
+            if model is None:
+                if _segment_may_touch_local_data(execution):
+                    requested = True
+                    incomplete = True
+                continue
+            effective_cwd = execution.effective_cwd
+            sensitive.extend(direct_secret_read_paths(model, cwd=effective_cwd, home_dir=home_dir))
+            if len(model.segments) > 1:
+                # Embedded commands are included by the command parser but do
+                # not have independently proven cwd contexts here.
+                requested = True
+                incomplete = True
+            primary = model.segments[0] if model.segments else None
+            if primary is None:
+                continue
+            payload, command_string_requested = _shell_command_string(
+                primary.executable or "",
+                primary.arguments,
+            )
+            if command_string_requested:
+                requested = True
+                if payload is None or len(payload.encode("utf-8")) > _MAX_INLINE_SCRIPT_BYTES or depth >= _MAX_DEPTH:
+                    incomplete = True
+                else:
+                    pending.append((payload, effective_cwd, depth + 1))
+            invocation = _script_operand(primary.executable or "", primary.arguments)
             if invocation is None:
                 continue
             requested = True
@@ -162,18 +315,25 @@ def assess_shell_reads(
             direct = _sensitive_path(operand, cwd=effective_cwd, home_dir=home_dir)
             if direct is not None:
                 sensitive.append(direct)
-                continue  # Never read the secret itself to classify the command.
-            # Sourcing makes the resulting shell state uncertain, but a single
-            # literal source still has the caller's known incoming directory.
+                continue
             literal_source = (
-                len(model.segments) == 1 and segment.executable in {"source", "."} and current_cwd is not None
+                len(model.segments) == 1
+                and primary.executable in {"source", "."}
+                and effective_cwd is not None
             )
-            if literal_source:
-                effective_cwd = current_cwd
-            if (not context.complete and not literal_source) or depth >= _MAX_DEPTH or len(visited) >= _MAX_SCRIPTS:
+            if (
+                (not context.complete and not literal_source)
+                or depth >= _MAX_DEPTH
+                or len(visited) >= _MAX_SCRIPTS
+            ):
                 incomplete = True
                 continue
-            source = _resolved_runtime_path(operand, cwd=effective_cwd, home_dir=home_dir, allowed_roots=roots)
+            source = _resolved_runtime_path(
+                operand,
+                cwd=effective_cwd,
+                home_dir=home_dir,
+                allowed_roots=roots,
+            )
             if source is None:
                 incomplete = True
                 continue
@@ -197,7 +357,6 @@ def assess_shell_reads(
                 continue
             sources.append((source_name, hashlib.sha256(encoded).hexdigest()))
             if is_shell:
-                # A script inherits the caller's cwd, not its own directory.
                 pending.append((payload, effective_cwd, depth + 1))
             else:
                 sensitive.extend(
