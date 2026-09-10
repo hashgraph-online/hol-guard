@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import time
 from collections.abc import Mapping
 from pathlib import PurePath
 
@@ -31,7 +30,8 @@ _PROCESS_HARNESSES = {
     "cursor": "cursor",
     "cursor-agent": "cursor",
     "zcode": "zcode",
-    "omp": "pi",
+    "pi": "pi",
+    "omp": "omp",
     "opencode": "opencode",
 }
 
@@ -45,25 +45,32 @@ def resolve_parent_process_harness() -> str | None:
     """
     if os.name == "nt":
         return None
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-axo", "pid=,ppid=,comm="],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=0.5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    parents: dict[int, tuple[int, str]] = {}
+    for row in result.stdout.splitlines():
+        try:
+            process, parent, executable = row.strip().split(maxsplit=2)
+            parents[int(process)] = (int(parent), executable)
+        except ValueError:
+            continue
     pid = os.getppid()
     seen: set[int] = set()
-    deadline = time.monotonic() + 0.5
     for _ in range(8):
-        remaining = deadline - time.monotonic()
-        if pid <= 1 or pid in seen or remaining <= 0:
+        if pid <= 1 or pid in seen or pid not in parents:
             break
         seen.add(pid)
-        try:
-            result = subprocess.run(
-                ["/bin/ps", "-p", str(pid), "-o", "ppid=,comm="],
-                capture_output=True, text=True, check=False, timeout=remaining,
-            )
-            if result.returncode != 0:
-                return None
-            parent, executable = result.stdout.strip().split(maxsplit=1)
-            pid = int(parent)
-        except (OSError, ValueError, subprocess.TimeoutExpired):
-            return None
+        pid, executable = parents[pid]
         harness = _PROCESS_HARNESSES.get(PurePath(executable).name.lower())
         if harness:
             return harness

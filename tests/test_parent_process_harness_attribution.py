@@ -7,25 +7,25 @@ import pytest
 from codex_plugin_scanner.guard.runtime import harness_attribution as attribution
 
 
-@pytest.mark.parametrize("executable,harness", [("codex", "codex"), ("omp", "pi"), ("zcode", "zcode")])
+@pytest.mark.parametrize("executable,harness", [("codex", "codex"), ("pi", "pi"), ("omp", "omp"), ("zcode", "zcode")])
 def test_nearest_harness_ancestor_without_reading_arguments(monkeypatch, executable, harness):
     monkeypatch.setattr(attribution.os, "name", "posix")
     monkeypatch.setattr(attribution.os, "getppid", lambda: 42)
-    rows = {"42": "41 /bin/zsh", "41": f"40 /opt/apps/{executable}"}
+    rows = f"42 41 /bin/zsh\n41 40 /opt/apps/{executable}\n40 1 /opt/apps/cursor"
     calls = []
 
     def run(command, **kwargs):
         calls.append(command)
-        assert command[-1] == "ppid=,comm="
+        assert command[-1] == "pid=,ppid=,comm="
         assert 0 < kwargs["timeout"] <= 0.5
-        return subprocess.CompletedProcess(command, 0, rows[command[2]], "")
+        return subprocess.CompletedProcess(command, 0, rows, "")
 
     monkeypatch.setattr(attribution.subprocess, "run", run)
     assert attribution.resolve_parent_process_harness() == harness
-    assert len(calls) == 2
+    assert len(calls) == 1
 
 
-@pytest.mark.parametrize("row", ["1 /bin/zsh", "42 /bin/zsh", "malformed", "1 /opt/codex-helper"])
+@pytest.mark.parametrize("row", ["42 1 /bin/zsh", "42 42 /bin/zsh", "malformed", "42 1 /opt/codex-helper"])
 def test_unknown_malformed_and_cyclic_ancestry_stays_unknown(monkeypatch, row):
     monkeypatch.setattr(attribution.os, "name", "posix")
     monkeypatch.setattr(attribution.os, "getppid", lambda: 42)

@@ -1388,6 +1388,7 @@ def _build_package_protect_authority(
     additional_current_action: object | None,
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
+    invoking_harness: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -1467,6 +1468,9 @@ def _build_package_protect_authority(
             additional_policy_context=additional_policy_context,
         )
         return _PackageProtectAuthority(
+            invoking_harness=invoking_harness
+            if invoking_harness is not None
+            else _resolve_local_supply_chain_harness(),
             intent=sanitized_intent,
             artifact=artifact,
             evaluation=evaluation,
@@ -1569,6 +1573,7 @@ def _final_package_protect_authority(
         additional_current_action=additional_action,
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
+        invoking_harness=initial.invoking_harness,
     )
     if current is None:
         reuse = evaluate_approval_reuse(
