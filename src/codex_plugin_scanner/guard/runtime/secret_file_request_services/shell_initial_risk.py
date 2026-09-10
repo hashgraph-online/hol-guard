@@ -148,7 +148,10 @@ def _direct_shell_risk_match(
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class="local secret read shell command",
-            reason="This command or a local script reads a protected credential file. Review the read before execution.",
+            reason=(
+                "This command or a local script reads a protected credential file. "
+                "Review the read before execution."
+            ),
             canonical_command=canonical_command,
             guard_default_action="require-reapproval",
             reason_code="shell_local_secret_read",
