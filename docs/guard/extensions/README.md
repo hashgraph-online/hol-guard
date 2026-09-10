@@ -47,8 +47,8 @@ Protection model meanings:
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
 | `command.api-gateway` | Reviews API and gateway deletion through supported cloud CLIs. | 1 | Built in |
-| `command.cdn` | Reviews distribution, profile, and endpoint deletion through supported cloud CLIs. | 1 | Built in |
-| `command.cloud.aws` | Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination. | 1 | Built in |
+| `command.cdn` | Reviews distribution, VPC origin, key-value-store, profile, and endpoint deletion through supported cloud CLIs. | 1 | Built in |
+| `command.cloud.aws` | Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination across identity, compute, data, delivery, and control-plane services. | 1 | Built in |
 | `command.cloud.azure` | Reviews a validated Azure CLI operation matrix for permanent resource deletion across subscription, identity, network, compute, application, data, messaging, and AI services. | 1 | Built in |
 | `command.cloud.gcp` | Reviews a validated gcloud operation matrix for permanent resource deletion across stable and supported release tracks. | 1 | Built in |
 | `command.dns.aws` | Reviews AWS Route 53 hosted-zone, record, health-check, traffic-policy, DNSSEC, and Resolver deletions. | 6 | Built in |
@@ -56,7 +56,7 @@ Protection model meanings:
 | `command.dns.gcp` | Reviews gcloud Cloud DNS managed-zone, record-set, policy, and response-policy deletions and updates. | 6 | Built in |
 | `command.infrastructure-as-code` | Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi. | 1 | Built in |
 | `command.kubernetes-operations` | Reviews cluster mutations, remote execution, file transfer, tunnels, certificate decisions, and Helm lifecycle operations. | 28 | Built in |
-| `command.load-balancer` | Reviews load-balancer and forwarding-rule deletion through supported cloud CLIs. | 1 | Built in |
+| `command.load-balancer` | Reviews load-balancer, target-group, listener, and forwarding-rule deletion through supported cloud CLIs. | 1 | Built in |
 
 ### Data and resilience
 
@@ -72,7 +72,7 @@ Protection model meanings:
 | `command.database.redis` | Reviews Redis key deletion and database flush commands. | 1 | Built in |
 | `command.database.sqlite` | Reviews SQLite restore operations that replace database content. | 1 | Built in |
 | `command.database.supabase` | Reviews database reset and migration rollback commands. | 1 | Built in |
-| `command.storage.aws-s3` | Reviews AWS CLI S3 commands including copy, list, sync, website, and deletion. | 8 | Built in |
+| `command.storage.aws-s3` | Reviews AWS CLI high-level S3 commands and S3 API object, bucket, access-control, and configuration operations including copy, list, sync, website, and deletion. | 14 | Built in |
 | `command.storage.azure-blob` | Reviews Azure CLI storage commands including upload, list, copy, and deletion. | 6 | Built in |
 | `command.storage.google-cloud` | Reviews Google CLI storage commands including copy, list, sync, and deletion. | 7 | Built in |
 | `command.storage.minio` | Reviews MinIO Client commands including copy, list, mirror, and deletion. | 7 | Built in |
@@ -97,12 +97,12 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
-| `command.email` | Reviews email identity and contact-list deletion through AWS CLI. | 1 | Built in |
+| `command.email` | Reviews email identity, template, configuration-set, and contact-list deletion through AWS CLI. | 1 | Built in |
 | `command.feature-flags` | Reviews permanent feature-flag deletion through LaunchDarkly CLI. | 1 | Built in |
 | `command.messaging.kafka` | Reviews Kafka topic, group, offset, and record deletion operations. | 1 | Built in |
 | `command.messaging.nats` | Reviews NATS stream, consumer, key-value, and object-store removal operations. | 1 | Built in |
 | `command.messaging.rabbitmq` | Reviews RabbitMQ deletion and broker reset operations. | 1 | Built in |
-| `command.monitoring` | Reviews alarm and alert deletion through supported cloud CLIs. | 1 | Built in |
+| `command.monitoring` | Reviews alarm, dashboard, metric-stream, and alert deletion through supported cloud CLIs. | 1 | Built in |
 | `command.payment` | Reviews product, coupon, customer, and webhook endpoint deletion through Stripe CLI. | 1 | Built in |
 | `command.search.elasticsearch` | Reviews explicit DELETE requests to recognizable Elasticsearch API targets. | 1 | Built in |
 

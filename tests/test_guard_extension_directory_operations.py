@@ -60,6 +60,12 @@ def test_aws_s3_operations_list_commands_and_default_floors() -> None:
         "command.storage.aws-s3.presign",
         "command.storage.aws-s3.sync",
         "command.storage.aws-s3.website",
+        "command.storage.aws-s3.object-write",
+        "command.storage.aws-s3.access-control",
+        "command.storage.aws-s3.bucket-configuration",
+        "command.storage.aws-s3.object-tagging",
+        "command.storage.aws-s3.download",
+        "command.storage.aws-s3.get",
     }
     deletion = operations["command.storage.aws-s3.deletion"]
     assert deletion["severity"] == "critical"
@@ -77,12 +83,22 @@ def test_aws_s3_operations_list_commands_and_default_floors() -> None:
         "aws s3api delete-bucket",
     ):
         assert command in commands
-    assert deletion["safeVariants"] == ["--help", "--dryrun"]
+    assert deletion["safeVariants"] == ["--help", "--dryrun", "generate-cli-skeleton"]
     listing = operations["command.storage.aws-s3.ls"]
     assert listing["defaultMode"] == "disabled"
     assert listing["defaultAction"] == "allow"
-    assert listing["commands"] == ["aws s3 ls"]
+    assert "aws s3 ls" in listing["commands"]
+    assert "aws s3api list-objects-v2" in listing["commands"]
     assert operations["command.storage.aws-s3.sync"]["commands"] == ["aws s3 sync"]
+    assert "aws s3api create-bucket" in operations["command.storage.aws-s3.mb"]["commands"]
+    assert "aws s3api put-object" in operations["command.storage.aws-s3.object-write"]["commands"]
+    assert (
+        "aws s3api update-bucket-metadata-annotation-table-configuration"
+        in operations["command.storage.aws-s3.bucket-configuration"]["commands"]
+    )
+    assert operations["command.storage.aws-s3.download"]["commands"] == ["aws s3api get-object"]
+    assert operations["command.storage.aws-s3.download"]["defaultMode"] == "review"
+    assert operations["command.storage.aws-s3.access-control"]["severity"] == "critical"
 
 
 def test_all_matcher_and_pipeline_signatures_stay_conjunctive() -> None:
