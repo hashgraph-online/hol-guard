@@ -22414,7 +22414,10 @@ function TechnicalSection({ receipt }) {
         }
       ),
       receipt.source_scope && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Source scope", value: receipt.source_scope }),
-      receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: receipt.provenance_summary }),
+      receipt.provenance_summary && (() => {
+        const provenance = redactDisplayText(receipt.provenance_summary);
+        return provenance ? /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: provenance }) : null;
+      })(),
       (receipt.changed_capabilities ?? []).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         DetailRow,
         {
@@ -22611,9 +22614,9 @@ function EvidenceActionDetail({
               primarySignal.false_positive_hint
             ] })
           ] }),
-          receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
+          receipt.provenance_summary && redactDisplayText(receipt.provenance_summary) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Provenance" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.provenance_summary })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: redactDisplayText(receipt.provenance_summary) })
           ] }),
           receipt.diff_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 mb-1", children: [

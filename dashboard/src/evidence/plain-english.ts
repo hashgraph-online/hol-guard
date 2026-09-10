@@ -41,7 +41,7 @@ const REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN =
   /(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*\[redacted\][^"']+\1/i;
 
 /** Keep command/provenance structure visible without guessing at ambiguous secret values. */
-function redactDisplayText(value: string): string | null {
+export function redactDisplayText(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
 
