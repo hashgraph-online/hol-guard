@@ -210,6 +210,34 @@ def test_grok_daemon_review_translation_keeps_wait_metadata() -> None:
     assert payload["primary_approval_request_id"] == "req-1"
 
 
+def test_grok_bridge_clamps_wait_to_remaining_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    seen: dict[str, object] = {}
+
+    def capture(response: dict[str, object], **kwargs: object) -> dict[str, object]:
+        seen["timeout_seconds"] = kwargs["timeout_seconds"]
+        return response
+
+    monkeypatch.setattr(grok_approval_resume, "apply_grok_pretool_approval_wait", capture)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 80\n", encoding="utf-8")
+    bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=guard_home,
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=json.dumps({"decision": "deny", "policy_action": "review"}),
+        stderr="",
+        exit_code=2,
+        timeout_seconds=2.9,
+    )
+    assert seen["timeout_seconds"] == 2
+
+
 def test_grok_bridge_preserves_daemon_result_when_store_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
