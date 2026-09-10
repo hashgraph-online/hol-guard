@@ -49,6 +49,8 @@ jobs:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Set up Python
@@ -92,6 +94,10 @@ jobs:
 
       - name: Commit regenerated decision evidence
         run: |
+          cp tests/fixtures/guard-command-corpus/decision-diff-report.json "$RUNNER_TEMP/decision-diff-report.json"
+          git fetch origin "${{ github.head_ref }}"
+          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
+          cp "$RUNNER_TEMP/decision-diff-report.json" tests/fixtures/guard-command-corpus/decision-diff-report.json
           if git diff --quiet -- tests/fixtures/guard-command-corpus/decision-diff-report.json; then
             exit 0
           fi
