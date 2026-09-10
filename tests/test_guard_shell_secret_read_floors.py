@@ -25,9 +25,16 @@ from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_r
         "grep API_KEY .env",
         "rg -n TOKEN .env",
         "cat < .env",
+        "read value < .env",
         "source .env",
         ". .env",
         "/bin/cat .env",
+        "command cat .env",
+        "command -p cat .env",
+        "command -- cat .env",
+        "exec cat .env",
+        "exec -- cat .env",
+        "exec -a reader cat .env",
         "bash -c 'cat .env'",
         "ksh -c 'cat .env'",
         "ash -c 'cat .env'",
@@ -57,6 +64,8 @@ def test_secret_reads_have_an_explicit_floor(command: str, tmp_path: Path) -> No
         "grep -e .env README.md",
         "cat docs/environment.md",
         "test -e .env && echo exists || echo absent",
+        "command -v cat",
+        "command -V cat",
         "bunx vitest run __tests__/guard-extension-public-promotions.test.ts --reporter=dot",
     ),
 )
@@ -74,6 +83,8 @@ def test_mentions_and_test_arguments_are_not_secret_reads(command: str, tmp_path
         "ash scripts/check.sh",
         "./scripts/check.sh",
         "source scripts/check.sh",
+        "command bash scripts/check.sh",
+        "exec bash scripts/check.sh",
     ),
 )
 def test_local_script_reads_are_found_without_a_network_sink(launch: str, tmp_path: Path) -> None:
@@ -127,6 +138,17 @@ def test_python_flags_before_script_do_not_hide_local_execution(tmp_path: Path) 
         assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
 
 
+def test_python_module_mode_is_mutable_local_execution(tmp_path: Path) -> None:
+    (tmp_path / "reader.py").write_text('open(".env").read()\n')
+    assessment = assess_shell_reads("python3 -I -m reader", cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.script_requested
+    assert assessment.incomplete
+    assert assessment.requires_review
+    evaluation = evaluate_command("python3 -I -m reader", cwd=tmp_path, home_dir=tmp_path)
+    assert evaluation.minimum_action == "review"
+    assert evaluation.decision_plane.action == "require-reapproval"
+
+
 def test_extensionless_local_executable_requires_review(tmp_path: Path) -> None:
     script = tmp_path / "check"
     script.write_text("#!/bin/sh\ncat .env\n")
@@ -135,6 +157,13 @@ def test_extensionless_local_executable_requires_review(tmp_path: Path) -> None:
     assert assessment.script_requested
     assert assessment.requires_review
     assert evaluate_command("./check", cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+
+
+def test_ambiguous_execution_builtin_fails_closed(tmp_path: Path) -> None:
+    assessment = assess_shell_reads("command --unknown cat .env", cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.script_requested
+    assert assessment.incomplete
+    assert assessment.requires_review
 
 
 def test_post_cd_reads_use_the_execution_directory(tmp_path: Path) -> None:
@@ -150,6 +179,13 @@ def test_post_cd_reads_use_the_execution_directory(tmp_path: Path) -> None:
     (subdir / "notes.txt").symlink_to(tmp_path / ".env")
     alias = assess_shell_reads("cd subdir && cat notes.txt", cwd=tmp_path, home_dir=tmp_path)
     assert alias.sensitive_paths == (str(tmp_path / ".env"),)
+
+
+def test_unresolved_cwd_input_redirect_fails_closed(tmp_path: Path) -> None:
+    assessment = assess_shell_reads('cd "$DIR" && read value < .env', cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.script_requested
+    assert assessment.incomplete
+    assert assessment.requires_review
 
 
 def test_script_changes_change_the_request_identity(tmp_path: Path) -> None:
