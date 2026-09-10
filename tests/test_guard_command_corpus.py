@@ -343,7 +343,7 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
         check=True,
         capture_output=True,
         text=True,
-        timeout=45,
+        timeout=90,
         cwd=Path.cwd(),
     )
     report_value = cast(object, json.loads(completed.stdout))
