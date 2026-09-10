@@ -46,11 +46,13 @@ def _stub_approval_daemon(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("origin", ["environment", "parent_process"])
+@pytest.mark.parametrize("package_manager", ["npm", "bun"])
 def test_guard_protect_attributes_package_requests_to_invoking_harness(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
     origin: str,
+    package_manager: str,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -77,7 +79,7 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
             str(workspace_dir),
             "--json",
             "--dry-run",
-            "npm",
+            package_manager,
             "install",
             "reviewpkg",
         ]
