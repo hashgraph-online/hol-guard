@@ -146,8 +146,8 @@ COMMON_CLI_COMMAND_RULES_3: tuple[CommandSafetyRule, ...] = (
         suffix="credential-mutation",
         title="Cloud credential mutation",
         description=(
-            "Identifies access-key or service-account credential creation, deletion, or reset "
-            "without stealing provider-owned deletion operations."
+            "Identifies access-key or service-account credential creation, deletion, or reset without stealing "
+            "provider-owned deletion operations."
         ),
         matcher=_CLOUD_CREDENTIAL_MUTATION_REFINED,
         action_class="cloud credential mutation command",

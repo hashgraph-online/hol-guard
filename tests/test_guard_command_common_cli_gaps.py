@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
@@ -56,7 +57,7 @@ REVIEWED_GAP_CASES: tuple[tuple[str, str, str], ...] = (
     (
         "dotnet add MyApp.csproj package Newtonsoft.Json",
         ".NET package mutation command",
-        "command.package.dotnet.positional-project-package",
+        "command.package-dotnet.positional-project-package",
     ),
     (
         "yarn publish",
@@ -215,9 +216,8 @@ def test_ansible_check_mode_is_not_globally_exempt(tmp_path: Path) -> None:
     )
 
     assert payload["status"] == "review"
-    assert "command.configuration-management.ansible.remote-execution" in {
-        rule["rule_id"] for rule in payload["rules"]
-    }
+    rules = cast(list[dict[str, object]], payload["rules"])
+    assert "command.configuration-management.ansible.remote-execution" in {rule["rule_id"] for rule in rules}
 
 
 def test_invalid_openshift_dry_run_value_does_not_create_safe_bypass(tmp_path: Path) -> None:
@@ -228,6 +228,5 @@ def test_invalid_openshift_dry_run_value_does_not_create_safe_bypass(tmp_path: P
     )
 
     assert payload["status"] == "review"
-    assert "command.kubernetes-operations.openshift-mutation" in {
-        rule["rule_id"] for rule in payload["rules"]
-    }
+    rules = cast(list[dict[str, object]], payload["rules"])
+    assert "command.kubernetes-operations.openshift-mutation" in {rule["rule_id"] for rule in rules}
