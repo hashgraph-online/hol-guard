@@ -1,4 +1,4 @@
-name: PR 2870 decision report export
+name: PR 2870 decision report refresh
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - fix/secret-read-floors-and-contained-vitest
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  refresh:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
@@ -24,14 +24,18 @@ jobs:
           version: "0.9.26"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --python 3.12
-      - name: Generate decision report
+      - name: Refresh decision report
         run: >-
           uv run --no-sync python -c
-          'from pathlib import Path; from tests.guard_command_decision_diff import canonical_json_bytes, generate_decision_diff_report; Path("generated-decision-diff-report.json").write_bytes(canonical_json_bytes(generate_decision_diff_report()))'
-      - name: Upload decision report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pr2870-decision-report
-          path: generated-decision-diff-report.json
-          if-no-files-found: error
-          retention-days: 1
+          'from tests.guard_command_decision_diff import REPORT_PATH, canonical_json_bytes, generate_decision_diff_report; REPORT_PATH.write_bytes(canonical_json_bytes(generate_decision_diff_report()))'
+      - name: Commit refreshed report
+        shell: bash
+        run: |
+          if git diff --quiet -- tests/fixtures/guard-command-corpus/decision-diff-report.json; then
+            exit 0
+          fi
+          git config user.name "kantorcodes"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git add tests/fixtures/guard-command-corpus/decision-diff-report.json
+          git commit -m "test: refresh command decision diff report"
+          git push origin HEAD:fix/secret-read-floors-and-contained-vitest
