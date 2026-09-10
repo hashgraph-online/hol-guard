@@ -59,6 +59,27 @@ VTTFORGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "VTTForge migration write command",
         "command.vttforge.migrate-write",
     ),
+    # Unresolved expansions may supply the writing flag, so they are reviewed.
+    (
+        "vttforge lint $FLAGS",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "vttforge lint ./my-system ${LINT_FLAGS}",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "vttforge migrate $(echo --write)",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
+    (
+        "vttforge migrate ./my-system `cat flags`",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
 )
 
 
