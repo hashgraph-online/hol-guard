@@ -191,6 +191,25 @@ def test_grok_bridge_rewrites_daemon_review_after_wait(
     assert json.loads(stdout)["decision"] == "allow"
 
 
+def test_grok_daemon_review_translation_keeps_wait_metadata() -> None:
+    stdout, _stderr, code = bounded_cli_hook_bridge._daemon_response_to_native(
+        {
+            "policy_action": "review",
+            "reason": "needs review",
+            "approval_requests": [{"request_id": "req-1"}],
+            "primary_approval_request_id": "req-1",
+        },
+        harness="grok",
+        event_name="PreToolUse",
+    )
+    payload = json.loads(stdout)
+    assert code == 2
+    assert payload["decision"] == "deny"
+    assert payload["policy_action"] == "review"
+    assert payload["approval_requests"] == [{"request_id": "req-1"}]
+    assert payload["primary_approval_request_id"] == "req-1"
+
+
 def test_grok_bridge_preserves_daemon_result_when_store_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

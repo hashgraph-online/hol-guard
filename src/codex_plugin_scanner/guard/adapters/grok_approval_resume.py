@@ -91,7 +91,7 @@ def wait_for_grok_live_approval(
         return None
     wait_items = wait_result.get("items")
     resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
-    if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
+    if not resolved_items or any(str(item.get("resolution_action")) != "allow" for item in resolved_items):
         response_payload["review_hint"] = "HOL Guard kept this Grok action blocked."
         return "block"
     response_payload["browser_resolution_request_id"] = request_ids[0]

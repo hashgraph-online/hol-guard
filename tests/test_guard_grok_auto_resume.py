@@ -128,6 +128,32 @@ def test_grok_live_wait_blocks_after_denial(tmp_path: Path) -> None:
     assert decision == "block"
 
 
+def test_grok_live_wait_requires_explicit_allow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request(tmp_path, "req-grok-deny"), "2026-05-08T10:00:00+00:00")
+    payload: dict[str, object] = {"approval_requests": [{"request_id": "req-grok-deny"}]}
+    monkeypatch.setattr(
+        grok_approval_resume,
+        "wait_for_approval_requests",
+        lambda **_kwargs: {
+            "resolved": True,
+            "pending_request_ids": [],
+            "items": [{"resolution_action": "deny"}],
+        },
+    )
+    decision = wait_for_grok_live_approval(
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        response_payload=payload,
+        store=store,
+        timeout_seconds=4,
+        json_mode=False,
+    )
+    assert decision == "block"
+
+
 def test_grok_live_wait_accepts_aliased_pretool_event_name(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request(tmp_path, "req-grok-alias"), "2026-05-08T10:00:00+00:00")

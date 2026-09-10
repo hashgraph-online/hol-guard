@@ -431,8 +431,22 @@ def _daemon_response_to_native(
         payload["hookSpecificOutput"] = hook_specific_output
         if canonical in {"grok", "openclaw"} and permission_decision is not None:
             payload["decision"] = "allow" if permission_decision == "allow" else "deny"
+            payload["policy_action"] = policy_action
             if permission_decision != "allow" and reason:
                 payload["reason"] = reason
+            for key in (
+                "reason_code",
+                "approval_url",
+                "approval_request_id",
+                "primary_approval_request_id",
+                "primary_approval_url",
+                "guardApprovalRequestId",
+                "guardApprovalUrl",
+                "approval_requests",
+            ):
+                value = daemon_response.get(key)
+                if value is not None:
+                    payload[key] = value
 
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
@@ -469,7 +483,7 @@ def _apply_grok_bridge_approval_wait(
             store=GuardStore(guard_home),
             timeout_seconds=load_guard_config(guard_home).approval_wait_timeout_seconds,
         )
-    except (OSError, RuntimeError, ValueError, sqlite3.Error):
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
         return stdout, stderr, exit_code
     rewritten = json.dumps(updated, ensure_ascii=True, separators=(",", ":")) + "\n"
     if updated.get("decision") == "allow":
