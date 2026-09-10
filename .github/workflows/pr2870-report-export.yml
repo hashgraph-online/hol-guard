@@ -1,0 +1,37 @@
+name: PR 2870 decision report export
+
+on:
+  push:
+    branches:
+      - fix/secret-read-floors-and-contained-vitest
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Generate decision report
+        run: >-
+          uv run --no-sync python -c
+          'from pathlib import Path; from tests.guard_command_decision_diff import canonical_json_bytes, generate_decision_diff_report; Path("generated-decision-diff-report.json").write_bytes(canonical_json_bytes(generate_decision_diff_report()))'
+      - name: Upload decision report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr2870-decision-report
+          path: generated-decision-diff-report.json
+          if-no-files-found: error
+          retention-days: 1
