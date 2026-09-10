@@ -96,3 +96,13 @@ def live_hook_approval_context(
     if not tokenized or tokenized == review_url:
         return message
     return message.replace(review_url, tokenized, 1)
+
+
+def live_approval_browser_url(url: str, *, guard_home: Path) -> str | None:
+    """Return a signed loopback link for live presentation, never persisted output."""
+    if not is_loopback_approval_url(url):
+        return None
+    token = load_guard_daemon_auth_token(guard_home)
+    if not token:
+        return None
+    return build_approval_browser_url(url, auth_token=token)

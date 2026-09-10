@@ -138,6 +138,10 @@ export function CommandActivityDetail(props: {
         </button>
       </div>
 
+      <div className="min-w-0 mb-4">
+        <h3 className="text-sm font-medium text-brand-dark">Command</h3>
+        {props.activity.action_preview ? <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-sm text-brand-dark">{props.activity.action_preview}</pre> : <p className="mt-2 text-sm text-slate-600">Command text was not retained for this record.</p>}
+      </div>
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <EvidenceField label="Decision" value={commandDecisionLabel(props.activity.policy_action)} />
         <EvidenceField label="Execution proof" value={commandExecutionLabel(props.activity.execution_status)} />

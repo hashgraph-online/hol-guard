@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { GUARD_AUTH_REQUIRED } from "./guard-auth-error";
 
 import {
   buildDemoRuntimeSnapshot,
@@ -1527,7 +1528,7 @@ assert(
   "L079dc: connect flow posts to package firewall connect route"
 );
 assert(
-  connectFlowError instanceof Error && connectFlowError.message.includes("Guard session missing"),
+  connectFlowError instanceof Error && connectFlowError.message === GUARD_AUTH_REQUIRED,
   "L079dc: connect flow surfaces missing dashboard session"
 );
 

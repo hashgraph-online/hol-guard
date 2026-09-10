@@ -313,9 +313,13 @@ class TestZCodeInstallUninstall:
         hooks = payload["hooks"]
         # Current ZCode requires hook groups nested under hooks.events; the
         # legacy flat layout makes ZCode reject the whole config file.
-        assert set(hooks.keys()) == {"events"}
+        assert hooks["enabled"] is True
+        assert set(hooks.keys()) == {"enabled", "events"}
+        state_path = ctx.guard_home / "managed" / "zcode" / "install.state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["hooks_enabled_before"] == {"present": False, "value": None}
         events = hooks["events"]
-        assert set(events.keys()) == {"PreToolUse", "UserPromptSubmit"}
+        assert set(events.keys()) == {"PreToolUse", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure"}
         pretool_matchers = {
             entry["matcher"]
             for entry in events["PreToolUse"]
@@ -331,6 +335,52 @@ class TestZCodeInstallUninstall:
             if isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
         ]
         assert managed_commands, "Guard-managed PreToolUse handlers must be present"
+
+    def test_install_enables_hooks_and_uninstall_restores_disabled_setting(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        _write_cli_config(ctx.home_dir, {"hooks": {"enabled": False}})
+        self._patch_shims(monkeypatch, ctx)
+        adapter = ZCodeHarnessAdapter()
+
+        adapter.install(ctx)
+        config_path = ctx.home_dir / ".zcode" / "cli" / "config.json"
+        installed = json.loads(config_path.read_text(encoding="utf-8"))
+        assert installed["hooks"]["enabled"] is True
+
+        adapter.uninstall(ctx)
+        restored = json.loads(config_path.read_text(encoding="utf-8"))
+        assert restored["hooks"] == {"enabled": False}
+
+    def test_uninstall_does_not_clobber_user_enabled_change(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        self._patch_shims(monkeypatch, ctx)
+        adapter = ZCodeHarnessAdapter()
+        adapter.install(ctx)
+        config_path = ctx.home_dir / ".zcode" / "cli" / "config.json"
+
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        payload["hooks"]["enabled"] = False
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        adapter.uninstall(ctx)
+
+        changed = json.loads(config_path.read_text(encoding="utf-8"))
+        assert changed["hooks"]["enabled"] is False
+
+    def test_repeated_install_preserves_original_enabled_snapshot(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        _write_cli_config(ctx.home_dir, {"hooks": {"enabled": False}})
+        self._patch_shims(monkeypatch, ctx)
+        adapter = ZCodeHarnessAdapter()
+
+        adapter.install(ctx)
+        adapter.install(ctx)
+        state_path = ctx.guard_home / "managed" / "zcode" / "install.state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["hooks_enabled_before"] == {"present": True, "value": False}
+
+        adapter.uninstall(ctx)
+        restored = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
+        assert restored["hooks"] == {"enabled": False}
 
     def test_install_hook_command_uses_bounded_bridge_for_interpreters(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -480,8 +530,8 @@ class TestZCodeInstallUninstall:
         first = (ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8")
         adapter.install(ctx)
         second = (ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8")
-        assert first.count(GUARD_MANAGED_MARKER) == len(ZCODE_PRETOOL_MATCHERS) + 1
-        assert second.count(GUARD_MANAGED_MARKER) == len(ZCODE_PRETOOL_MATCHERS) + 1
+        assert first.count(GUARD_MANAGED_MARKER) == 3 * len(ZCODE_PRETOOL_MATCHERS) + 1
+        assert second.count(GUARD_MANAGED_MARKER) == 3 * len(ZCODE_PRETOOL_MATCHERS) + 1
 
     def test_uninstall_removes_only_guard_managed_entries(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

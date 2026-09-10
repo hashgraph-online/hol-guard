@@ -155,7 +155,7 @@ def _run_guard_approvals_command(
     approvals_command = getattr(args, "approvals_command", None)
     if approvals_command == "open":
         payload, exit_code = run_approval_open_command(args, store=store)
-        _emit("approvals", payload, getattr(args, "json", False))
+        _emit("approvals", payload, getattr(args, "json", False), live_approval_home=store.guard_home)
         return exit_code
     if approvals_command == "retry-hint":
         payload, exit_code = run_approval_retry_hint_command(args, store=store)

@@ -11,6 +11,34 @@ import {
 
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
 
+for (const width of [390, 1280]) {
+  test(`Missing local session offers authentication recovery at ${width}px`, async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height: 850 });
+    await page.route("**/v1/**", (route) => route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "unauthorized" }),
+    }));
+    const requestId = "a".repeat(32);
+    await page.goto(`/requests/${requestId}?${DAEMON}`);
+    await expect(page.getByRole("heading", { name: "Reconnect this browser to Guard" })).toBeVisible();
+    await expect(page.getByText(`hol-guard approvals open ${requestId}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(/Guard daemon not reachable/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Repair", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Check session again" })).toBeVisible();
+    await page.evaluate(() => Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text: string) => { document.documentElement.dataset.copiedCommand = text; } },
+    }));
+    await page.getByRole("button", { name: "Copy recovery command" }).click();
+    await expect(page.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.dataset.copiedCommand)).toBe(`hol-guard approvals open ${requestId}`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`approval-session-${width}.png`), fullPage: true });
+  });
+}
+
 const request: GuardApprovalRequest = {
   request_id: "scope-e2e",
   harness: "codex",

@@ -62,13 +62,25 @@ function looksLikeId(text: string): boolean {
   return false;
 }
 
+export function resolveActionCommand(receipt: GuardReceipt): string | null {
+  const envelope = getEnvelope(receipt);
+  if (envelope) return envelope.command?.trim() || null;
+  if (receipt.decision_contract_error) return null;
+
+  // Legacy CLI receipts retained the invocation as provenance, without an envelope.
+  const name = receipt.artifact_name?.trim();
+  const provenance = receipt.provenance_summary?.trim();
+  if (name && provenance && provenance.startsWith(`${name} `)) return provenance;
+  return null;
+}
+
 export function resolveActionTitle(receipt: GuardReceipt): string {
   const envelope = getEnvelope(receipt);
   const type = resolveActionType(receipt);
 
   // Shell command: show the actual command if available
-  const command = envelope?.command?.trim();
-  if (type === "Shell command" && command && command.length > 0) {
+  const command = resolveActionCommand(receipt);
+  if (command) {
     return truncate(command, 80);
   }
 

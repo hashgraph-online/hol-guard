@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import threading
 import time
 from collections import OrderedDict, deque
@@ -17,6 +18,7 @@ from uuid import uuid4
 
 from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
+from ..local_action_preview import action_preview
 from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
@@ -65,6 +67,7 @@ class RuntimeHookEvidenceWriterStats(TypedDict):
     receipt_deduped: int
     receipt_dropped: int
     receipt_failures: int
+    local_preview_failures: int
     receipt_durable_pending: int
 
 
@@ -108,6 +111,8 @@ class RuntimeHookEvidenceWriter:
         self._receipt_deduped = 0
         self._receipt_dropped = 0
         self._receipt_failures = 0
+        self._local_previews: dict[str, str] = {}
+        self._local_preview_failures = 0
         self._stopping = False
         self._drain_deadline: float | None = None
         self._sqlite_timeout_seconds = 0.05
@@ -164,6 +169,7 @@ class RuntimeHookEvidenceWriter:
         )
         if _CommandActivityRecord.from_json(json.loads(record.serialized())) is None:
             return False
+        preview = action_preview(snapshot)
         with self._condition:
             if (
                 self._stopping
@@ -174,6 +180,8 @@ class RuntimeHookEvidenceWriter:
                 self._degraded = True
                 return False
             self._records.append(record)
+            if preview is not None:
+                self._local_previews[record.record_id] = preview
             self._queued_bytes += record.payload_bytes
             self._accepted += 1
             self._condition.notify()
@@ -251,6 +259,7 @@ class RuntimeHookEvidenceWriter:
                 "receipt_deduped": self._receipt_deduped,
                 "receipt_dropped": self._receipt_dropped,
                 "receipt_failures": self._receipt_failures,
+                "local_preview_failures": self._local_preview_failures,
                 "receipt_durable_pending": sum(
                     isinstance(record, _NativeDecisionReceiptRecord) for record in self._durable.values()
                 ),
@@ -345,14 +354,37 @@ class RuntimeHookEvidenceWriter:
                                 )
                                 if not self._store.is_exact_command_activity_pre_replay(evidence):
                                     _ = self._store.record_command_activity(evidence)
+                                preview = self._local_previews.get(record.record_id)
+                                if preview is not None:
+                                    try:
+                                        self._store.record_local_action_preview(evidence.activity.activity_id, preview)
+                                    except (sqlite3.Error, ValueError):
+                                        # Optional display text must not retry an already-recorded decision.
+                                        with self._condition:
+                                            self._local_preview_failures += 1
                         else:
-                            _ = persist_deferred_post_hook_command_activity(
+                            recorded = persist_deferred_post_hook_command_activity(
                                 store=self._store,
                                 harness=record.harness,
                                 correlation=record.correlation,
                                 has_command=record.has_command,
                                 succeeded=record.succeeded,
+                                activity_id=record.record_id,
                             )
+                            preview = self._local_previews.get(record.record_id)
+                            if recorded and preview is not None:
+                                try:
+                                    correlated = (
+                                        self._store.get_command_activity_by_request_correlation(record.correlation)
+                                        if record.correlation is not None
+                                        else None
+                                    )
+                                    self._store.record_local_action_preview(
+                                        correlated.activity_id if correlated is not None else record.record_id, preview
+                                    )
+                                except (sqlite3.Error, ValueError):
+                                    with self._condition:
+                                        self._local_preview_failures += 1
                 except Exception:
                     with self._condition:
                         self._failures += 1
@@ -372,6 +404,7 @@ class RuntimeHookEvidenceWriter:
                         if isinstance(record, _NativeDecisionReceiptRecord):
                             self._receipt_processed += 1
                         self._retry_attempts.pop(record.record_id, None)
+                        _ = self._local_previews.pop(record.record_id, None)
                         _ = self._durable.pop(record.record_id, None)
                     try:
                         self._rewrite_journal(remove_record_id=record.record_id)

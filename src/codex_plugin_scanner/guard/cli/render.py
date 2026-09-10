@@ -221,7 +221,9 @@ _TRUST_SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tupl
 )
 
 
-def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> None:
+def emit_guard_payload(
+    command: str, payload: PayloadDict, as_json: bool, *, live_approval_home: Path | None = None
+) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json:
@@ -231,7 +233,34 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         return
 
     redacted_payload = _coerce_object_dict(_sanitize_payload_for_output(payload, command=command))
+    if command == "protect" and live_approval_home is not None:
+        from ..approval_hook_copy import live_hook_approval_context
+
+        # Signed links belong only to live output, never receipts or JSON exports.
+        context = live_hook_approval_context(payload, harness="guard-cli", guard_home=live_approval_home)
+        if context:
+            evaluation = redacted_payload.get("supply_chain_evaluation")
+            if isinstance(evaluation, dict):
+                user_copy = evaluation.get("user_copy")
+                if isinstance(user_copy, dict):
+                    user_copy["harness_message"] = context
+                    user_copy["dashboard_url"] = ""
+    if command == "approvals" and live_approval_home is not None:
+        from ..approval_hook_copy import live_approval_browser_url
+
+        url = redacted_payload.get("approval_url")
+        if isinstance(url, str):
+            signed_url = live_approval_browser_url(url, guard_home=live_approval_home)
+            if signed_url:
+                redacted_payload["approval_url"] = signed_url
     if not _RICH_AVAILABLE:
+        if (
+            command == "approvals"
+            and live_approval_home is not None
+            and isinstance(redacted_payload.get("approval_url"), str)
+        ):
+            sys.stdout.write(f"Review: {redacted_payload['approval_url']}\n")
+            return
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
             redacted_output = redact_text(_safe_json_output_text(command, payload))

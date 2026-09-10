@@ -283,10 +283,10 @@ def _record_harness_usage_for_hook(
         occurred_at=_now(),
     )
 
-def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
+def _emit(command: str, payload: dict[str, object], as_json: bool, *, live_approval_home: Path | None = None) -> None:
     from .render import emit_guard_payload
 
-    emit_guard_payload(command, payload, as_json)
+    emit_guard_payload(command, payload, as_json, live_approval_home=live_approval_home)
 
 def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)

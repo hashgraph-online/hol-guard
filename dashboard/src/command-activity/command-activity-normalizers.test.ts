@@ -60,7 +60,30 @@ const page = normalizeCommandActivityPage({
 });
 assert(page.items[0]?.execution_status === "allowed_unconfirmed", "activity execution proof is preserved");
 assert(page.items[0]?.policy_action === "allow", "activity decision remains independent from execution proof");
+assert(page.items[0]?.action_preview === null, "missing action previews remain explicitly unavailable");
 assert(page.next_cursor === longOpaqueCursor, "signed opaque cursors above 256 characters survive normalization");
+
+const maximumActionPreview = "x".repeat(2_048);
+const maximumPreviewPage = normalizeCommandActivityPage({
+  schema_version: "guard.command-activity-api.v1",
+  items: [{ ...activityItem(), action_preview: maximumActionPreview }],
+  next_cursor: null,
+});
+assert(
+  maximumPreviewPage.items[0]?.action_preview === maximumActionPreview,
+  "action previews accept the backend's exact 2,048-character maximum",
+);
+let oversizedActionPreviewError = false;
+try {
+  normalizeCommandActivityPage({
+    schema_version: "guard.command-activity-api.v1",
+    items: [{ ...activityItem(), action_preview: `${maximumActionPreview}x` }],
+    next_cursor: null,
+  });
+} catch {
+  oversizedActionPreviewError = true;
+}
+assert(oversizedActionPreviewError, "action previews above 2,048 characters fail closed");
 
 const dimensions = Object.fromEntries(
   ["harness", "extension", "rule", "disposition", "execution_status", "prompt_status", "proof_level", "latency"].map(

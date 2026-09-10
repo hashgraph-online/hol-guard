@@ -11,7 +11,7 @@ import type { GuardReceipt } from "../guard-types";
 import type { EvidenceSortKey } from "./evidence-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
-import { resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
+import { resolveActionCommand, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { hasMore } from "./evidence-pagination";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -219,6 +219,7 @@ function ActionRow({
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
   const actionTitle = resolveActionTitle(receipt);
+  const command = resolveActionCommand(receipt);
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
 
@@ -270,8 +271,8 @@ function ActionRow({
       </td>
       <td className="px-3 py-2.5">
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">
-            {actionTitle}
+          <span className={`text-sm text-brand-dark block max-w-[36rem] break-words line-clamp-3 ${command ? "font-mono whitespace-pre-wrap" : "font-medium"}`}>
+            {command ?? actionTitle}
           </span>
           <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">
             {actionSubtitle ?? actionType}

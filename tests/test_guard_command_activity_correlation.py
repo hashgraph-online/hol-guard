@@ -96,6 +96,9 @@ def test_concurrent_creation_converges_on_one_key(tmp_path: Path) -> None:
         ("claude-code", "PostToolUseFailure", "tool_use_id"),
         ("pi", "PreToolUse", "tool_call_id"),
         ("pi", "PostToolUse", "tool_call_id"),
+        ("zcode", "PreToolUse", "toolCallId"),
+        ("zcode", "PostToolUse", "toolCallId"),
+        ("zcode", "PostToolUseFailure", "toolCallId"),
     ],
 )
 def test_adapter_allowlist_derives_only_native_request_ids(harness: str, event: str, field: str) -> None:
@@ -111,6 +114,16 @@ def test_adapter_allowlist_derives_only_native_request_ids(harness: str, event: 
     assert result is not None
     assert result.harness == harness
     assert result.key_id == key.key_id
+
+
+def test_zcode_conflicting_request_aliases_cannot_correlate() -> None:
+    with pytest.raises(ValueError, match="conflicting ZCode request identifiers"):
+        derive_proven_request_correlation(
+            harness="zcode",
+            event="PostToolUse",
+            payload={"toolCallId": _STRONG_ID, "tool_use_id": "01J3DIFFERENTNATIVEID"},
+            key=_fixed_key(),
+        )
 
 
 @pytest.mark.parametrize(

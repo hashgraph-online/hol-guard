@@ -13,6 +13,7 @@ const SECRET_SENTINEL = "secret_sentinel_value";
 
 const activity = {
   activity_id: "activity:01",
+  action_preview: "git status --short",
   occurred_at: "2026-07-19T12:00:00+00:00",
   harness: "codex",
   hook_phase: "pre",
@@ -146,6 +147,7 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   const fixture = await mountCommandFixture(page);
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "git status --short", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Allowed; execution not confirmed" })).toBeVisible();
   const trend = page.getByRole("img", { name: /2026-07-18: 0; 2026-07-19: 1$/ });
   await expect(trend).toBeVisible();
@@ -161,6 +163,7 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await detailsButton.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeFocused();
+  await expect(page.getByRole("complementary", { name: "Command activity detail" }).getByText("git status --short", { exact: true })).toBeVisible();
   await expect(page.getByText("Other recorded reason")).toBeVisible();
   await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
   await page.getByRole("button", { name: "Should not have interrupted" }).click();

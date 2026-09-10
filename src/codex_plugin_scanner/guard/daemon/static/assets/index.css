@@ -1123,6 +1123,10 @@
     max-height: calc(var(--spacing) * 40);
   }
 
+  .max-h-60 {
+    max-height: calc(var(--spacing) * 60);
+  }
+
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -1427,6 +1431,10 @@
     max-width: 17.5rem;
   }
 
+  .max-w-\[36rem\] {
+    max-width: 36rem;
+  }
+
   .max-w-\[260px\] {
     max-width: 260px;
   }
@@ -1469,6 +1477,10 @@
 
   .min-w-7 {
     min-width: calc(var(--spacing) * 7);
+  }
+
+  .min-w-\[16rem\] {
+    min-width: 16rem;
   }
 
   .min-w-\[44px\] {

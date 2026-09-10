@@ -12,6 +12,7 @@ from typing import ClassVar
 from uuid import uuid4
 
 from . import store_native_decision_receipts, store_review_event_outbox_schema
+from .local_action_preview import ensure_local_action_preview_schema
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
@@ -999,6 +1000,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
+            ensure_local_action_preview_schema(connection)
             ensure_evidence_schema(connection)
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
@@ -1181,12 +1183,16 @@ class StoreConnectionSchemaMixin:
                         "watch_only_observation",
                         "continuation_snapshot_json",
                     }
+                    preview_columns = {
+                        str(column[1]) for column in connection.execute("pragma table_info(local_action_previews)")
+                    }
                     return (
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
                         and storage_row is not None
                         and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
+                        and preview_columns == {"activity_id", "preview"}
                     )
                 finally:
                     connection.close()
