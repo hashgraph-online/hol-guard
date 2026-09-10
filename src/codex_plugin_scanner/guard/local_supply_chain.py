@@ -1388,6 +1388,7 @@ def _build_package_protect_authority(
     additional_current_action: object | None,
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
+    invoking_harness: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -1467,6 +1468,9 @@ def _build_package_protect_authority(
             additional_policy_context=additional_policy_context,
         )
         return _PackageProtectAuthority(
+            invoking_harness=invoking_harness
+            if invoking_harness is not None
+            else _resolve_local_supply_chain_harness(),
             intent=sanitized_intent,
             artifact=artifact,
             evaluation=evaluation,
@@ -1569,6 +1573,7 @@ def _final_package_protect_authority(
         additional_current_action=additional_action,
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
+        invoking_harness=initial.invoking_harness,
     )
     if current is None:
         reuse = evaluate_approval_reuse(
@@ -2384,13 +2389,25 @@ def _is_fresh_artifact_approval(decision: dict[str, object], *, store: Any) -> b
         return False
     request_id = decision.get("request_id")
     request_getter = getattr(store, "get_approval_request", None)
-    if not isinstance(request_id, str) or not request_id or not callable(request_getter):
-        return False
-    try:
-        request = request_getter(request_id)
-    except Exception:
-        return False
-    return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    if isinstance(request_id, str) and request_id:
+        if not callable(request_getter):
+            return False
+        try:
+            request = request_getter(request_id)
+        except Exception:
+            return False
+        return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    # resolve_policy_decision_lookup has already applied expiry and local-row
+    # integrity checks. Expiring package rows do not retain request_id in
+    # policy_decisions, so their canonical local identity and context token are
+    # the bounded fresh-proof.
+    artifact_id = decision.get("artifact_id")
+    return (
+        decision.get("harness") == _LOCAL_SUPPLY_CHAIN_HARNESS
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{_LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+        and parse_approval_context_token(decision.get("artifact_hash")) is not None
+    )
 
 
 def _is_durable_exact_artifact_approval(decision: dict[str, object]) -> bool:
