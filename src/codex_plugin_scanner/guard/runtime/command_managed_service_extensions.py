@@ -123,13 +123,6 @@ def _azure(*subcommands: str):
     )
 
 
-_DNS_DELETE = AnyMatcher(
-    matchers=(
-        _aws("route53", "delete-hosted-zone"),
-        *_gcloud("dns", "managed-zones", "delete"),
-        _azure("network", "dns", "zone", "delete"),
-    )
-)
 _CDN_DELETE = AnyMatcher(
     matchers=(
         _aws("cloudfront", "delete-distribution"),
@@ -216,13 +209,6 @@ def _rule(
 
 MANAGED_SERVICE_COMMAND_RULES = (
     _rule(
-        extension_id="command.dns",
-        title="DNS zone deletion",
-        matcher=_DNS_DELETE,
-        action_class="DNS destructive command",
-        safer_alternative="Export zone records and verify delegation before deleting the zone.",
-    ),
-    _rule(
         extension_id="command.cdn",
         title="CDN resource deletion",
         matcher=_CDN_DELETE,
@@ -295,18 +281,6 @@ def _spec(
 
 
 MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
-    _spec(
-        extension_id="command.dns",
-        name="DNS command protection",
-        description="Reviews hosted-zone deletion through supported cloud CLIs.",
-        action_class="DNS destructive command",
-        safer_alternative="Export zone records and verify delegation before deletion.",
-        reference_urls=(
-            "https://docs.aws.amazon.com/cli/latest/reference/route53/delete-hosted-zone.html",
-            "https://cloud.google.com/sdk/gcloud/reference/dns/managed-zones/delete",
-            "https://learn.microsoft.com/cli/azure/network/dns/zone#az-network-dns-zone-delete",
-        ),
-    ),
     _spec(
         extension_id="command.cdn",
         name="CDN command protection",

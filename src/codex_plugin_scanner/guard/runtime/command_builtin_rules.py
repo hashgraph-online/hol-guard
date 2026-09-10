@@ -6,6 +6,7 @@ from .command_action_risk_classes import COMMAND_ACTION_RISK_CLASSES
 from .command_backup_extensions import BACKUP_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_RULES
+from .command_dns_extensions import DNS_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_RULES
 from .command_git_porcelain_extensions import GIT_PORCELAIN_COMMAND_RULES
 from .command_github_rules import GITHUB_COMMAND_RULES
@@ -422,6 +423,7 @@ BUILT_IN_COMMAND_RULES = (
     *GIT_PORCELAIN_COMMAND_RULES,
     *DOMAIN_COMMAND_RULES,
     *CLOUD_COMMAND_RULES,
+    *DNS_COMMAND_RULES,
     *STORAGE_COMMAND_RULES,
     *BACKUP_COMMAND_RULES,
     *REMOTE_COMMAND_RULES,

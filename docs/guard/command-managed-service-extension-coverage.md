@@ -7,7 +7,6 @@ executable and exact operation path; quoted examples and unrelated read or updat
 
 | Extension | Reviewed operations | Safe counterparts |
 | --- | --- | --- |
-| `command.dns` | Hosted-zone deletion through AWS, Google Cloud, and Azure CLIs | List, describe, show, and help |
 | `command.cdn` | Distribution, profile, and endpoint deletion through AWS and Azure CLIs | List, show, and help |
 | `command.api-gateway` | API and gateway deletion through AWS, Google Cloud, and Azure CLIs | Get, list, describe, and help |
 | `command.load-balancer` | Load-balancer and forwarding-rule deletion through AWS, Google Cloud, and Azure CLIs | Describe, list, show, and help |
@@ -22,9 +21,6 @@ have distinct business and recovery semantics.
 
 ## Primary command references
 
-- DNS: [AWS Route 53](https://docs.aws.amazon.com/cli/latest/reference/route53/delete-hosted-zone.html),
-  [Google Cloud DNS](https://cloud.google.com/sdk/gcloud/reference/dns/managed-zones/delete), and
-  [Azure DNS](https://learn.microsoft.com/cli/azure/network/dns/zone#az-network-dns-zone-delete).
 - CDN and gateways: [AWS CloudFront](https://docs.aws.amazon.com/cli/latest/reference/cloudfront/delete-distribution.html),
   [Google Cloud API Gateway](https://cloud.google.com/sdk/gcloud/reference/api-gateway/gateways/delete), and
   [Azure API Management](https://learn.microsoft.com/cli/azure/apim#az-apim-delete).

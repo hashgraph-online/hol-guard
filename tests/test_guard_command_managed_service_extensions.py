@@ -12,24 +12,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 
 MANAGED_SERVICE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
-    ("aws route53 delete-hosted-zone --id Z123", "DNS destructive command", "command.dns.delete"),
-    (
-        "aws --future-global-option account route53 delete-hosted-zone --id Z123",
-        "DNS destructive command",
-        "command.dns.delete",
-    ),
-    ("gcloud beta dns managed-zones delete public", "DNS destructive command", "command.dns.delete"),
-    (
-        "gcloud --filter active dns managed-zones delete public",
-        "DNS destructive command",
-        "command.dns.delete",
-    ),
-    ("az network dns zone delete -g app -n example.test", "DNS destructive command", "command.dns.delete"),
-    (
-        "az --future-global-option tenant network dns zone delete -g app -n example.test",
-        "DNS destructive command",
-        "command.dns.delete",
-    ),
     (
         "aws cloudfront delete-distribution --id E123 --if-match etag",
         "CDN destructive command",
@@ -116,16 +98,7 @@ def test_managed_service_rules_feed_runtime_hooks(tmp_path: Path) -> None:
 
 
 MANAGED_SERVICE_SAFE_COMMANDS: tuple[str, ...] = (
-    "aws route53 delete-hosted-zone --help",
-    "gcloud dns managed-zones delete --help",
     "az cdn profile delete --help",
-    "aws --future-global-option account route53 delete-hosted-zone --id Z123 --help",
-    "gcloud --future-global-option account dns managed-zones delete public --help",
-    "az --future-global-option tenant network dns zone delete -g app -n example.test --help",
-    "aws route53 list-hosted-zones",
-    "aws --future-global-option account route53 list-hosted-zones",
-    "gcloud dns managed-zones describe public",
-    "gcloud --filter active dns managed-zones describe public",
     "az network lb show -g app -n public-lb",
     "az --future-global-option tenant network lb show -g app -n public-lb",
     "aws cloudwatch describe-alarms",
@@ -159,11 +132,8 @@ def test_safe_managed_variant_does_not_hide_destructive_segment(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("command", "rule_id"),
     [
-        ("aws route53 delete-hosted-zone --id Z123 > --help", "command.dns.delete"),
-        ("aws route53 delete-hosted-zone --id Z123 >--help", "command.dns.delete"),
         ("stripe products delete prod_123 2> --help", "command.payment.delete"),
         ("stripe products delete prod_123 2>--help", "command.payment.delete"),
-        ("aws route53 delete-hosted-zone --id Z123 << --help\npayload\n--help", "command.dns.delete"),
     ],
 )
 def test_help_redirection_target_does_not_hide_destructive_command(
@@ -188,7 +158,6 @@ def test_help_redirection_target_does_not_hide_destructive_command(
 
 def test_managed_service_extensions_publish_official_references() -> None:
     for extension_id in (
-        "command.dns",
         "command.cdn",
         "command.api-gateway",
         "command.load-balancer",
