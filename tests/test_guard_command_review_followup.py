@@ -55,7 +55,7 @@ REVIEW_COMMENT_CASES: tuple[tuple[str, str, str], ...] = (
     (
         "dotnet add src/MyApp/MyApp.csproj package Newtonsoft.Json",
         ".NET package mutation command",
-        "command.package-dotnet.positional-project-package",
+        "command.package.dotnet.positional-project-package",
     ),
     (
         "psql '--command=TRUNCATE TABLE users'",
