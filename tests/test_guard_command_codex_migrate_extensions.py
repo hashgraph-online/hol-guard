@@ -13,10 +13,35 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 from tests.command_extension_contracts import assert_safe_command_cases
 
 _ACTION_CLASS = "Codex Migrate destination-changing operation"
 _RULE_ID = "command.codex-migrate.apply"
+
+
+def _enabled_control_layer() -> ExtensionControlLayer:
+    return ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.EXTENSION, "command.codex-migrate"),
+                state=ControlState.ENABLED,
+            ),
+        ),
+    )
+
 
 CODEX_MIGRATE_REVIEW_COMMANDS = (
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --component personal-skills --apply",
@@ -33,7 +58,12 @@ CODEX_MIGRATE_REVIEW_COMMANDS = (
     "xargs -n1 codex-migrate serve --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user ${MODE_FLAG}",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user $DASHES$APPLY",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user ${DASHES}apply",
+    "codex-migrate serve --target user@new-mac.local --target-home /Users/user --$MODE",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --apply)",
+    "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --)apply",
+    "codex-migrate serve --target user@new-mac.local --target-home /Users/user `printf -- --`apply",
     "codex-migrate inventory --json; codex-migrate serve --target user@new-mac.local --target-home /Users/user --apply",
 )
 
@@ -58,6 +88,19 @@ def test_codex_migrate_rules_stay_inert_until_enabled(command: str, tmp_path: Pa
     assert all(item.extension.extension_id != "command.codex-migrate" for item in evaluation.extension_observations)
 
 
+def test_codex_migrate_apply_rule_controls_command_when_enabled(tmp_path: Path) -> None:
+    evaluation = evaluate_command(
+        CODEX_MIGRATE_REVIEW_COMMANDS[0],
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        extension_control_layers=(_enabled_control_layer(),),
+    )
+
+    assert any(item.extension.extension_id == "command.codex-migrate" for item in evaluation.extension_observations)
+    assert evaluation.controlling_action_class == _ACTION_CLASS
+    assert evaluation.controlling_rule_id == _RULE_ID
+
+
 CODEX_MIGRATE_SAFE_COMMANDS = (
     "codex-migrate --help",
     "codex-migrate --version",
@@ -78,6 +121,7 @@ CODEX_MIGRATE_SAFE_COMMANDS = (
     "codex-migrate export --target user@new-mac.local --target-h $TARGET_HOME $APPLY_FLAG",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user backup-$HOME",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user ${PORT_SUFFIX}-backup",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --help $APPLY_FLAG",
     "codex-migrate inspect --target user@new-mac.local --target-home /Users/user -- --apply",
     "printf '%s' 'codex-migrate export --apply'",
     "grep 'codex-migrate serve --apply' docs/guide.md",

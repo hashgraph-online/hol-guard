@@ -187,7 +187,7 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                     if option_name in _SUBCOMMAND_VALUE_FORMS[subcommand]:
                         argument_index += 1 if separator else 2
                         continue
-                    if _is_complete_expansion(remaining, argument_index):
+                    if _expansion_can_equal_apply(remaining, argument_index):
                         evidence.append(
                             MatcherEvidence(
                                 segment_index=index,
@@ -201,20 +201,97 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
         return tuple(evidence)
 
 
-def _is_complete_expansion(arguments: tuple[str, ...], index: int) -> bool:
-    """Return whether one entire argv token can expand into ``--apply``."""
+def _expansion_can_equal_apply(arguments: tuple[str, ...], index: int) -> bool:
+    """Return whether expansions in one shell word can produce ``--apply``."""
 
-    argument = arguments[index]
-    if argument.startswith("${") and argument.endswith("}"):
-        return True
-    if argument.startswith("$("):
-        return any(candidate.endswith(")") for candidate in arguments[index:])
-    if argument.startswith("`"):
-        return any(candidate.endswith("`") for candidate in arguments[index:])
-    if not argument.startswith("$") or len(argument) < 2:
+    candidate = arguments[index]
+    if "$(" in candidate or "`" in candidate:
+        candidate = _command_expansion_word(arguments, index)
+    literals = _expansion_literal_fragments(candidate)
+    if literals is None:
         return False
-    name = argument[1:]
-    return name.isidentifier() or name.isdigit() or name in {"@", "*"}
+    target = "--apply"
+    prefix, *middle, suffix = literals
+    if not target.startswith(prefix) or not target.endswith(suffix):
+        return False
+    cursor = len(prefix)
+    limit = len(target) - len(suffix)
+    for literal in middle:
+        position = target.find(literal, cursor, limit + 1)
+        if position < 0:
+            return False
+        cursor = position + len(literal)
+    return cursor <= limit
+
+
+def _command_expansion_word(arguments: tuple[str, ...], index: int) -> str:
+    """Reassemble only the shell word split around command-substitution spaces."""
+
+    first = arguments[index]
+    starts = [position for marker in ("$(", "`") if (position := first.find(marker)) >= 0]
+    if not starts:
+        return first
+    start = min(starts)
+    for end in range(index + 1, len(arguments) + 1):
+        candidate = " ".join(arguments[index:end])
+        if _expansion_end(candidate, start) is not None:
+            return candidate
+    return first
+
+
+def _expansion_literal_fragments(candidate: str) -> tuple[str, ...] | None:
+    """Split a shell word into fixed literals around complete expansions."""
+
+    fragments: list[str] = []
+    literal: list[str] = []
+    index = 0
+    while index < len(candidate):
+        end = _expansion_end(candidate, index)
+        if end is None:
+            literal.append(candidate[index])
+            index += 1
+            continue
+        fragments.append("".join(literal))
+        literal = []
+        index = end
+    if not fragments:
+        return None
+    fragments.append("".join(literal))
+    return tuple(fragments)
+
+
+def _expansion_end(candidate: str, index: int) -> int | None:
+    if candidate.startswith("${", index):
+        closing = candidate.find("}", index + 2)
+        return closing + 1 if closing >= 0 else None
+    if candidate.startswith("$(", index):
+        depth = 1
+        cursor = index + 2
+        while cursor < len(candidate):
+            if candidate.startswith("$(", cursor):
+                depth += 1
+                cursor += 2
+                continue
+            if candidate[cursor] == ")":
+                depth -= 1
+                if depth == 0:
+                    return cursor + 1
+            cursor += 1
+        return None
+    if candidate[index] == "`":
+        closing = candidate.find("`", index + 1)
+        return closing + 1 if closing >= 0 else None
+    if candidate[index] != "$" or index + 1 >= len(candidate):
+        return None
+    cursor = index + 1
+    if candidate[cursor].isdigit() or candidate[cursor] in {"@", "*"}:
+        return cursor + 1
+    if not (candidate[cursor].isalpha() or candidate[cursor] == "_"):
+        return None
+    cursor += 1
+    while cursor < len(candidate) and (candidate[cursor].isalnum() or candidate[cursor] == "_"):
+        cursor += 1
+    return cursor
 
 
 _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS = AnyMatcher(
