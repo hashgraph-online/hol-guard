@@ -74,6 +74,7 @@ _DIRECT_REUSABLE_COMMANDS = {
 }
 _NATIVE_DIGEST = re.compile(r"[0-9a-f]{64}")
 _NATIVE_IDENTITY_TOKEN = re.compile(r"[a-z0-9_-]{1,128}")
+_SHELL_PUNCTUATION = frozenset(";&|<>")
 
 
 def pause_native_pre_tool_for_approval(
@@ -218,9 +219,10 @@ def _command_reuse_is_payload_bound(command: str) -> bool:
         return False
     if not tokens:
         return False
-    # Only one direct command is eligible. Pipelines, redirections and command
-    # lists can hide additional mutable executables or script inputs.
-    if any(token in {";", "&", "&&", "|", "||", "<", ">", "<<", ">>"} for token in tokens):
+    # shlex groups adjacent punctuation, so reject every punctuation-only token
+    # rather than a fixed operator list. This covers |&, <<<, <>, >| and future
+    # combinations without accidentally treating them as part of argv.
+    if any(token and all(char in _SHELL_PUNCTUATION for char in token) for token in tokens):
         return False
     # Leading environment assignments can change executable lookup or loader
     # behavior without changing the apparent command. They are never reusable.
