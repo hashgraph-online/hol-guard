@@ -13,6 +13,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ._shell_execution_context_support import (
+    SHELL_CWD_MISSING_DIRECTORY,
+    SHELL_CWD_NOT_DIRECTORY,
+    SHELL_CWD_UNREADABLE_DIRECTORY,
+)
 from .command_model import CanonicalCommand, parse_shell_command
 from .home_path_text import expand_home, normalize_path
 from .secret_sensitivity import classify_secret_path
@@ -48,6 +53,9 @@ _LITERAL_READ = re.compile(
 _PATH_READ = re.compile(
     r"\bPath\s*\(\s*(['\"])([^'\"\n\x00]{1,4096})\1\s*\)"
     r"\s*\.\s*(?:read_text|read_bytes|open)\s*\("
+)
+_SHORT_CIRCUITING_CD_FAILURES = frozenset(
+    {SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY, SHELL_CWD_UNREADABLE_DIRECTORY}
 )
 
 
@@ -348,6 +356,19 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
     )
 
 
+def _unreachable_after_failed_literal_cd(execution: ShellExecutionSegment) -> bool:
+    """A failing literal `cd ... &&` prevents this segment from executing.
+
+    The context model has already proven the directory is absent, not a
+    directory, or unreadable in the current filesystem snapshot. Treating the
+    right-hand side as an attempted secret read creates false positives for
+    ordinary navigation/test pipelines even though the shell cannot reach it.
+    Other unresolved cwd states remain fail-closed.
+    """
+
+    return execution.reason_code in _SHORT_CIRCUITING_CD_FAILURES and "&&" in execution.control_before
+
+
 def assess_shell_reads(
     command_text: str,
     *,
@@ -382,6 +403,8 @@ def assess_shell_reads(
         for execution in context.segments:
             model = _parse_execution_segment(execution, home_dir=home_dir)
             if model is None:
+                if _unreachable_after_failed_literal_cd(execution):
+                    continue
                 if _segment_may_touch_local_data(execution):
                     requested = True
                     incomplete = True
