@@ -17,8 +17,7 @@ from .command_rules import AnyMatcher, CommandSafetyRule, _after_leading_options
 # same flag. Inspect and recovery remain read-only even when --apply is passed;
 # inventory and launch do not accept it.
 _APPLY_SUBCOMMANDS = ("export", "serve")
-_APPLY_FLAG_FORMS = ("--a", "--ap", "--app", "--appl", "--apply")
-_OPTIONS_WITH_VALUES = frozenset(
+_COMMON_OPTIONS_WITH_VALUES = frozenset(
     {
         "--target",
         "--target-home",
@@ -29,18 +28,105 @@ _OPTIONS_WITH_VALUES = frozenset(
         "--identity-file",
         "--known-hosts-file",
         "--host-key-alias",
-        "--component",
-        "--port",
     }
 )
-_KNOWN_FLAGS = frozenset({"--no-compress", "--apply", "--json", "--no-open", "--help", "-h"})
+_COMMON_FLAGS = frozenset({"--no-compress", "--apply", "--help"})
+_SUBCOMMAND_OPTION_NAMES = {
+    "export": _COMMON_OPTIONS_WITH_VALUES | _COMMON_FLAGS | {"--component", "--json"},
+    "serve": _COMMON_OPTIONS_WITH_VALUES | _COMMON_FLAGS | {"--port", "--no-open"},
+}
+
+
+def _unambiguous_long_forms(options: frozenset[str], all_options: frozenset[str]) -> frozenset[str]:
+    """Return exact long options and every argparse-accepted unique prefix."""
+
+    return frozenset(
+        option[:length]
+        for option in options
+        for length in range(3, len(option) + 1)
+        if sum(candidate.startswith(option[:length]) for candidate in all_options) == 1
+    )
+
+
+_SUBCOMMAND_VALUE_FORMS = {
+    subcommand: _unambiguous_long_forms(
+        _COMMON_OPTIONS_WITH_VALUES | ({"--component"} if subcommand == "export" else {"--port"}),
+        option_names,
+    )
+    for subcommand, option_names in _SUBCOMMAND_OPTION_NAMES.items()
+}
+_SUBCOMMAND_HELP_FORMS = {
+    subcommand: _unambiguous_long_forms(frozenset({"--help"}), option_names) | {"-h"}
+    for subcommand, option_names in _SUBCOMMAND_OPTION_NAMES.items()
+}
+_APPLY_FLAG_FORMS = tuple(
+    sorted(
+        set.intersection(
+            *(
+                set(_unambiguous_long_forms(frozenset({"--apply"}), option_names))
+                for option_names in _SUBCOMMAND_OPTION_NAMES.values()
+            )
+        ),
+        key=lambda value: (len(value), value),
+    )
+)
 _LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("codex-migrate",),
     ("exec", "codex-migrate"),
     ("xargs", "codex-migrate"),
 )
-_WRAPPER_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
-_EXPANSION_MARKERS = frozenset({"$", "`"})
+_EXEC_OPTIONS_WITH_VALUES = frozenset({"-a"})
+_EXEC_FLAGS = frozenset({"-c", "-l"})
+_XARGS_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--arg-file",
+        "--delimiter",
+        "--eof",
+        "--max-args",
+        "--max-chars",
+        "--max-lines",
+        "--max-procs",
+        "--replace",
+        "-E",
+        "-I",
+        "-J",
+        "-L",
+        "-P",
+        "-R",
+        "-S",
+        "-a",
+        "-d",
+        "-e",
+        "-n",
+        "-s",
+    }
+)
+_XARGS_FLAGS = frozenset(
+    {
+        "--exit",
+        "--help",
+        "--no-run-if-empty",
+        "--null",
+        "--open-tty",
+        "--show-limits",
+        "--verbose",
+        "--version",
+        "-0",
+        "-o",
+        "-p",
+        "-r",
+        "-t",
+        "-x",
+    }
+)
+
+
+def _wrapper_options(launcher: str) -> tuple[frozenset[str], frozenset[str]]:
+    if launcher == "exec":
+        return _EXEC_OPTIONS_WITH_VALUES, _EXEC_FLAGS
+    if launcher == "xargs":
+        return _XARGS_OPTIONS_WITH_VALUES, _XARGS_FLAGS
+    return frozenset(), frozenset()
 
 
 def _apply_matchers() -> tuple[object, ...]:
@@ -49,11 +135,9 @@ def _apply_matchers() -> tuple[object, ...]:
             *launcher,
             subcommand,
             required_flags=frozenset({apply_flag}),
-            options_with_values=_OPTIONS_WITH_VALUES,
+            options_with_values=_SUBCOMMAND_VALUE_FORMS[subcommand],
             allow_leading_options=launcher[0] in ("exec", "xargs"),
-            leading_options_with_values=(
-                _WRAPPER_OPTIONS_WITH_VALUES if launcher[0] in ("exec", "xargs") else frozenset()
-            ),
+            leading_options_with_values=_wrapper_options(launcher[0])[0],
             fail_secure_unknown_options=True,
         )
         for launcher in _LAUNCHERS
@@ -82,24 +166,28 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                     continue
                 arguments = lowered_arguments
                 if launcher[0] in ("exec", "xargs"):
-                    arguments = _after_leading_options(arguments, _WRAPPER_OPTIONS_WITH_VALUES, frozenset())
+                    value_options, flags = _wrapper_options(launcher[0])
+                    arguments = _after_leading_options(arguments, value_options, flags)
                 prefix = launcher[1:]
                 if arguments[: len(prefix)] != prefix:
                     continue
                 arguments = arguments[len(prefix) :]
                 if not arguments or arguments[0] not in _APPLY_SUBCOMMANDS:
                     continue
+                subcommand = arguments[0]
                 remaining = arguments[1:]
+                if any(argument in _SUBCOMMAND_HELP_FORMS[subcommand] for argument in remaining):
+                    continue
                 argument_index = 0
                 while argument_index < len(remaining):
                     argument = remaining[argument_index]
                     if argument == "--":
                         break
                     option_name, separator, _value = argument.partition("=")
-                    if option_name in _OPTIONS_WITH_VALUES:
+                    if option_name in _SUBCOMMAND_VALUE_FORMS[subcommand]:
                         argument_index += 1 if separator else 2
                         continue
-                    if any(marker in argument for marker in _EXPANSION_MARKERS):
+                    if _is_complete_expansion(remaining, argument_index):
                         evidence.append(
                             MatcherEvidence(
                                 segment_index=index,
@@ -111,6 +199,22 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                     argument_index += 1
                 break
         return tuple(evidence)
+
+
+def _is_complete_expansion(arguments: tuple[str, ...], index: int) -> bool:
+    """Return whether one entire argv token can expand into ``--apply``."""
+
+    argument = arguments[index]
+    if argument.startswith("${") and argument.endswith("}"):
+        return True
+    if argument.startswith("$("):
+        return any(candidate.endswith(")") for candidate in arguments[index:])
+    if argument.startswith("`"):
+        return any(candidate.endswith("`") for candidate in arguments[index:])
+    if not argument.startswith("$") or len(argument) < 2:
+        return False
+    name = argument[1:]
+    return name.isidentifier() or name.isdigit() or name in {"@", "*"}
 
 
 _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS = AnyMatcher(
@@ -137,17 +241,14 @@ CODEX_MIGRATE_COMMAND_RULES = (
         matcher=_CODEX_MIGRATE_APPLY_WITH_EXPANSIONS,
         default_mode="review",
         safe_variants=(
-            safe_flag_variant(
-                _CODEX_MIGRATE_APPLY,
-                variant_id="help",
-                title="Codex Migrate command help",
-                flag="--help",
-            ),
-            safe_flag_variant(
-                _CODEX_MIGRATE_APPLY,
-                variant_id="short-help",
-                title="Codex Migrate command help",
-                flag="-h",
+            *(
+                safe_flag_variant(
+                    _CODEX_MIGRATE_APPLY,
+                    variant_id=f"help-{index}",
+                    title="Codex Migrate command help",
+                    flag=flag,
+                )
+                for index, flag in enumerate(sorted(set.union(*map(set, _SUBCOMMAND_HELP_FORMS.values()))))
             ),
         ),
     ),
