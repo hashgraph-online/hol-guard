@@ -45,17 +45,26 @@ def _stub_approval_daemon(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.mark.parametrize("origin", ["environment", "parent_process"])
 def test_guard_protect_attributes_package_requests_to_invoking_harness(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    origin: str,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     store = GuardStore(home_dir)
     _seed_review_advisory(store)
-    monkeypatch.setenv("ZCODE_ENV", "production")
+    strip_harness_env_markers(monkeypatch)
+    if origin == "environment":
+        monkeypatch.setenv("ZCODE_ENV", "production")
+    else:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.runtime.package_protect_projection.resolve_parent_process_harness",
+            lambda: "zcode",
+        )
     _stub_approval_daemon(monkeypatch)
 
     rc = main(
@@ -134,10 +143,15 @@ def test_guard_protect_keeps_guard_cli_attribution_outside_harness_env(
 
 
 @pytest.mark.usefixtures("bundle_first_cloud")
+@pytest.mark.parametrize("parent_harness", [None, "codex"])
 def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parent_harness: str | None
 ) -> None:
     strip_harness_env_markers(monkeypatch)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.package_protect_projection.resolve_parent_process_harness",
+        lambda: parent_harness,
+    )
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -174,6 +188,9 @@ def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(
     assert exit_code == 0
     assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
     action_envelope = dict(payload["receipt"]["action_envelope_json"])
+    assert payload["receipt"]["harness"] == (parent_harness or "guard-cli")
+    if parent_harness:
+        assert action_envelope.pop("invoking_harness") == parent_harness
     package_context = action_envelope.pop("package_execution_context")
     assert action_envelope.pop("policy_action") == "warn"
     assert action_envelope.pop("additional_policy_context") == {

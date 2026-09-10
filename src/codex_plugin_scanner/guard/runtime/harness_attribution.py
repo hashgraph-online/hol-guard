@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import time
 from collections.abc import Mapping
+from pathlib import PurePath
 
 _CURSOR_ENV_MARKERS = frozenset(
     {
@@ -21,6 +24,50 @@ _CURSOR_ENV_MARKERS = frozenset(
 # read as an attribution signal only; policy scoping never keys off them.
 _CLAUDE_CODE_ENV_MARKERS = frozenset({"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"})
 _CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX"})
+
+_PROCESS_HARNESSES = {
+    "codex": "codex",
+    "claude": "claude-code",
+    "cursor": "cursor",
+    "cursor-agent": "cursor",
+    "zcode": "zcode",
+    "omp": "pi",
+    "opencode": "opencode",
+}
+
+
+def resolve_parent_process_harness() -> str | None:
+    """Best-effort display attribution when a harness supplies no env marker.
+
+    Inspect executable names only, never arguments or process environments.
+    Bound traversal and elapsed time; failures leave the origin unknown. This
+    signal must never be used as an authorization or policy selector.
+    """
+    if os.name == "nt":
+        return None
+    pid = os.getppid()
+    seen: set[int] = set()
+    deadline = time.monotonic() + 0.5
+    for _ in range(8):
+        remaining = deadline - time.monotonic()
+        if pid <= 1 or pid in seen or remaining <= 0:
+            break
+        seen.add(pid)
+        try:
+            result = subprocess.run(
+                ["/bin/ps", "-p", str(pid), "-o", "ppid=,comm="],
+                capture_output=True, text=True, check=False, timeout=remaining,
+            )
+            if result.returncode != 0:
+                return None
+            parent, executable = result.stdout.strip().split(maxsplit=1)
+            pid = int(parent)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return None
+        harness = _PROCESS_HARNESSES.get(PurePath(executable).name.lower())
+        if harness:
+            return harness
+    return None
 
 
 def _zcode_env_markers() -> frozenset[str]:
