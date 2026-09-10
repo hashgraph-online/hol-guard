@@ -7,8 +7,11 @@ computed request identity and consume it at most once, in the same transaction.
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
+
+_NATIVE_REVIEW_BINDING = re.compile(r"native-review-v4:[0-9a-f]{64}(?::[a-z0-9_-]{1,128}){4}")
 
 
 def _aware_utc(value: object) -> datetime | None:
@@ -39,9 +42,7 @@ def consume_native_review_approval(
     """Consume only the chronologically latest matching five-minute allow."""
 
     current = _aware_utc(now)
-    if current is None:
-        return False
-    if len(artifact_hash) != 64 or any(c not in "0123456789abcdef" for c in artifact_hash):
+    if current is None or _NATIVE_REVIEW_BINDING.fullmatch(artifact_hash) is None:
         return False
     _ = connection.execute("begin immediate")
     rows = connection.execute(
@@ -62,15 +63,24 @@ def consume_native_review_approval(
     if not resolved_rows:
         return False
     resolved_rows.sort(key=lambda item: item[0], reverse=True)
-    approved_at, row = resolved_rows[0]
-    # A later denial, non-artifact scope, future timestamp, or expired decision
-    # supersedes every older allow for this exact request identity.
-    if row["resolution_action"] != "allow" or row["resolution_scope"] != "artifact":
+    approved_at = resolved_rows[0][0]
+    latest_rows = [row for resolved_at, row in resolved_rows if resolved_at == approved_at]
+    # Same-instant decisions are one logical resolution set. Any conflict is
+    # ambiguous and must fail closed rather than relying on SQLite row order.
+    if any(
+        row["resolution_action"] != "allow" or row["resolution_scope"] != "artifact"
+        for row in latest_rows
+    ):
         return False
     if not timedelta(0) <= current - approved_at <= timedelta(minutes=5):
         return False
+    row = min(latest_rows, key=lambda candidate: str(candidate["request_id"]))
     request_id = str(row["request_id"])
-    effect_key = hashlib.sha256(f"native-review-once-v2\0{request_id}".encode()).hexdigest()
+    # Spend all equivalent decisions at this instant as one capability. This
+    # prevents duplicate same-timestamp allows from being consumed separately.
+    effect_key = hashlib.sha256(
+        f"native-review-once-v3\0{artifact_hash}\0{approved_at.isoformat()}".encode()
+    ).hexdigest()
     inserted = connection.execute(
         """insert or ignore into guard_continuation_effects
            (effect_key, request_id, evidence_id, event_name, created_at)
