@@ -1,13 +1,18 @@
 """Queue native PreToolUse review pauses on the local approval center.
 
 Rust remains the semantic authority. This helper only records a resolvable
-request so the user can allow or deny an already-decided review.
+request so the user can allow or deny an already-decided review. Native-mode
+approval binding is deliberately payload-only: decision-critical source I/O
+belongs to Rust. Commands that can execute mutable local code are therefore not
+eligible for Python-side retry reuse.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
+import shlex
 import sqlite3
 import uuid
 from collections.abc import Mapping
@@ -16,7 +21,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
-from ..runtime.shell_secret_reads import assess_shell_reads
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -24,6 +28,53 @@ from .hook_worker_responses import (
 )
 
 _DEFAULT_APPROVAL_CENTER_PORT = 4781
+_MUTABLE_CODE_LAUNCHERS = {
+    ".",
+    "source",
+    "sh",
+    "bash",
+    "dash",
+    "ash",
+    "zsh",
+    "ksh",
+    "fish",
+    "node",
+    "bun",
+    "deno",
+    "ruby",
+    "perl",
+    "npm",
+    "npx",
+    "pnpm",
+    "pnpx",
+    "yarn",
+    "bunx",
+    "make",
+    "just",
+    "task",
+    "cargo",
+    "uv",
+    "uvx",
+    "pipx",
+}
+_PYTHON_LAUNCHER = re.compile(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
+_DIRECT_REUSABLE_COMMANDS = {
+    "cat",
+    "head",
+    "tail",
+    "sed",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "stat",
+    "wc",
+    "base64",
+    "xxd",
+    "od",
+    "hexdump",
+    "strings",
+}
 
 
 def pause_native_pre_tool_for_approval(
@@ -136,19 +187,60 @@ def _native_review_artifact_id(harness: str, tool_name: str) -> str:
     return f"{harness}:native-pretool:{tool_name}"
 
 
+def _command_reuse_is_payload_bound(command: str) -> bool:
+    """Allow retry reuse only when mutable local code cannot hide behind argv.
+
+    This is intentionally narrower than command classification. It does not
+    decide whether a command is safe; Rust already made that decision. It only
+    decides whether the exact JSON request is enough identity for a one-use
+    retry. Script/interpreter/package invocations require a native source-bound
+    identity and are not reusable through this compatibility store.
+    """
+
+    if any(marker in command for marker in ("`", "$(", "${")):
+        return False
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    if not tokens:
+        return False
+    # Only one direct command is eligible. Pipelines, redirections and command
+    # lists can hide additional mutable executables or script inputs.
+    if any(token in {";", "&", "&&", "|", "||", "<", ">", "<<", ">>"} for token in tokens):
+        return False
+    index = 0
+    while index < len(tokens) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[index]):
+        index += 1
+    if index >= len(tokens):
+        return False
+    executable = tokens[index]
+    if "/" in executable or "\\" in executable or executable.startswith("."):
+        return False
+    basename = Path(executable).name.lower()
+    if basename in _MUTABLE_CODE_LAUNCHERS or _PYTHON_LAUNCHER.fullmatch(basename):
+        return False
+    return basename in _DIRECT_REUSABLE_COMMANDS
+
+
 def _native_review_binding(
     harness: str,
     payload: Mapping[str, object],
     native_result: Mapping[str, object],
     workspace: Path | None,
 ) -> str | None:
-    """Bind a short-lived retry to the complete request and inspected code."""
+    """Bind a short-lived retry without performing decision-time filesystem I/O."""
 
     command = pre_tool_command(payload)
+    action = native_result.get("action")
+    action_type = action.get("action_type") if isinstance(action, Mapping) else None
+    if action_type == "package":
+        return None
+    if command is not None and not _command_reuse_is_payload_bound(command):
+        return None
     try:
-        assessment = assess_shell_reads(command, cwd=workspace) if command is not None else None
-        if assessment is not None and assessment.script_requested and assessment.incomplete:
-            return None
         request = dict(payload)
         # Only root transport timestamps are volatile. Nested fields can change
         # the operation and must not disappear from the approval identity.
@@ -156,18 +248,17 @@ def _native_review_binding(
             request.pop(key, None)
         encoded = json.dumps(
             {
-                "schema": "guard.native-review-retry.v2",
+                "schema": "guard.native-review-retry.v3",
                 "harness": harness,
                 "request": request,
                 "workspace": str(workspace) if workspace is not None else None,
                 "native_result": dict(native_result),
-                "script_identity": assessment.identity_sha256 if assessment is not None else None,
             },
             sort_keys=True,
             separators=(",", ":"),
             allow_nan=False,
         ).encode("utf-8")
-    except (OSError, RuntimeError, TypeError, ValueError, RecursionError):
+    except (TypeError, ValueError, RecursionError):
         return None
     if len(encoded) > 128 * 1024:
         return None
