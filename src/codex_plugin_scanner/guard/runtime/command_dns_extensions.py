@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 
 from . import command_managed_service_extensions as _cloud_cli
-from .command_extension_matchers import executable_matcher, executable_path_set_matcher, safe_flag_variant
+from .command_extension_matchers import (
+    executable_matcher,
+    executable_path_set_matcher,
+    safe_flag_variant,
+    safe_option_variant,
+)
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
 from .extension_control_contract import (
@@ -26,6 +31,7 @@ _PUBLIC_RECORD_TYPES = ("a", "aaaa", "caa", "cname", "ds", "mx", "ns", "ptr", "s
 _PRIVATE_RECORD_TYPES = ("a", "aaaa", "cname", "mx", "ptr", "srv", "txt")
 _DELETE = "Export records and confirm recovery or delegation controls before deletion."
 _CHANGE = "Inspect the current record set and preview the intended change first."
+_AWS_SKELETON_VALUES = frozenset({"input", "output", "yaml-input"})
 
 _AWS = "command.dns.aws"
 _GCP = "command.dns.gcp"
@@ -122,9 +128,19 @@ def _rule(
     safer: str = _DELETE,
     example: str | None = None,
 ) -> CommandSafetyRule:
-    variants: tuple[CommandSafeVariant, ...] = (
+    variants: list[CommandSafeVariant] = [
         safe_flag_variant(matcher, variant_id="help", title=f"{title} help", flag="--help"),
-    )
+    ]
+    if family == "aws-route53":
+        variants.append(
+            safe_option_variant(
+                matcher,
+                variant_id="generate-cli-skeleton",
+                title="AWS request skeleton",
+                option="--generate-cli-skeleton",
+                allowed_values=_AWS_SKELETON_VALUES,
+            )
+        )
     return CommandSafetyRule(
         rule_id=rule_id,
         title=title,
@@ -136,11 +152,15 @@ def _rule(
         matcher=matcher,
         family=family,
         example_command=example,
-        safe_variants=variants,
+        safe_variants=tuple(variants),
     )
 
 
-_AWS_ZONE = _aws("route53", "delete-hosted-zone")
+_AWS_ZONE = _aws_paths(
+    ("route53", "delete-hosted-zone"),
+    ("route53", "delete-query-logging-config"),
+    ("route53", "delete-reusable-delegation-set"),
+)
 _AWS_RECORDS = _aws("route53", "change-resource-record-sets")
 _AWS_HEALTH = _aws("route53", "delete-health-check")
 _AWS_TRAFFIC = _aws_paths(
