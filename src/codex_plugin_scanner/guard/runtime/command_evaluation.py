@@ -22,6 +22,7 @@ from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
+    risk_classes_for_command_action,
 )
 from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
@@ -50,6 +51,7 @@ from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
 )
+from .shell_secret_reads import assess_shell_reads
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
@@ -96,7 +98,14 @@ class CompositeCommandEvaluation:
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
-        return tuple(sorted({risk for owned in self.matches for risk in owned.match.rule.risk_classes}))
+        risks = {risk for owned in self.matches for risk in owned.match.rule.risk_classes}
+        if self.controlling_action_class is not None:
+            risks.update(risk_classes_for_command_action(self.controlling_action_class))
+        if any(factor.reason_code == "critical.local-secret-read" for factor in self.baseline_factors):
+            risks.add("local_secret_read")
+        if any(factor.reason_code == "critical.local-script-execution" for factor in self.baseline_factors):
+            risks.add("execution")
+        return tuple(sorted(risks))
 
     @property
     def matched(self) -> bool:
@@ -268,7 +277,23 @@ def evaluate_command(
         workflow_authorization,
         command_identity=command.security_identity,
     )
-    baseline_critical_floor_factors = command_critical_floor_factors(command)
+    read_assessment = assess_shell_reads(command_text, cwd=cwd, home_dir=home_dir)
+    read_factors: tuple[DecisionFactor, ...] = ()
+    if read_assessment.requires_review:
+        reason_code = (
+            "critical.local-secret-read" if read_assessment.sensitive_paths else "critical.local-script-execution"
+        )
+        read_factors = (
+            DecisionFactor(
+                source=DecisionFactorSource.POLICY,
+                reason_code=reason_code,
+                basis=DecisionBasis("require-reapproval", None),
+                operation_ref=f"operation:{command.security_identity.rsplit(':', 1)[-1]}",
+                producer_ref="runtime:shell-read-floors-v1",
+            ),
+        )
+        minimum_action = _stronger_floor(minimum_action, "review")
+    baseline_critical_floor_factors = (*command_critical_floor_factors(command), *read_factors)
     explicitly_allowed_github_capabilities = frozenset(
         capability
         for permission_id in relaxable_enabled_permissions
@@ -355,6 +380,7 @@ def evaluate_command(
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
                 *workspace_write_candidates,
                 *critical_floor_factors,
+                *read_factors,
                 *control_resolution.factors,
                 *explicit_permission_allow_factors,
             ),

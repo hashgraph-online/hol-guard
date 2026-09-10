@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .command_model import CanonicalCommand, parse_shell_command
+from .home_path_text import expand_home, normalize_path
 from .secret_sensitivity import classify_secret_path
 from .shell_execution_context import model_shell_execution_context
 
@@ -24,9 +25,18 @@ _MAX_SCRIPTS = 16
 _MAX_DEPTH = 4
 _MAX_TOTAL_BYTES = 128 * 1024
 _LITERAL_READ = re.compile(
-    r"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bPath|\bBun\.file|\bload_dotenv)"
+    r"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bBun\.file|\bload_dotenv)"
     r"\s*\(\s*(['\"])([^'\"\n\x00]{1,4096})\1"
 )
+
+_PATH_READ = re.compile(
+    r"\bPath\s*\(\s*(['\"])([^'\"\n\x00]{1,4096})\1\s*\)"
+    r"\s*\.\s*(?:read_text|read_bytes|open)\s*\("
+)
+
+
+def _literal_read_paths(source: str) -> tuple[str, ...]:
+    return tuple(match.group(2) for pattern in (_LITERAL_READ, _PATH_READ) for match in pattern.finditer(source))
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,18 +58,29 @@ class ShellReadAssessment:
 
 def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> str | None:
     match = classify_secret_path(value, cwd=cwd, home_dir=home_dir)
+    if match is not None:
+        return match.path
+    # An innocent filename may be a symlink to a credential. Resolve metadata
+    # only; never open the target to decide whether it is protected.
+    lexical = Path(normalize_path(expand_home(value, home_dir), cwd))
+    roots = tuple(root for root in (cwd, home_dir) if root is not None)
+    if not lexical.is_absolute() or not any(lexical.is_relative_to(root) for root in roots):
+        return None
+    try:
+        resolved = lexical.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    match = classify_secret_path(str(resolved), cwd=cwd, home_dir=home_dir)
     return match.path if match is not None else None
 
 
-def direct_secret_read_paths(
-    command: CanonicalCommand, *, cwd: Path | None, home_dir: Path | None
-) -> tuple[str, ...]:
+def direct_secret_read_paths(command: CanonicalCommand, *, cwd: Path | None, home_dir: Path | None) -> tuple[str, ...]:
     # A grep pattern or a test filename containing "secret" is not a file read.
     from .secret_file_request_services.local_read_operands import _shell_segment_file_operand_tokens
 
     candidates: list[str] = []
     for segment in command.segments:
-        name = Path(segment.executable or "").name.lower()
+        name = "." if segment.executable == "." else Path(segment.executable or "").name.lower()
         args = list(segment.arguments)
         candidates.extend(_shell_segment_file_operand_tokens([name, *args]))
         if name in _OTHER_READERS:
@@ -69,18 +90,19 @@ def direct_secret_read_paths(
         if name in {"python", "python3", "node", "bun", "ruby", "perl"}:
             for index, arg in enumerate(args[:-1]):
                 if arg in {"-c", "-e", "--eval", "-p", "--print"}:
-                    candidates.extend(match.group(2) for match in _LITERAL_READ.finditer(args[index + 1]))
+                    candidates.extend(_literal_read_paths(args[index + 1]))
     for redirect in command.redirects:
         if redirect.operator in {"<", "<>"}:
             candidates.append(redirect.target)
-    return tuple(dict.fromkeys(
-        path for value in candidates
-        if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
-    ))
+    return tuple(
+        dict.fromkeys(
+            path for value in candidates if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
+        )
+    )
 
 
 def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] | None:
-    name = Path(executable).name.lower()
+    name = "." if executable == "." else Path(executable).name.lower()
     is_shell = name in _SHELLS
     is_interpreter = name in {"python", "python3", "node", "ruby", "perl"} or bool(re.fullmatch(r"python3\.\d+", name))
     if is_shell or is_interpreter:
@@ -141,11 +163,22 @@ def assess_shell_reads(
             if direct is not None:
                 sensitive.append(direct)
                 continue  # Never read the secret itself to classify the command.
-            if not context.complete or depth >= _MAX_DEPTH or len(visited) >= _MAX_SCRIPTS:
+            # Sourcing makes the resulting shell state uncertain, but a single
+            # literal source still has the caller's known incoming directory.
+            literal_source = (
+                len(model.segments) == 1 and segment.executable in {"source", "."} and current_cwd is not None
+            )
+            if literal_source:
+                effective_cwd = current_cwd
+            if (not context.complete and not literal_source) or depth >= _MAX_DEPTH or len(visited) >= _MAX_SCRIPTS:
                 incomplete = True
                 continue
             source = _resolved_runtime_path(operand, cwd=effective_cwd, home_dir=home_dir, allowed_roots=roots)
             if source is None:
+                incomplete = True
+                continue
+            lexical_source = Path(normalize_path(expand_home(operand, home_dir), effective_cwd))
+            if source != lexical_source:
                 incomplete = True
                 continue
             source_name = str(source)
@@ -168,8 +201,9 @@ def assess_shell_reads(
                 pending.append((payload, effective_cwd, depth + 1))
             else:
                 sensitive.extend(
-                    path for match in _LITERAL_READ.finditer(payload)
-                    if (path := _sensitive_path(match.group(2), cwd=effective_cwd, home_dir=home_dir)) is not None
+                    path
+                    for literal in _literal_read_paths(payload)
+                    if (path := _sensitive_path(literal, cwd=effective_cwd, home_dir=home_dir)) is not None
                 )
     return ShellReadAssessment(tuple(dict.fromkeys(sensitive)), tuple(sources), requested, incomplete)
 

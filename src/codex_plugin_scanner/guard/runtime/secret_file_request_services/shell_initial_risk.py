@@ -8,6 +8,7 @@ from ..command_extension_interaction import CommandExtensionInteraction
 from ..command_model import CanonicalCommand
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..self_approval import SELF_APPROVAL_ACTION_CLASS, SELF_APPROVAL_REASON, is_guard_approval_mutation_command
+from ..shell_secret_reads import assess_shell_reads
 from .destructive_shell_detection import _contains_shell_credential_exfiltration
 from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
 from .github_pr_expansion import (
@@ -138,6 +139,25 @@ def _direct_shell_risk_match(
                 "contents to a network endpoint before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    assessment = assess_shell_reads(detection_command_text, cwd=cwd, home_dir=home_dir)
+    if assessment.requires_review:
+        secret_read = bool(assessment.sensitive_paths)
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="local secret read shell command" if secret_read else "local script execution",
+            reason=(
+                "This command or a local script reads a protected credential file. Review the read before execution."
+                if secret_read
+                else "Local script execution needs review because its file access is not contained."
+            ),
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="shell_local_secret_read" if secret_read else "shell_local_script_review",
+            script_read_identity_sha256=assessment.identity_sha256,
             interpreter_executable_identities=interpreter_executable_identities,
         )
     return None

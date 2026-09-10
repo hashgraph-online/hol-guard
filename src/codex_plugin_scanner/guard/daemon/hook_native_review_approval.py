@@ -6,6 +6,8 @@ request so the user can allow or deny an already-decided review.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 import uuid
 from collections.abc import Mapping
@@ -14,6 +16,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
+from ..runtime.shell_secret_reads import assess_shell_reads
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -42,6 +45,7 @@ def pause_native_pre_tool_for_approval(
         tool_name=tool_name,
         launch_target=launch_target,
         workspace=workspace,
+        identity=_native_review_binding(harness, payload, native_result, workspace),
     ):
         allowed = dict(native_result)
         allowed["decision"] = "allow"
@@ -99,7 +103,7 @@ def queue_native_pre_tool_review(
         harness=harness,
         artifact_id=artifact_id,
         artifact_name=tool_name,
-        artifact_hash=request_id,
+        artifact_hash=_native_review_binding(harness, payload, native_result, workspace) or request_id,
         policy_action="review",
         recommended_scope="artifact",
         changed_fields=("native_pre_tool",),
@@ -132,6 +136,44 @@ def _native_review_artifact_id(harness: str, tool_name: str) -> str:
     return f"{harness}:native-pretool:{tool_name}"
 
 
+def _native_review_binding(
+    harness: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+) -> str | None:
+    """Bind a short-lived retry to the complete request and inspected code."""
+
+    command = pre_tool_command(payload)
+    try:
+        assessment = assess_shell_reads(command, cwd=workspace) if command is not None else None
+        if assessment is not None and assessment.script_requested and assessment.incomplete:
+            return None
+        request = dict(payload)
+        # Only root transport timestamps are volatile. Nested fields can change
+        # the operation and must not disappear from the approval identity.
+        for key in ("timestamp", "timestamp_ms", "timestampMs", "received_at", "receivedAt"):
+            request.pop(key, None)
+        encoded = json.dumps(
+            {
+                "schema": "guard.native-review-retry.v2",
+                "harness": harness,
+                "request": request,
+                "workspace": str(workspace) if workspace is not None else None,
+                "native_result": dict(native_result),
+                "script_identity": assessment.identity_sha256 if assessment is not None else None,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (OSError, RuntimeError, TypeError, ValueError, RecursionError):
+        return None
+    if len(encoded) > 128 * 1024:
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _native_review_matching_allow(
     store: object,
     *,
@@ -139,33 +181,26 @@ def _native_review_matching_allow(
     tool_name: str,
     launch_target: str,
     workspace: Path | None,
+    identity: str | None,
 ) -> bool:
-    listing = getattr(store, "list_approval_requests", None)
-    if not callable(listing) or not launch_target:
+    consume = getattr(store, "consume_native_review_approval", None)
+    if not callable(consume) or identity is None or not launch_target:
         return False
     try:
-        rows = listing(status="resolved", harness=harness, limit=50)
+        return (
+            consume(
+                harness=harness,
+                artifact_id=_native_review_artifact_id(harness, tool_name),
+                artifact_name=tool_name,
+                artifact_hash=identity,
+                launch_target=launch_target,
+                workspace=str(workspace) if workspace is not None else None,
+                now=datetime.now(tz=timezone.utc).isoformat(),
+            )
+            is True
+        )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return False
-    if not isinstance(rows, list):
-        return False
-    expected_workspace = str(workspace) if workspace is not None else None
-    expected_artifact_id = _native_review_artifact_id(harness, tool_name)
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        if row.get("resolution_action") != "allow":
-            continue
-        if row.get("artifact_id") != expected_artifact_id:
-            continue
-        if row.get("artifact_name") != tool_name:
-            continue
-        if row.get("launch_target") != launch_target:
-            continue
-        if row.get("workspace") != expected_workspace:
-            continue
-        return True
-    return False
 
 
 def _native_review_action_envelope(

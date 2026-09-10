@@ -12,7 +12,7 @@ from ...models import GuardArtifact
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import evaluate_command
 from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
+from ..direct_vitest import direct_local_typescript_execution_context
 from ..extension_control_contract import ControlSurface, ExtensionControlLayer
 from ..extension_control_resolver import resolve_extension_controls
 from ..extension_control_runtime import current_extension_control_snapshot
@@ -22,6 +22,7 @@ from ..github_capability_interaction import github_capability_requires_confirmat
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
+from ..shell_secret_reads import assess_shell_reads
 from .agent_guidance_reads import is_benign_agent_guidance_read
 from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS, _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
@@ -110,6 +111,8 @@ def is_explicitly_benign_tool_action_request(
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
         raw_command_text = command_text
+        if assess_shell_reads(command_text, cwd=cwd, home_dir=home_dir).requires_review:
+            return False
         interpreter_evidence = _python_interpreter_executable_identities(
             command_text,
             cwd=cwd,
@@ -220,12 +223,7 @@ def is_explicitly_benign_tool_action_request(
             found_benign_candidate = True
             continue
         if home_dir is not None and (
-            direct_local_vitest_execution_context(
-                stripped_command,
-                cwd=cwd,
-                home_dir=home_dir,
-            )
-            or direct_local_typescript_execution_context(
+            direct_local_typescript_execution_context(
                 stripped_command,
                 cwd=cwd,
                 home_dir=home_dir,
@@ -389,6 +387,8 @@ def build_tool_action_request_artifact(
         "shell_execution_context_hash": request.shell_execution_context_hash,
         "interpreter_executable_identities": request.interpreter_executable_identities,
     }
+    if request.script_read_identity_sha256 is not None:
+        fingerprint_payload["script_read_identity_sha256"] = request.script_read_identity_sha256
     if request.restricted_profile_version is not None:
         fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
     if request.pytest_config_identity_sha256 is not None:
@@ -465,6 +465,11 @@ def build_tool_action_request_artifact(
                 else {}
             ),
             **({"reason_code": request.reason_code} if request.reason_code is not None else {}),
+            **(
+                {"script_read_identity_sha256": request.script_read_identity_sha256}
+                if request.script_read_identity_sha256 is not None
+                else {}
+            ),
             **(
                 {
                     "pytest_config_identity_sha256": request.pytest_config_identity_sha256,
