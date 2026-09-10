@@ -5,3 +5,7 @@ c8b599fa1a262de4751062063677b74e915344c8:tests/test_final_release_evidence.py:ge
 # The test helper was renamed after this commit changed the flagged signature.
 41109cbe4130f4f2c1f8da28e1a3b6e0128f64f7:tests/test_final_release_evidence.py:generic-api-key:77
 ecab2b4949aa53c67014ad06b5162dde273266d6:tests/test_final_release_evidence.py:generic-api-key:77
+# Historical synthetic curl redaction fixtures (alice:password, example.invalid).
+# Current fixtures generate fake credentials; only these two prior lines are excluded.
+caf4288513f0179d24e965a5c866757546cf477e:tests/test_guard_local_action_preview.py:curl-auth-header:32
+caf4288513f0179d24e965a5c866757546cf477e:dashboard/src/evidence/action-command.test.ts:curl-auth-header:21

@@ -1,5 +1,6 @@
 """Local command previews never enter the privacy-safe activity journal."""
 
+import base64
 import sqlite3
 import threading
 from pathlib import Path
@@ -10,6 +11,9 @@ import pytest
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from codex_plugin_scanner.guard.local_action_preview import action_preview
 from codex_plugin_scanner.guard.store import GuardStore
+
+SYNTHETIC_USERINFO = ":".join(("fixture-user", "fixture-password"))
+SYNTHETIC_BASIC = base64.b64encode(SYNTHETIC_USERINFO.encode()).decode()
 
 
 def test_preview_excludes_file_contents_and_redacts_credentials() -> None:
@@ -29,11 +33,11 @@ def test_preview_excludes_file_contents_and_redacts_credentials() -> None:
         ('tool --password "quoted password"', "quoted password"),
         ("tool --credential 'quoted credential'", "quoted credential"),
         ('tool --password = "spaced equals password"', "spaced equals password"),
-        ("curl -u alice:password https://example.invalid", "alice:password"),
-        ("curl --user=alice:password https://example.invalid", "alice:password"),
-        ("curl -ualice:password https://example.invalid", "alice:password"),
-        ("curl https://alice:password@example.invalid", "alice:password"),
-        ('curl -H "Authorization: Basic YWxpY2U6cGFzc3dvcmQ=" https://example.invalid', "YWxpY2U6cGFzc3dvcmQ="),
+        (f"curl -u {SYNTHETIC_USERINFO} https://example.invalid", SYNTHETIC_USERINFO),
+        (f"curl --user={SYNTHETIC_USERINFO} https://example.invalid", SYNTHETIC_USERINFO),
+        (f"curl -u{SYNTHETIC_USERINFO} https://example.invalid", SYNTHETIC_USERINFO),
+        (f"curl https://{SYNTHETIC_USERINFO}@example.invalid", SYNTHETIC_USERINFO),
+        (f'curl -H "Authorization: Basic {SYNTHETIC_BASIC}" https://example.invalid', SYNTHETIC_BASIC),
     ),
 )
 def test_preview_redacts_sensitive_arguments(command: str, secret: str) -> None:

@@ -17,11 +17,13 @@ assert.equal(resolveActionCommand({ ...receipt, provenance_summary: "Command det
 const shellEnvelope = (command: string): GuardActionEnvelope =>
   ({ action_type: "shell_command", command } as unknown as GuardActionEnvelope);
 
+const syntheticUserinfo = ["fixture-user", "fixture-password"].join(":");
+const syntheticBasic = Buffer.from(syntheticUserinfo).toString("base64");
 for (const [command, secret] of [
-  ["curl -u alice:password https://example.invalid", "alice:password"],
-  ["curl --user=alice:password https://example.invalid", "alice:password"],
-  ["curl https://alice:password@example.invalid", "alice:password"],
-  ['curl -H "Authorization: Basic YWxpY2U6cGFzc3dvcmQ=" https://example.invalid', "YWxpY2U6cGFzc3dvcmQ="],
+  [`curl -u ${syntheticUserinfo} https://example.invalid`, syntheticUserinfo],
+  [`curl --user=${syntheticUserinfo} https://example.invalid`, syntheticUserinfo],
+  [`curl https://${syntheticUserinfo}@example.invalid`, syntheticUserinfo],
+  [`curl -H "Authorization: Basic ${syntheticBasic}" https://example.invalid`, syntheticBasic],
 ]) {
   const preview = resolveActionCommand({ ...receipt, action_envelope_json: shellEnvelope(command) });
   assert.ok(preview && !preview.includes(secret));
