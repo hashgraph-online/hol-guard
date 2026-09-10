@@ -69,6 +69,7 @@ from .runtime.github_workflow_runtime import (
     github_workflow_requires_local_once,
     issue_github_workflow_capability_for_resolution,
 )
+from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
@@ -175,6 +176,20 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
+
+
+def _approval_policy_harness(request: Mapping[str, object]) -> str:
+    """Keep local package policy identity separate from display attribution."""
+
+    artifact_type = request.get("artifact_type")
+    artifact_id = request.get("artifact_id")
+    if (
+        artifact_type == "package_request"
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+    ):
+        return LOCAL_SUPPLY_CHAIN_HARNESS
+    return str(request["harness"])
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
@@ -753,7 +768,7 @@ def apply_approval_resolution(
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
-        harness="*" if scope == "global" else str(request["harness"]),
+        harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
         action="allow" if action == "allow" else "block",
         artifact_id=scoped_artifact_id,
@@ -786,7 +801,7 @@ def apply_approval_resolution(
                 store,
                 request_id=request_id,
                 decision=decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
     elif persist_policy is None and scope == "artifact" and temporary_mcp_selection is None:
@@ -809,7 +824,7 @@ def apply_approval_resolution(
                 store,
                 request_id=request_id,
                 decision=once_decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
 
