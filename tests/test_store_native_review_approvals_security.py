@@ -6,7 +6,7 @@ import sqlite3
 
 from codex_plugin_scanner.guard.store_native_review_approvals import consume_native_review_approval
 
-_HASH = "a" * 64
+_BINDING = f"native-review-v4:{'a' * 64}:deny:review:review:native_sensitive_access_review"
 
 
 def _connection() -> sqlite3.Connection:
@@ -51,8 +51,8 @@ def _insert_resolution(
            (request_id, status, harness, artifact_id, artifact_name, artifact_hash,
             launch_target, workspace, resolved_at, resolution_action, resolution_scope)
            values (?, 'resolved', 'cursor', 'cursor:native-pretool:Bash', 'Bash', ?,
-                   'bash check.sh', '/workspace', ?, ?, 'artifact')""",
-        (request_id, _HASH, resolved_at, action),
+                   'cat .env', '/workspace', ?, ?, 'artifact')""",
+        (request_id, _BINDING, resolved_at, action),
     )
 
 
@@ -62,8 +62,8 @@ def _consume(connection: sqlite3.Connection, *, now: str) -> bool:
         harness="cursor",
         artifact_id="cursor:native-pretool:Bash",
         artifact_name="Bash",
-        artifact_hash=_HASH,
-        launch_target="bash check.sh",
+        artifact_hash=_BINDING,
+        launch_target="cat .env",
         workspace="/workspace",
         now=now,
     )
@@ -112,3 +112,49 @@ def test_invalid_matching_timestamp_fails_closed() -> None:
     )
 
     assert _consume(connection, now="2026-09-10T16:05:00+00:00") is False
+
+
+def test_equal_timestamp_allow_and_denial_fail_closed() -> None:
+    connection = _connection()
+    timestamp = "2026-09-10T16:05:00+00:00"
+    _insert_resolution(connection, request_id="allow", resolved_at=timestamp, action="allow")
+    _insert_resolution(connection, request_id="deny", resolved_at=timestamp, action="block")
+
+    assert _consume(connection, now="2026-09-10T16:05:30+00:00") is False
+
+
+def test_duplicate_same_timestamp_allows_are_one_logical_capability() -> None:
+    connection = _connection()
+    timestamp = "2026-09-10T16:05:00+00:00"
+    _insert_resolution(connection, request_id="allow-a", resolved_at=timestamp, action="allow")
+    _insert_resolution(connection, request_id="allow-b", resolved_at=timestamp, action="allow")
+
+    assert _consume(connection, now="2026-09-10T16:05:30+00:00") is True
+    connection.commit()
+    assert _consume(connection, now="2026-09-10T16:05:40+00:00") is False
+
+
+def test_legacy_unbound_hash_cannot_authorize_retry() -> None:
+    connection = _connection()
+    connection.execute(
+        """insert into approval_requests
+           (request_id, status, harness, artifact_id, artifact_name, artifact_hash,
+            launch_target, workspace, resolved_at, resolution_action, resolution_scope)
+           values ('legacy', 'resolved', 'cursor', 'cursor:native-pretool:Bash', 'Bash', ?,
+                   'cat .env', '/workspace', '2026-09-10T16:05:00+00:00', 'allow', 'artifact')""",
+        ("a" * 64,),
+    )
+
+    assert (
+        consume_native_review_approval(
+            connection,
+            harness="cursor",
+            artifact_id="cursor:native-pretool:Bash",
+            artifact_name="Bash",
+            artifact_hash="a" * 64,
+            launch_target="cat .env",
+            workspace="/workspace",
+            now="2026-09-10T16:05:30+00:00",
+        )
+        is False
+    )
