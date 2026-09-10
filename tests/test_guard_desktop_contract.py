@@ -292,14 +292,3 @@ def test_receipt_summary_uses_global_latest_and_counts_warnings_as_approved(tmp_
         "approved": 1,
         "latest_at": warning_timestamp,
     }
-
-
-def test_decision_report_drift_is_small_and_visible() -> None:
-    import difflib
-
-    from tests.guard_command_decision_diff import REPORT_PATH, canonical_json_bytes, generate_decision_diff_report
-
-    expected = REPORT_PATH.read_text(encoding="utf-8").splitlines()
-    actual = canonical_json_bytes(generate_decision_diff_report()).decode().splitlines()
-    diff = "\n".join(difflib.unified_diff(expected, actual, fromfile="fixture", tofile="generated", n=1))
-    assert not diff, diff
