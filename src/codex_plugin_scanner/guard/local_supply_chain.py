@@ -2389,13 +2389,25 @@ def _is_fresh_artifact_approval(decision: dict[str, object], *, store: Any) -> b
         return False
     request_id = decision.get("request_id")
     request_getter = getattr(store, "get_approval_request", None)
-    if not isinstance(request_id, str) or not request_id or not callable(request_getter):
-        return False
-    try:
-        request = request_getter(request_id)
-    except Exception:
-        return False
-    return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    if isinstance(request_id, str) and request_id:
+        if not callable(request_getter):
+            return False
+        try:
+            request = request_getter(request_id)
+        except Exception:
+            return False
+        return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    # resolve_policy_decision_lookup has already applied expiry and local-row
+    # integrity checks. Expiring package rows do not retain request_id in
+    # policy_decisions, so their canonical local identity and context token are
+    # the bounded fresh-proof.
+    artifact_id = decision.get("artifact_id")
+    return (
+        decision.get("harness") == _LOCAL_SUPPLY_CHAIN_HARNESS
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{_LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+        and parse_approval_context_token(decision.get("artifact_hash")) is not None
+    )
 
 
 def _is_durable_exact_artifact_approval(decision: dict[str, object]) -> bool:
