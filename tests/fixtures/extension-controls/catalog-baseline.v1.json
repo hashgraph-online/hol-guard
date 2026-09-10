@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "5bf220ae9974c1450b14ab8cea065132f1cb20dac3d4b5a979ca3e2b965768d5",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -35,6 +35,7 @@
     "command.cloud.aws",
     "command.cloud.azure",
     "command.cloud.gcp",
+    "command.codex-migrate",
     "command.container-runtime",
     "command.data-protection",
     "command.database.mongodb",
@@ -95,7 +96,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 246,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -114,6 +115,7 @@
     "command.cloud.aws.permission.resource-deletion": "aws ec2 terminate-instances",
     "command.cloud.azure.permission.resource-deletion": "az vm delete",
     "command.cloud.gcp.permission.resource-deletion": "gcloud compute instances delete",
+    "command.codex-migrate.permission.apply": "codex-migrate export --a",
     "command.container-runtime.permission.build-cache-prune": "docker buildx prune -a",
     "command.container-runtime.permission.buildx-builder-removal": "docker buildx rm old-builder",
     "command.container-runtime.permission.compose-destructive-cleanup": "docker compose down --volumes",
@@ -457,6 +459,7 @@
     "command.cloud.aws.permission.resource-deletion",
     "command.cloud.azure.permission.resource-deletion",
     "command.cloud.gcp.permission.resource-deletion",
+    "command.codex-migrate.permission.apply",
     "command.container-runtime.permission.build-cache-prune",
     "command.container-runtime.permission.buildx-builder-removal",
     "command.container-runtime.permission.compose-destructive-cleanup",
@@ -696,7 +699,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 233,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -715,6 +718,7 @@
     "command.cloud.aws.resource-deletion",
     "command.cloud.azure.resource-deletion",
     "command.cloud.gcp.resource-deletion",
+    "command.codex-migrate.apply",
     "command.container-runtime.docker-sensitive",
     "command.container-runtime.docker-config-access",
     "command.container-runtime.system-prune",

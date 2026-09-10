@@ -63,6 +63,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "essh group execution command": ("execution", "network_egress"),
     "essh cache removal command": ("destructive_shell",),
     "noodle request execution command": ("execution", "network_egress"),
+    "codex migrate destination-changing operation": ("destructive_shell", "execution", "network_egress"),
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),

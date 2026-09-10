@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.codex-migrate",
+  "version": "1.0.0",
+  "name": "Codex Migrate",
+  "description": "Reviews Codex Migrate commands that enable destination-changing migration or recovery operations.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.jsegeren",
+    "displayName": "Joshua Segeren",
+    "url": "https://github.com/jsegeren/codex-migrate"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#4F46C8" },
+  "homepage": "https://migrate.segeren.com/",
+  "license": "MIT",
+  "executables": ["codex-migrate"],
+  "ecosystemIds": ["codex-migrate"],
+  "riskClasses": ["destructive_shell", "execution", "network_egress"],
+  "actionClasses": ["Codex Migrate destination-changing operation"],
+  "referenceUrls": [
+    "https://github.com/jsegeren/codex-migrate",
+    "https://migrate.segeren.com/how-it-works"
+  ],
+  "saferAlternatives": [
+    "Run the command without --apply and inspect the read-only plan first.",
+    "Keep the source Mac and an independent backup until the migrated workspace is verified."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_codex_migrate_extensions"
+  }
+}
