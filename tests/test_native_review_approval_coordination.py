@@ -249,7 +249,7 @@ def test_native_review_allow_does_not_cross_workspace_or_tool(
     assert other_tool["policy_action"] == "review"
 
 
-@pytest.mark.parametrize("mutation", ("replay", "expired", "future", "input", "script", "legacy", "floor"))
+@pytest.mark.parametrize("mutation", ("replay", "expired", "future", "input", "legacy", "floor"))
 def test_native_review_retry_is_bound_expiring_and_one_use(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -259,12 +259,10 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     worker, store = _worker(tmp_path, monkeypatch, edge)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    script = workspace / "check.sh"
-    script.write_text("echo harmless\n")
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "bash check.sh", "timeout": 1000},
+        "tool_input": {"command": "cat .env", "timeout": 1000},
     }
     kwargs = {
         "payload": payload,
@@ -290,8 +288,6 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     )
     if mutation == "input":
         payload["tool_input"]["timeout"] = 2000
-    elif mutation == "script":
-        script.write_text("cat .env\n")
     elif mutation == "legacy":
         with store._connect() as connection:
             connection.execute(
@@ -305,6 +301,55 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     response = worker.review_http_payload(**kwargs)
     assert response["policy_action"] == "review"
     assert response.get("approval_reuse_status") != "accepted"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "bash check.sh",
+        "sh check.sh",
+        "ash check.sh",
+        "python3 check.py",
+        "python3.12 check.py",
+        "node check.js",
+        "./check",
+        "bunx vitest run __tests__/guard-extension-public-promotions.test.ts --reporter=dot",
+    ),
+)
+def test_mutable_code_launches_never_reuse_python_side_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    edge = _edge("cursor")
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": workspace,
+    }
+    first = worker.review_http_payload(**kwargs)
+    request_id = first["approval_request_id"]
+    assert isinstance(request_id, str)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    second = worker.review_http_payload(**kwargs)
+    assert second["policy_action"] == "review"
+    assert second.get("approval_reuse_status") != "accepted"
 
 
 def test_native_review_retry_is_atomic_between_two_consumers(
