@@ -191,6 +191,33 @@ def test_grok_bridge_rewrites_daemon_review_after_wait(
     assert json.loads(stdout)["decision"] == "allow"
 
 
+def test_grok_bridge_preserves_daemon_result_when_store_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    def boom(*_args: object, **_kwargs: object) -> str:
+        del _args, _kwargs
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(grok_approval_resume, "apply_grok_pretool_approval_wait", boom)
+    original = json.dumps({"decision": "deny", "policy_action": "review"})
+    stdout, stderr, code = bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=tmp_path / "guard-home",
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=original,
+        stderr="keep-stderr",
+        exit_code=2,
+    )
+    assert stdout == original
+    assert stderr == "keep-stderr"
+    assert code == 2
+
+
 def _signed_bundle_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     bundle = tmp_path / "HOL Guard.app"
     macos = bundle / "Contents" / "MacOS"

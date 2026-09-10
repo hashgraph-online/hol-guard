@@ -172,6 +172,7 @@ def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str
             _CLIENT_POOLS[key] = pool
     if evicted is not None:
         evicted.close()
+    _track_resident(executable, normalized_state_dir, environment)
     return pool
 
 

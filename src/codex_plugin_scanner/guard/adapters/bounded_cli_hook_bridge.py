@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import urllib.error
 import urllib.request
@@ -468,7 +469,7 @@ def _apply_grok_bridge_approval_wait(
             store=GuardStore(guard_home),
             timeout_seconds=load_guard_config(guard_home).approval_wait_timeout_seconds,
         )
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
         return stdout, stderr, exit_code
     rewritten = json.dumps(updated, ensure_ascii=True, separators=(",", ":")) + "\n"
     if updated.get("decision") == "allow":

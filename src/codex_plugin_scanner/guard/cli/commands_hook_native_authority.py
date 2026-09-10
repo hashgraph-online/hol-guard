@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -120,12 +121,15 @@ def try_native_or_source_ref_hook(
     )
     if native_result is not None:
         if str(args.harness).strip().lower().replace("_", "-") == "grok":
-            native_result = apply_grok_pretool_approval_wait(
-                native_result,
-                event_name=runtime_hook_event_name(payload),
-                store=store,
-                timeout_seconds=load_guard_config(context.guard_home).approval_wait_timeout_seconds,
-            )
+            try:
+                native_result = apply_grok_pretool_approval_wait(
+                    native_result,
+                    event_name=runtime_hook_event_name(payload),
+                    store=store,
+                    timeout_seconds=load_guard_config(context.guard_home).approval_wait_timeout_seconds,
+                )
+            except (OSError, RuntimeError, ValueError, sqlite3.Error):
+                pass
         _emit("hook", native_result, getattr(args, "json", False))
         return 0
     if _native_mode_requires_rust():
