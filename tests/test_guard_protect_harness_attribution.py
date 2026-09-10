@@ -120,15 +120,18 @@ def _install_fake_package_manager(
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, (str(package_bin), inherited_path))))
 
 
-@pytest.mark.parametrize("origin", ["environment", "parent_process"])
+@pytest.mark.parametrize("origin,harness", [("environment", "zcode"), ("zcode-cli", "zcode"), ("grok", "grok")])
 @pytest.mark.parametrize("package_manager", ["npm", "bun"])
 def test_guard_protect_attributes_package_requests_to_invoking_harness(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
     origin: str,
+    harness: str,
     package_manager: str,
 ) -> None:
+    if origin != "environment" and os.name == "nt":
+        pytest.skip("Process-table attribution is Unix-only")
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
@@ -138,10 +141,21 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     if origin == "environment":
         monkeypatch.setenv("ZCODE_ENV", "production")
     else:
+        from codex_plugin_scanner.guard.runtime import harness_attribution
+
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.runtime.package_protect_projection.resolve_parent_process_harness",
-            lambda: "zcode",
+            harness_attribution.resolve_parent_process_harness,
         )
+        original_run = subprocess.run
+
+        def process_snapshot(command, **kwargs):
+            if command == ["/bin/ps", "-axo", "pid=,ppid=,comm="]:
+                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {origin}\n", "")
+            return original_run(command, **kwargs)
+
+        monkeypatch.setattr(harness_attribution.os, "getppid", lambda: 42)
+        monkeypatch.setattr(harness_attribution.subprocess, "run", process_snapshot)
     _stub_approval_daemon(monkeypatch)
 
     rc = main(
@@ -162,24 +176,24 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
 
     output = json.loads(capsys.readouterr().out)
 
-    assert output["request"]["harness"] == "zcode"
-    assert output["receipt"]["harness"] == "zcode"
+    assert output["request"]["harness"] == harness
+    assert output["receipt"]["harness"] == harness
     assert output["targets"]
-    assert all(target.get("harness") == "zcode" for target in output["targets"])
+    assert all(target.get("harness") == harness for target in output["targets"])
     assert str(output["receipt"]["artifact_id"]).startswith("guard-cli:")
 
     queued = store.list_approval_requests(status="pending", limit=10)
     assert queued
-    assert all(item["harness"] == "zcode" for item in queued)
+    assert all(item["harness"] == harness for item in queued)
     assert all(str(item["artifact_id"]).startswith("guard-cli:") for item in queued)
-    assert any("ZCode" in str(item.get("trigger_summary") or "") for item in queued)
+    assert any(harness in str(item.get("trigger_summary") or "").lower() for item in queued)
     assert rc == 2
 
     install_events = [
         event for event in store.list_events(limit=20) if str(event["event_name"]).startswith("install_time_")
     ]
     assert install_events
-    assert all(event["payload"].get("harness") == "zcode" for event in install_events)
+    assert all(event["payload"].get("harness") == harness for event in install_events)
 
 
 def test_guard_protect_keeps_guard_cli_attribution_outside_harness_env(

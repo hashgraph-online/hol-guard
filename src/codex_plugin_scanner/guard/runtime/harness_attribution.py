@@ -30,6 +30,8 @@ _PROCESS_HARNESSES = {
     "cursor": "cursor",
     "cursor-agent": "cursor",
     "zcode": "zcode",
+    "zcode-cli": "zcode",
+    "grok": "grok",
     "pi": "pi",
     "omp": "omp",
     "opencode": "opencode",
