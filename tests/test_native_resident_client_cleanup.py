@@ -33,6 +33,31 @@ def test_close_native_resident_clients_attempts_all_selected_pools_before_raisin
     assert not any(Path(key[1]).parent == guard_home.resolve() for key in client_module._CLIENT_POOLS)
 
 
+def test_stream_close_does_not_stop_shared_resident(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped: list[Path] = []
+    monkeypatch.setattr(
+        client_module,
+        "stop_native_resident",
+        lambda *, state_dir, **_kwargs: stopped.append(state_dir) or True,
+    )
+    pool = _PersistentNativeClientPool(
+        executable=tmp_path / "runtime",
+        state_dir=tmp_path / "native-runtime",
+        environment={},
+    )
+    client = client_module._PersistentNativeClient(
+        executable=tmp_path / "runtime",
+        state_dir=tmp_path / "native-runtime",
+        environment={},
+    )
+    pool._clients.add(client)  # pyright: ignore[reportPrivateUsage]
+    pool.close()
+    assert stopped == []
+
+
 def test_close_native_residents_preserves_another_guard_home(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

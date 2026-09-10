@@ -162,6 +162,35 @@ def test_success_preserves_child_stdout_and_returncode(
     assert output.getvalue() == '{"decision":"deny"}\n'
 
 
+def test_grok_bridge_rewrites_daemon_review_after_wait(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    monkeypatch.setattr(
+        grok_approval_resume,
+        "wait_for_grok_live_approval",
+        lambda **_kwargs: "allow",
+    )
+    stdout, _stderr, code = bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=tmp_path / "guard-home",
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=json.dumps(
+            {
+                "decision": "deny",
+                "policy_action": "review",
+                "approval_requests": [{"request_id": "req-1"}],
+            }
+        ),
+        stderr="",
+        exit_code=2,
+    )
+    assert code == 0
+    assert json.loads(stdout)["decision"] == "allow"
+
+
 def _signed_bundle_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     bundle = tmp_path / "HOL Guard.app"
     macos = bundle / "Contents" / "MacOS"

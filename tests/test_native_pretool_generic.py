@@ -136,6 +136,39 @@ def test_generic_result_decoder_rejects_raw_or_conflicting_content() -> None:
     assert _decode_edge(malformed_type) is None
 
 
+def test_generic_allow_result_renders_grok_decision_json() -> None:
+    edge = _edge("grok", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(
+        {
+            "decision": "allow",
+            "policy_action": "allow",
+            "minimum_action": "allow",
+            "reason_code": "native_pre_tool_allow",
+            "reason": "",
+            "explicitly_benign": True,
+        }
+    )
+    _sync_receipt(edge)
+    rendered = harness_json_from_native_pre_tool("grok", result)
+    assert rendered["decision"] == "allow"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "allow"
+
+
+def test_generic_review_result_renders_grok_deny_decision() -> None:
+    edge = _edge("grok", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    rendered = harness_json_from_native_pre_tool("grok", result)
+    assert rendered["decision"] == "deny"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "deny"
+
+
 def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically() -> None:
     edge = _edge("codex", "PreToolUse")
     result = edge["result"]

@@ -52,10 +52,15 @@ def wait_for_grok_live_approval(
     json_mode: bool,
     payload: Mapping[str, object] | None = None,
 ) -> str | None:
-    """Wait for the queued Grok approval and return allow, block, or None."""
+    """Wait for the queued Grok approval and return allow, block, or None.
 
+    ``json_mode`` is retained for callers. Compact JSON stdout still waits so
+    the original PreToolUse call can resume inside the hook deadline.
+    """
+
+    del json_mode
     canonical_event = event_name.replace("_", "").replace("-", "").lower()
-    if json_mode or canonical_event != "pretooluse":
+    if canonical_event != "pretooluse":
         return None
     if policy_action not in _GROK_WAITABLE_ACTIONS:
         return None
@@ -175,6 +180,50 @@ def _optional_string(value: object) -> str | None:
     return stripped or None
 
 
+def apply_grok_pretool_approval_wait(
+    response: dict[str, object],
+    *,
+    event_name: str,
+    store: GuardStore,
+    timeout_seconds: int,
+) -> dict[str, object]:
+    """Wait on a native or daemon Grok review and rewrite allow/deny JSON."""
+
+    policy_action = str(response.get("policy_action") or "")
+    decision = wait_for_grok_live_approval(
+        event_name=event_name,
+        policy_action=policy_action,
+        response_payload=response,
+        store=store,
+        timeout_seconds=timeout_seconds,
+        json_mode=False,
+        payload=response,
+    )
+    if decision == "allow":
+        allowed = dict(response)
+        allowed["decision"] = "allow"
+        allowed["policy_action"] = "allow"
+        allowed.pop("reason", None)
+        hook_specific = allowed.get("hookSpecificOutput")
+        if isinstance(hook_specific, Mapping):
+            rewritten = dict(hook_specific)
+            rewritten["permissionDecision"] = "allow"
+            rewritten.pop("permissionDecisionReason", None)
+            allowed["hookSpecificOutput"] = rewritten
+        return allowed
+    if decision == "block":
+        blocked = dict(response)
+        blocked["decision"] = "deny"
+        blocked["policy_action"] = "block"
+        hook_specific = blocked.get("hookSpecificOutput")
+        if isinstance(hook_specific, Mapping):
+            rewritten = dict(hook_specific)
+            rewritten["permissionDecision"] = "deny"
+            blocked["hookSpecificOutput"] = rewritten
+        return blocked
+    return response
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -183,6 +232,7 @@ __all__ = [
     "GROK_APPROVAL_WAIT_MAX_SECONDS",
     "GROK_HOOK_INTERNAL_TIMEOUT_SECONDS",
     "GROK_PRETOOL_HOOK_TIMEOUT_SECONDS",
+    "apply_grok_pretool_approval_wait",
     "grok_live_approval_wait_seconds",
     "grok_resume_metadata_from_guard_payload",
     "wait_for_grok_live_approval",
