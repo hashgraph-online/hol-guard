@@ -287,6 +287,10 @@ def _python_module_launch(executable: str, args: tuple[str, ...]) -> bool:
     return False
 
 
+def _path_qualified(executable: str) -> bool:
+    return bool(executable) and ("/" in executable or "\\" in executable or executable.startswith("."))
+
+
 def _local_executable_operand(
     executable: str,
     *,
@@ -296,7 +300,7 @@ def _local_executable_operand(
 ) -> str | None:
     """Return a path-qualified executable only when it is inside a guarded local root."""
 
-    if not executable or not ("/" in executable or "\\" in executable or executable.startswith(".")):
+    if not _path_qualified(executable):
         return None
     lexical = Path(normalize_path(expand_home(executable, home_dir), cwd))
     if not lexical.is_absolute() or not any(lexical.is_relative_to(root) for root in roots):
@@ -352,8 +356,7 @@ def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
         executable in readers
         or has_input_redirect
         or _python_executable(executable)
-        or "/" in execution.tokens[0]
-        or "\\" in execution.tokens[0]
+        or _path_qualified(execution.tokens[0])
     )
 
 
@@ -469,6 +472,9 @@ def assess_shell_reads(
                     roots=roots,
                 )
                 if local_executable is None:
+                    if _path_qualified(executable):
+                        requested = True
+                        incomplete = True
                     continue
                 invocation = (local_executable, False)
             requested = True
