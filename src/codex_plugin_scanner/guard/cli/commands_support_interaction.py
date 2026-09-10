@@ -735,9 +735,12 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
             file=sys.stderr,
             flush=True,
         )
-        with suppress(Exception):
-            open_browser_url(browser_url)
-        return
+        try:
+            opened = open_browser_url(browser_url)
+        except Exception:
+            opened = False
+        if opened is not False:
+            return
 
     recovery_command = _approval_recovery_command(response_payload, review_url=review_url)
     if recovery_command is not None:

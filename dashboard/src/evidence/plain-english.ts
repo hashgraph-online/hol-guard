@@ -179,7 +179,7 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     artifactName &&
     provenance.toLowerCase().endsWith(artifactName.toLowerCase())
   ) {
-    return redactDisplayText(provenance) ?? artifactName ?? type;
+    return redactDisplayText(provenance) ?? redactDisplayText(artifactName) ?? type;
   }
 
   // artifact_name when it is human-readable

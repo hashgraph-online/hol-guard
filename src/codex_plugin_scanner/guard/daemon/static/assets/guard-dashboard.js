@@ -14414,7 +14414,7 @@ function resolveActionTitle(receipt) {
   const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
   if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
-    return redactDisplayText(provenance) ?? artifactName ?? type;
+    return redactDisplayText(provenance) ?? redactDisplayText(artifactName) ?? type;
   }
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
     return redactDisplayText(artifactName) ?? type;
