@@ -1186,6 +1186,11 @@ class StoreConnectionSchemaMixin:
                     preview_columns = {
                         str(column[1]) for column in connection.execute("pragma table_info(local_action_previews)")
                     }
+                    preview_cleanup = connection.execute(
+                        "select 1 from sqlite_master where type = 'trigger' "
+                        "and name = 'trg_command_activity_delete_local_action_previews' "
+                        "and tbl_name = 'command_activity'"
+                    ).fetchone()
                     return (
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
@@ -1193,6 +1198,7 @@ class StoreConnectionSchemaMixin:
                         and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
                         and preview_columns == {"activity_id", "preview"}
+                        and preview_cleanup is not None
                     )
                 finally:
                     connection.close()

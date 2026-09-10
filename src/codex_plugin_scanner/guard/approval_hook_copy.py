@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -25,12 +27,56 @@ def _without_guard_token_fragment(text: str) -> str:
 def is_loopback_approval_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
     except ValueError:
         return False
-    host = (parsed.hostname or "").lower()
+    if port is not None and not 0 <= port <= 65535:
+        return False
     if host.startswith("[") and host.endswith("]"):
         host = host[1:-1]
-    return parsed.scheme in {"http", "https"} and host in _LOOPBACK_HOSTS
+    return (
+        parsed.scheme in {"http", "https"}
+        and host in _LOOPBACK_HOSTS
+        and parsed.username is None
+        and parsed.password is None
+    )
+
+
+def _safe_approval_request_id(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    request_id = value.strip()
+    if not request_id or len(request_id) > 256 or not request_id.isprintable():
+        return None
+    return request_id
+
+
+def _approval_recovery_command(response_payload: Mapping[str, object], *, review_url: str | None = None) -> str | None:
+    """Return a shell-safe local command for recovering a pending approval."""
+
+    queued = response_payload.get("approval_requests")
+    if isinstance(queued, list):
+        queued_ids: list[str] = []
+        for item in queued:
+            if not isinstance(item, Mapping):
+                continue
+            request_id = _safe_approval_request_id(item.get("request_id"))
+            if request_id is None:
+                continue
+            item_url = item.get("approval_url")
+            if review_url is not None and isinstance(item_url, str) and item_url.strip() == review_url:
+                return shlex.join(["hol-guard", "approvals", "open", request_id])
+            queued_ids.append(request_id)
+        if len(queued_ids) == 1:
+            return shlex.join(["hol-guard", "approvals", "open", queued_ids[0]])
+
+    request_id = _safe_approval_request_id(response_payload.get("primary_approval_request_id"))
+    if request_id is None:
+        request_id = _safe_approval_request_id(response_payload.get("request_id"))
+    if request_id is None:
+        return None
+    return shlex.join(["hol-guard", "approvals", "open", request_id])
 
 
 def join_native_hook_reason(*values: object | None) -> str:
@@ -81,8 +127,7 @@ def live_hook_approval_context(
     from .cli.commands_support_runtime_policy import _native_approval_center_context
 
     message = _native_approval_center_context(response_payload, harness=harness)
-    token = load_guard_daemon_auth_token(guard_home)
-    if message is None or not token:
+    if message is None:
         return message
     from .cli.commands_support_interaction import _preferred_approval_review_url
 
@@ -92,9 +137,9 @@ def live_hook_approval_context(
     review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
     if not is_loopback_approval_url(review_url):
         return message
-    tokenized = build_approval_browser_url(review_url, auth_token=token)
-    if not tokenized or tokenized == review_url:
-        return message
+    tokenized = live_approval_browser_url(review_url, guard_home=guard_home)
+    if tokenized is None or tokenized == review_url:
+        return message.replace(review_url, "the local Guard app", 1)
     return message.replace(review_url, tokenized, 1)
 
 
@@ -105,4 +150,7 @@ def live_approval_browser_url(url: str, *, guard_home: Path) -> str | None:
     token = load_guard_daemon_auth_token(guard_home)
     if not token:
         return None
-    return build_approval_browser_url(url, auth_token=token)
+    try:
+        return build_approval_browser_url(url, auth_token=token)
+    except (TypeError, ValueError):
+        return None

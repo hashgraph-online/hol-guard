@@ -246,13 +246,20 @@ def emit_guard_payload(
                     user_copy["harness_message"] = context
                     user_copy["dashboard_url"] = ""
     if command == "approvals" and live_approval_home is not None:
-        from ..approval_hook_copy import live_approval_browser_url
+        from ..approval_hook_copy import _approval_recovery_command, live_approval_browser_url
 
         url = redacted_payload.get("approval_url")
         if isinstance(url, str):
             signed_url = live_approval_browser_url(url, guard_home=live_approval_home)
             if signed_url:
                 redacted_payload["approval_url"] = signed_url
+            else:
+                recovery_command = _approval_recovery_command(payload, review_url=url)
+                redacted_payload["approval_url"] = (
+                    f"Run `{recovery_command}` to open this request in the local Guard app."
+                    if recovery_command is not None
+                    else "Open the local Guard app to review this request."
+                )
     if not _RICH_AVAILABLE:
         if (
             command == "approvals"

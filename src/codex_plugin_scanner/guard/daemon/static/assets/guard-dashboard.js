@@ -14305,6 +14305,34 @@ function getArtifactType(receipt) {
 function getEnvelope(receipt) {
   return receipt.action_envelope_json ?? null;
 }
+function getRedactedEnvelopeCommand(receipt) {
+  const value = receipt.envelope_redacted_json;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const command = value.command;
+  return typeof command === "string" && command.trim() ? command.trim() : null;
+}
+const SENSITIVE_ARGUMENT_PATTERN = /((?:^|\s)--?[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*(?:\s*=\s*|\s+))("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s'\"]+)/gi;
+const QUOTED_ASSIGNMENT_PATTERN = /((?:^|\s)(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*).*?\2(?=\s|$)/gi;
+const SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])["']?[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*)([^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN = /(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*\[redacted\][^"']+\1/i;
+function redactDisplayText(value) {
+  const trimmed = value.trim();
+  if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
+  const redacted = trimmed.replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]").replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2").replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");
+  return REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN.test(redacted) ? null : redacted;
+}
+function hasAmbiguousUnquotedAssignment(value) {
+  for (const match of value.matchAll(UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN)) {
+    const remainder = value.slice((match.index ?? 0) + match[0].length);
+    if (!remainder.trim()) continue;
+    const whitespace = remainder.match(/^\s*/)?.[0] ?? "";
+    if (whitespace.includes("\n") || whitespace.includes("\r")) continue;
+    const next = remainder.slice(whitespace.length);
+    if (!/^[;|&)\]}]/.test(next)) return true;
+  }
+  return false;
+}
 function humanFileName(artifactName) {
   if (!artifactName) return "a file";
   const name = artifactName.split("/").pop() ?? artifactName;
@@ -14342,11 +14370,14 @@ function looksLikeId(text) {
 }
 function resolveActionCommand(receipt) {
   const envelope = getEnvelope(receipt);
-  if (envelope) return envelope.command?.trim() || null;
+  if (envelope) {
+    const command = getRedactedEnvelopeCommand(receipt) ?? receipt.action_explanation?.technical.command_display?.trim() ?? envelope.command?.trim();
+    return command ? redactDisplayText(command) : null;
+  }
   if (receipt.decision_contract_error) return null;
   const name = receipt.artifact_name?.trim();
   const provenance = receipt.provenance_summary?.trim();
-  if (name && provenance && provenance.startsWith(`${name} `)) return provenance;
+  if (name && provenance && provenance.startsWith(`${name} `)) return redactDisplayText(provenance);
   return null;
 }
 function resolveActionTitle(receipt) {
@@ -14383,17 +14414,17 @@ function resolveActionTitle(receipt) {
   const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
   if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
-    return provenance;
+    return redactDisplayText(provenance) ?? artifactName ?? type;
   }
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
-    return artifactName;
+    return redactDisplayText(artifactName) ?? type;
   }
   const caps = receipt.capabilities_summary?.trim();
   if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
     return caps;
   }
   if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
-    return provenance;
+    return redactDisplayText(provenance) ?? type;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
   if (name && name.toLowerCase() !== type.toLowerCase()) {
@@ -14421,12 +14452,14 @@ function resolveActionSubtitle(receipt) {
   }
   const caps = receipt.capabilities_summary?.trim();
   const provenance = receipt.provenance_summary?.trim();
+  const safeCaps = caps ? redactDisplayText(caps) : null;
+  const safeProvenance = provenance ? redactDisplayText(provenance) : null;
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
-  if (isCapsUseful) {
-    parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
-    parts.push(provenance);
+  if (isCapsUseful && safeCaps) {
+    parts.push(safeCaps);
+  } else if (isProvenanceUseful && safeProvenance && provenance?.toLowerCase() !== caps?.toLowerCase() && safeProvenance !== resolveActionTitle(receipt)) {
+    parts.push(safeProvenance);
   }
   if (parts.length > 0) {
     return parts.join(" · ");
@@ -14436,7 +14469,8 @@ function resolveActionSubtitle(receipt) {
 function resolveActionDetail(receipt) {
   const envelope = getEnvelope(receipt);
   if (!envelope) return null;
-  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  const detail = resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  return detail ? redactDisplayText(detail) : null;
 }
 function formatSubtitle(subtitle) {
   if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
@@ -26436,7 +26470,7 @@ function CommandRow(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "min-w-[16rem] max-w-[36rem] px-3 py-3 text-sm text-brand-dark", children: props.item.action_preview ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words line-clamp-3", children: props.item.action_preview }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-600", children: "Command not recorded" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "min-w-[16rem] max-w-[36rem] px-3 py-3 text-sm text-brand-dark", children: props.item.action_preview ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words line-clamp-3", children: props.item.action_preview }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-600", children: "Command text not retained" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [

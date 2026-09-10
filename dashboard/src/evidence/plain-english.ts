@@ -20,6 +20,50 @@ function getEnvelope(receipt: GuardReceipt): GuardActionEnvelope | null {
   return receipt.action_envelope_json ?? null;
 }
 
+type ReceiptWithRedactedEnvelope = GuardReceipt & { envelope_redacted_json?: unknown };
+
+function getRedactedEnvelopeCommand(receipt: GuardReceipt): string | null {
+  const value = (receipt as ReceiptWithRedactedEnvelope).envelope_redacted_json;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const command = (value as Record<string, unknown>).command;
+  return typeof command === "string" && command.trim() ? command.trim() : null;
+}
+
+const SENSITIVE_ARGUMENT_PATTERN =
+  /((?:^|\s)--?[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*(?:\s*=\s*|\s+))("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s'\"]+)/gi;
+const QUOTED_ASSIGNMENT_PATTERN =
+  /((?:^|\s)(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*).*?\2(?=\s|$)/gi;
+const SENSITIVE_ASSIGNMENT_PATTERN =
+  /((?:^|[\s{,;])["']?[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN =
+  /((?:^|[\s{,;])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*)([^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN =
+  /(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*\[redacted\][^"']+\1/i;
+
+/** Keep command/provenance structure visible without guessing at ambiguous secret values. */
+function redactDisplayText(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
+
+  const redacted = trimmed
+    .replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]")
+    .replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2")
+    .replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");
+  return REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN.test(redacted) ? null : redacted;
+}
+
+function hasAmbiguousUnquotedAssignment(value: string): boolean {
+  for (const match of value.matchAll(UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN)) {
+    const remainder = value.slice((match.index ?? 0) + match[0].length);
+    if (!remainder.trim()) continue;
+    const whitespace = remainder.match(/^\s*/)?.[0] ?? "";
+    if (whitespace.includes("\n") || whitespace.includes("\r")) continue;
+    const next = remainder.slice(whitespace.length);
+    if (!/^[;|&)\]}]/.test(next)) return true;
+  }
+  return false;
+}
+
 export function humanFileName(artifactName: string | null | undefined): string {
   if (!artifactName) return "a file";
   const name = artifactName.split("/").pop() ?? artifactName;
@@ -64,13 +108,19 @@ function looksLikeId(text: string): boolean {
 
 export function resolveActionCommand(receipt: GuardReceipt): string | null {
   const envelope = getEnvelope(receipt);
-  if (envelope) return envelope.command?.trim() || null;
+  if (envelope) {
+    const command =
+      getRedactedEnvelopeCommand(receipt) ??
+      receipt.action_explanation?.technical.command_display?.trim() ??
+      envelope.command?.trim();
+    return command ? redactDisplayText(command) : null;
+  }
   if (receipt.decision_contract_error) return null;
 
   // Legacy CLI receipts retained the invocation as provenance, without an envelope.
   const name = receipt.artifact_name?.trim();
   const provenance = receipt.provenance_summary?.trim();
-  if (name && provenance && provenance.startsWith(`${name} `)) return provenance;
+  if (name && provenance && provenance.startsWith(`${name} `)) return redactDisplayText(provenance);
   return null;
 }
 
@@ -129,12 +179,12 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     artifactName &&
     provenance.toLowerCase().endsWith(artifactName.toLowerCase())
   ) {
-    return provenance;
+    return redactDisplayText(provenance) ?? artifactName ?? type;
   }
 
   // artifact_name when it is human-readable
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
-    return artifactName;
+    return redactDisplayText(artifactName) ?? type;
   }
 
   // capabilities_summary
@@ -145,7 +195,7 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
 
   // provenance_summary when it is descriptive
   if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
-    return provenance;
+    return redactDisplayText(provenance) ?? type;
   }
 
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
@@ -184,13 +234,15 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
 
   const caps = receipt.capabilities_summary?.trim();
   const provenance = receipt.provenance_summary?.trim();
+  const safeCaps = caps ? redactDisplayText(caps) : null;
+  const safeProvenance = provenance ? redactDisplayText(provenance) : null;
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
 
-  if (isCapsUseful) {
-    parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
-    parts.push(provenance);
+  if (isCapsUseful && safeCaps) {
+    parts.push(safeCaps);
+  } else if (isProvenanceUseful && safeProvenance && provenance?.toLowerCase() !== caps?.toLowerCase() && safeProvenance !== resolveActionTitle(receipt)) {
+    parts.push(safeProvenance);
   }
 
   if (parts.length > 0) {
@@ -203,7 +255,8 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
 export function resolveActionDetail(receipt: GuardReceipt): string | null {
   const envelope = getEnvelope(receipt);
   if (!envelope) return null;
-  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  const detail = resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  return detail ? redactDisplayText(detail) : null;
 }
 
 function formatSubtitle(subtitle: string): string {

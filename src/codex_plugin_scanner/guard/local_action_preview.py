@@ -11,6 +11,7 @@ from .redaction import redact_sensitive_text, redact_text
 from .runtime.command_tokens import shell_tokens
 
 MAX_PREVIEW_LENGTH = 2048
+_SENSITIVE_NAME_RE = re.compile(r"api_?key|token|secret|password|credential|authorization|cookie", re.IGNORECASE)
 
 _SENSITIVE_ARGUMENT_RE = re.compile(
     r"""
@@ -31,18 +32,39 @@ _SENSITIVE_ARGUMENT_RE = re.compile(
 
 
 def action_preview(payload: Mapping[str, object]) -> str | None:
-    inputs = payload.get("tool_input", payload.get("toolInput", payload))
-    if not isinstance(inputs, Mapping):
-        return None
-    command = cast(Mapping[str, object], inputs).get("command")
-    if not isinstance(command, str):
+    inputs = payload.get("tool_input", payload.get("toolInput", payload.get("arguments")))
+    command: str | None = None
+    if isinstance(inputs, Mapping):
+        arguments = cast(Mapping[str, object], inputs)
+        command = next(
+            (
+                value
+                for key in ("command", "cmd", "shell_command", "shellCommand")
+                if isinstance(value := arguments.get(key), str) and value.strip()
+            ),
+            None,
+        )
+    if command is None:
+        command = next(
+            (value for key in ("command", "cmd") if isinstance(value := payload.get(key), str) and value.strip()), None
+        )
+    if command is None:
         return None
     # Do not truncate before redaction: that could cut off a secret's terminator.
     if len(command) > 65536:
         return None
-    _tokens, parse_succeeded = shell_tokens(command)
+    tokens, parse_succeeded = shell_tokens(command)
     if not parse_succeeded:
         return None
+
+    # Shell parsing catches assignments after `env` and quoted assignment values.
+    # If escaping prevents safe replacement, omit the preview rather than leak.
+    for token in tokens:
+        name, separator, value = token.partition("=")
+        if separator and value and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) and _SENSITIVE_NAME_RE.search(name):
+            if value not in command:
+                return None
+            command = command.replace(value, "[redacted]")
 
     redacted_command = _SENSITIVE_ARGUMENT_RE.sub(
         lambda match: f"{match.group('prefix')}[redacted]",

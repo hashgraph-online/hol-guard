@@ -417,8 +417,9 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
 
     captured = capsys.readouterr()
 
-    assert opened_urls == ["http://127.0.0.1:5475/requests/req-1"]
-    assert "http://127.0.0.1:5475/requests/req-1" in captured.err
+    assert opened_urls == []
+    assert "hol-guard approvals open req-1" in captured.err
+    assert "http://127.0.0.1:5475/requests/req-1" not in captured.err
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:

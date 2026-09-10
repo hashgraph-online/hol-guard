@@ -1,7 +1,9 @@
 """Local command previews never enter the privacy-safe activity journal."""
 
 import sqlite3
+import threading
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -39,6 +41,37 @@ def test_preview_redacts_sensitive_arguments(command: str, secret: str) -> None:
 
 def test_preview_omits_malformed_shell_input() -> None:
     assert action_preview({"toolInput": {"command": 'tool --password "unterminated'}}) is None
+
+
+@pytest.mark.parametrize("container", ["tool_input", "toolInput", "arguments"])
+@pytest.mark.parametrize("alias", ["command", "cmd", "shell_command", "shellCommand"])
+def test_preview_retains_supported_command_aliases(container: str, alias: str) -> None:
+    assert action_preview({container: {alias: "git status"}}) == "git status"
+
+
+@pytest.mark.parametrize("alias", ["command", "cmd"])
+def test_preview_retains_top_level_command_aliases(alias: str) -> None:
+    assert action_preview({alias: "git status"}) == "git status"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "env PASSWORD=hunter2 python app.py",
+        'env PASSWORD="hunter2 with spaces" python app.py',
+        'env "PASSWORD=hunter2 with spaces" python app.py',
+        "export APP_PASSWORD=hunter2; python app.py",
+    ],
+)
+def test_preview_redacts_inline_environment_credentials(command: str) -> None:
+    preview = action_preview({"command": command})
+    assert preview is not None
+    assert "hunter2" not in preview
+    assert "with spaces" not in preview
+
+
+def test_preview_omits_escaped_environment_secret() -> None:
+    assert action_preview({"command": 'env PASSWORD="hun""ter2" python app.py'}) is None
 
 
 def test_native_preview_is_local_and_deleted_with_activity(tmp_path: Path) -> None:
@@ -100,6 +133,57 @@ def test_existing_database_adds_preview_storage(tmp_path: Path) -> None:
     assert store._schema_is_current()
 
 
+def test_existing_database_restores_preview_cleanup(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    writer = RuntimeHookEvidenceWriter(store=store)
+    assert writer.submit_command_activity(
+        harness="zcode",
+        event="PostToolUse",
+        succeeded=True,
+        payload={"toolCallId": "call_cleanup_123456789", "toolInput": {"command": "git status"}},
+    )
+    assert writer.stop(timeout_seconds=5)
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute("drop trigger trg_command_activity_delete_local_action_previews")
+    assert not store._schema_is_current()
+    repaired = GuardStore(store.guard_home, prime_policy_integrity=False)
+    assert repaired._schema_is_current()
+    assert repaired.clear_command_activity_evidence()["deleted"]["activities"] == 1
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        assert connection.execute("select count(*) from local_action_previews").fetchone() == (0,)
+
+
+def test_recovery_keeps_evidence_without_journaling_command_text(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    failed = threading.Event()
+
+    def fail(**_kwargs: object) -> bool:
+        failed.set()
+        raise sqlite3.OperationalError("database unavailable")
+
+    with patch(
+        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_deferred_post_hook_command_activity",
+        side_effect=fail,
+    ):
+        writer = RuntimeHookEvidenceWriter(store=store, batch_wait_seconds=0)
+        assert writer.submit_command_activity(
+            harness="zcode",
+            event="PostToolUse",
+            succeeded=True,
+            payload={"toolCallId": "call_recovery_123456789", "toolInput": {"command": "echo private-preview"}},
+        )
+        assert failed.wait(timeout=2)
+        assert writer.stop(timeout_seconds=2)
+        assert writer.stats()["durable_pending"] == 1
+    assert "private-preview" not in (store.guard_home / "runtime-hook-evidence.jsonl").read_text()
+    recovered = RuntimeHookEvidenceWriter(store=store, batch_wait_seconds=0)
+    assert recovered.stop(timeout_seconds=2)
+    assert recovered.stats()["recovered"] == 1
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        assert connection.execute("select count(*) from command_activity").fetchone() == (1,)
+        assert connection.execute("select count(*) from local_action_previews").fetchone() == (0,)
+
+
 def test_preview_failure_does_not_retry_recorded_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
 
@@ -110,7 +194,10 @@ def test_preview_failure_does_not_retry_recorded_evidence(tmp_path: Path, monkey
     writer = RuntimeHookEvidenceWriter(store=store)
     for index in range(2):
         assert writer.submit_command_activity(
-            harness="zcode", event="PreToolUse", succeeded=True, policy_action="allow",
+            harness="zcode",
+            event="PreToolUse",
+            succeeded=True,
+            policy_action="allow",
             payload={"toolCallId": f"call_example_12345678{index}", "toolInput": {"command": "git status --short"}},
         )
     assert writer.stop(timeout_seconds=5)

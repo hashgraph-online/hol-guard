@@ -726,22 +726,28 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if not review_url:
         return
-    print(
-        f"HOL Guard is waiting for approval in your browser: {review_url}",
-        file=sys.stderr,
-        flush=True,
-    )
-    browser_url = review_url
-    if guard_home is not None:
-        browser_url = (
-            build_approval_browser_url(
-                review_url,
-                auth_token=load_guard_daemon_auth_token(guard_home),
-            )
-            or review_url
+    from ..approval_hook_copy import _approval_recovery_command, live_approval_browser_url
+
+    browser_url = live_approval_browser_url(review_url, guard_home=guard_home) if guard_home is not None else None
+    if browser_url is not None:
+        print(
+            f"HOL Guard is waiting for approval in your browser: {browser_url}",
+            file=sys.stderr,
+            flush=True,
         )
-    with suppress(Exception):
-        open_browser_url(browser_url)
+        with suppress(Exception):
+            open_browser_url(browser_url)
+        return
+
+    recovery_command = _approval_recovery_command(response_payload, review_url=review_url)
+    if recovery_command is not None:
+        message = (
+            "HOL Guard is waiting for approval. "
+            f"Run `{recovery_command}` to open this request in the local Guard app."
+        )
+    else:
+        message = "HOL Guard is waiting for approval. Open the local Guard app to review this request."
+    print(message, file=sys.stderr, flush=True)
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_bind_hook_blocked_operation_queue",

@@ -35,7 +35,7 @@ function CommandRow(props: {
       <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{recordedTime(props.item.occurred_at)}</td>
       <td className="px-3 py-3 text-sm font-medium text-brand-dark">{safeEvidenceId(props.item.harness)}</td>
       <td className="min-w-[16rem] max-w-[36rem] px-3 py-3 text-sm text-brand-dark">
-        {props.item.action_preview ? <code className="block whitespace-pre-wrap break-words line-clamp-3">{props.item.action_preview}</code> : <span className="text-slate-600">Command not recorded</span>}
+        {props.item.action_preview ? <code className="block whitespace-pre-wrap break-words line-clamp-3">{props.item.action_preview}</code> : <span className="text-slate-600">Command text not retained</span>}
       </td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandDecisionLabel(props.item.policy_action)}</td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandExecutionLabel(props.item.execution_status)}</td>
