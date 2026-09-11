@@ -1031,6 +1031,16 @@ class TestGuardSurfaceServer:
         assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
             minimum_workers=1, timeout_seconds=15
         )
+        health_deadline = time.monotonic() + 5
+        while True:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=1) as health:
+                    assert json.loads(health.read().decode("utf-8"))["ok"] is True
+                break
+            except OSError:
+                if time.monotonic() >= health_deadline:
+                    raise
+                time.sleep(0.05)
 
         try:
             hook_request = urllib.request.Request(
