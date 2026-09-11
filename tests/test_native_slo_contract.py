@@ -123,6 +123,7 @@ def test_privacy_contract_returns_json_safe_aggregate() -> None:
 
 
 def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
+    assert MAX_READINESS_P95_MS == 400.0
     passing = gate_results(
         resident_share=1.0,
         safe_fail_rate=0.0,
