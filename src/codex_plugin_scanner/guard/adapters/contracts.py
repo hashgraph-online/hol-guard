@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .contract_rendering import DISPLAY_NAMES as _DISPLAY_NAMES
+from .contract_rendering import render_harness_contracts
+
 
 @dataclass(frozen=True, slots=True)
 class HarnessProtectionContract:
@@ -125,25 +128,6 @@ class HarnessSetupContract:
         if self.icon_label is not None:
             payload["icon_label"] = self.icon_label
         return payload
-
-
-_DISPLAY_NAMES = {
-    "codex": "Codex",
-    "claude-code": "Claude Code",
-    "opencode": "OpenCode",
-    "copilot": "Copilot",
-    "cursor": "Cursor",
-    "cline": "Cline",
-    "gemini": "Gemini",
-    "hermes": "Hermes",
-    "openclaw": "OpenClaw",
-    "antigravity": "Antigravity",
-    "kimi": "Kimi",
-    "grok": "Grok",
-    "pi": "Pi",
-    "omp": "Oh My Pi",
-    "zcode": "ZCode",
-}
 
 
 HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
@@ -423,6 +407,24 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         ),
         smoke_command="hol-guard install zcode --dry-run",
     ),
+    HarnessProtectionContract(
+        harness="paseo",
+        install_aliases=("paseo",),
+        config_paths=("~/.paseo/config.json",),
+        event_surfaces=(),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Protection is delegated to supported native providers on the Paseo daemon host. "
+            "Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, "
+            "plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. "
+            "Native runtime failure behavior and approval/resume support remain provider-specific."
+        ),
+        smoke_command="hol-guard install paseo --dry-run",
+        docs_path="docs/guard/paseo.md",
+        icon_label="Paseo",
+    ),
 )
 
 _CONTRACT_BY_ALIAS: dict[str, HarnessProtectionContract] = {}
@@ -462,7 +464,11 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         HarnessSetupStep(
             step_id="connect",
             title=f"Connect {display_name}",
-            body=f"Add Guard's local protection hooks for {display_name}.",
+            body=(
+                "Install native provider hooks on the Paseo daemon host."
+                if contract.harness == "paseo"
+                else f"Add Guard's local protection hooks for {display_name}."
+            ),
             command=("hol-guard", "apps", "connect", alias),
             writes_config=True,
         ),
@@ -516,19 +522,4 @@ def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
 
 def harness_contracts_table() -> str:
     """Return a Markdown table summarising all harness contracts."""
-    header = (
-        "| Harness | Install Aliases | Native Approval | Browser Fallback "
-        "| Resume | Event Surfaces |\n"
-        "|---------|-----------------|-----------------|------------------"
-        "|--------|----------------|\n"
-    )
-    rows: list[str] = []
-    for c in HARNESS_CONTRACTS:
-        aliases = ", ".join(f"`{a}`" for a in c.install_aliases)
-        surfaces = ", ".join(c.event_surfaces) if c.event_surfaces else "—"
-        rows.append(
-            f"| `{c.harness}` | {aliases} | {'✅' if c.native_approval else '❌'} "
-            f"| {'✅' if c.browser_fallback else '❌'} "
-            f"| {'✅' if c.resume_support else '❌'} | {surfaces} |"
-        )
-    return header + "\n".join(rows) + "\n"
+    return render_harness_contracts(HARNESS_CONTRACTS)

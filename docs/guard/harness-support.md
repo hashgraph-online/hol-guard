@@ -189,3 +189,8 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `paseo` | `paseo` | ❌ | ✅ | ❌ | — |
+
+## Paseo
+
+Run `hol-guard install paseo` on the Paseo daemon host to install Guard for enabled, available native providers. This is not a universal Paseo permission hook. See [Paseo setup and coverage](paseo.md) for provider support, exclusions, diagnostics, and shared-hook ownership.

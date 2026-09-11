@@ -1,0 +1,320 @@
+"""Paseo installation, ownership, configuration and coverage contracts."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.paseo import PaseoHarnessAdapter
+from codex_plugin_scanner.guard.adapters.paseo_config import (
+    PASEO_NATIVE_HARNESSES,
+    paseo_config_path,
+    paseo_providers,
+    read_config_object,
+)
+from codex_plugin_scanner.guard.adapters.paseo_install import read_receipt, receipt_path
+from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, build_harness_setup_plan
+from codex_plugin_scanner.guard.inventory_contract import (
+    inventory_snapshot_from_detection,
+    serialize_inventory_snapshot,
+)
+from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.fixture
+def context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    workspace.mkdir()
+    for key in list(os.environ):
+        if key.startswith(("PASEO_", "PI_", "OMP_", "OPENCODE_", "CODEX_HOME", "CLAUDE_CONFIG", "XDG_")):
+            monkeypatch.delenv(key)
+    for harness in (*PASEO_NATIVE_HARNESSES.values(), "paseo"):
+        # The actual installers run; only discovery of paid/authenticated CLIs is faked.
+        monkeypatch.setattr(get_adapter(harness), "resolved_executable", lambda _context: sys.executable)
+    return HarnessContext(
+        home, workspace, tmp_path / "guard", home_override_explicit=True, workspace_override_explicit=True
+    )
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def configure(context: HarnessContext, providers: dict[str, object]) -> Path:
+    entries: dict[str, object] = {name: {"enabled": False} for name in PASEO_NATIVE_HARNESSES}
+    entries.update(providers)
+    path = paseo_config_path(context)
+    write_json(path, {"agents": {"providers": entries}, "plugins": {"enabled": False}, "custom": {"keep": True}})
+    return path
+
+
+def statuses(payload: dict[str, object]) -> dict[str, str]:
+    return {item["provider"]: item["status"] for item in payload["providers"]}
+
+
+@pytest.mark.adapter_contract
+@pytest.mark.parametrize("provider", tuple(PASEO_NATIVE_HARNESSES))
+def test_paseo_installs_real_native_hooks_and_registers_native_proofs(context: HarnessContext, provider: str) -> None:
+    path = configure(context, {provider: {"enabled": True}})
+    original = path.read_bytes()
+    adapter = PaseoHarnessAdapter()
+    manifest = adapter.install(context)
+    native = PASEO_NATIVE_HARNESSES[provider]
+    assert manifest["active"] is True
+    assert statuses(manifest)[provider] == "native-hooks-installed"
+    assert manifest["runtime_verification"] == "not-performed"
+    assert manifest["coverage_status"] == "limited"
+    assert path.read_bytes() == original
+    assert verify_managed_install_proof(bind_managed_install_proof(manifest, context), context) is True
+    native_install = GuardStore(context.guard_home).get_managed_install(native)
+    assert native_install and native_install["active"]
+    assert native_install["workspace"] is None
+    assert verify_managed_install_proof(native_install["manifest"], context) is True
+    assert not list(context.workspace_dir.rglob("*"))
+
+
+def test_claude_preserves_user_hooks_and_installs_pretool_for_all_workspaces(context: HarnessContext) -> None:
+    configure(context, {"claude": {"enabled": True}})
+    settings = context.home_dir / ".claude/settings.json"
+    user_hook = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo user-hook"}]}
+    write_json(settings, {"hooks": {"PreToolUse": [user_hook]}, "permissions": {"allow": ["Read"]}})
+    PaseoHarnessAdapter().install(context)
+    result = json.loads(settings.read_text())
+    assert result["permissions"] == {"allow": ["Read"]}
+    assert user_hook in result["hooks"]["PreToolUse"]
+    managed = [entry for entry in result["hooks"]["PreToolUse"] if entry != user_hook]
+    assert managed
+    assert str(context.workspace_dir) not in json.dumps(managed)
+
+
+def test_shared_profiles_install_once_and_repeat_install_is_idempotent(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"pi": {"enabled": True}, "pi-work": {"extends": "pi", "label": "Work"}})
+    native = get_adapter("pi")
+    original_install = native.install
+    calls: list[HarnessContext] = []
+
+    def record_install(native_context: HarnessContext) -> dict[str, object]:
+        calls.append(native_context)
+        return original_install(native_context)
+
+    monkeypatch.setattr(native, "install", record_install)
+    adapter = PaseoHarnessAdapter()
+    first = adapter.install(context)
+    extension = context.home_dir / ".pi/agent/extensions/hol-guard.ts"
+    original = extension.read_bytes()
+    second = adapter.install(context)
+    assert len(calls) == 2
+    assert all(call.workspace_dir is None and not call.workspace_override_explicit for call in calls)
+    assert extension.read_bytes() == original
+    assert statuses(first)["pi-work"] == statuses(second)["pi-work"] == "native-hooks-installed"
+    assert len(read_receipt(context)["native_proofs"]) == 1
+
+
+@pytest.mark.security_critical
+@pytest.mark.parametrize("changed_file", ("settings.json", "extensions/hol-guard.ts"))
+def test_native_hook_drift_is_not_reported_as_protected(context: HarnessContext, changed_file: str) -> None:
+    configure(context, {"pi": {"enabled": True}})
+    adapter = PaseoHarnessAdapter()
+    manifest = bind_managed_install_proof(adapter.install(context), context)
+    (context.home_dir / ".pi/agent" / changed_file).unlink()
+    assert verify_managed_install_proof(manifest, context) is False
+    diagnosis = adapter.diagnostics(context)
+    assert diagnosis["setup_status"] == "broken"
+    assert statuses(diagnosis)["pi"] == "changed"
+
+
+def test_uninstall_keeps_shared_hooks_settings_credentials_and_native_records(context: HarnessContext) -> None:
+    path = configure(context, {"pi": {"enabled": True, "env": {"API_KEY": "test-private-value"}}})
+    adapter = PaseoHarnessAdapter()
+    adapter.install(context)
+    settings = context.home_dir / ".pi/agent/settings.json"
+    extension = context.home_dir / ".pi/agent/extensions/hol-guard.ts"
+    before = (path.read_bytes(), settings.read_bytes(), extension.read_bytes())
+    assert adapter.uninstall(context)["active"] is False
+    assert (path.read_bytes(), settings.read_bytes(), extension.read_bytes()) == before
+    assert not receipt_path(context).exists()
+    assert not (context.guard_home / "bin/guard-paseo").exists()
+    assert GuardStore(context.guard_home).get_managed_install("pi")["active"] is True
+    assert adapter.uninstall(context)["active"] is False
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        [],
+        {"agents": []},
+        {"agents": {"providers": []}},
+        {"agents": {"providers": {"pi": {"enabled": "yes"}}}},
+        {"agents": {"providers": {"../escape": {}}}},
+        {"agents": {"providers": {"pi": {"env": {"HOME": 1}}}}},
+    ],
+)
+def test_malformed_paseo_configuration_is_not_overwritten(context: HarnessContext, bad: object) -> None:
+    path = paseo_config_path(context)
+    write_json(path, bad)
+    original = path.read_bytes()
+    with pytest.raises(ValueError):
+        PaseoHarnessAdapter().install(context)
+    assert path.read_bytes() == original
+    assert not context.guard_home.exists()
+
+
+@pytest.mark.parametrize(
+    "raw", [b'{"agents":', b"null", b'{"agents":{},"agents":{}}', b"\xff", b" " * (2 * 1024 * 1024 + 1)]
+)
+def test_unsafe_json_is_bounded_and_never_echoed(context: HarnessContext, raw: bytes) -> None:
+    path = configure(context, {})
+    path.write_bytes(raw)
+    with pytest.raises(ValueError, match="Cannot safely read configuration"):
+        read_config_object(path)
+    assert path.read_bytes() == raw
+
+
+@pytest.mark.security_critical
+@pytest.mark.parametrize("relative", [".pi", ".pi/agent/settings.json", ".pi/agent/extensions/hol-guard.ts"])
+def test_native_symlink_targets_are_rejected_before_install(
+    context: HarnessContext, tmp_path: Path, relative: str
+) -> None:
+    configure(context, {"pi": {"enabled": True}})
+    target = tmp_path / "outside"
+    link = context.home_dir / relative
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if relative == ".pi":
+        target.mkdir()
+    else:
+        target.write_text("{}", encoding="utf-8")
+    try:
+        link.symlink_to(target, target_is_directory=target.is_dir())
+    except OSError:
+        pytest.skip("This platform does not allow symlinks.")
+    with pytest.raises(ValueError, match="symlink"):
+        PaseoHarnessAdapter().install(context)
+    assert target.is_dir() or target.read_text() == "{}"
+    assert not context.guard_home.exists()
+
+
+def test_preflight_checks_every_selected_provider_before_any_write(context: HarnessContext) -> None:
+    configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
+    path = context.home_dir / ".pi/agent/settings.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("not-json", encoding="utf-8")
+    with pytest.raises(ValueError):
+        PaseoHarnessAdapter().install(context)
+    assert not (context.home_dir / ".claude/settings.json").exists()
+    assert not context.guard_home.exists()
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"command": ["pi", "--no-extensions"]},
+        {"env": {"PI_CODING_AGENT_DIR": "/another-home"}},
+        {"env": {"PATH": "/custom-bin"}},
+        {"env": {"HOL_GUARD_DISABLED": "1"}},
+    ],
+)
+def test_custom_provider_execution_is_explicitly_uncovered(
+    context: HarnessContext, override: dict[str, object]
+) -> None:
+    configure(context, {"pi": {"enabled": True}, "custom-pi": {"extends": "pi", "label": "Custom", **override}})
+    manifest = PaseoHarnessAdapter().install(context)
+    assert statuses(manifest)["pi"] == "native-hooks-installed"
+    assert statuses(manifest)["custom-pi"] == "unsupported"
+
+
+def test_default_providers_disabled_omp_and_acp_profile_contract(context: HarnessContext) -> None:
+    defaults = {provider.provider_id: provider for provider in paseo_providers(context)}
+    assert len(defaults) == 6
+    assert defaults["omp"].enabled is False
+    assert all(provider.enabled for name, provider in defaults.items() if name != "omp")
+    configure(context, {"my-omp": {"extends": "omp", "label": "My OMP"}, "other": {"extends": "acp"}})
+    providers = {provider.provider_id: provider for provider in paseo_providers(context)}
+    assert providers["my-omp"].enabled is True
+    assert providers["other"].native_harness is None
+    assert providers["other"].unsupported_reason
+
+
+def test_credentials_do_not_enter_manifest_diagnostics_or_inventory(context: HarnessContext) -> None:
+    secret = "sk-do-not-persist-this-paseo-provider-secret"
+    path = configure(context, {"pi": {"enabled": True, "env": {"API_KEY": secret}}})
+    adapter = PaseoHarnessAdapter()
+    outputs = [adapter.install(context), adapter.diagnostics(context), read_receipt(context)]
+    detection = adapter.detect(context)
+    outputs.append(detection.to_dict())
+    inventory = inventory_snapshot_from_detection(
+        detection, generated_at="2026-09-11T00:00:00Z", home_dir=context.home_dir
+    )
+    outputs.append(serialize_inventory_snapshot(inventory))
+    assert secret not in json.dumps(outputs)
+    assert secret in path.read_text()
+
+
+def test_home_selection_and_per_instance_receipts(context: HarnessContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    custom = context.home_dir / "another-paseo"
+    monkeypatch.setenv("PASEO_HOME", str(custom))
+    assert paseo_config_path(context) == context.home_dir / ".paseo/config.json"
+    inherited = replace(context, home_override_explicit=False)
+    assert paseo_config_path(inherited) == custom / "config.json"
+    assert receipt_path(context) != receipt_path(inherited)
+    monkeypatch.setenv("PASEO_HOME", "~/custom-paseo")
+    assert paseo_config_path(inherited) == context.home_dir / "custom-paseo/config.json"
+    monkeypatch.setenv("PASEO_HOME", "relative-home")
+    with pytest.raises(ValueError, match="absolute PASEO_HOME"):
+        paseo_config_path(inherited)
+
+
+def test_missing_runtime_cannot_create_an_active_install(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"pi": {"enabled": True}})
+    monkeypatch.setattr(get_adapter("pi"), "resolved_executable", lambda _context: None)
+    with pytest.raises(ValueError, match="No supported, enabled"):
+        PaseoHarnessAdapter().install(context)
+    assert not receipt_path(context).exists()
+
+
+def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"pi": {"enabled": True}})
+    adapter = PaseoHarnessAdapter()
+    adapter.install(context)
+    extension = context.home_dir / ".pi/agent/extensions/hol-guard.ts"
+    original = extension.read_bytes()
+
+    def fail(_context: HarnessContext) -> dict[str, object]:
+        raise ValueError("test installation failure")
+
+    monkeypatch.setattr(get_adapter("pi"), "install", fail)
+    with pytest.raises(ValueError, match="test installation failure"):
+        adapter.install(context)
+    assert not receipt_path(context).exists()
+    assert extension.read_bytes() == original
+    assert adapter.diagnostics(context)["setup_status"] != "active"
+
+
+def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessContext) -> None:
+    configure(context, {"pi": {"enabled": True}})
+    plan = build_harness_setup_plan("install", "paseo", context, dry_run=True)
+    assert plan
+    assert not context.guard_home.exists()
+    store = GuardStore(context.guard_home)
+    payload = apply_managed_install("install", "paseo", False, context, store, None, "2026-09-11T00:00:00Z")
+    managed = payload["managed_install"]
+    assert managed["primary_integration"] == "native-provider-hooks"
+    assert managed["coverage_status"] == "limited"
+    assert managed["native_hooks"] is False
+    assert verify_managed_install_proof(managed["manifest"], context) is True

@@ -13,7 +13,7 @@ from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
 from ..consumer import detect_all
-from ..managed_install_proof import bind_managed_install_proof
+from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
 from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
 from ..store import GuardStore
@@ -23,6 +23,7 @@ from .cursor_actions import (
     cursor_protected_surfaces,
     cursor_protected_surfaces_from_store,
 )
+from .managed_install_payload import managed_install_payload as _managed_install_payload
 
 _HARNESS_OBSERVED_COPY = {
     "protected": "Active Guard protection is installed.",
@@ -115,33 +116,6 @@ def apply_managed_install(
             context=context,
             protected_surfaces=cursor_protected_surfaces(managed_installs) if active else (),
         )
-    return payload
-
-
-def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, object]:
-    payload = dict(managed_install)
-    harness = str(payload.get("harness") or "")
-    protection_contract = contract_for(harness)
-    if protection_contract is not None:
-        payload["native_hooks"] = protection_contract.native_approval
-        payload["browser_fallback"] = protection_contract.browser_fallback
-        payload["primary_integration"] = "native_hooks" if protection_contract.native_approval else "browser_fallback"
-    manifest = payload.get("manifest")
-    if isinstance(manifest, dict):
-        for key in (
-            "config_path",
-            "managed_config_path",
-            "shim_path",
-            "shim_paths",
-            "shim_command",
-            "shim_commands",
-            "mode",
-            "surface",
-            "surfaces",
-        ):
-            value = manifest.get(key)
-            if value is not None:
-                payload[key] = value
     return payload
 
 
@@ -534,6 +508,18 @@ def _safe_setup_detection(
     store: GuardStore | None,
 ) -> dict[str, object]:
     managed = store.get_managed_install(adapter.harness) if store is not None else None
+    if adapter.harness == "paseo":
+        diagnostics = adapter.diagnostics(context)
+        return {
+            "installed": bool(
+                managed
+                and managed.get("active")
+                and diagnostics.get("setup_status") == "active"
+                and verify_managed_install_proof(managed.get("manifest"), context) is True
+            ),
+            "command_available": diagnostics.get("command_available", False),
+            "config_paths": diagnostics.get("config_paths", []),
+        }
     protection_contract = contract_for(adapter.harness)
     config_paths = protection_contract.config_paths if protection_contract is not None else ()
     return {

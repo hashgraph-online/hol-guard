@@ -56,7 +56,7 @@ Guard prefers the strongest integration each agent exposes. Enforcement depth va
 
 ## Supported AI Agents
 
-HOL Guard currently integrates with Codex, Claude Code, GitHub Copilot CLI, Cursor, Gemini CLI, Hermes, OpenClaw, OpenCode, Antigravity, Kimi Code, Grok, Pi / oh-my-pi, and ZCode.
+HOL Guard currently integrates with Codex, Claude Code, GitHub Copilot CLI, Cursor, Gemini CLI, Hermes, OpenClaw, OpenCode, Antigravity, Kimi Code, Grok, Pi / oh-my-pi, and ZCode. [Paseo](docs/guard/paseo.md) is supported through its native provider integrations, with explicit per-provider coverage.
 
 These developer agents are Guard's deepest integrations today, but the product boundary is broader: the same policy, supply-chain, approval, and evidence layers are designed to protect AI agents and their local tool ecosystems as new adapters are added.
 

@@ -32,6 +32,8 @@ class HarnessProtectionCapability:
 
 
 def honesty_sentence(capability: HarnessProtectionCapability, display_name: str) -> str:
+    if capability.harness == "paseo":
+        return "Paseo uses each provider's native Guard hooks. Other Paseo actions are not covered."
     if capability.can_ask_inline and capability.has_native_remember:
         return f"{display_name} uses this app's prompt when it can."
     if capability.can_ask_inline:
@@ -60,6 +62,7 @@ HARNESS_PROTECTION_CAPABILITIES: tuple[HarnessProtectionCapability, ...] = (
     HarnessProtectionCapability("pi", True, False, False, True),
     HarnessProtectionCapability("omp", True, False, False, True),
     HarnessProtectionCapability("zcode", True, False, False, True),
+    HarnessProtectionCapability("paseo", True, False, False, False, True),
 )
 
 _CAPABILITY_BY_HARNESS = {item.harness: item for item in HARNESS_PROTECTION_CAPABILITIES}
