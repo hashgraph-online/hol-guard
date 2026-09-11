@@ -287,6 +287,22 @@ def _python_module_launch(executable: str, args: tuple[str, ...]) -> bool:
     return False
 
 
+def _interpreter_inline_launch(executable: str, args: tuple[str, ...]) -> bool:
+    """Return True for literal inline-code modes whose file reads were already scanned."""
+
+    name = Path(executable or "").name.lower()
+    if name not in {"node", "bun", "ruby", "perl"} and not _python_executable(name):
+        return False
+    for arg in args:
+        if arg == "--":
+            return False
+        if arg in {"-c", "-e", "--eval", "-p", "--print"} or arg.startswith(("--eval=", "--print=")):
+            return True
+        if not arg.startswith("-"):
+            return False
+    return False
+
+
 def _path_qualified(executable: str) -> bool:
     return bool(executable) and ("/" in executable or "\\" in executable or executable.startswith("."))
 
@@ -364,25 +380,19 @@ def _flow_operator_before(execution: ShellExecutionSegment) -> str | None:
     return next((token for token in reversed(execution.control_before) if token in _FLOW_OPERATORS), None)
 
 
-def _short_circuited_after_failed_literal_cd(
+def _failed_cd_short_circuit_state(
     execution: ShellExecutionSegment,
     *,
-    already_short_circuited: bool,
-) -> bool:
-    """Track the whole `cd missing && command | command` branch as unreachable.
+    active: bool,
+) -> tuple[bool, bool]:
+    """Return the failed-cd state and whether this segment is provably unreachable."""
 
-    A literal cd failure makes the RHS of `&&` unreachable. Pipelines and
-    subsequent `&&` terms in that RHS are unreachable too. `||`, `;` and `&`
-    begin control-flow that may run despite the failure, so uncertainty remains
-    fail-closed there rather than being silently skipped.
-    """
-
-    if execution.reason_code not in _SHORT_CIRCUITING_CD_FAILURES:
-        return False
     operator = _flow_operator_before(execution)
-    if operator == "&&":
-        return True
-    return bool(operator == "|" and already_short_circuited)
+    if operator in {"||", ";", "&"}:
+        active = False
+    if execution.directory_operation is not None and execution.reason_code in _SHORT_CIRCUITING_CD_FAILURES:
+        return True, False
+    return active, bool(active and operator in {"&&", "|"})
 
 
 def assess_shell_reads(
@@ -416,13 +426,13 @@ def assess_shell_reads(
             if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
                 incomplete = True
             continue
-        short_circuited_by_cd = False
+        failed_cd_short_circuit = False
         for execution in context.segments:
-            short_circuited_by_cd = _short_circuited_after_failed_literal_cd(
+            failed_cd_short_circuit, unreachable = _failed_cd_short_circuit_state(
                 execution,
-                already_short_circuited=short_circuited_by_cd,
+                active=failed_cd_short_circuit,
             )
-            if short_circuited_by_cd:
+            if unreachable:
                 continue
             model = _parse_execution_segment(execution, home_dir=home_dir)
             if model is None:
@@ -460,6 +470,8 @@ def assess_shell_reads(
             if _python_module_launch(executable, arguments):
                 requested = True
                 incomplete = True
+                continue
+            if _interpreter_inline_launch(executable, arguments):
                 continue
             invocation = _script_operand(executable, arguments)
             if invocation is None:
