@@ -55,6 +55,7 @@ class _CommandActivityRecord:
     receipt_id: str | None = None
     prompted: bool = False
     approval_reuse_status: str = "not-applicable"
+    invocation_preview: str | None = None
 
     def serialized(self) -> bytes:
         return (

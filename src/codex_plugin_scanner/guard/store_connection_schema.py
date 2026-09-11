@@ -30,6 +30,7 @@ from .sqlite_recovery import (
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_command_activity_api_schema import ensure_command_activity_api_schema
+from .store_command_activity_display_schema import ensure_command_activity_display_schema
 from .store_command_activity_health_schema import ensure_command_activity_health_schema
 from .store_command_activity_maintenance_schema import ensure_command_activity_maintenance_schema
 from .store_command_activity_schema import ensure_command_activity_schema
@@ -999,6 +1000,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
+            ensure_command_activity_display_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)

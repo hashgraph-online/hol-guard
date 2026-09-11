@@ -36,10 +36,12 @@ class StoreCommandActivityMixin:
         *,
         shadow: CommandShadowObservation | None = None,
         shadow_evaluation_succeeded: bool = False,
+        invocation_preview: str | None = None,
     ) -> bool:
         """Persist one logical command and its rule hits; return false for an exact replay."""
 
         _validate_command_activity_write(evidence, shadow)
+        preview = _validated_invocation_preview(invocation_preview)
         with self._connect() as connection:
             connection.execute("begin immediate")
             existing = cast(
@@ -75,6 +77,7 @@ class StoreCommandActivityMixin:
                 evidence,
                 shadow=shadow,
                 shadow_evaluation_succeeded=shadow_evaluation_succeeded,
+                invocation_preview=preview,
             )
             return True
 
@@ -97,6 +100,7 @@ class StoreCommandActivityMixin:
                     evidence,
                     shadow=shadow,
                     shadow_evaluation_succeeded=shadow_evaluation_succeeded,
+                    invocation_preview=None,
                 )
             except BaseException:
                 connection.execute("rollback to command_activity_repair_probe")
@@ -156,12 +160,24 @@ def _validate_command_activity_write(
         raise ValueError("shadow occurred_at must match command evidence")
 
 
+def _validated_invocation_preview(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or "\x00" in value:
+        raise ValueError("invalid_invocation_preview")
+    stripped = value.strip()
+    if not stripped or len(stripped) > 4096:
+        raise ValueError("invalid_invocation_preview")
+    return stripped
+
+
 def _record_new_command_activity(
     connection: sqlite3.Connection,
     evidence: CommandActivityEvidence,
     *,
     shadow: CommandShadowObservation | None,
     shadow_evaluation_succeeded: bool,
+    invocation_preview: str | None = None,
 ) -> None:
     connection.execute(
         """
@@ -175,6 +191,14 @@ def _record_new_command_activity(
         """,
         _activity_values(evidence.activity),
     )
+    if invocation_preview is not None:
+        connection.execute(
+            """
+            insert into command_activity_invocation (activity_id, invocation_preview)
+            values (?, ?)
+            """,
+            (evidence.activity.activity_id, invocation_preview),
+        )
     connection.executemany(
         """
         insert into command_activity_matches (

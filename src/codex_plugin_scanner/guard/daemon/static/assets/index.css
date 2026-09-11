@@ -1427,6 +1427,10 @@
     max-width: 17.5rem;
   }
 
+  .max-w-\[28rem\] {
+    max-width: 28rem;
+  }
+
   .max-w-\[260px\] {
     max-width: 260px;
   }
@@ -1495,8 +1499,8 @@
     min-width: 220px;
   }
 
-  .min-w-\[760px\] {
-    min-width: 760px;
+  .min-w-\[920px\] {
+    min-width: 920px;
   }
 
   .min-w-\[1040px\] {
@@ -5301,6 +5305,11 @@
   .select-none {
     -webkit-user-select: none;
     user-select: none;
+  }
+
+  .select-text {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   .ring-inset {
