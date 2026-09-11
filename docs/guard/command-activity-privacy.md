@@ -38,6 +38,7 @@ The versioned local schema permits only:
 - Local keyed request/session correlation handles
 - Bounded evaluation and persistence latency buckets
 - Built-in extension/rule identities, versions, safe-variant outcomes, severity, floors, and effect classes
+- A local-only redacted invocation preview for dashboard review, stored beside the activity row and omitted from cloud aggregates, hook journals, and analytics
 
 Multi-rule commands produce one activity row and ordered match rows. A safe variant has its own analytics class and
 is never projected as unsafe. An unmatched ordinary command may have zero match rows and cannot name a controlling
@@ -47,7 +48,7 @@ Review-or-stronger decisions require a linked receipt reference. Analytics does 
 
 ## Forbidden Data
 
-The activity domain must never store, expose, log, or export:
+The core activity, match, correlation, and cloud-aggregate types must never store, expose, log, or export:
 
 - Raw or normalized commands, arguments, shell fragments, substitutions, heredocs, or redirects
 - Paths, current directories, workspace or repository names, owners, remotes, hosts, or URLs
@@ -60,7 +61,9 @@ The activity domain must never store, expose, log, or export:
 - Command security identities, artifact hashes, fingerprints, reversible encodings, or unsalted hashes of forbidden data
 - Arbitrary metadata dictionaries
 
-Positive field allowlists and closed typed values enforce this boundary. Redaction is not sufficient.
+Positive field allowlists and closed typed values enforce this boundary on those types. Redaction is not sufficient there.
+
+The local dashboard may show a redacted invocation preview so operators can see which command Guard checked. That preview is local-only: it is omitted from hook journals, cloud aggregates, and analytics, and it must still drop secrets, tokens, private paths, URLs, emails, secret-bearing environment assignments, and heredoc bodies. The exact original command string must not appear on command-activity API, diagnostics, log, or journal surfaces. A local recovery sidecar may retain the same redacted preview until the activity row is persisted, then it is deleted with the journal record.
 
 ## Correlation
 

@@ -8,7 +8,7 @@ import re
 import stat
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -20,6 +20,7 @@ from ..native_decision_receipt import (
     validate_native_decision_receipt,
 )
 from ..runtime.command_activity_contract import CorrelationHandle, CorrelationKind
+from ..runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 
 try:
     import fcntl
@@ -55,6 +56,7 @@ class _CommandActivityRecord:
     receipt_id: str | None = None
     prompted: bool = False
     approval_reuse_status: str = "not-applicable"
+    invocation_preview: str | None = None
 
     def serialized(self) -> bytes:
         return (
@@ -245,7 +247,111 @@ def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_E
 
 def recover_journal_records(path: Path, *, max_bytes: int) -> tuple[list[_EvidenceRecord], int]:
     with _journal_lock(path):
-        return _read_journal_records_locked(path, max_bytes=max_bytes)
+        records, invalid_records = _read_journal_records_locked(path, max_bytes=max_bytes)
+        return _attach_invocation_previews(path, records), invalid_records
+
+
+def _preview_sidecar_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.preview{path.suffix}")
+
+
+def _validated_sidecar_preview(value: object) -> str | None:
+    if not isinstance(value, str) or "\x00" in value:
+        return None
+    stripped = value.strip()
+    if not stripped or len(stripped) > INVOCATION_PREVIEW_MAX_CHARS:
+        return None
+    return stripped
+
+
+def _read_preview_sidecar(path: Path) -> dict[str, str]:
+    sidecar = _preview_sidecar_path(path)
+    try:
+        raw_lines = sidecar.read_bytes().splitlines()
+    except FileNotFoundError:
+        return {}
+    previews: dict[str, str] = {}
+    for raw_line in raw_lines:
+        try:
+            decoded = json.loads(raw_line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if not isinstance(decoded, dict):
+            continue
+        record_id = decoded.get("record_id")
+        preview = _validated_sidecar_preview(decoded.get("invocation_preview"))
+        if isinstance(record_id, str) and preview is not None:
+            previews[record_id] = preview
+    return previews
+
+
+def _append_preview_sidecar(path: Path, record: _EvidenceRecord) -> None:
+    if not isinstance(record, _CommandActivityRecord):
+        return
+    preview = _validated_sidecar_preview(record.invocation_preview)
+    if preview is None:
+        return
+    sidecar = _preview_sidecar_path(path)
+    payload = (
+        json.dumps(
+            {"record_id": record.record_id, "invocation_preview": preview},
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n"
+    )
+    descriptor = _open_journal(sidecar, os.O_APPEND | os.O_CREAT | os.O_WRONLY)
+    try:
+        _apply_private_file_mode(descriptor)
+        _write_all(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _rewrite_preview_sidecar(path: Path, remaining: tuple[_EvidenceRecord, ...]) -> None:
+    keep_ids = {record.record_id for record in remaining}
+    kept = {record_id: preview for record_id, preview in _read_preview_sidecar(path).items() if record_id in keep_ids}
+    sidecar = _preview_sidecar_path(path)
+    if not kept:
+        sidecar.unlink(missing_ok=True)
+        return
+    temporary = sidecar.with_name(f".{sidecar.name}.{uuid4().hex}.tmp")
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(temporary, flags, 0o600)
+    try:
+        try:
+            for record_id, preview in kept.items():
+                _write_all(
+                    descriptor,
+                    json.dumps(
+                        {"record_id": record_id, "invocation_preview": preview},
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8")
+                    + b"\n",
+                )
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, sidecar)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _attach_invocation_previews(path: Path, records: list[_EvidenceRecord]) -> list[_EvidenceRecord]:
+    previews = _read_preview_sidecar(path)
+    if not previews:
+        return records
+    attached: list[_EvidenceRecord] = []
+    for record in records:
+        if isinstance(record, _CommandActivityRecord):
+            preview = previews.get(record.record_id)
+            if preview is not None:
+                record = replace(record, invocation_preview=preview)
+        attached.append(record)
+    return attached
 
 
 def _apply_private_file_mode(descriptor: int) -> None:
@@ -262,6 +368,7 @@ def append_journal(path: Path, record: _EvidenceRecord) -> None:
             _apply_private_file_mode(descriptor)
             _write_all(descriptor, record.serialized())
             os.fsync(descriptor)
+            _append_preview_sidecar(path, record)
         except OSError:
             os.ftruncate(descriptor, original_size)
             raise
@@ -287,6 +394,7 @@ def rewrite_journal(path: Path, *, remove_record_id: str, max_bytes: int) -> int
             finally:
                 os.close(descriptor)
             os.replace(temporary, path)
+            _rewrite_preview_sidecar(path, remaining)
         finally:
             temporary.unlink(missing_ok=True)
     return invalid_records

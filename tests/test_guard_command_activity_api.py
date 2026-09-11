@@ -68,6 +68,7 @@ def test_activity_page_is_deterministic_filter_bounded_and_private(tmp_path: Pat
     serialized = repr(first)
     for forbidden in ("correlation", "digest", "command_text", "raw_command", "cwd", "environment"):
         assert forbidden not in serialized
+    assert all(item["invocation_preview"] is None for item in first["items"])
 
     second = store.list_command_activity_page(
         CommandActivityListQuery(limit=2),

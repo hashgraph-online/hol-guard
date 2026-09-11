@@ -8,6 +8,7 @@ import {
   commandEffectLabels,
   commandExecutionLabel,
   commandInteractionLabel,
+  commandInvocationLabel,
   commandProofLabel,
   commandReasonLabel,
   FEEDBACK_LABELS,
@@ -52,6 +53,24 @@ function EvidenceField(props: { label: string; value: string }) {
     <div>
       <dt className="text-xs font-medium text-slate-500">{props.label}</dt>
       <dd className="mt-0.5 text-sm font-medium text-brand-dark">{props.value}</dd>
+    </div>
+  );
+}
+
+function CommandValue(props: { preview: string | null }) {
+  const label = commandInvocationLabel(props.preview);
+  return (
+    <div className="sm:col-span-2">
+      <dt className="text-xs font-medium text-slate-500">Command</dt>
+      <dd className="mt-0.5">
+        {props.preview === null ? (
+          <span className="text-sm text-slate-500">{label}</span>
+        ) : (
+          <code className="block select-text whitespace-pre-wrap break-all font-mono text-[13px] leading-5 text-brand-dark">
+            {label}
+          </code>
+        )}
+      </dd>
     </div>
   );
 }
@@ -139,6 +158,7 @@ export function CommandActivityDetail(props: {
       </div>
 
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+        <CommandValue preview={props.activity.invocation_preview} />
         <EvidenceField label="Decision" value={commandDecisionLabel(props.activity.policy_action)} />
         <EvidenceField label="Execution proof" value={commandExecutionLabel(props.activity.execution_status)} />
         <EvidenceField label="Proof source" value={commandProofLabel(props.activity.proof_level)} />

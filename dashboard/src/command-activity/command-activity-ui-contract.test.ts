@@ -25,6 +25,9 @@ assert(appDetail.includes("<CommandActivityWorkspace harness={props.harness} />"
 assert(appModes.includes('label="Command protection"'), "per-app activity exposes the approved command-protection mode");
 assert(appModes.includes('role="tab"') && appModes.includes("aria-selected"), "app activity modes expose tab semantics");
 assert(appModes.includes("ArrowLeft") && appModes.includes("ArrowRight"), "app activity modes support arrow navigation");
+const table = readSource("command-activity/command-activity-table.tsx");
+assert(table.includes(">Command</th>"), "Commands table lists the recorded command");
+assert(detail.includes("<CommandValue"), "detail names the recorded command");
 assert(workspace.includes("commandExecutionEvidenceCopy(props.harness ?? null"), "execution-proof disclosure is harness aware");
 assert(workspace.includes("Showing the last loaded command activity page"), "refresh failures retain prior valid page data");
 assert(workspace.includes('activity.page.kind === "empty"'), "empty command pages render an explicit state");

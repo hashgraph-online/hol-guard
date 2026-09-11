@@ -22,6 +22,7 @@ from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_display import build_invocation_preview_from_payload
 from ..runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_correlated_post_activity,
@@ -122,6 +123,11 @@ def record_pre_hook_command_activity_best_effort(
                 evidence,
                 shadow=shadow,
                 shadow_evaluation_succeeded=not shadow_failed,
+                invocation_preview=build_invocation_preview_from_payload(
+                    payload,
+                    cwd=cwd,
+                    home_dir=home_dir,
+                ),
             )
         except Exception:
             if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
@@ -163,6 +169,7 @@ def record_post_hook_command_activity_best_effort(
             correlation=correlation,
             succeeded=succeeded,
             has_command=_payload_command_text(payload) is not None,
+            invocation_preview=build_invocation_preview_from_payload(payload),
         )
     except Exception:
         _record_persistence_failure(store, "post_record_failed")
@@ -178,6 +185,7 @@ def persist_deferred_post_hook_command_activity(
     correlation: CorrelationHandle | None,
     succeeded: bool,
     has_command: bool,
+    invocation_preview: str | None = None,
 ) -> bool:
     """Persist a sanitized deferred post-hook record."""
 
@@ -208,7 +216,7 @@ def persist_deferred_post_hook_command_activity(
         harness=harness,
         succeeded=succeeded,
     )
-    return store.record_command_activity(evidence)
+    return store.record_command_activity(evidence, invocation_preview=invocation_preview)
 
 
 def hook_post_succeeded(event: str, payload: Mapping[str, object]) -> bool:

@@ -5,6 +5,7 @@ import { Badge, EmptyState, IconActionButton } from "../approval-center-primitiv
 import {
   commandDecisionLabel,
   commandExecutionLabel,
+  commandInvocationLabel,
   safeEvidenceId,
 } from "./command-activity-presenters";
 import type { CommandActivityItem } from "./command-activity-types";
@@ -30,9 +31,20 @@ function CommandRow(props: {
   } else if (props.item.decision_reason_code === "no_match") {
     ruleLabel = "No rule match";
   }
+  const commandLabel = commandInvocationLabel(props.item.invocation_preview);
+  const hasCommand = props.item.invocation_preview !== null;
   return (
     <tr className={props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70"}>
       <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{recordedTime(props.item.occurred_at)}</td>
+      <td className="max-w-[28rem] px-3 py-3">
+        {hasCommand ? (
+          <code className="block truncate font-mono text-[13px] leading-5 text-brand-dark" title={commandLabel}>
+            {commandLabel}
+          </code>
+        ) : (
+          <span className="text-sm text-slate-500">{commandLabel}</span>
+        )}
+      </td>
       <td className="px-3 py-3 text-sm font-medium text-brand-dark">{safeEvidenceId(props.item.harness)}</td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandDecisionLabel(props.item.policy_action)}</td>
       <td className="px-3 py-3 text-sm text-brand-dark">{commandExecutionLabel(props.item.execution_status)}</td>
@@ -71,12 +83,16 @@ export function CommandActivityTable(props: {
   return (
     <section aria-label="Command activity records" className="w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white [contain:inline-size]">
       <div className="max-w-full overflow-x-auto [contain:paint]">
-        <table className="w-full min-w-[760px] border-collapse text-left">
+        <table className="w-full min-w-[920px] border-collapse text-left">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
             <tr>
-              <th className="px-3 py-2.5">Time</th><th className="px-3 py-2.5">App</th>
-              <th className="px-3 py-2.5">Decision</th><th className="px-3 py-2.5">Execution proof</th>
-              <th className="px-3 py-2.5">Rule evidence</th><th className="px-3 py-2.5"><span className="sr-only">Open detail</span></th>
+              <th className="px-3 py-2.5">Time</th>
+              <th className="px-3 py-2.5">Command</th>
+              <th className="px-3 py-2.5">App</th>
+              <th className="px-3 py-2.5">Decision</th>
+              <th className="px-3 py-2.5">Execution proof</th>
+              <th className="px-3 py-2.5">Rule evidence</th>
+              <th className="px-3 py-2.5"><span className="sr-only">Open detail</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
