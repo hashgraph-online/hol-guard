@@ -65,3 +65,18 @@ def test_disconnect_plan_warns_that_native_protection_remains(context: HarnessCo
     assert "receipt and launcher" in step["body"]
     assert "native provider protection remains installed" in step["body"]
     assert step["requires_confirmation"] is True
+
+
+@pytest.mark.parametrize("artifact", ["settings.json", "extensions/hol-guard.ts"])
+def test_reinstall_repairs_deleted_native_artifacts(context: HarnessContext, artifact: str) -> None:
+    """Reinstall rebuilds drifted native settings/extensions and publishes fresh proofs."""
+    configure(context, {"pi": {"enabled": True}})
+    adapter = PaseoHarnessAdapter()
+    adapter.install(context)
+    target = context.home_dir / ".pi/agent" / artifact
+    target.unlink()
+    assert adapter.diagnostics(context)["setup_status"] == "broken"
+    repaired = adapter.install(context)
+    assert target.is_file()
+    assert statuses(repaired)["pi"] == "native-hooks-installed"
+    assert adapter.diagnostics(context)["setup_status"] == "active"

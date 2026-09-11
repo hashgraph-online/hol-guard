@@ -76,6 +76,8 @@ class PaseoHarnessAdapter(HarnessAdapter):
         """Install shared native hooks and publish a receipt only after their proofs verify."""
         providers = paseo_providers(context)
         path = receipt_path(context)
+        # Reinstall every available supported native provider, including drifted
+        # installations. An empty receipt intentionally makes each a fresh target.
         rows = _provider_rows(providers, context, {})
         targets = sorted({str(row["native_harness"]) for row in rows if row["status"] == "not-installed"})
         if not targets:

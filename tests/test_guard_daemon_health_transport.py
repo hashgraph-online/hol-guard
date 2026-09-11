@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -82,3 +83,41 @@ def test_health_probe_rejects_invalid_authorities_before_connecting(monkeypatch:
 
     monkeypatch.setattr(client, "HTTPConnection", unexpected_connection)
     assert client.read_guard_health_details(url, "test-token") is None
+
+
+@pytest.mark.security_critical
+@pytest.mark.parametrize("drip_headers", [False, True])
+def test_health_probe_enforces_deadline_against_byte_drip(monkeypatch: pytest.MonkeyPatch, drip_headers: bool) -> None:
+    """Neither a partial header nor a slowly arriving body can extend the total deadline."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            """Drip bytes more frequently than the socket timeout until the client closes."""
+            if not drip_headers:
+                self.send_response(200)
+                self.send_header("Content-Length", "1000")
+                self.end_headers()
+            try:
+                for _ in range(100):
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                    time.sleep(0.04)
+            except OSError:
+                pass  # The deadline deliberately closes the client connection.
+
+        def log_message(self, message_format: str, *args: object) -> None:
+            """Suppress expected loopback-test access logs."""
+
+    monkeypatch.setattr(client, "_HEALTH_PROBE_DEADLINE_SECONDS", 0.2)
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        try:
+            started = time.monotonic()
+            result = client.read_guard_health_details(f"http://127.0.0.1:{server.server_port}", "test-token")
+            elapsed = time.monotonic() - started
+            assert result is None
+            assert elapsed < 1.0
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
