@@ -316,7 +316,11 @@ class StoreConnectionSchemaMixin:
                     _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
                 else:
                     self._initialize_schema()
-                    if salvage_local_cli_state(source=quarantined, destination=self.path):
+                    from .sqlite_cloud_review_recovery import salvage_cloud_review_state
+
+                    cloud_restored = salvage_cloud_review_state(source=quarantined, destination=self.path)
+                    cli_restored = salvage_local_cli_state(source=quarantined, destination=self.path)
+                    if cloud_restored or cli_restored:
                         self._last_sqlite_recovery = "reinitialized_salvaged"
                     else:
                         self._last_sqlite_recovery = "reinitialized"

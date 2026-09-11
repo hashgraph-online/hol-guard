@@ -46,9 +46,6 @@ def start_cloud_sync_sync_worker(
         if existing.thread.is_alive():
             raise RuntimeError("Previous Cloud Review sync worker did not stop.")
 
-    profile = store.get_cloud_sync_profile()
-    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
-        return None
     stop_event = threading.Event()
     wake_signal = review_event_wake_signal(store.path)
     safety_poll = poll_interval or float(
@@ -124,6 +121,13 @@ def _cloud_sync_sync_loop(
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
         try:
+            profile = store.get_cloud_sync_profile()
+            if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
+                # The account may connect after daemon startup. Keep the worker
+                # dormant, without network calls or an authentication-error loop.
+                error_streak = 0
+                wake_signal.wait(observed_generation, poll_interval)
+                continue
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
             result = sync.sync_cloud_review_events_once(store, auth_context)
             error_streak = 0

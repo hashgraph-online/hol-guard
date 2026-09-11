@@ -189,6 +189,19 @@ def requeue_pending_request_events(
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
+        if require_binding and current_binding is not None:
+            established = connection.execute(
+                """
+                select 1 from guard_review_outbox_request_sequences
+                where local_request_id = ? and oauth_source = ?
+                  and oauth_subject_hash = ? and workspace_id = ?
+                """,
+                (request_id, source, current_binding["oauth_subject_hash"], current_binding["workspace_id"]),
+            ).fetchone()
+            if established is None:
+                # Enabling decisions is not consent to upload another account's
+                # requests or requests whose original identity was lost.
+                continue
         existing_snapshot = connection.execute(
             """
             select oauth_source, oauth_subject_hash, workspace_id, machine_id,

@@ -215,6 +215,11 @@ def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "soak")
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"workspace_id": "workspace-1", "sync_url": "https://guard.example/api/guard/receipts/sync"},
+    )
     iterations = 10_000
     attempts = 0
 
