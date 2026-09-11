@@ -37,6 +37,7 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DAEMON_TIMEOUT_BUDGET_SECONDS = 5.0
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
+_ZCODE_HARNESSES = frozenset({"zcode", "zai", "z-code", "zai-zcode"})
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -652,6 +653,20 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             guard_home=guard_home,
         )
     if result.returncode is None:
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            guard_home=guard_home,
+            continue_session=True,
+        )
+    canonical_harness = harness.strip().lower().replace("_", "-")
+    if (
+        canonical_harness in _ZCODE_HARNESSES
+        and _event_name(input_text) == "PreToolUse"
+        and result.returncode not in {0, 2}
+    ):
+        # ZCode treats a hook process error as unavailable and continues. Do
+        # not let parseable error output bypass the PreToolUse review floor.
         return _emit_failure(
             harness=harness,
             input_text=input_text,

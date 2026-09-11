@@ -408,12 +408,24 @@ def run_approval_open_command(
     if item is None:
         return {"error": "not_found", "request_id": request_id}, 1
     approval_url = str(item.get("approval_url", ""))
-    repaired_url = _repaired_approval_url(approval_url, store.guard_home)
+    from ..dashboard_launcher import open_dashboard
+
+    result = open_dashboard(
+        guard_home=store.guard_home,
+        store=store,
+        config=load_guard_config(store.guard_home),
+        force_open=True,
+        open_key=f"approval-request:{request_id}",
+        request_id=request_id,
+    )
     return {
         "request_id": request_id,
-        "approval_url": repaired_url,
-        "repaired": repaired_url != approval_url,
-    }, 0
+        "approval_url": result.browser_url,
+        "repaired": result.browser_url is not None and result.browser_url != approval_url,
+        "opened": result.opened,
+        "reason": result.reason,
+        **({"error": result.error} if result.error else {}),
+    }, 0 if result.opened or result.reason in {"policy-disabled", "already-opened", "live-client"} else 1
 
 
 def run_approval_retry_hint_command(

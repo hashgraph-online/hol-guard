@@ -117,6 +117,11 @@ def derive_proven_request_correlation(
     ):
         return None
     value = payload.get(field)
+    if harness == "zcode" and "toolCallId" in payload:
+        native_value = payload["toolCallId"]
+        if value is not None and value != native_value:
+            raise ValueError("conflicting ZCode request identifiers")
+        value = native_value
     if value is None:
         return None
     if type(value) is not str:

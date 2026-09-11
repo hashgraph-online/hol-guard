@@ -116,7 +116,9 @@ Current Guard support in this repo:
   - detects a running ZCode app through its non-secret process identity signals when no config file exists yet
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
-  - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+  - enables the hook runner during managed installation and restores its prior enabled setting on uninstall when the managed value is unchanged
+  - records `PostToolUse` and `PostToolUseFailure` events to correlate execution evidence
+  - pauses unchecked tool actions when a pre-execution review fails or times out; emergency-safe inspection and watch-only operation remain available
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only

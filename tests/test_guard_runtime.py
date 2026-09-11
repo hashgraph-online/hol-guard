@@ -4950,7 +4950,8 @@ clearer UX and an implementation plan with technical references.
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Open HOL Guard to approve or keep this blocked" in reason
-        assert "http://127.0.0.1:4455/requests/request-1" in reason
+        assert "the local Guard app" in reason
+        assert "/requests/" not in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
@@ -16406,7 +16407,8 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     assert "HOL Guard paused your Codex prompt" in payload["systemMessage"]
     assert "Open HOL Guard" in payload["systemMessage"]
     assert "approve" in payload["systemMessage"].lower()
-    assert "http://127.0.0.1:4455/requests/" in payload["reason"]
+    assert "the local Guard app" in payload["reason"]
+    assert "/requests/" not in payload["reason"]
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "prompt_request"
@@ -16529,7 +16531,8 @@ def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
-    assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "the local Guard app" in payload["reason"]
+    assert "/requests/" not in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_saved_artifact_allow_does_not_lower_reapproval(
@@ -18617,7 +18620,8 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert payload["continue"] is True
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
-    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+    assert "the local Guard app" in payload["stopReason"]
+    assert "/requests/" not in payload["stopReason"]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
@@ -18927,7 +18931,8 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     assert "Traceback" not in captured.err
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
-    assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "the local Guard app" in payload["reason"]
+    assert "/requests/" not in payload["reason"]
 
 
 def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approval(

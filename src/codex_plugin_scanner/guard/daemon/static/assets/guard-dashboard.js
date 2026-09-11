@@ -12537,6 +12537,16 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     return baseModule().catch(handlePreloadError);
   });
 };
+const GUARD_AUTH_REQUIRED = "This browser needs a fresh local Guard session.";
+const DASHBOARD_REQUEST_PATH = /^\/(?:requests|approvals)\/([^/?#]+)\/?$/;
+const DASHBOARD_REQUEST_ID = /^[a-z0-9][a-z0-9._-]{0,255}$/;
+function isGuardAuthenticationError(message) {
+  return message === GUARD_AUTH_REQUIRED || /\bunauthorized\s*\(401\)|\bfailed with 401\b/i.test(message);
+}
+function guardSessionRecoveryCommand(pathname) {
+  const requestId = DASHBOARD_REQUEST_PATH.exec(pathname)?.[1] ?? null;
+  return requestId !== null && DASHBOARD_REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : "hol-guard dashboard";
+}
 const GUARD_ACTIONS$1 = [
   "allow",
   "warn",
@@ -14295,6 +14305,41 @@ function getArtifactType(receipt) {
 function getEnvelope(receipt) {
   return receipt.action_envelope_json ?? null;
 }
+function getRedactedEnvelopeCommand(receipt) {
+  const value = receipt.envelope_redacted_json;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const command = value.command;
+  return typeof command === "string" && command.trim() ? command.trim() : null;
+}
+const SENSITIVE_ARGUMENT_PATTERN = /((?:^|\s)--?[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*(?:\s*=\s*|\s+))("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s'\"]+)/gi;
+const QUOTED_ASSIGNMENT_PATTERN = /((?:^|\s)(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*).*?\2(?=\s|$)/gi;
+const SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])["']?[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN = /((?:^|[\s{,;])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*)([^\s,;)}\]'\"]+)(?=$|[\s,;)}])/gi;
+const REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN = /(["'])[A-Za-z0-9_-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[A-Za-z0-9_-]*\s*[:=]\s*\[redacted\][^"']+\1/i;
+const SENSITIVE_QUERY_NAME = /api[-_]?key|token|secret|password|credential|authorization|cookie|signature|^(?:key|sig|auth)$/i;
+function redactQueryAssignments(value) {
+  return value.replace(/([?&#])([^=&#\s"']+)=([^&#\s"']*)/g, (assignment, separator, key) => {
+    const decodedKey = new URLSearchParams(`${key}=`).keys().next().value ?? key;
+    return SENSITIVE_QUERY_NAME.test(decodedKey) ? `${separator}${key}=[redacted]` : assignment;
+  });
+}
+function redactDisplayText(value) {
+  const trimmed = value.trim();
+  if (!trimmed || hasAmbiguousUnquotedAssignment(trimmed)) return null;
+  const redacted = redactQueryAssignments(trimmed).replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]").replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'\"]+@/gi, "$1[redacted]@").replace(/((?:^|\s)(?:--user|--proxy-user)(?:=|\s+)|(?:^|\s)-[uU]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s]+)/g, "$1[redacted]").replace(SENSITIVE_ARGUMENT_PATTERN, "$1[redacted]").replace(QUOTED_ASSIGNMENT_PATTERN, "$1[redacted]$2").replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]");
+  return REDACTED_QUOTED_ASSIGNMENT_TAIL_PATTERN.test(redacted) ? null : redacted;
+}
+function hasAmbiguousUnquotedAssignment(value) {
+  for (const match of value.matchAll(UNQUOTED_SENSITIVE_ASSIGNMENT_PATTERN)) {
+    const remainder = value.slice((match.index ?? 0) + match[0].length);
+    if (!remainder.trim()) continue;
+    const whitespace = remainder.match(/^\s*/)?.[0] ?? "";
+    if (whitespace.includes("\n") || whitespace.includes("\r")) continue;
+    const next = remainder.slice(whitespace.length);
+    if (!/^[;|&)\]}]/.test(next)) return true;
+  }
+  return false;
+}
 function humanFileName(artifactName) {
   if (!artifactName) return "a file";
   const name = artifactName.split("/").pop() ?? artifactName;
@@ -14330,11 +14375,23 @@ function looksLikeId(text) {
   if (/^[a-f0-9]{8,}$/i.test(text)) return true;
   return false;
 }
+function resolveActionCommand(receipt) {
+  const envelope = getEnvelope(receipt);
+  if (envelope) {
+    const command = getRedactedEnvelopeCommand(receipt) ?? receipt.action_explanation?.technical.command_display?.trim() ?? envelope.command?.trim();
+    return command ? redactDisplayText(command) : null;
+  }
+  if (receipt.decision_contract_error) return null;
+  const name = receipt.artifact_name?.trim();
+  const provenance = receipt.provenance_summary?.trim();
+  if (name && provenance && provenance.startsWith(`${name} `)) return redactDisplayText(provenance);
+  return null;
+}
 function resolveActionTitle(receipt) {
   const envelope = getEnvelope(receipt);
   const type = resolveActionType(receipt);
-  const command = envelope?.command?.trim();
-  if (type === "Shell command" && command && command.length > 0) {
+  const command = resolveActionCommand(receipt);
+  if (command) {
     return truncate(command, 80);
   }
   const targetPath = envelope?.target_paths?.[0]?.trim();
@@ -14364,17 +14421,17 @@ function resolveActionTitle(receipt) {
   const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
   if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
-    return provenance;
+    return redactDisplayText(provenance) ?? redactDisplayText(artifactName) ?? type;
   }
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
-    return artifactName;
+    return redactDisplayText(artifactName) ?? type;
   }
   const caps = receipt.capabilities_summary?.trim();
   if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
     return caps;
   }
   if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
-    return provenance;
+    return redactDisplayText(provenance) ?? type;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
   if (name && name.toLowerCase() !== type.toLowerCase()) {
@@ -14402,12 +14459,14 @@ function resolveActionSubtitle(receipt) {
   }
   const caps = receipt.capabilities_summary?.trim();
   const provenance = receipt.provenance_summary?.trim();
+  const safeCaps = caps ? redactDisplayText(caps) : null;
+  const safeProvenance = provenance ? redactDisplayText(provenance) : null;
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
-  if (isCapsUseful) {
-    parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
-    parts.push(provenance);
+  if (isCapsUseful && safeCaps) {
+    parts.push(safeCaps);
+  } else if (isProvenanceUseful && safeProvenance && provenance?.toLowerCase() !== caps?.toLowerCase() && safeProvenance !== resolveActionTitle(receipt)) {
+    parts.push(safeProvenance);
   }
   if (parts.length > 0) {
     return parts.join(" · ");
@@ -14417,7 +14476,8 @@ function resolveActionSubtitle(receipt) {
 function resolveActionDetail(receipt) {
   const envelope = getEnvelope(receipt);
   if (!envelope) return null;
-  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  const detail = resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+  return detail ? redactDisplayText(detail) : null;
 }
 function formatSubtitle(subtitle) {
   if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
@@ -15886,6 +15946,9 @@ let guardDaemonReconnectDiagnostic = "dashboard_reconnect_not_started";
 async function readJson(input, init) {
   const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(GUARD_AUTH_REQUIRED);
+    }
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return await response.json();
@@ -22058,6 +22121,7 @@ function ActionRow({
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
   const actionTitle = resolveActionTitle(receipt);
+  const command = resolveActionCommand(receipt);
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
   const handleClick = reactExports.useCallback(() => {
@@ -22098,7 +22162,7 @@ function ActionRow({
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm text-brand-dark block max-w-[36rem] break-words line-clamp-3 ${command ? "font-mono whitespace-pre-wrap" : "font-medium"}`, children: command ?? actionTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
         ] }) }),
         !hideHarnessColumn && /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -22357,7 +22421,10 @@ function TechnicalSection({ receipt }) {
         }
       ),
       receipt.source_scope && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Source scope", value: receipt.source_scope }),
-      receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: receipt.provenance_summary }),
+      receipt.provenance_summary && (() => {
+        const provenance = redactDisplayText(receipt.provenance_summary);
+        return provenance ? /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: provenance }) : null;
+      })(),
       (receipt.changed_capabilities ?? []).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         DetailRow,
         {
@@ -22554,9 +22621,9 @@ function EvidenceActionDetail({
               primarySignal.false_positive_hint
             ] })
           ] }),
-          receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
+          receipt.provenance_summary && redactDisplayText(receipt.provenance_summary) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Provenance" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.provenance_summary })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: redactDisplayText(receipt.provenance_summary) })
           ] }),
           receipt.diff_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 mb-1", children: [
@@ -25785,7 +25852,7 @@ const REASON_LABELS = {
   no_match: "No command rule controlled the decision",
   extension_match: "A command rule controlled the decision",
   uncertainty: "Uncertainty retained a stricter review floor",
-  policy: "A saved policy controlled the decision",
+  policy: "Guard recorded the policy decision",
   approval_reuse: "A prior approval was evaluated for reuse",
   containment: "Verified containment evidence controlled the decision",
   capability: "A workflow capability controlled the decision"
@@ -25994,6 +26061,10 @@ function CommandActivityDetail(props) {
           children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
         }
       )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 mb-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-medium text-brand-dark", children: "Command" }),
+      props.activity.action_preview ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-sm text-brand-dark", children: props.activity.action_preview }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "Command text was not retained for this record." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision", value: commandDecisionLabel(props.activity.policy_action) }),
@@ -26473,6 +26544,7 @@ function CommandRow(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "min-w-[16rem] max-w-[36rem] px-3 py-3 text-sm text-brand-dark", children: props.item.action_preview ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words line-clamp-3", children: props.item.action_preview }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-600", children: "Command text not retained" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [
@@ -26504,6 +26576,7 @@ function CommandActivityTable(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Time" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "App" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Decision" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Execution proof" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Rule evidence" }),
@@ -26533,6 +26606,7 @@ const EXECUTION_STATUSES = [
 const PROOF_LEVELS = ["pre_hook", "post_hook", "unpaired_post"];
 const REUSE_STATUSES = ["accepted", "rejected", "not-applicable"];
 const FEEDBACK_LABELS = ["should_not_have_interrupted", "expected_guard_to_stop_this"];
+const ACTION_PREVIEW_MAX_LENGTH = 2048;
 const ANALYTICS_DIMENSIONS = [
   "harness",
   "extension",
@@ -26666,6 +26740,7 @@ function normalizeActivity(value) {
     ),
     receipt_link_status: enumValue(item.receipt_link_status, ["not_applicable", "linked"], "command activity"),
     receipt_id: nullableString(item.receipt_id, "command activity"),
+    action_preview: nullableString(item.action_preview ?? null, "command activity", ACTION_PREVIEW_MAX_LENGTH),
     evaluation_latency_bucket: stringValue(item.evaluation_latency_bucket, "command activity"),
     persistence_latency_bucket: stringValue(item.persistence_latency_bucket, "command activity"),
     feedback_label: item.feedback_label === null ? null : enumValue(item.feedback_label, FEEDBACK_LABELS, "command activity"),
@@ -30697,13 +30772,19 @@ function ReviewWorkspace(props) {
 }
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
+  const [repairError, setRepairError] = reactExports.useState(null);
+  const [copied, setCopied] = reactExports.useState(false);
+  const authenticationRequired = isGuardAuthenticationError(props.message);
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
     }
     setRepairing(true);
+    setRepairError(null);
     try {
       await props.onRepair();
+    } catch {
+      setRepairError("Guard could not complete the repair. Open the local Guard app to check its status.");
     } finally {
       setRepairing(false);
     }
@@ -30715,9 +30796,39 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
+  if (authenticationRequired) {
+    const recoveryCommand = guardSessionRecoveryCommand(typeof window === "undefined" ? "" : window.location.pathname);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Reconnect this browser to Guard" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "Guard responded, but this browser's local session is missing or has expired. Your request has not been changed." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "Open the dashboard from the Guard app, or run this command in your terminal. Guard Cloud sign-in is not required." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 break-words font-mono text-sm text-brand-dark select-all", children: recoveryCommand }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          IconActionButton,
+          {
+            label: copied ? "Copied" : "Copy recovery command",
+            icon: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, {}) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, {}),
+            onClick: async () => {
+              try {
+                await navigator.clipboard.writeText(recoveryCommand);
+                setCopied(true);
+                setRepairError(null);
+              } catch {
+                setRepairError("Clipboard unavailable. Select the command to copy it.");
+              }
+            }
+          }
+        )
+      ] }),
+      repairError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-2 text-sm", children: repairError }),
+      props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Check session again" }) })
+    ] });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: QUEUE_CONNECTION_ERROR_HEADLINE }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.message }),
+    repairError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-2 text-sm", children: repairError }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: QUEUE_CONNECTION_ERROR_INSTRUCTION }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),

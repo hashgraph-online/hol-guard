@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import dashboard_launcher
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
@@ -528,18 +529,29 @@ def test_build_approval_request_url_uses_requests_route() -> None:
 class TestApprovalsOpenCommand:
     """T734-T735: 'hol-guard approvals open <request_id>' command."""
 
-    def test_approvals_open_returns_approval_url_for_known_request(self, tmp_path: Path, capsys) -> None:
+    def test_approvals_open_returns_approval_url_for_known_request(self, tmp_path: Path, monkeypatch, capsys) -> None:
         """T734: approvals open prints the approval URL for an existing pending request."""
         home_dir = tmp_path / "guard-home"
         store = GuardStore(home_dir)
         store.add_approval_request(_make_request(request_id="req-open-01"), "2026-01-01T00:00:00Z")
+        monkeypatch.setattr(
+            dashboard_launcher,
+            "open_dashboard",
+            lambda **_kwargs: dashboard_launcher.DashboardLaunchResult(
+                opened=True,
+                approval_center_url="http://127.0.0.1:5474",
+                browser_url="http://127.0.0.1:5474/requests/req-open-01",
+                reason="opened",
+            ),
+        )
 
         rc = main(["guard", "approvals", "open", "req-open-01", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
         assert output["request_id"] == "req-open-01"
-        assert "approval_url" in output
+        assert output["approval_url"] == "http://127.0.0.1:5474/requests/req-open-01"
+        assert "guard-token" not in json.dumps(output)
 
     def test_approvals_open_returns_error_for_missing_request(self, tmp_path: Path, capsys) -> None:
         """T735: approvals open with daemon stopped returns a clear error, not a crash."""

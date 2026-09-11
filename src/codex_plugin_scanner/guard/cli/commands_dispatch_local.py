@@ -342,7 +342,7 @@ def _run_guard_protect_command(
                     fresh_payload["approval_wait"] = wait_result
                     payload, exit_code = fresh_payload, 0
     if not _suppress_package_shim_allow_output(args, payload):
-        _emit("protect", payload, getattr(args, "json", False))
+        _emit("protect", payload, getattr(args, "json", False), live_approval_home=guard_home)
     return exit_code
 
 

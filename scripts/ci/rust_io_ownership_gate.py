@@ -75,6 +75,10 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_runtime_resident.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+        # Loopback approval presentation signs a session token and reads the
+        # daemon auth token; neither operation supplies native decision input.
+        "src/codex_plugin_scanner/guard/local_dashboard_session.py",
+        "src/codex_plugin_scanner/guard/private_file_io.py",
     }
 )
 _TRANSPORT_DECODE_PATHS: Final = frozenset(

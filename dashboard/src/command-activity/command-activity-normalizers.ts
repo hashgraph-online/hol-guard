@@ -33,6 +33,7 @@ const EXECUTION_STATUSES = [
 const PROOF_LEVELS = ["pre_hook", "post_hook", "unpaired_post"] as const;
 const REUSE_STATUSES = ["accepted", "rejected", "not-applicable"] as const;
 const FEEDBACK_LABELS = ["should_not_have_interrupted", "expected_guard_to_stop_this"] as const;
+const ACTION_PREVIEW_MAX_LENGTH = 2_048;
 const ANALYTICS_DIMENSIONS = [
   "harness",
   "extension",
@@ -186,6 +187,7 @@ function normalizeActivity(value: unknown): CommandActivityItem {
     ) as CommandApprovalReuseStatus,
     receipt_link_status: enumValue(item.receipt_link_status, ["not_applicable", "linked"], "command activity"),
     receipt_id: nullableString(item.receipt_id, "command activity"),
+    action_preview: nullableString(item.action_preview ?? null, "command activity", ACTION_PREVIEW_MAX_LENGTH),
     evaluation_latency_bucket: stringValue(item.evaluation_latency_bucket, "command activity"),
     persistence_latency_bucket: stringValue(item.persistence_latency_bucket, "command activity"),
     feedback_label:

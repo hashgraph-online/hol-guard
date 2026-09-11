@@ -10,6 +10,29 @@ from ..daemon.hook_availability_policy import (
 )
 
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
+_ZCODE_HARNESSES = frozenset({"zcode", "zai", "z-code", "zai-zcode"})
+
+
+def _canonical_harness(harness: str) -> str:
+    return harness.strip().lower().replace("_", "-")
+
+
+def _zcode_pretool_requires_pause(harness: str, event_name: str) -> bool:
+    """Keep ZCode's review boundary closed when its PreToolUse hook fails."""
+
+    canonical_harness = _canonical_harness(harness)
+    compact_event = event_name.strip().lower().replace("_", "").replace("-", "")
+    return canonical_harness in _ZCODE_HARNESSES and compact_event in {"pretooluse", "pretool"}
+
+
+def _emergency_safe_payload_input(harness: str, payload: dict[str, object]) -> dict[str, object]:
+    """Normalize ZCode's camelCase wire fields before shared floor checks."""
+
+    if _canonical_harness(harness) not in _ZCODE_HARNESSES:
+        return payload
+    from .zcode_hooks import prepare_zcode_hook_payload
+
+    return prepare_zcode_hook_payload(payload)
 
 
 def _is_permission_event(event_name: str) -> bool:
@@ -134,11 +157,14 @@ def failure_payload(
         pauses
         and not _is_permission_event(event_name)
         and isinstance(payload, dict)
-        and hook_action_is_emergency_safe(payload)
+        and hook_action_is_emergency_safe(_emergency_safe_payload_input(harness, payload))
     ):
         return _emergency_safe_payload(harness, event_name), 0
     if not pauses:
         return _observe_payload(harness, event_name, reason), 0
-    if continue_session:
+    # ZCode's runtime treats an allow-shaped failure response as permission to
+    # execute the pending tool. Keep its PreToolUse boundary fail-closed; the
+    # emergency-safe inspection branch above remains the explicit exception.
+    if continue_session and not _zcode_pretool_requires_pause(harness, event_name):
         return _unavailable_payload(harness, event_name, reason)
     return _pause_payload(harness, event_name, reason)

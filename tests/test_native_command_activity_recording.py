@@ -31,6 +31,7 @@ def test_native_receipt_link_requires_writer_acceptance(accepted: bool) -> None:
         ("codex", "tool_call_id", "tool_input"),
         ("grok", "toolUseId", "toolInput"),
         ("zcode", "tool_use_id", "tool_input"),
+        ("zcode", "toolCallId", "toolInput"),
     ],
 )
 def test_native_pre_and_post_keep_authoritative_decision(

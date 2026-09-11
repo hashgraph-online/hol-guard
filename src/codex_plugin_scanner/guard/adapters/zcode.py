@@ -63,6 +63,44 @@ _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
+_ZCODE_HOOKS_ENABLED_STATE_KEY = "hooks_enabled_before"
+
+
+def _hooks_enabled_snapshot(hooks: dict[str, object]) -> dict[str, object]:
+    """Capture the exact user value before Guard enables managed hooks."""
+
+    return {
+        "present": "enabled" in hooks,
+        "value": hooks.get("enabled"),
+    }
+
+
+def _stored_hooks_enabled_snapshot(state: dict[str, object]) -> dict[str, object] | None:
+    """Return a validated enabled snapshot, or None for legacy state files."""
+
+    raw_snapshot = state.get(_ZCODE_HOOKS_ENABLED_STATE_KEY)
+    if not isinstance(raw_snapshot, dict):
+        return None
+    present = raw_snapshot.get("present")
+    if not isinstance(present, bool):
+        return None
+    if present and "value" not in raw_snapshot:
+        return None
+    return {
+        "present": present,
+        "value": raw_snapshot.get("value"),
+    }
+
+
+def _restore_hooks_enabled(hooks: dict[str, object], snapshot: dict[str, object] | None) -> None:
+    """Restore Guard's enabled key only when its managed value is unchanged."""
+
+    if snapshot is None or hooks.get("enabled") is not True:
+        return
+    if snapshot.get("present") is True:
+        hooks["enabled"] = snapshot.get("value")
+    else:
+        hooks.pop("enabled", None)
 
 
 class ZCodeHarnessAdapter(HarnessAdapter):
@@ -316,11 +354,22 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             hooks = {}
         payload["hooks"] = hooks
 
+        state_payload = _json_payload(state_path) if state_path.is_file() else {}
+        hooks_enabled_before = None
+        if state_payload.get("managed_config_path") == str(config_path):
+            hooks_enabled_before = _stored_hooks_enabled_snapshot(state_payload)
+        if hooks_enabled_before is None:
+            hooks_enabled_before = _hooks_enabled_snapshot(hooks)
+        # ZCode does not construct its hook runner while this feature flag is
+        # false. Guard owns the value for the duration of the managed install.
+        hooks["enabled"] = True
         self._sync_managed_hook_groups(hooks, managed_hook_command)
         config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
+        state_payload["managed_config_path"] = str(config_path)
+        state_payload[_ZCODE_HOOKS_ENABLED_STATE_KEY] = hooks_enabled_before
         state_path.write_text(
-            json.dumps({"managed_config_path": str(config_path)}, indent=2) + "\n",
+            json.dumps(state_payload, indent=2) + "\n",
             encoding="utf-8",
         )
 
@@ -335,6 +384,8 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.zcode/cli/config.json under the hooks.events section",
+                "ZCode hooks were enabled for the managed install and the prior enabled setting is restored "
+                "on uninstall",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
                 "Legacy flat hook groups were migrated into hooks.events for current ZCode",
                 *shim_notes,
@@ -349,19 +400,24 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             display_name="zcode",
         )
         config_path = self._config_path(context)
+        _state_dir, _backup_path, state_path = self._managed_state_paths(context)
+        state_payload = _json_payload(state_path) if state_path.is_file() else {}
+        hooks_enabled_before = _stored_hooks_enabled_snapshot(state_payload)
+        state_belongs_to_config = state_payload.get("managed_config_path") == str(config_path)
         if config_path.is_file():
             _ensure_path_within_root(self._zcode_home_dir(context), config_path, label="ZCode")
             payload = _json_payload(config_path)
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
                 self._prune_managed_hook_groups(hooks)
+                if state_belongs_to_config:
+                    _restore_hooks_enabled(hooks, hooks_enabled_before)
                 if not hooks:
                     payload.pop("hooks", None)
                 else:
                     payload["hooks"] = hooks
                 config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-        _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():
             state_path.unlink()
 
@@ -382,7 +438,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         }
 
     def _sync_managed_hook_groups(self, hooks: dict[str, object], managed_command: str) -> None:
-        """Reconcile Guard-managed PreToolUse and UserPromptSubmit hook groups.
+        """Reconcile Guard-managed review and execution-evidence hook groups.
 
         Guard only writes the ``hooks.events`` layout; legacy flat ``hooks.<Event>``
         groups (whether Guard-managed leftovers or user entries written by older
@@ -410,6 +466,12 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         prompt_entries = _merge_hook_entry(prompt_entries, None, prompt_handler)
         events["PreToolUse"] = pretool_entries
         events["UserPromptSubmit"] = prompt_entries
+        for event_name in ("PostToolUse", "PostToolUseFailure"):
+            raw_entries = events.get(event_name)
+            entries = self._prune_managed_entries(raw_entries if isinstance(raw_entries, list) else [])
+            for matcher in ZCODE_PRETOOL_MATCHERS:
+                entries = _merge_hook_entry(entries, matcher, pretool_handler)
+            events[event_name] = entries
 
     @staticmethod
     def _migrate_legacy_hook_events(hooks: dict[str, object]) -> dict[str, object]:

@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard import dashboard_launcher
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_module
@@ -57,6 +58,19 @@ def _context(tmp_path: Path) -> HarnessContext:
     guard_home = tmp_path / "guard-home"
     workspace.mkdir(parents=True, exist_ok=True)
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
+
+
+def _mock_dashboard_launcher(monkeypatch: pytest.MonkeyPatch, browser_url: str) -> None:
+    monkeypatch.setattr(
+        dashboard_launcher,
+        "open_dashboard",
+        lambda **_kwargs: dashboard_launcher.DashboardLaunchResult(
+            opened=True,
+            approval_center_url="http://127.0.0.1:4781",
+            browser_url=browser_url,
+            reason="opened",
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -2881,16 +2895,14 @@ def test_approval_open_repairs_stale_local_url(tmp_path: Path, monkeypatch: pyte
         approval_url="http://127.0.0.1:4000/approvals/request-1",
     )
     store.add_approval_request(request, "2026-05-12T00:00:00Z")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.approval_commands.load_guard_daemon_url",
-        lambda guard_home: "http://127.0.0.1:4781",
-    )
+    _mock_dashboard_launcher(monkeypatch, "http://127.0.0.1:4781/requests/request-1")
 
     payload, exit_code = run_approval_open_command(argparse.Namespace(request_id="request-1"), store=store)
 
     assert exit_code == 0
-    assert payload["approval_url"] == "http://127.0.0.1:4781/approvals/request-1"
+    assert payload["approval_url"] == "http://127.0.0.1:4781/requests/request-1"
     assert payload["repaired"] is True
+    assert "guard-token" not in str(payload)
 
 
 def test_approval_open_repairs_ipv6_local_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2910,19 +2922,19 @@ def test_approval_open_repairs_ipv6_local_url(tmp_path: Path, monkeypatch: pytes
         approval_url="http://[::1]:4000/approvals/request-ipv6",
     )
     store.add_approval_request(request, "2026-05-12T00:00:00Z")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.approval_commands.load_guard_daemon_url",
-        lambda guard_home: "http://127.0.0.1:4781",
-    )
+    _mock_dashboard_launcher(monkeypatch, "http://127.0.0.1:4781/requests/request-ipv6")
 
     payload, exit_code = run_approval_open_command(argparse.Namespace(request_id="request-ipv6"), store=store)
 
     assert exit_code == 0
-    assert payload["approval_url"] == "http://127.0.0.1:4781/approvals/request-ipv6"
+    assert payload["approval_url"] == "http://127.0.0.1:4781/requests/request-ipv6"
     assert payload["repaired"] is True
+    assert "guard-token" not in str(payload)
 
 
-def test_approval_open_preserves_malformed_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_approval_open_uses_canonical_url_for_malformed_stored_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     request = GuardApprovalRequest(
         request_id="request-bad-url",
@@ -2939,13 +2951,11 @@ def test_approval_open_preserves_malformed_url(tmp_path: Path, monkeypatch: pyte
         approval_url="http://[::1:4000/approvals/request-bad-url",
     )
     store.add_approval_request(request, "2026-05-12T00:00:00Z")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.approval_commands.load_guard_daemon_url",
-        lambda guard_home: "http://127.0.0.1:4781",
-    )
+    _mock_dashboard_launcher(monkeypatch, "http://127.0.0.1:4781/requests/request-bad-url")
 
     payload, exit_code = run_approval_open_command(argparse.Namespace(request_id="request-bad-url"), store=store)
 
     assert exit_code == 0
-    assert payload["approval_url"] == "http://[::1:4000/approvals/request-bad-url"
-    assert payload["repaired"] is False
+    assert payload["approval_url"] == "http://127.0.0.1:4781/requests/request-bad-url"
+    assert payload["repaired"] is True
+    assert "guard-token" not in str(payload)

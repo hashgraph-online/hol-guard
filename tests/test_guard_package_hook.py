@@ -547,7 +547,9 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "/requests/" in reason
     assert "retry the same Codex action" in reason
-    assert "waiting for approval in your browser" in captured.err
+    assert "HOL Guard is waiting for approval." in captured.err
+    assert "hol-guard approvals open " in captured.err
+    assert "/requests/" not in captured.err
 
 
 def test_guard_hook_warns_for_package_request_without_blocking(

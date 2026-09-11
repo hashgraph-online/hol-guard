@@ -178,6 +178,7 @@ def persist_deferred_post_hook_command_activity(
     correlation: CorrelationHandle | None,
     succeeded: bool,
     has_command: bool,
+    activity_id: str | None = None,
 ) -> bool:
     """Persist a sanitized deferred post-hook record."""
 
@@ -203,7 +204,7 @@ def persist_deferred_post_hook_command_activity(
     if not has_command:
         return False
     evidence = build_unpaired_post_evidence(
-        activity_id=_activity_id(),
+        activity_id=activity_id or _activity_id(),
         occurred_at=_utc_now(),
         harness=harness,
         succeeded=succeeded,

@@ -88,9 +88,11 @@ def test_timeout_continues_when_review_cannot_finish(
         assert payload[key] == value
 
 
+@pytest.mark.parametrize("harness", ["kimi", "zcode"])
 def test_timeout_allows_emergency_safe_read(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    harness: str,
 ) -> None:
     monkeypatch.setattr(
         bounded_cli_hook_bridge,
@@ -100,7 +102,7 @@ def test_timeout_allows_emergency_safe_read(
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="kimi"),
+            _config(tmp_path, harness=harness),
             input_text=json.dumps(
                 {
                     "hook_event_name": "PreToolUse",
@@ -117,7 +119,39 @@ def test_timeout_allows_emergency_safe_read(
     assert hook_output["permissionDecision"] == "allow"
 
 
-@pytest.mark.parametrize("harness", ["kimi", "zcode"])
+def test_zcode_timeout_allows_camelcase_emergency_safe_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The emergency-safe floor accepts ZCode's installed camelCase wire shape."""
+
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(None, "", False, True)),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="zcode"),
+            input_text=json.dumps(
+                {
+                    "hookEventName": "PreToolUse",
+                    "toolCallId": "synthetic-call-read",
+                    "toolName": "Read",
+                    "toolInput": {"filePath": "src/app.ts"},
+                }
+            ),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
+
+
+@pytest.mark.parametrize("harness", ["kimi"])
 def test_claude_shaped_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -140,6 +174,49 @@ def test_claude_shaped_timeout_continues_when_review_cannot_finish(
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "allow"
+
+
+@pytest.mark.parametrize(
+    "process_result",
+    [
+        pytest.param(BoundedHookProcessResult(None, "", False, True), id="timeout"),
+        pytest.param(BoundedHookProcessResult(1, "", False, False), id="missing-output"),
+        pytest.param(BoundedHookProcessResult(1, "not-json", False, False), id="malformed-output"),
+        pytest.param(BoundedHookProcessResult(1, "{}", False, False), id="parseable-error-output"),
+    ],
+)
+def test_zcode_pretool_failure_denies_sensitive_before_execution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    process_result: BoundedHookProcessResult,
+) -> None:
+    """A failed ZCode review must not turn a synthetic .env edit into allow."""
+
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(process_result),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="zcode"),
+            input_text=json.dumps(
+                {
+                    "hookEventName": "PreToolUse",
+                    "toolCallId": "synthetic-call-1",
+                    "toolName": "Edit",
+                    "toolInput": {"filePath": ".env"},
+                }
+            ),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 2
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert payload.get("continue") is not True
 
 
 def test_success_preserves_child_stdout_and_returncode(

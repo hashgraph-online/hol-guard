@@ -28,6 +28,14 @@ class _ConnectionOwner(Protocol):
 
 
 class StoreCommandActivityApiMixin:
+    def record_local_action_preview(self: _ConnectionOwner, activity_id: str, preview: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "insert or ignore into local_action_previews (activity_id, preview) "
+                "select activity_id, ? from command_activity where activity_id = ?",
+                (preview, activity_id),
+            )
+
     def list_command_activity_page(
         self: _ConnectionOwner,
         query: CommandActivityListQuery,
@@ -282,7 +290,19 @@ def _activity_items(connection: sqlite3.Connection, rows: Sequence[sqlite3.Row])
         ).fetchall(),
     )
     matches_by_activity = _group_matches(match_rows)
-    return [_activity_row_payload(row, matches_by_activity.get(str(row["activity_id"]), [])) for row in rows]
+    previews = dict(
+        connection.execute(
+            f"select activity_id, preview from local_action_previews where activity_id in ({placeholders})",
+            tuple(activity_ids),
+        ).fetchall()
+    )
+    return [
+        {
+            **_activity_row_payload(row, matches_by_activity.get(str(row["activity_id"]), [])),
+            "action_preview": previews.get(str(row["activity_id"])),
+        }
+        for row in rows
+    ]
 
 
 def _group_matches(rows: Sequence[sqlite3.Row]) -> dict[str, list[dict[str, object]]]:

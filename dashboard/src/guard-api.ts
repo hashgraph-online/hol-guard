@@ -1,3 +1,4 @@
+import { GUARD_AUTH_REQUIRED } from "./guard-auth-error";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -204,6 +205,9 @@ type QueueResolutionPayload = Omit<
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(GUARD_AUTH_REQUIRED);
+    }
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return (await response.json()) as T;
