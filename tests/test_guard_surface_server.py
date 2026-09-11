@@ -1074,7 +1074,7 @@ class TestGuardSurfaceServer:
                     hook_payload = urlopen_json(
                         hook_request,
                         timeout=min(2.0, max(0.1, remaining)),
-                        attempts=2,
+                        attempts=1,
                     )
                     break
                 except ConnectionRefusedError as exc:
