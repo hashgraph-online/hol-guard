@@ -71,6 +71,7 @@
       "command.remote.rsync",
       "command.remote.scp",
       "command.remote.ssh",
+      "command.sandbin",
       "command.search.elasticsearch",
       "command.storage.aws-s3",
       "command.storage.azure-blob",
