@@ -105,6 +105,32 @@ VTTFORGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "VTTForge migration write command",
         "command.vttforge.migrate-write",
     ),
+    # Wrapper options that take a value must not pass their operand off as the executable.
+    (
+        "exec -a vtt vttforge lint --fix",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "xargs -a targets vttforge migrate --write",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
+    (
+        "xargs --max-args 1 -a targets vttforge init",
+        "VTTForge project scaffold command",
+        "command.vttforge.init",
+    ),
+    (
+        "xargs -a targets vttforge lint $FLAGS",
+        "VTTForge lint fix command",
+        "command.vttforge.lint-fix",
+    ),
+    (
+        "exec -a vtt vttforge $ARGS --write",
+        "VTTForge migration write command",
+        "command.vttforge.migrate-write",
+    ),
     # An expanded subcommand next to a literal writing flag goes to that rule.
     (
         "vttforge $SUBCOMMAND --fix",
@@ -187,6 +213,8 @@ VTTFORGE_SAFE_COMMANDS: tuple[str, ...] = (
     # Read-only subcommands take no writing flag, expanded or not.
     "vttforge audit $FLAGS",
     "xargs vttforge audit ./my-system",
+    "xargs -a targets vttforge audit",
+    "exec -a vtt vttforge migrate --write --help",
 )
 
 

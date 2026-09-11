@@ -41,14 +41,46 @@ _VTTFORGE_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("exec", "vttforge"),
     ("xargs", "vttforge"),
 )
-_WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
+# Wrapper options that consume the next token. Missing one here would let its
+# operand pass for the wrapped executable and hide the command; `exec -a name`
+# and `xargs -a file` are the ones a shared set tends to forget.
+_WRAPPER_LEADING_OPTIONS_WITH_VALUES: dict[str, frozenset[str]] = {
+    "exec": frozenset({"-a"}),
+    "xargs": frozenset(
+        {
+            "-a",
+            "--arg-file",
+            "-d",
+            "--delimiter",
+            "-E",
+            "--eof",
+            "-I",
+            "--replace",
+            "-J",
+            "-L",
+            "--max-lines",
+            "-n",
+            "--max-args",
+            "-P",
+            "--max-procs",
+            "-R",
+            "-S",
+            "-s",
+            "--max-chars",
+        }
+    ),
+}
 _EXPANSION_MARKERS: frozenset[str] = frozenset({"$", "`"})
 _INIT_OPTIONS_WITH_VALUES = frozenset({"--type", "--lang", "--id", "--title", "--description", "--author", "--license"})
 _MIGRATE_OPTIONS_WITH_VALUES = frozenset({"--style", "--lang"})
 
 
 def _is_wrapper(launcher: tuple[str, ...]) -> bool:
-    return launcher[0] in ("exec", "xargs")
+    return launcher[0] in _WRAPPER_LEADING_OPTIONS_WITH_VALUES
+
+
+def _wrapper_options(launcher: tuple[str, ...]) -> frozenset[str]:
+    return _WRAPPER_LEADING_OPTIONS_WITH_VALUES.get(launcher[0], frozenset())
 
 
 def _launcher_matcher(
@@ -63,7 +95,7 @@ def _launcher_matcher(
         required_flags=required_flags,
         options_with_values=options_with_values,
         allow_leading_options=_is_wrapper(launcher),
-        leading_options_with_values=_WRAPPER_LEADING_OPTIONS_WITH_VALUES if _is_wrapper(launcher) else frozenset(),
+        leading_options_with_values=_wrapper_options(launcher),
     )
 
 
@@ -101,7 +133,6 @@ class VttforgeUnresolvedExpansionMatcher:
     literal_flag: str | None = None
     other_literal_flags: frozenset[str] = frozenset()
     launchers: tuple[tuple[str, ...], ...] = _VTTFORGE_LAUNCHERS
-    leading_options_with_values: frozenset[str] = _WRAPPER_LEADING_OPTIONS_WITH_VALUES
     expansion_markers: frozenset[str] = _EXPANSION_MARKERS
 
     def _has_expansion(self, argument: str) -> bool:
@@ -132,7 +163,7 @@ class VttforgeUnresolvedExpansionMatcher:
                 if _is_wrapper(launcher):
                     candidate_arguments = _after_leading_options(
                         candidate_arguments,
-                        self.leading_options_with_values,
+                        _wrapper_options(launcher),
                         frozenset(),
                     )
                 prefix = launcher[1:]
