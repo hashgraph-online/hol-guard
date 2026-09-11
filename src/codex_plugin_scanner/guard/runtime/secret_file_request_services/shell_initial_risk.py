@@ -158,6 +158,22 @@ def _direct_shell_risk_match(
             script_read_identity_sha256=assessment.identity_sha256,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    if assessment.requires_review:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="local script execution shell command",
+            reason=(
+                "This command executes local or incompletely inspected code. "
+                "Review it before execution."
+            ),
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="shell_local_script_execution_review",
+            script_read_identity_sha256=assessment.identity_sha256,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
     return None
 
 
