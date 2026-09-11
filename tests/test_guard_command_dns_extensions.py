@@ -13,6 +13,16 @@ from tests.command_extension_contracts import assert_reviewed_command_cases, ass
 DNS_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("aws route53 delete-hosted-zone --id Z123", "AWS DNS destructive command", "command.dns.aws.zone-deletion"),
     (
+        "aws route53 delete-query-logging-config --id abc",
+        "AWS DNS destructive command",
+        "command.dns.aws.zone-deletion",
+    ),
+    (
+        "aws route53 delete-reusable-delegation-set --id N123",
+        "AWS DNS destructive command",
+        "command.dns.aws.zone-deletion",
+    ),
+    (
         "aws --future-global-option account route53 delete-hosted-zone --id Z123",
         "AWS DNS destructive command",
         "command.dns.aws.zone-deletion",
@@ -98,6 +108,8 @@ DNS_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 DNS_SAFE_COMMANDS: tuple[str, ...] = (
     "aws route53 delete-hosted-zone --help",
+    "aws route53 delete-hosted-zone --generate-cli-skeleton input",
+    "aws route53 delete-query-logging-config --generate-cli-skeleton output",
     "aws --future-global-option account route53 delete-hosted-zone --id Z123 --help",
     "aws route53 list-hosted-zones",
     "aws --future-global-option account route53 list-hosted-zones",

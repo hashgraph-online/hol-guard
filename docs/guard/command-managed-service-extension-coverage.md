@@ -7,11 +7,11 @@ executable and exact operation path; quoted examples and unrelated read or updat
 
 | Extension | Reviewed operations | Safe counterparts |
 | --- | --- | --- |
-| `command.cdn` | Distribution, profile, and endpoint deletion through AWS and Azure CLIs | List, show, and help |
-| `command.api-gateway` | API and gateway deletion through AWS, Google Cloud, and Azure CLIs | Get, list, describe, and help |
-| `command.load-balancer` | Load-balancer and forwarding-rule deletion through AWS, Google Cloud, and Azure CLIs | Describe, list, show, and help |
-| `command.monitoring` | Alarm and alert deletion through AWS, Google Cloud, and Azure CLIs | Describe, list, show, and help |
-| `command.email` | Email identity and contact-list deletion through AWS CLI | Get, list, and help |
+| `command.cdn` | Distribution, VPC origin, key-value-store, profile, and endpoint deletion through AWS and Azure CLIs | List, show, help, and AWS request skeleton generation |
+| `command.api-gateway` | API and gateway deletion through AWS, Google Cloud, and Azure CLIs | Get, list, describe, help, and AWS request skeleton generation |
+| `command.load-balancer` | Classic and v2 load-balancer, target-group, listener, and forwarding-rule deletion through AWS, Google Cloud, and Azure CLIs | Describe, list, show, help, and AWS request skeleton generation |
+| `command.monitoring` | Alarm, dashboard, metric-stream, and alert deletion through AWS, Google Cloud, and Azure CLIs | Describe, list, show, help, and AWS request skeleton generation |
+| `command.email` | Email identity, template, configuration-set, and contact-list deletion through AWS CLI | Get, list, help, and AWS request skeleton generation |
 | `command.feature-flags` | Permanent feature-flag deletion through `ldcli` | Get, list, update/archive, and help |
 | `command.payment` | Product, coupon, customer, and webhook endpoint deletion through Stripe CLI | Retrieve, list, update/archive, and help |
 

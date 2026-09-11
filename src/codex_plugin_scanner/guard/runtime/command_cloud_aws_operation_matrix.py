@@ -213,8 +213,113 @@ AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4: tuple[CommandPath, ...] = (
     ("cloudhsmv2", "delete-resource-policy"),
 )
 
+AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5: tuple[CommandPath, ...] = (
+    ("dynamodb", "delete-backup"),
+    ("dynamodb", "delete-global-table"),
+    ("dynamodb", "delete-item"),
+    ("dynamodb", "delete-resource-policy"),
+    ("dynamodb", "delete-table"),
+    ("ec2", "delete-security-group"),
+    ("ec2", "delete-subnet"),
+    ("ec2", "delete-volume"),
+    ("ec2", "delete-vpc"),
+    ("ecr", "batch-delete-image"),
+    ("ecr", "delete-lifecycle-policy"),
+    ("ecr", "delete-registry-policy"),
+    ("ecr", "delete-repository"),
+    ("ecr", "delete-repository-policy"),
+    ("ecs", "delete-capacity-provider"),
+    ("ecs", "delete-cluster"),
+    ("ecs", "delete-service"),
+    ("ecs", "delete-task-definitions"),
+    ("ecs", "deregister-task-definition"),
+    ("efs", "delete-file-system"),
+    ("elasticache", "delete-cache-cluster"),
+    ("elasticache", "delete-cache-parameter-group"),
+    ("elasticache", "delete-cache-subnet-group"),
+    ("elasticache", "delete-replication-group"),
+    ("elasticache", "delete-serverless-cache"),
+    ("elasticache", "delete-snapshot"),
+    ("elasticbeanstalk", "delete-application"),
+    ("elasticbeanstalk", "terminate-environment"),
+    ("events", "delete-archive"),
+    ("events", "delete-connection"),
+    ("events", "delete-event-bus"),
+    ("events", "delete-rule"),
+    ("events", "remove-targets"),
+    ("firehose", "delete-delivery-stream"),
+    ("fsx", "delete-file-system"),
+    ("glue", "delete-database"),
+    ("iam", "delete-access-key"),
+    ("iam", "delete-group"),
+    ("iam", "delete-group-policy"),
+    ("iam", "delete-instance-profile"),
+    ("iam", "delete-login-profile"),
+    ("iam", "delete-open-id-connect-provider"),
+    ("iam", "delete-policy"),
+    ("iam", "delete-role"),
+    ("iam", "delete-role-policy"),
+    ("iam", "delete-saml-provider"),
+    ("iam", "delete-server-certificate"),
+    ("iam", "delete-user"),
+    ("iam", "delete-user-policy"),
+    ("iam", "delete-virtual-mfa-device"),
+    ("iam", "detach-role-policy"),
+    ("iam", "detach-user-policy"),
+    ("kinesis", "delete-stream"),
+    ("kms", "delete-alias"),
+    ("kms", "delete-custom-key-store"),
+    ("kms", "delete-imported-key-material"),
+    ("kms", "disable-key"),
+    ("kms", "revoke-grant"),
+    ("kms", "schedule-key-deletion"),
+    ("lambda", "delete-alias"),
+    ("lambda", "delete-event-source-mapping"),
+    ("lambda", "delete-function"),
+    ("lambda", "delete-function-concurrency"),
+    ("lambda", "delete-function-event-invoke-config"),
+    ("lambda", "delete-function-url-config"),
+    ("lambda", "delete-layer-version"),
+    ("lambda", "delete-provisioned-concurrency-config"),
+    ("logs", "delete-log-group"),
+    ("logs", "delete-log-stream"),
+    ("logs", "delete-metric-filter"),
+    ("logs", "delete-resource-policy"),
+    ("logs", "delete-subscription-filter"),
+    ("opensearch", "delete-domain"),
+    ("rds", "delete-db-parameter-group"),
+    ("rds", "delete-db-snapshot"),
+    ("rds", "delete-db-subnet-group"),
+    ("redshift", "delete-cluster"),
+    ("redshift", "delete-cluster-parameter-group"),
+    ("redshift", "delete-cluster-snapshot"),
+    ("redshift", "delete-cluster-subnet-group"),
+    ("redshift", "delete-event-subscription"),
+    ("s3control", "delete-access-point"),
+    ("s3control", "delete-access-point-policy"),
+    ("s3control", "delete-multi-region-access-point"),
+    ("s3control", "delete-storage-lens-configuration"),
+    ("secretsmanager", "delete-resource-policy"),
+    ("secretsmanager", "delete-secret"),
+    ("secretsmanager", "remove-regions-from-replication"),
+    ("sns", "delete-endpoint"),
+    ("sns", "delete-platform-application"),
+    ("sns", "delete-topic"),
+    ("sqs", "delete-message"),
+    ("sqs", "delete-queue"),
+    ("sqs", "purge-queue"),
+    ("ssm", "delete-document"),
+    ("ssm", "delete-maintenance-window"),
+    ("ssm", "delete-parameter"),
+    ("ssm", "delete-parameters"),
+    ("ssm", "delete-patch-baseline"),
+    ("ssm", "delete-resource-data-sync"),
+)
+
 AWS_DESTRUCTIVE_COMMAND_PATHS: tuple[CommandPath, ...] = (
-    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1 + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+    + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+    + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5
 )
 
 if len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) != 100:
@@ -225,10 +330,18 @@ if len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4) != 100:
     raise AssertionError("AWS batch 4 operation matrix must contain exactly 100 paths")
 if len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)) != 100:
     raise AssertionError("AWS batch 4 operation matrix paths must be unique")
+if len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5) != 100:
+    raise AssertionError("AWS batch 5 operation matrix must contain exactly 100 paths")
+if len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)) != 100:
+    raise AssertionError("AWS batch 5 operation matrix paths must be unique")
 if set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) & set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4):
     raise AssertionError("AWS operation matrix batches must not overlap")
-if len(AWS_DESTRUCTIVE_COMMAND_PATHS) != 200 or len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) != 200:
-    raise AssertionError("combined AWS operation matrix must contain exactly 200 unique paths")
+if set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) & set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5):
+    raise AssertionError("AWS operation matrix batches must not overlap")
+if set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4) & set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5):
+    raise AssertionError("AWS operation matrix batches must not overlap")
+if len(AWS_DESTRUCTIVE_COMMAND_PATHS) != 300 or len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) != 300:
+    raise AssertionError("combined AWS operation matrix must contain exactly 300 unique paths")
 
 
 def aws_destructive_command_matchers(

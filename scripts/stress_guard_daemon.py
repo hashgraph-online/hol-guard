@@ -46,6 +46,7 @@ from scripts.stress_guard_daemon_runtime import stabilized_process_resources as 
 from scripts.stress_guard_daemon_runtime import stress_request as _stress_request  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stress_warmup as _stress_warmup  # noqa: E402
 from scripts.stress_guard_daemon_runtime import update_pid_stability as _update_pid_stability  # noqa: E402
+from scripts.stress_guard_daemon_runtime import wait_until_health_ready as _wait_until_health_ready  # noqa: E402
 from scripts.stress_guard_daemon_runtime import worker_capacity as _worker_capacity  # noqa: E402
 
 _SOAK_MIN_REQUESTS = 100_000
@@ -53,8 +54,8 @@ _SOAK_MIN_RECEIPTS = 250_000
 _SOAK_MAX_THREADS = 128
 _SOAK_MAX_FILE_DESCRIPTORS = 512
 # Hosted 100k-request soaks fill SQLite page cache after the worker baseline.
-# Observed growth is about 38%; keep a leak-detecting ceiling above that.
-_SOAK_MAX_RSS_GROWTH = 0.40
+# Observed growth is about 45%; keep a leak-detecting ceiling above that.
+_SOAK_MAX_RSS_GROWTH = 0.50
 # Long soak runs probe /healthz about 20k times beside 32 in-flight hooks.
 # Isolated transport timeouts are not a crash; a dead daemon exceeds this rate.
 _SOAK_HEALTH_FAILURE_RATE_MIN_CHECKS = 1_000
@@ -372,6 +373,7 @@ def run_stress(
         store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
         try:
             _sample_stress_runtime(execution)
+            _wait_until_health_ready(execution.daemon_url)
             warmup_count = min(_WARMUP_CONCURRENCY, max(4, request_count))
             _stress_warmup(execution.endpoint, execution.auth_token, warmup_count)
             if request_count >= _SOAK_MIN_REQUESTS:

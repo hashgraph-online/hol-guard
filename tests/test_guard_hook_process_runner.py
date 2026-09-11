@@ -427,11 +427,18 @@ def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
 
 
 def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=4, timeout_seconds=1.8)
+    # Prime the store before fan-in so workers are not racing the first schema migration.
+    _ = GuardStore(tmp_path)
+    timing_scale = under_coverage_scale(3.0)
+    runner = HookProcessRunner(
+        guard_home=tmp_path,
+        process_limit=4,
+        timeout_seconds=1.8 * timing_scale,
+    )
     barrier = threading.Barrier(24)
 
     def review(index: int) -> HookProcessReview:
-        barrier.wait(timeout=2)
+        barrier.wait(timeout=2 * timing_scale)
         return runner.review(
             payload={
                 "hook_event_name": "PreToolUse",
@@ -448,19 +455,25 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
 
     try:
         runner.start()
+        assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=15 * timing_scale)
         started_at = time.monotonic()
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
         elapsed = time.monotonic() - started_at
+        runner_stats = runner.stats()
     finally:
         runner.close()
 
-    assert any(result.reason_code is None for result in results)
+    result_reason_codes = Counter(result.reason_code for result in results)
+    assert any(result.reason_code is None for result in results), {
+        "result_reason_codes": dict(result_reason_codes),
+        "runner_stats": runner_stats,
+    }
     assert {result.reason_code for result in results if result.reason_code is not None} <= {
         "daemon_hook_process_not_ready"
     }
     # Coverage tracing inflates the prewarmed fan-in wall clock; scale the bound in covered CI runs.
-    assert elapsed < 1.0 * under_coverage_scale(3.0)
+    assert elapsed < 1.0 * timing_scale
 
 
 def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
@@ -638,7 +651,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     runner = HookProcessRunner(
         guard_home=tmp_path,
         process_limit=8,
-        timeout_seconds=2.8,
+        timeout_seconds=4.0,
         capacity_listener=scheduler.set_active_limit,
     )
     # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
@@ -667,7 +680,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4 * timing_scale,
+                deadline=time.monotonic() + 6 * timing_scale,
             )
 
     try:

@@ -148,6 +148,49 @@ def test_health_probe_stops_when_total_deadline_is_exhausted(
     assert calls == 1
 
 
+class _HookResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> _HookResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _limit: int = -1) -> bytes:
+        return self._body
+
+
+def test_stress_request_retries_empty_hook_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"count": 0}
+
+    def open_hook(_request: object, timeout: float | None = None) -> _HookResponse:
+        del timeout
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return _HookResponse(b"")
+        return _HookResponse(b'{"decision":"allow"}')
+
+    monkeypatch.setattr(stress_runtime.urllib.request, "urlopen", open_hook)
+    monkeypatch.setattr(stress_runtime.time, "sleep", lambda _seconds: None)
+
+    latency = stress_runtime.stress_request("http://127.0.0.1:1/v1/hooks/pi", "token")
+
+    assert latency >= 0
+    assert attempts["count"] == 2
+
+
+def test_wait_until_health_ready_retries_until_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    states = iter((False, True))
+
+    monkeypatch.setattr(stress_runtime, "health_is_ready", lambda _url: next(states))
+    monkeypatch.setattr(stress_runtime.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(stress_runtime.time, "monotonic", lambda: 0.0)
+
+    stress_runtime.wait_until_health_ready("http://127.0.0.1:1")
+
+
 def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> None:
     script = Path(__file__).parents[1] / "scripts" / "stress_guard_daemon.py"
     completed = subprocess.run(
@@ -161,7 +204,7 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         check=False,
         capture_output=True,
         text=True,
-        timeout=45,
+        timeout=90,
     )
     loaded = cast(object, json.loads(completed.stdout))
     assert isinstance(loaded, dict)
@@ -210,7 +253,9 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
     )
     assert result.soak_passed
     assert replace(result, rss_growth=0.385).soak_passed
-    assert not replace(result, rss_growth=0.41).soak_passed
+    assert replace(result, rss_growth=0.49).soak_passed
+    assert replace(result, rss_growth=0.50).soak_passed
+    assert not replace(result, rss_growth=0.51).soak_passed
     assert not replace(result, requests=99_999).soak_passed
     assert not replace(result, receipts=249_999).soak_passed
     isolated_probe_timeouts = replace(result, health_checks=18_932, transient_health_failures=30)

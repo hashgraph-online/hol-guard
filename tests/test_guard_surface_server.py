@@ -1028,11 +1028,20 @@ class TestGuardSurfaceServer:
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
-        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1, timeout_seconds=15
-        )
-
         try:
+            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+                minimum_workers=1, timeout_seconds=15
+            )
+            health_deadline = time.monotonic() + 5
+            while True:
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=1) as health:
+                        assert json.loads(health.read().decode("utf-8"))["ok"] is True
+                    break
+                except OSError:
+                    if time.monotonic() >= health_deadline:
+                        raise
+                    time.sleep(0.05)
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
@@ -1053,7 +1062,22 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            hook_payload = urlopen_json(hook_request, timeout=15)
+            hook_deadline = time.monotonic() + 5
+            last_post_error: BaseException | None = None
+            while True:
+                try:
+                    hook_payload = urlopen_json(hook_request, timeout=15, attempts=1)
+                    break
+                except ConnectionRefusedError as exc:
+                    last_post_error = exc
+                except urllib.error.URLError as exc:
+                    if not isinstance(exc.reason, ConnectionRefusedError):
+                        raise
+                    last_post_error = exc
+                if time.monotonic() >= hook_deadline:
+                    assert last_post_error is not None
+                    raise last_post_error
+                time.sleep(0.05)
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):
@@ -2747,6 +2771,9 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
+            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+                minimum_workers=1, timeout_seconds=15
+            )
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
