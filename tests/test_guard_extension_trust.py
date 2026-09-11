@@ -95,6 +95,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
+        "command.blaizio",
         "command.blitcp",
         "command.mcp-filesystem",
         "command.noodle",

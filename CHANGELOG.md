@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `command.blaizio` command-safety extension (external, opt-in): reviews
+  `blaizio add`, `update`, `remove` (`rm`) and `uninstall` (`un`) across the
+  global-tool, `dotnet blaizio`, `dotnet tool run blaizio`, `exec` and `xargs`
+  launcher forms, while `--dry-run`, `add --diff`, `add --view` and help stay
+  unreviewed.
+
 ### Fixed
 
 - Claude marketplace scans treat `strict` as an optional boolean on each
