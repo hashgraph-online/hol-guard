@@ -24,6 +24,7 @@ from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_display import build_invocation_preview_from_payload
 from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
@@ -144,6 +145,7 @@ class RuntimeHookEvidenceWriter:
             snapshot = deepcopy(dict(payload))
             encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
             correlation = self._derive_correlation(harness=harness, event=event, payload=snapshot)
+            invocation_preview = build_invocation_preview_from_payload(snapshot)
         except Exception:
             with self._condition:
                 self._dropped += 1
@@ -161,6 +163,7 @@ class RuntimeHookEvidenceWriter:
             receipt_id=receipt_id,
             prompted=prompted,
             approval_reuse_status=approval_reuse_status,
+            invocation_preview=invocation_preview,
         )
         if _CommandActivityRecord.from_json(json.loads(record.serialized())) is None:
             return False
@@ -344,7 +347,10 @@ class RuntimeHookEvidenceWriter:
                                     approval_reuse_status=ActivityApprovalReuseStatus(record.approval_reuse_status),
                                 )
                                 if not self._store.is_exact_command_activity_pre_replay(evidence):
-                                    _ = self._store.record_command_activity(evidence)
+                                    _ = self._store.record_command_activity(
+                                        evidence,
+                                        invocation_preview=record.invocation_preview,
+                                    )
                         else:
                             _ = persist_deferred_post_hook_command_activity(
                                 store=self._store,
@@ -352,6 +358,7 @@ class RuntimeHookEvidenceWriter:
                                 correlation=record.correlation,
                                 has_command=record.has_command,
                                 succeeded=record.succeeded,
+                                invocation_preview=record.invocation_preview,
                             )
                 except Exception:
                     with self._condition:

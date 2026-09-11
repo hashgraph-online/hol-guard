@@ -25837,6 +25837,9 @@ function commandReasonLabel(reason) {
 function commandInteractionLabel(item) {
   return item.prompted ? "Guard asked for review" : "No review prompt recorded";
 }
+function commandInvocationLabel(preview) {
+  return preview === null || preview.length === 0 ? "Command not recorded" : preview;
+}
 function safeEvidenceId(value) {
   if (value === null || value.length > 256 || !/^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/.test(value)) {
     return "Unavailable";
@@ -25934,6 +25937,13 @@ function EvidenceField(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children: props.value })
   ] });
 }
+function CommandValue(props) {
+  const label = commandInvocationLabel(props.preview);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sm:col-span-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium text-slate-500", children: "Command" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5", children: props.preview === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: label }) : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block select-text whitespace-pre-wrap break-all font-mono text-[13px] leading-5 text-brand-dark", children: label }) })
+  ] });
+}
 function extensionPatternHref(extensionId, ruleId) {
   const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
   const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
@@ -26006,6 +26016,7 @@ function CommandActivityDetail(props) {
       )
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CommandValue, { preview: props.activity.invocation_preview }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision", value: commandDecisionLabel(props.activity.policy_action) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Execution proof", value: commandExecutionLabel(props.activity.execution_status) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
@@ -26480,8 +26491,11 @@ function CommandRow(props) {
   } else if (props.item.decision_reason_code === "no_match") {
     ruleLabel = "No rule match";
   }
+  const commandLabel = commandInvocationLabel(props.item.invocation_preview);
+  const hasCommand = props.item.invocation_preview !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "max-w-[28rem] px-3 py-3", children: hasCommand ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block truncate font-mono text-[13px] leading-5 text-brand-dark", title: commandLabel, children: commandLabel }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: commandLabel }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
@@ -26510,9 +26524,10 @@ function CommandActivityTable(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No command activity", body: "No recorded commands match these filters.", tone: "teach" });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Command activity records", className: "w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white [contain:inline-size]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-full overflow-x-auto [contain:paint]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full min-w-[760px] border-collapse text-left", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-full overflow-x-auto [contain:paint]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full min-w-[920px] border-collapse text-left", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Time" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "App" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Decision" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Execution proof" }),
@@ -26610,6 +26625,11 @@ function stringValue(value, kind, max = 256) {
 function nullableString(value, kind, max = 256) {
   return value === null ? null : stringValue(value, kind, max);
 }
+function nullableInvocationPreview(value) {
+  if (value === void 0 || value === null) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 4096) invalid("command activity");
+  return value;
+}
 function booleanValue(value, kind) {
   if (typeof value !== "boolean") invalid(kind);
   return value;
@@ -26680,6 +26700,7 @@ function normalizeActivity(value) {
     persistence_latency_bucket: stringValue(item.persistence_latency_bucket, "command activity"),
     feedback_label: item.feedback_label === null ? null : enumValue(item.feedback_label, FEEDBACK_LABELS, "command activity"),
     schema_version: stringValue(item.schema_version, "command activity"),
+    invocation_preview: nullableInvocationPreview(item.invocation_preview),
     matches
   };
 }
