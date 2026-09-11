@@ -59,7 +59,9 @@ def test_recovery_preserves_identity_consent_pending_events_and_replay_barrier(
     assert restarted.get_sync_payload("guard_exact_cloud_review_capability") == capability
     assert exact_cloud_review_status(restarted)["enabled"] is True
     assert restarted.has_exact_cloud_review_receipt("consumed-receipt")
-    assert restarted.get_approval_request("recover-pending")["status"] == "pending"
+    pending_request = restarted.get_approval_request("recover-pending")
+    assert pending_request is not None
+    assert pending_request["status"] == "pending"
     assert restarted.list_ready_review_events(now=now, limit=100) == before
     proof = remote_approval(restarted, "recover-pending", receipt_id="after-recovery")
     result = apply_exact_cloud_review(restarted, remote_approval=proof, expected_harness="codex")
@@ -144,6 +146,7 @@ def test_prior_schema_only_defaults_known_presentation_columns(
         connection.execute(f'alter table approval_requests drop column "{missing_column}"')
     _recover(source, monkeypatch)
     destination = GuardStore(source.guard_home)
+    assert source._last_sqlite_recovery_details is not None
     recovered = source._last_sqlite_recovery_details["cloud_review"]
     assert recovered is (missing_column != "action_envelope_json")
     if recovered:
