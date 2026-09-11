@@ -7703,7 +7703,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self.send_header(key, value)
             self.end_headers()
             self.wfile.write(body)
-            self.wfile.flush()
         except _PEER_DISCONNECT_ERRORS:
             self.close_connection = True
 
