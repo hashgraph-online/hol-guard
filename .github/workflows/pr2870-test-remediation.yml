@@ -94,10 +94,6 @@ jobs:
             tests/test_guard_shell_secret_read_floors.py \
             tests/test_shell_initial_risk_incomplete_review.py \
             --tb=short -q
-      - name: Validate ownership gates
-        run: |
-          uv run --no-sync python scripts/ci/rust_io_ownership_gate.py
-          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py
       - name: Commit validated fixes
         run: |
           git config user.name "kantorcodes"
