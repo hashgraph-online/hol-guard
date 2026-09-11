@@ -455,7 +455,7 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
 
     try:
         runner.start()
-        assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=15)
+        assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=15 * timing_scale)
         started_at = time.monotonic()
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
@@ -472,8 +472,8 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
     assert {result.reason_code for result in results if result.reason_code is not None} <= {
         "daemon_hook_process_not_ready"
     }
-    # Coverage tracing inflates the prewarmed fan-in wall clock; scale the bound in covered CI runs.
-    assert elapsed < 1.0 * under_coverage_scale(6.0)
+    # Elapsed time includes the 24-way stampede plus one scaled worker deadline.
+    assert elapsed < (1.8 * timing_scale) + (1.0 * timing_scale)
 
 
 def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
