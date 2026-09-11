@@ -101,6 +101,7 @@ class StoreReviewEventOutboxMixin:
         *,
         approved_source: str,
         approved_workspace_id: str,
+        only_unbound: bool = False,
     ) -> int:
         with self._connect() as connection:
             connection.execute("begin immediate")
@@ -109,7 +110,14 @@ class StoreReviewEventOutboxMixin:
                 source=self._guard_source,
                 approved_source=approved_source,
                 approved_workspace_id=approved_workspace_id,
+                only_unbound=only_unbound,
             )
+
+    def count_recoverable_unbound_review_events(self) -> int:
+        from .store_review_event_outbox_binding import count_recoverable_unbound_events
+
+        with self._connect() as connection:
+            return count_recoverable_unbound_events(connection, source=self._guard_source)
 
     def list_ready_review_events(
         self,

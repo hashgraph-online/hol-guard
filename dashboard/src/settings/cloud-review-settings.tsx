@@ -14,6 +14,7 @@ export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
+  if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
@@ -96,6 +97,12 @@ export function CloudReviewSettings() {
   const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
     status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false,
   ));
+  let confirmLabel = "Turn off Cloud Review";
+  if (action === "enable") confirmLabel = "Authorize this device";
+  if (pending) confirmLabel = "Saving...";
+  let statusCopy = error;
+  if (status) statusCopy = cloudReviewStatusCopy(status);
+  if (loading) statusCopy = "Checking device authorization...";
   return (
     <section aria-labelledby="cloud-review-heading" className="border-t border-slate-200 pt-4">
       <div className="flex items-start justify-between gap-3">
@@ -104,7 +111,7 @@ export function CloudReviewSettings() {
             <HiMiniCloud aria-hidden="true" className="h-5 w-5 shrink-0" /> Cloud Review
           </h3>
           <p className="mt-1 text-sm text-slate-600" role="status">
-            {loading ? "Checking device authorization..." : status ? cloudReviewStatusCopy(status) : error}
+            {statusCopy}
           </p>
           {status?.enabled && status.expires_at ? (
             <p className="mt-1 text-xs text-slate-600">Authorized until {new Date(status.expires_at).toLocaleDateString()}.</p>
@@ -154,7 +161,8 @@ export function CloudReviewSettings() {
             {action === "enable" && status.held_events > 0 ? (
               <label className="mt-4 flex items-start gap-3 text-sm text-brand-dark">
                 <input type="checkbox" checked={includeHeld} onChange={(event) => setIncludeHeld(event.target.checked)} disabled={pending} className="mt-1" />
-                <span>Also send {status.held_events.toLocaleString()} held events to the connected workspace.
+                <span>Also send {status.held_events.toLocaleString()} previously unassigned events to the connected workspace.
+                  <span className="mt-1 block text-xs text-slate-600">Requests tied to another account or workspace stay isolated.</span>
                   <span className="mt-1 block break-all text-xs text-slate-600">Workspace: {status.workspace_id}</span>
                 </span>
               </label>
@@ -170,7 +178,7 @@ export function CloudReviewSettings() {
               <button type="button" onClick={close} disabled={pending} className="min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark">Cancel</button>
               <button type="button" onClick={() => void confirm()} disabled={disabled}
                 className="min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {pending ? "Saving..." : action === "enable" ? "Authorize this device" : "Turn off Cloud Review"}
+                {confirmLabel}
               </button>
             </div>
           </div>

@@ -15,6 +15,8 @@ from ..runtime.exact_cloud_review import (
 )
 from ..store import GuardStore
 
+_RECOVERY_KEY = "guard_cloud_review_settings_recovery"
+
 
 class CloudReviewSettingsError(ValueError):
     def __init__(self, code: str, message: str) -> None:
@@ -29,6 +31,8 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     outbox = store.review_event_outbox_status(now=datetime.now(timezone.utc).isoformat())
     sync = store.get_sync_payload("guard_cloud_review_sync_state")
     sync = sync if isinstance(sync, dict) else {}
+    recovery = store.get_sync_payload(_RECOVERY_KEY)
+    recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
     return {
         "enabled": status.get("enabled") is True,
         "connected": profile is not None and binding is not None,
@@ -37,7 +41,9 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         "workspace_id": binding["workspace_id"] if binding else None,
         "source": binding["oauth_source"] if binding else None,
         "pending_uploads": outbox.get("depth", 0),
-        "held_events": outbox.get("quarantined_depth", 0),
+        "held_events": store.count_recoverable_unbound_review_events(),
+        "isolated_events": outbox.get("quarantined_depth", 0),
+        "activation_error": recovery.get("error"),
         "last_synced_at": sync.get("last_success_at"),
         "delivery_state": sync.get("state", "idle"),
         "approval_gate": public_config(store.guard_home).to_dict(),
@@ -81,10 +87,17 @@ def change_cloud_review_settings(
                     "connection_changed", "The connected workspace changed. Refresh before confirming."
                 )
             _ = enable_exact_cloud_review(store, issuer="local-dashboard")
+            store.set_sync_payload(
+                _RECOVERY_KEY,
+                {"binding": binding, "error": "pending_request_requeue_failed"},
+                datetime.now(timezone.utc).isoformat(),
+            )
             try:
                 if payload.get("include_held_requests") is True:
                     adopted = store.reassign_quarantined_review_events(
-                        approved_source=binding["oauth_source"], approved_workspace_id=binding["workspace_id"]
+                        approved_source=binding["oauth_source"],
+                        approved_workspace_id=binding["workspace_id"],
+                        only_unbound=True,
                     )
                 requeued = store.requeue_pending_review_events(
                     changed_at=datetime.now(timezone.utc).isoformat(), require_binding=True
@@ -93,11 +106,21 @@ def change_cloud_review_settings(
                 activation_error = "pending_request_requeue_failed"
         else:
             _ = disable_exact_cloud_review(store, issuer="local-dashboard")
-    try:
-        worker = refresh_workers()
-    except (OSError, RuntimeError, ValueError):
-        worker = {"running": False, "sync_running": False}
-        activation_error = activation_error or "worker_refresh_failed"
+        store.set_sync_payload(
+            _RECOVERY_KEY,
+            {"binding": binding, "error": activation_error or "worker_refresh_failed"},
+            datetime.now(timezone.utc).isoformat(),
+        )
+        try:
+            worker = refresh_workers()
+            if action == "enable" and (worker.get("running") is not True or worker.get("sync_running") is not True):
+                activation_error = activation_error or "worker_refresh_failed"
+        except (OSError, RuntimeError, ValueError):
+            worker = {"running": False, "sync_running": False}
+            activation_error = activation_error or "worker_refresh_failed"
+        store.set_sync_payload(
+            _RECOVERY_KEY, {"binding": binding, "error": activation_error}, datetime.now(timezone.utc).isoformat()
+        )
     return {
         **cloud_review_settings_status(store),
         "pending_requests_requeued": requeued,

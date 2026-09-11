@@ -2179,6 +2179,7 @@ export type CloudReviewSettingsStatus = {
   source: string | null;
   pending_uploads: number;
   held_events: number;
+  isolated_events: number;
   last_synced_at: string | null;
   delivery_state: string;
   approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;

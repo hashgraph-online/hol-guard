@@ -86,6 +86,18 @@ def stop_cloud_sync_sync_worker(
     return worker if worker.thread.is_alive() else None
 
 
+def refresh_cloud_review_sync_worker(
+    store: GuardStore, worker: CloudReviewSyncWorker | None, *, shutting_down: bool
+) -> tuple[CloudReviewSyncWorker | None, bool]:
+    if shutting_down:
+        return worker, False
+    worker = start_cloud_sync_sync_worker(store, worker)
+    if worker is None:
+        return None, False
+    worker.wake_signal.notify()
+    return worker, worker.thread.is_alive() and not worker.stop_event.is_set()
+
+
 def _bounded_error_wait(initial: float, maximum: float, streak: int) -> float:
     exponential = min(maximum, initial * (2 ** min(streak, 10)))
     return exponential * random.uniform(0.5, 1.0)

@@ -2509,6 +2509,7 @@ function cloudReviewStatusCopy(status) {
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
+  if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
@@ -2594,6 +2595,12 @@ function CloudReviewSettings() {
     { approvalPassword: password, approvalTotpCode: totp },
     false
   ));
+  let confirmLabel = "Turn off Cloud Review";
+  if (action === "enable") confirmLabel = "Authorize this device";
+  if (pending) confirmLabel = "Saving...";
+  let statusCopy = error;
+  if (status) statusCopy = cloudReviewStatusCopy(status);
+  if (loading) statusCopy = "Checking device authorization...";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -2601,7 +2608,7 @@ function CloudReviewSettings() {
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { "aria-hidden": "true", className: "h-5 w-5 shrink-0" }),
           " Cloud Review"
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", role: "status", children: loading ? "Checking device authorization..." : status ? cloudReviewStatusCopy(status) : error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", role: "status", children: statusCopy }),
         status?.enabled && status.expires_at ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-600", children: [
           "Authorized until ",
           new Date(status.expires_at).toLocaleDateString(),
@@ -2686,7 +2693,8 @@ function CloudReviewSettings() {
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
                   "Also send ",
                   status.held_events.toLocaleString(),
-                  " held events to the connected workspace.",
+                  " previously unassigned events to the connected workspace.",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-600", children: "Requests tied to another account or workspace stay isolated." }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1 block break-all text-xs text-slate-600", children: [
                     "Workspace: ",
                     status.workspace_id
@@ -2713,7 +2721,7 @@ function CloudReviewSettings() {
                     onClick: () => void confirm(),
                     disabled,
                     className: "min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
-                    children: pending ? "Saving..." : action === "enable" ? "Authorize this device" : "Turn off Cloud Review"
+                    children: confirmLabel
                   }
                 )
               ] })

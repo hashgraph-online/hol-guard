@@ -33,7 +33,7 @@ async function fixture(page: Page, held = 0) {
       }
       body = {
         enabled, connected: true, reason: enabled ? null : "cloud_review_capability_missing",
-        workspace_id: "workspace-1", source: "default", pending_uploads: 0, held_events: held,
+        workspace_id: "workspace-1", source: "default", pending_uploads: 0, held_events: held, isolated_events: held,
         expires_at: enabled ? "2099-01-01T00:00:00Z" : null,
         delivery_state: "healthy", last_synced_at: null, approval_gate: gate,
       };

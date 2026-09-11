@@ -6,6 +6,8 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from .review_event_wake import review_event_wake_signal
+
 # pyright: reportAny=false
 
 # Consent must never be recovered without its revocation and replay records.
@@ -15,6 +17,7 @@ _STATE_KEYS = (
     "guard_exact_cloud_review_capability",
     "guard_exact_cloud_review_revocation",
     "guard_review_verification_keyring",
+    "guard_cloud_review_settings_recovery",
 )
 _STATE_PLACEHOLDERS = ", ".join("?" for _ in _STATE_KEYS)
 _TABLES = (
@@ -62,7 +65,8 @@ def salvage_cloud_review_state(*, source: Path, destination: Path) -> bool:
             _ = dst.executemany("insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)", states)
             for table in _TABLES:
                 _copy_complete_table(src, dst, table)
-            return True
+        review_event_wake_signal(destination).notify()
+        return True
     except sqlite3.Error:
         return False
 

@@ -195,8 +195,16 @@ def requeue_pending_request_events(
                 select 1 from guard_review_outbox_request_sequences
                 where local_request_id = ? and oauth_source = ?
                   and oauth_subject_hash = ? and workspace_id = ?
+                  and machine_id = ? and machine_installation_id = ?
                 """,
-                (request_id, source, current_binding["oauth_subject_hash"], current_binding["workspace_id"]),
+                (
+                    request_id,
+                    source,
+                    current_binding["oauth_subject_hash"],
+                    current_binding["workspace_id"],
+                    current_binding["machine_id"],
+                    current_binding["machine_installation_id"],
+                ),
             ).fetchone()
             if established is None:
                 # Enabling decisions is not consent to upload another account's

@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import sqlite_cloud_review_recovery as recovery
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     apply_exact_cloud_review,
     disable_exact_cloud_review,
@@ -49,7 +50,10 @@ def test_recovery_preserves_identity_consent_pending_events_and_replay_barrier(
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     now = datetime.now(timezone.utc).isoformat()
     before = store.list_ready_review_events(now=now, limit=100)
+    signal = review_event_wake_signal(store.path)
+    generation = signal.generation()
     _recover(store, monkeypatch)
+    assert signal.generation() > generation
     restarted = GuardStore(store.guard_home)
     assert restarted.get_or_create_installation_id() == identity
     assert restarted.get_sync_payload("guard_exact_cloud_review_capability") == capability
@@ -111,3 +115,16 @@ def test_recovery_refuses_nonempty_destination(tmp_path: Path) -> None:
     assert not recovery.salvage_cloud_review_state(source=source.path, destination=destination.path)
     assert destination.get_or_create_installation_id() == identity
     assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
+
+
+def test_committed_connection_changes_wake_delivery_but_unrelated_state_does_not(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    signal = review_event_wake_signal(store.path)
+    payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(payload, dict)
+    generation = signal.generation()
+    store.set_sync_payload("oauth_local_credentials", payload, datetime.now(timezone.utc).isoformat())
+    assert signal.generation() > generation
+    generation = signal.generation()
+    store.set_sync_payload("unrelated-sync-counter", {"count": 1}, datetime.now(timezone.utc).isoformat())
+    assert signal.generation() == generation

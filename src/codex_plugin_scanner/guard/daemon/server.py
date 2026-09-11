@@ -5561,36 +5561,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:
-        from .cloud_review_settings import CloudReviewSettingsError, ExactCloudReviewError, change_cloud_review_settings
+        from .cloud_review_settings_route import handle_cloud_review_settings
 
         lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
-        if lifecycle is None:
-            self._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
-            return
-        try:
-            result = change_cloud_review_settings(
-                self.server.store,
-                payload,
-                refresh_workers=lifecycle.refresh_command_queue_worker,  # type: ignore[attr-defined]
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except CloudReviewSettingsError as error:
-            self._write_json({"error": error.code, "message": str(error)}, status=400)
-            return
-        except ExactCloudReviewError as error:
-            self._write_json(
-                {
-                    "error": error.code,
-                    "message": (
-                        "Guard could not verify this device's Cloud connection. Your local protection is unchanged."
-                    ),
-                },
-                status=409,
-            )
-            return
-        self._write_json(result, extra_headers={"Cache-Control": "no-store"})
+        handle_cloud_review_settings(
+            self.server.store,
+            payload,
+            refresh_workers=lifecycle.refresh_command_queue_worker if lifecycle is not None else None,
+            write_json=self._write_json,
+            write_approval_gate_error=self._write_approval_gate_error,
+        )
 
     def _handle_command_queue_worker_refresh(self) -> None:
         lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
@@ -8076,20 +8056,15 @@ class GuardDaemonServer:
                 self._command_queue_worker,
                 shutting_down=self._shutdown_started.is_set(),
             )
-            if not self._shutdown_started.is_set():
-                self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
-                    self._server.store, self._cloud_review_sync_worker
-                )
-                if self._cloud_review_sync_worker is not None:
-                    self._cloud_review_sync_worker.wake_signal.notify()
+            from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
+
+            self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
+                self._server.store, self._cloud_review_sync_worker, shutting_down=self._shutdown_started.is_set()
+            )
         return {
             "operation": "guard.review.resolveExact",
             "running": running,
-            "sync_running": (
-                self._cloud_review_sync_worker is not None
-                and self._cloud_review_sync_worker.thread.is_alive()
-                and not self._cloud_review_sync_worker.stop_event.is_set()
-            ),
+            "sync_running": sync_running,
         }
 
     def _reconcile_runtime_artifacts_best_effort(self) -> None:

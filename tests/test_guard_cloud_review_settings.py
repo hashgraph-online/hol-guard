@@ -104,6 +104,7 @@ def test_requeue_failure_reports_saved_consent_and_retryable_delivery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("pending-recovery"))
 
     def fail(**_kwargs: object) -> int:
         raise sqlite3.OperationalError("database locked")
@@ -112,6 +113,63 @@ def test_requeue_failure_reports_saved_consent_and_retryable_delivery(
     changed = change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
     assert changed["enabled"] is True
     assert changed["activation_error"] == "pending_request_requeue_failed"
+    restarted = GuardStore(store.guard_home)
+    assert cloud_review_settings_status(restarted)["activation_error"] == "pending_request_requeue_failed"
+    recovered = change_cloud_review_settings(restarted, _payload(), refresh_workers=_refresh)
+    assert recovered["pending_requests_requeued"] == 1
+    assert cloud_review_settings_status(GuardStore(store.guard_home))["activation_error"] is None
+
+
+def test_worker_failure_survives_reload_until_restored(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    result = change_cloud_review_settings(store, _payload(), refresh_workers=lambda: {"running": False})
+    assert result["enabled"] is True
+    assert cloud_review_settings_status(GuardStore(store.guard_home))["activation_error"] == "worker_refresh_failed"
+    change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
+    assert cloud_review_settings_status(GuardStore(store.guard_home))["activation_error"] is None
+
+
+@pytest.mark.parametrize("field", ["workspace_id", "oauth_subject_hash", "machine_id", "machine_installation_id"])
+def test_quick_recovery_never_adopts_known_other_identity(tmp_path: Path, field: str) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("other-identity"))
+    with store._connect() as connection:
+        connection.execute(
+            f"update guard_review_outbox_events set {field} = ?, binding_status = 'quarantined', "
+            "quarantine_reason = 'identity_incomplete' where local_request_id = ?",
+            ("other-identity", "other-identity"),
+        )
+        connection.execute(
+            f"update guard_review_outbox_request_sequences set {field} = ? where local_request_id = ?",
+            ("other-identity", "other-identity"),
+        )
+    assert cloud_review_settings_status(store)["held_events"] == 0
+    result = change_cloud_review_settings(store, _payload(include_held_requests=True), refresh_workers=_refresh)
+    assert result["held_events_recovered"] == 0
+    assert result["pending_requests_requeued"] == 0
+    with store._connect() as connection:
+        row = connection.execute(
+            f"select {field} from guard_review_outbox_request_sequences where local_request_id = ?", ("other-identity",)
+        ).fetchone()
+    assert row[field] == "other-identity"
+
+
+def test_quick_recovery_checks_the_request_history_identity(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("historical-identity"))
+    with store._connect() as connection:
+        connection.execute(
+            "update guard_review_outbox_events set oauth_subject_hash = null, binding_status = 'quarantined', "
+            "quarantine_reason = 'identity_incomplete' where local_request_id = ?",
+            ("historical-identity",),
+        )
+        connection.execute(
+            "update guard_review_outbox_request_sequences set oauth_subject_hash = ? where local_request_id = ?",
+            ("previous-account", "historical-identity"),
+        )
+    result = change_cloud_review_settings(store, _payload(include_held_requests=True), refresh_workers=_refresh)
+    assert result["held_events_recovered"] == 0
+    assert result["pending_requests_requeued"] == 0
 
 
 def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) -> None:
