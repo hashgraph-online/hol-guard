@@ -508,7 +508,7 @@ def _destructive_shell_tool_action_request(
             reason_code="interpreter_identity_untrusted",
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    return None
+    return initial_risk
 
 
 __all__ = [

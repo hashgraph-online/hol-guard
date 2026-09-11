@@ -17,12 +17,10 @@ from .github_pr_expansion import (
     _gh_pr_edit_has_shell_command_substitution,
 )
 from .interpreter_trust import _contains_shell_network_file_upload
-from .pytest_target_detection import _shell_command_targets_pytest
 from .request_models import ToolActionRequestMatch
 from .upload_arguments import _contains_encoded_or_encrypted_shell_command
 
 _LOCAL_SCRIPT_ACTION_CLASS = "local script execution shell command"
-_SECRET_MARKERS = (".env", "credentials", ".npmrc", ".pypirc", ".netrc")
 
 
 def initial_shell_risk_match(
@@ -66,7 +64,7 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or gh_pr_create_uses_safe_ephemeral_body(raw_command_text)
     ):
-        return True, None
+        return deferred_script_match is None, deferred_script_match
     match = _github_shell_risk_match(
         tool_name=tool_name,
         normalized_tool_name=normalized_tool_name,
@@ -83,14 +81,11 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or is_nonexecuting_github_actions_read_workflow(raw_command_text, cwd=cwd)
     ):
-        return True, None
-    if (
-        deferred_script_match is not None
-        and extension_interaction.fallback is None
-        and not _shell_command_targets_pytest(detection_command_text)
-    ):
-        return True, deferred_script_match
-    return False, None
+        return deferred_script_match is None, deferred_script_match
+    # Keep the generic execution floor available after more specific policies
+    # classify the command. A pytest segment or an extension fallback must not
+    # erase a separate, uninspected script launch from the same request.
+    return False, deferred_script_match
 
 
 def _direct_shell_risk_match(
@@ -160,8 +155,7 @@ def _direct_shell_risk_match(
             command_text=command_text,
             action_class="local secret read shell command",
             reason=(
-                "This command or a local script reads a protected credential file. "
-                "Review the read before execution."
+                "This command or a local script reads a protected credential file. Review the read before execution."
             ),
             canonical_command=canonical_command,
             guard_default_action="require-reapproval",
@@ -169,17 +163,13 @@ def _direct_shell_risk_match(
             script_read_identity_sha256=assessment.identity_sha256,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    secret_uncertainty = assessment.incomplete and any(marker in detection_command_text for marker in _SECRET_MARKERS)
-    if assessment.script_requested or assessment.script_sources or secret_uncertainty:
+    if assessment.requires_review:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class=_LOCAL_SCRIPT_ACTION_CLASS,
-            reason=(
-                "This command executes local or incompletely inspected code. "
-                "Review it before execution."
-            ),
+            reason=("This command executes local or incompletely inspected code. Review it before execution."),
             canonical_command=canonical_command,
             guard_default_action="require-reapproval",
             reason_code="shell_local_script_execution_review",

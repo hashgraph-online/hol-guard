@@ -10,15 +10,19 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ._shell_execution_context_support import (
     SHELL_CWD_MISSING_DIRECTORY,
     SHELL_CWD_NOT_DIRECTORY,
     SHELL_CWD_UNREADABLE_DIRECTORY,
+    SHELL_CWD_UNRESOLVED_PARENT_SHELL,
+    SHELL_CWD_WORKSPACE_ESCAPE,
+    split_shell_tokens,
 )
-from .command_model import CanonicalCommand, parse_shell_command
+from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
+from .data_flow import extract_heredocs
 from .home_path_text import expand_home, normalize_path
 from .secret_sensitivity import classify_secret_path
 from .shell_execution_context import ShellExecutionSegment, model_shell_execution_context
@@ -38,9 +42,7 @@ _SCRIPT_SUFFIXES = (
     ".rb",
     ".pl",
 )
-_OTHER_READERS = frozenset(
-    {"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"}
-)
+_OTHER_READERS = frozenset({"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"})
 _MAX_SCRIPTS = 16
 _MAX_DEPTH = 4
 _MAX_TOTAL_BYTES = 128 * 1024
@@ -124,15 +126,13 @@ def _unwrap_execution_builtin(
             if arg == "--":
                 index += 1
                 break
-            if arg == "-p":
-                index += 1
-                continue
-            if arg in {"-v", "-V"}:
-                lookup_only = True
-                index += 1
-                continue
             if arg.startswith("-"):
-                return None, (), True
+                flags = arg[1:]
+                if not flags or any(flag not in "pVv" for flag in flags):
+                    return None, (), True
+                lookup_only = lookup_only or "v" in flags or "V" in flags
+                index += 1
+                continue
             break
         if lookup_only:
             return None, (), False
@@ -195,13 +195,11 @@ def direct_secret_read_paths(
                 elif arg.startswith(("--eval=", "--print=")):
                     candidates.extend(_literal_read_paths(arg.split("=", 1)[1]))
     for redirect in command.redirects:
-        if redirect.operator in {"<", "<>"}:
+        if redirect.operator.lstrip("0123456789") in {"<", "<>"}:
             candidates.append(redirect.target)
     return tuple(
         dict.fromkeys(
-            path
-            for value in candidates
-            if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
+            path for value in candidates if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
         )
     )
 
@@ -224,12 +222,10 @@ def _shell_command_string(executable: str, args: tuple[str, ...]) -> tuple[str |
         if arg == "-s":
             return None, True
         if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
-            cluster = arg[1:]
-            command_index = cluster.index("c")
-            attached = cluster[command_index + 1 :]
-            if attached:
-                return attached, True
-            return (args[index + 1] if index + 1 < len(args) else None), True
+            from .interpreter_options import shell_interpreter_command_payload
+
+            parsed = shell_interpreter_command_payload([executable, *args], 0)
+            return (parsed.script_text if parsed is not None else None), True
         if arg in {"-o", "-O", "+o", "+O", "--rcfile", "--init-file"}:
             index += 2
             continue
@@ -249,8 +245,10 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
         index = 0
         while index < len(args):
             arg = args[index]
-            if arg in {"-c", "-e", "--eval", "-m", "--command"} or (is_shell and arg == "-s") or (
-                is_shell and arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]
+            if (
+                arg in {"-c", "-e", "--eval", "-m", "--command"}
+                or (is_shell and arg == "-s")
+                or (is_shell and arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:])
             ):
                 return None
             if arg == "--":
@@ -296,7 +294,7 @@ def _interpreter_inline_launch(executable: str, args: tuple[str, ...]) -> bool:
     for arg in args:
         if arg == "--":
             return False
-        if arg in {"-c", "-e", "--eval", "-p", "--print"} or arg.startswith(("--eval=", "--print=")):
+        if arg in {"-", "-c", "-e", "--eval", "-p", "--print"} or arg.startswith(("--eval=", "--print=")):
             return True
         if not arg.startswith("-"):
             return False
@@ -327,52 +325,54 @@ def _local_executable_operand(
 def _parse_execution_segment(
     execution: ShellExecutionSegment,
     *,
-    home_dir: Path | None,
+    raw_model: CanonicalCommand,
+    raw_segment: CommandSegment | None,
 ) -> CanonicalCommand | None:
-    """Parse one context segment only after its effective cwd is proven."""
+    """Keep source syntax and require agreement with the cwd model.
 
-    if not execution.complete or execution.effective_cwd is None:
+    Re-quoting decoded tokens changes input redirections into ordinary argv
+    and can erase command/exec ambiguity. The raw command parser deliberately
+    skips transparent-wrapper normalization for this inspection path.
+    """
+
+    if not execution.complete or execution.effective_cwd is None or raw_segment is None:
         return None
-    return parse_shell_command(
-        execution.command_text,
-        cwd=execution.effective_cwd,
-        home_dir=home_dir,
+    try:
+        if split_shell_tokens(raw_segment.text) != execution.tokens:
+            return None
+    except ValueError:
+        return None
+    return replace(
+        raw_model,
+        segments=(raw_segment,),
+        redirects=tuple(
+            redirect
+            for redirect in raw_model.redirects
+            if raw_segment.start <= redirect.start and redirect.end <= raw_segment.end
+        ),
+        embedded_commands=(),
     )
 
 
 def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
-    """Recognize segments where losing cwd/parse alignment must fail closed."""
+    """Keep unknown file/code access closed without treating stdout as a file."""
+
+    from .secret_file_request_services.local_read_operands import _shell_segment_file_operand_tokens
 
     if not execution.tokens:
         return False
-    executable = Path(execution.tokens[0]).name.lower()
-    readers = {
-        "cat",
-        "grep",
-        "egrep",
-        "fgrep",
-        "head",
-        "read",
-        "rg",
-        "sed",
-        "tail",
-        "source",
-        ".",
-        "command",
-        "exec",
-        *_OTHER_READERS,
-        *_SHELLS,
-        "node",
-        "bun",
-        "ruby",
-        "perl",
-    }
-    has_input_redirect = any(token in {"<", "<>", "<<", "<<<"} for token in execution.tokens)
+    token = execution.tokens[0]
+    executable = "." if token == "." else Path(token).name.lower()
+    args = list(execution.tokens[1:])
+    has_input_redirect = any(re.match(r"^\d*<(?!<)", item) for item in execution.tokens)
+    if has_input_redirect or _shell_segment_file_operand_tokens([executable, *args]):
+        return True
+    if executable in _OTHER_READERS:
+        return any(not arg.startswith("-") for arg in args)
     return (
-        executable in readers
-        or has_input_redirect
+        executable in {*_SHELLS, "command", "exec", "node", "bun", "ruby", "perl"}
         or _python_executable(executable)
-        or _path_qualified(execution.tokens[0])
+        or _path_qualified(token)
     )
 
 
@@ -416,6 +416,12 @@ def assess_shell_reads(
     total_bytes = 0
     while pending:
         text, current_cwd, depth = pending.pop()
+        # A literal delay cannot change cwd or introduce a file read. Inspect
+        # its conditional successor conservatively without inventing a cwd
+        # failure for the delay itself.
+        delay = re.match(r"^\s*sleep\s+([1-9]\d{0,3})\s*&&\s*", text)
+        if delay is not None and int(delay.group(1)) <= 3600:
+            text = text[delay.end() :]
         context = model_shell_execution_context(
             text,
             cwd=current_cwd,
@@ -426,21 +432,81 @@ def assess_shell_reads(
             if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
                 incomplete = True
             continue
+        if context.reason_code == SHELL_CWD_WORKSPACE_ESCAPE and home_dir is not None:
+            # Inspection may follow a proven directory inside the same home
+            # even when execution policy has a narrower workspace boundary.
+            alternate = model_shell_execution_context(
+                text, cwd=current_cwd or home_dir, workspace_root=home_dir, home_dir=home_dir
+            )
+            first = alternate.segments[0] if alternate.segments else None
+            literal_cd = (
+                first is not None
+                and first.directory_operation == "cd"
+                and not first.control_before
+                and len(first.tokens) == 2
+                and (Path(first.tokens[1]).is_absolute() or first.tokens[1].startswith("~/"))
+            )
+            if alternate.complete and (current_cwd is not None or literal_cd):
+                context = alternate
+            elif current_cwd is None:
+                from .secret_file_request_services.source_edit_context import (
+                    low_risk_compound_developer_execution_context,
+                )
+
+                proven = low_risk_compound_developer_execution_context(text, home_dir=home_dir)
+                if proven is not None and proven.complete:
+                    context = proven
+        raw_model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir, normalize_wrappers=False)
+        raw_segments = tuple(segment for segment in raw_model.segments if segment.execution_context.startswith("top:"))
+        aligned = len(raw_segments) == len(context.segments)
+        heredocs = extract_heredocs(raw_model.normalized_text)
         failed_cd_short_circuit = False
-        for execution in context.segments:
+        for index, execution in enumerate(context.segments):
             failed_cd_short_circuit, unreachable = _failed_cd_short_circuit_state(
                 execution,
                 active=failed_cd_short_circuit,
             )
             if unreachable:
                 continue
-            model = _parse_execution_segment(execution, home_dir=home_dir)
+            raw_segment = raw_segments[index] if aligned else None
+            if (
+                index == 0
+                and raw_segment is not None
+                and raw_segment.executable in {"source", "."}
+                and not execution.control_before
+                and context.reason_code == SHELL_CWD_UNRESOLVED_PARENT_SHELL
+                and context.initial_cwd is not None
+            ):
+                # A first source invocation reads its operand before sourced
+                # code can change the caller's cwd. Later segments stay closed.
+                execution = replace(execution, effective_cwd=context.initial_cwd, complete=True, reason_code=None)
+            model = _parse_execution_segment(execution, raw_model=raw_model, raw_segment=raw_segment)
+            owned_substitutions = tuple(
+                embedded
+                for embedded in raw_model.embedded_commands
+                if embedded.kind == "substitution"
+                and raw_segment is not None
+                and (
+                    raw_segment.start <= embedded.start < raw_segment.end
+                    or any(
+                        raw_segment.start <= item.operator_start < raw_segment.end
+                        and item.body_start <= embedded.start < item.end
+                        for item in heredocs
+                    )
+                )
+            )
             if model is None:
-                if _segment_may_touch_local_data(execution):
+                if _segment_may_touch_local_data(execution) or owned_substitutions:
                     requested = True
                     incomplete = True
                 continue
             effective_cwd = execution.effective_cwd
+            for substitution in owned_substitutions:
+                if depth >= _MAX_DEPTH or len(substitution.text.encode("utf-8")) > _MAX_INLINE_SCRIPT_BYTES:
+                    requested = True
+                    incomplete = True
+                else:
+                    pending.append((substitution.text, effective_cwd, depth + 1))
             sensitive.extend(direct_secret_read_paths(model, cwd=effective_cwd, home_dir=home_dir))
             if len(model.segments) > 1:
                 # Embedded commands are included by the command parser but do
@@ -460,6 +526,21 @@ def assess_shell_reads(
                 continue
             if executable is None:
                 continue
+            name = "." if executable == "." else Path(executable).name.lower()
+            owned_heredocs = tuple(item for item in heredocs if primary.start <= item.operator_start < primary.end)
+            for heredoc in owned_heredocs:
+                if name in _SHELLS:
+                    requested = True
+                    if depth >= _MAX_DEPTH or len(heredoc.body.encode("utf-8")) > _MAX_INLINE_SCRIPT_BYTES:
+                        incomplete = True
+                    else:
+                        pending.append((heredoc.body, effective_cwd, depth + 1))
+                elif name in {"node", "bun", "ruby", "perl"} or _python_executable(name):
+                    sensitive.extend(
+                        path
+                        for literal in _literal_read_paths(heredoc.body)
+                        if (path := _sensitive_path(literal, cwd=effective_cwd, home_dir=home_dir)) is not None
+                    )
             payload, command_string_requested = _shell_command_string(executable, arguments)
             if command_string_requested:
                 requested = True
@@ -474,7 +555,23 @@ def assess_shell_reads(
             if _interpreter_inline_launch(executable, arguments):
                 continue
             invocation = _script_operand(executable, arguments)
+            if (
+                name in _SHELLS
+                and executable == name
+                and len(arguments) == 2
+                and arguments[0] == "-n"
+                and invocation is not None
+            ):
+                # Syntax checking reads this file but does not execute its body.
+                direct = _sensitive_path(invocation[0], cwd=effective_cwd, home_dir=home_dir)
+                if direct is not None:
+                    sensitive.append(direct)
+                continue
             if invocation is None:
+                if owned_heredocs and (
+                    name in _SHELLS or name in {"node", "bun", "ruby", "perl"} or _python_executable(name)
+                ):
+                    continue
                 local_executable = _local_executable_operand(
                     executable,
                     cwd=effective_cwd,

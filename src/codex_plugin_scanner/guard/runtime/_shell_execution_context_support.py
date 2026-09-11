@@ -32,6 +32,7 @@ CONTROL_TOKENS = FLOW_OPERATORS | GROUP_OPERATORS
 MAX_DIRECTORY_STACK_DEPTH = 32
 _NEWLINE_SENTINEL = "__HOL_GUARD_SHELL_NEWLINE__"
 _FD_AMPERSAND_SENTINEL = "__HOL_GUARD_SHELL_FD_AMPERSAND__"
+_NOCLOBBER_PIPE_SENTINEL = "__GUARD_SHELL_NOCLOBBER_PIPE__"
 _FIND_PLACEHOLDER_SENTINEL = "__HOL_GUARD_FIND_PLACEHOLDER__"
 _ESCAPED_SEMICOLON_SENTINEL = "__HOL_GUARD_ESCAPED_SEMICOLON__"
 _SHELL_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
@@ -118,6 +119,7 @@ def split_shell_tokens(command_text: str) -> tuple[str, ...]:
         else:
             tokens.append(
                 token.replace(_FD_AMPERSAND_SENTINEL, "&")
+                .replace(_NOCLOBBER_PIPE_SENTINEL, "|")
                 .replace(_FIND_PLACEHOLDER_SENTINEL, "{}")
                 .replace(_ESCAPED_SEMICOLON_SENTINEL, r"\;")
             )
@@ -149,7 +151,7 @@ def _protect_escaped_semicolons(command_text: str) -> str:
 
 
 def _protect_fd_redirection_ampersands(command_text: str) -> str:
-    if _FD_AMPERSAND_SENTINEL in command_text:
+    if _FD_AMPERSAND_SENTINEL in command_text or _NOCLOBBER_PIPE_SENTINEL in command_text:
         raise ValueError("reserved shell parsing sentinel")
     result: list[str] = []
     quote: str | None = None
@@ -177,7 +179,9 @@ def _protect_fd_redirection_ampersands(command_text: str) -> str:
             result.append(character)
             index += 1
             continue
-        if quote is None and character == "&" and _is_adjacent_fd_duplication(command_text, index):
+        if quote is None and character == "|" and index > 0 and command_text[index - 1] == ">":
+            result.append(_NOCLOBBER_PIPE_SENTINEL)
+        elif quote is None and character == "&" and _is_adjacent_fd_duplication(command_text, index):
             result.append(_FD_AMPERSAND_SENTINEL)
         else:
             result.append(character)
