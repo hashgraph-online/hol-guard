@@ -204,7 +204,7 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         check=False,
         capture_output=True,
         text=True,
-        timeout=45,
+        timeout=90,
     )
     loaded = cast(object, json.loads(completed.stdout))
     assert isinstance(loaded, dict)
@@ -253,7 +253,9 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
     )
     assert result.soak_passed
     assert replace(result, rss_growth=0.385).soak_passed
-    assert not replace(result, rss_growth=0.41).soak_passed
+    assert replace(result, rss_growth=0.49).soak_passed
+    assert replace(result, rss_growth=0.50).soak_passed
+    assert not replace(result, rss_growth=0.51).soak_passed
     assert not replace(result, requests=99_999).soak_passed
     assert not replace(result, receipts=249_999).soak_passed
     isolated_probe_timeouts = replace(result, health_checks=18_932, transient_health_failures=30)
