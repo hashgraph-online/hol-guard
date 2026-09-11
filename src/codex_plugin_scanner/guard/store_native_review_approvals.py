@@ -11,7 +11,9 @@ import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-_NATIVE_REVIEW_BINDING = re.compile(r"native-review-v4:[0-9a-f]{64}(?::[a-z0-9_-]{1,128}){4}")
+_NATIVE_REVIEW_BINDING = re.compile(
+    r"native-review-v4:[0-9a-f]{64}(?::[a-z0-9_-]{1,128}){4}"
+)
 
 
 def _aware_utc(value: object) -> datetime | None:
