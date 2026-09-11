@@ -4,34 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from tests.command_extension_contracts import assert_safe_command_cases
 
-SANDBIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
-    (
-        "sandbin run script.py --server sandbin.example.com",
-        "sandbin remote run submission command",
-        "command.sandbin.run-server",
-    ),
-    (
-        "sandbin run script.py -s sandbin.example.com",
-        "sandbin remote run submission command",
-        "command.sandbin.run-server",
-    ),
-    (
-        "sandbin run -l python -e 'print(1)' --server localhost:8080 --json",
-        "sandbin remote run submission command",
-        "command.sandbin.run-server",
-    ),
-    (
-        "sandbin keys create --server sandbin.example.com",
-        "sandbin API key issuance command",
-        "command.sandbin.keys-create",
-    ),
-    (
-        "sandbin keys create",
-        "sandbin API key issuance command",
-        "command.sandbin.keys-create",
-    ),
+SANDBIN_REVIEW_CASES: tuple[tuple[str, str], ...] = (
+    ("sandbin run script.py --server sandbin.example.com", "command.sandbin.run-server"),
+    ("sandbin run script.py -s sandbin.example.com", "command.sandbin.run-server"),
+    ("sandbin run -l python -e 'print(1)' --server localhost:8080 --json", "command.sandbin.run-server"),
+    ("sandbin keys create --server sandbin.example.com", "command.sandbin.keys-create"),
+    ("sandbin keys create", "command.sandbin.keys-create"),
 )
 
 SANDBIN_SAFE_COMMANDS: tuple[str, ...] = (
@@ -52,5 +35,17 @@ def test_sandbin_run_server_and_keys_create_reach_review_while_reconnect_and_rea
     tmp_path: Path,
 ) -> None:
     """Fresh --server submissions and key issuance are reviewed; reconnect, status, and languages are not."""
-    assert_reviewed_command_cases(SANDBIN_REVIEW_CASES, tmp_path)
+    for command, expected_rule in SANDBIN_REVIEW_CASES:
+        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
+            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+        )
+        matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.sandbin"}
+        assert expected_rule in matched, command
+
+        # command.sandbin ships external/opt-in, so a default evaluation must
+        # not enforce it until a caller explicitly enables the extension.
+        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        assert evaluation.controlling_rule_id != expected_rule
+        assert all(item.extension.extension_id != "command.sandbin" for item in evaluation.extension_observations)
+
     assert_safe_command_cases(SANDBIN_SAFE_COMMANDS, tmp_path)

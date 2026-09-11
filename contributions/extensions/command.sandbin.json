@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.sandbin",
+  "version": "1.0.0",
+  "name": "sandbin",
+  "description": "Reviews sandbin commands that submit a new remote sandbox job or mint a new API key.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.ayazdoruck",
+    "displayName": "Community",
+    "url": "https://github.com/ayazdoruck/sandbin"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#334155" },
+  "homepage": "https://github.com/ayazdoruck/sandbin",
+  "license": "MIT",
+  "executables": ["sandbin"],
+  "ecosystemIds": ["sandbin"],
+  "riskClasses": ["network_egress", "execution"],
+  "actionClasses": [
+    "sandbin remote run submission command",
+    "sandbin API key issuance command"
+  ],
+  "referenceUrls": ["https://github.com/ayazdoruck/sandbin"],
+  "saferAlternatives": [
+    "Reconnect to an existing run with --reconnect instead of resubmitting the same code.",
+    "Confirm the target --server is trusted before sending code or requesting a credential."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_sandbin_extensions"
+  }
+}
