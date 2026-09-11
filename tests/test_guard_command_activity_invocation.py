@@ -58,6 +58,18 @@ def test_invocation_preview_scrubs_spaced_heredocs_urls_and_quoted_secrets() -> 
     windows_slash = build_invocation_preview("type C:/Secrets/token.txt")
     assert windows_slash is not None
     assert "C:/Secrets/token.txt" not in windows_slash
+    quoted_windows = build_invocation_preview(r'type "C:/Docs/alice/My Documents/token.txt"')
+    assert quoted_windows is not None
+    assert "Documents/token.txt" not in quoted_windows
+    assert "My Documents" not in quoted_windows
+    quoted_windows_backslash = build_invocation_preview(
+        r"type 'C:\Docs\alice\My Documents\token.txt'"
+    )
+    assert quoted_windows_backslash is not None
+    assert r"Documents\token.txt" not in quoted_windows_backslash
+    quoted_posix = build_invocation_preview('cat "/var/secret dir/token.txt"')
+    assert quoted_posix is not None
+    assert "secret dir/token.txt" not in quoted_posix
     punctuated = build_invocation_preview("git push origin main << 'end.json'\nHEREDOC_PRIVATE\nend.json")
     assert punctuated is not None
     assert "HEREDOC_PRIVATE" not in punctuated
