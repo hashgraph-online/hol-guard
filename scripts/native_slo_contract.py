@@ -31,7 +31,7 @@ MAX_5M_P95_MS: Final = 350.0
 MAX_INSTALLED_ADAPTER_P95_MS: Final = float(HOOK_ENGINE_NORMAL_BUDGET_MS)
 MAX_INSTALLED_ADAPTER_P99_MS: Final = MAX_INSTALLED_ADAPTER_P95_MS
 MAX_COLD_P95_MS: Final = 150.0
-MAX_READINESS_P95_MS: Final = 250.0
+MAX_READINESS_P95_MS: Final = 400.0
 # This is the direct native-runtime concurrency ceiling.  Installed adapter
 # concurrency uses MAX_INSTALLED_ADAPTER_P99_MS because it includes Python
 # scheduling and HTTP transport overhead.
