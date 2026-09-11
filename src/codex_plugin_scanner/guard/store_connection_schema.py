@@ -275,6 +275,7 @@ class StoreConnectionSchemaMixin:
         failed_identity: tuple[int, int] | None = None,
     ) -> bool:
         self._last_sqlite_recovery = "skipped"
+        self._last_sqlite_recovery_details = None
         is_io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
         if (
             not isinstance(error, sqlite3.DatabaseError)

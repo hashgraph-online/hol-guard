@@ -164,3 +164,6 @@ def test_independent_cli_recovery_failure_does_not_discard_complete_review_state
     _recover(store, monkeypatch)
     assert exact_cloud_review_status(store)["enabled"] is True
     assert store._last_sqlite_recovery_details == {"cloud_review": True, "local_cli": False}
+    assert not store._recover_fatal_sqlite_store(ValueError("not a storage failure"))
+    assert store._last_sqlite_recovery == "skipped"
+    assert store._last_sqlite_recovery_details is None
