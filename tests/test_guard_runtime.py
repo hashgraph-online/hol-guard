@@ -13814,8 +13814,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
                         workspace=None,
                         reason="approved from test",
                     )
-                if not store.list_approval_requests(limit=10):
-                    return
+                # Keep listening: a sequential review may not be queued yet.
             threading.Event().wait(0.03)
 
     worker = threading.Thread(target=resolve_pending, daemon=True)
@@ -13836,7 +13835,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     worker.join(timeout=1.0)
     output = capsys.readouterr().out
 
-    assert rc == 0
+    assert rc == 0, output
     assert "Launch allowed" in output
     assert "Approval received" in output
     assert observed_actions
