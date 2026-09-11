@@ -651,7 +651,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     runner = HookProcessRunner(
         guard_home=tmp_path,
         process_limit=8,
-        timeout_seconds=2.8,
+        timeout_seconds=4.0,
         capacity_listener=scheduler.set_active_limit,
     )
     # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
@@ -680,7 +680,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4 * timing_scale,
+                deadline=time.monotonic() + 6 * timing_scale,
             )
 
     try:

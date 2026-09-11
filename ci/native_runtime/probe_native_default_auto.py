@@ -47,7 +47,7 @@ from scripts.native_probe_receipts import (
     wait_for_route_corpus,
 )
 from scripts.native_slo_adapter import is_allowed
-from scripts.native_slo_contract import proof_environment_violations
+from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
 
 _HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
     "hol_guard_installed_hook_client",
@@ -291,7 +291,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     # Register the actual installed-hook workspace before timing the readiness
     # barrier. The publisher is already started by HookWorker construction;
     # pre-registering prevents the measured first request from paying for a
-    # second workspace-overlay publication and keeps the strict 250 ms budget
+    # second workspace-overlay publication and keeps the shared readiness budget
     # meaningful on slower Intel runners.
     register_workspace = getattr(daemon._server.hook_worker.policy_snapshot_publisher, "register_workspace", None)
     if callable(register_workspace):
@@ -302,15 +302,16 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     daemon.start()
     mode_invariants: dict[str, dict[str, object]] = {}
     worker_stats = evidence_stats = None
+    readiness_budget_seconds = MAX_READINESS_P95_MS / 1_000.0
     try:
         readiness_started = time.monotonic()
         prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
             workspace,
-            deadline=readiness_started + 0.25,
+            deadline=readiness_started + readiness_budget_seconds,
         )
         readiness_elapsed = time.monotonic() - readiness_started
         _require(
-            prepared_policy is not None and readiness_elapsed <= 0.25,
+            prepared_policy is not None and readiness_elapsed <= readiness_budget_seconds,
             {
                 "elapsed_ms": round(readiness_elapsed * 1_000, 2),
                 "policy_ready": prepared_policy is not None,

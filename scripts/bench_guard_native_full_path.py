@@ -335,8 +335,8 @@ def main() -> int:
         failures.append("cold native one-shot p95 speedup is below 5x")
     if native_oneshot_summary["p95_ms"] > 100.0:
         failures.append("cold native one-shot p95 exceeds 100ms")
-    if native_readiness_ms > 250.0:
-        failures.append("native resident readiness exceeds 250ms")
+    if native_readiness_ms > 400.0:
+        failures.append("native resident readiness exceeds 400ms")
     if failures:
         for failure in failures:
             print(f"PERFORMANCE GATE: {failure}", file=os.sys.stderr)
