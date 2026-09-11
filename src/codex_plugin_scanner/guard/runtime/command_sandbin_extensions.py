@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from dataclasses import dataclass
+
+from .command_extension_matchers import executable_matcher, executable_names
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_matcher_contracts import MatcherEvidence
+from .command_model import CanonicalCommand
+from .command_rules import AllMatcher, AnyMatcher, CommandSafetyRule, CommandSafeVariant, _segment_matches_executable
 
 # Flag surface verified against sandbin's own bin/sandbin.mjs (a plain
 # switch-based argv parser, not argparse: unlike repo2nb's --f/--fo/--for
@@ -48,6 +52,41 @@ _SANDBIN_RUN_SERVER = AnyMatcher(
     )
 )
 
+
+@dataclass(frozen=True, slots=True)
+class _SandbinBareReconnectToken:
+    """Match a standalone `--reconnect` token, sandbin's only recognized spelling.
+
+    The shared option-value parser normalizes `--reconnect=<id>` to the same
+    effective flag as a space-separated `--reconnect <id>`, but sandbin's own
+    argv parser (bin/sandbin.mjs) is a plain switch on exact tokens with no
+    `--flag=value` support: `--reconnect=<id>` never matches the literal
+    `'--reconnect'` case, falls through to sandbin's unknown-option branch,
+    and aborts before any network call. Treating that spelling as proof of a
+    safe reconnect would be unearned, so this matcher only credits the exact
+    form sandbin itself understands; a `--server` command carrying anything
+    else stays covered by the base rule below, same as any other submission.
+    """
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, executable_names("sandbin")):
+                continue
+            if not any(argument == "--reconnect" for argument in segment.arguments):
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched a bare --reconnect token, sandbin's only recognized reconnect spelling.",
+                )
+            )
+        return tuple(evidence)
+
+
+_SANDBIN_RUN_SERVER_RECONNECT = AllMatcher(matchers=(_SANDBIN_RUN_SERVER, _SandbinBareReconnectToken()))
+
 _SANDBIN_KEYS_CREATE = executable_matcher(
     "sandbin",
     "keys",
@@ -78,11 +117,10 @@ SANDBIN_COMMAND_RULES = (
         ),
         matcher=_SANDBIN_RUN_SERVER,
         safe_variants=(
-            safe_flag_variant(
-                _SANDBIN_RUN_SERVER,
+            CommandSafeVariant(
                 variant_id="reconnect",
                 title="sandbin run --reconnect (attaches to an existing run, submits nothing new)",
-                flag="--reconnect",
+                matcher=_SANDBIN_RUN_SERVER_RECONNECT,
             ),
         ),
         example_command="sandbin run script.py --server sandbin.example.com",
