@@ -29,6 +29,24 @@ _TABLES = (
     "guard_review_outbox_cursors",
     "guard_review_outbox_request_sequences",
 )
+# Only additive presentation columns may be absent in an older request table.
+# Identity, decisions, revocations and replay records must remain complete.
+_OPTIONAL_REQUEST_COLUMNS = frozenset(
+    {
+        "artifact_label",
+        "source_label",
+        "trigger_summary",
+        "why_now",
+        "launch_summary",
+        "risk_headline",
+        "desktop_notified_at",
+        "guard_version",
+        "first_seen_guard_version",
+        "last_seen_guard_version",
+        "dedupe_count",
+        "last_seen_at",
+    }
+)
 
 
 def salvage_cloud_review_state(*, source: Path, destination: Path) -> bool:
@@ -87,10 +105,21 @@ def _destination_is_empty(connection: sqlite3.Connection) -> bool:
 def _copy_complete_table(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> None:
     if table not in _TABLES:
         raise ValueError("Unsupported Cloud Review recovery table")
-    columns = [str(row[1]) for row in dst.execute(f'pragma table_info("{table}")')]
+    destination_columns = list(dst.execute(f'pragma table_info("{table}")'))
+    columns = [str(row[1]) for row in destination_columns]
     source_columns = {str(row[1]) for row in src.execute(f'pragma table_info("{table}")')}
-    if not columns or not set(columns).issubset(source_columns):
+    missing = set(columns) - source_columns
+    compatible = {
+        str(row[1])
+        for row in destination_columns
+        if table == "approval_requests"
+        and row[1] in _OPTIONAL_REQUEST_COLUMNS
+        and (not row[3] or row[4] is not None)
+        and not row[5]
+    }
+    if not columns or not missing.issubset(compatible):
         raise sqlite3.DatabaseError("Incomplete Cloud Review recovery schema")
+    columns = [column for column in columns if column in source_columns]
     quoted = ", ".join('"' + column.replace('"', '""') + '"' for column in columns)
     placeholders = ", ".join("?" for _ in columns)
     cursor = src.execute(f'select {quoted} from "{table}"')

@@ -2566,6 +2566,11 @@ function CloudReviewSettings() {
   }
   async function confirm() {
     if (!status || !action || pending) return;
+    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
+      status.approval_gate,
+      { approvalPassword: password, approvalTotpCode: totp },
+      false
+    )) return;
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -2697,7 +2702,7 @@ function CloudReviewSettings() {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-600", children: "Requests tied to another account or workspace stay isolated." }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1 block break-all text-xs text-slate-600", children: [
                     "Workspace: ",
-                    status.workspace_id
+                    status.workspace_id ?? "Not connected"
                   ] })
                 ] })
               ] }) : null,

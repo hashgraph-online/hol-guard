@@ -128,3 +128,39 @@ def test_committed_connection_changes_wake_delivery_but_unrelated_state_does_not
     generation = signal.generation()
     store.set_sync_payload("unrelated-sync-counter", {"count": 1}, datetime.now(timezone.utc).isoformat())
     assert signal.generation() == generation
+
+
+@pytest.mark.parametrize("missing_column", ["guard_version", "dedupe_count", "action_envelope_json"])
+def test_prior_schema_only_defaults_known_presentation_columns(
+    tmp_path: Path, missing_column: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    with sqlite3.connect(source.path) as connection:
+        triggers = connection.execute(
+            "select name from sqlite_master where type = 'trigger' and tbl_name = 'approval_requests'"
+        ).fetchall()
+        for (name,) in triggers:
+            connection.execute('drop trigger "' + name.replace('"', '""') + '"')
+        connection.execute(f'alter table approval_requests drop column "{missing_column}"')
+    _recover(source, monkeypatch)
+    destination = GuardStore(source.guard_home)
+    recovered = source._last_sqlite_recovery_details["cloud_review"]
+    assert recovered is (missing_column != "action_envelope_json")
+    if recovered:
+        assert exact_cloud_review_status(destination)["enabled"] is True
+        assert destination.has_exact_cloud_review_receipt("consumed-receipt")
+        request = destination.get_approval_request("recover-pending")
+        assert request is not None
+        assert request[missing_column] == (1 if missing_column == "dedupe_count" else None)
+    else:
+        assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
+
+
+def test_independent_cli_recovery_failure_does_not_discard_complete_review_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _prepare(tmp_path)
+    monkeypatch.setattr(store_connection_schema, "salvage_local_cli_state", lambda **_kwargs: False)
+    _recover(store, monkeypatch)
+    assert exact_cloud_review_status(store)["enabled"] is True
+    assert store._last_sqlite_recovery_details == {"cloud_review": True, "local_cli": False}

@@ -54,6 +54,28 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     assert disabled["connected"] is True
 
 
+def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("current-workspace"))
+    add_review_request(store, review_request("other-workspace"))
+    with store._connect() as connection:
+        connection.execute(
+            "update guard_review_outbox_events set workspace_id = 'other' where local_request_id = ?",
+            ("other-workspace",),
+        )
+    assert cloud_review_settings_status(store)["pending_uploads"] == 1
+    alternate = GuardStore(store.guard_home, source="alternate")
+    now = datetime.now(timezone.utc).isoformat()
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "idle", "last_success_at": "default"}, now)
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state:alternate", {"state": "error", "last_success_at": "alternate"}, now
+    )
+    result = cloud_review_settings_status(alternate)
+    assert result["last_synced_at"] == "alternate"
+    assert result["delivery_state"] == "error"
+    assert result["pending_uploads"] == 0
+
+
 def test_reauthorization_refreshes_existing_pending_request(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     add_review_request(store, review_request("old-pending"))

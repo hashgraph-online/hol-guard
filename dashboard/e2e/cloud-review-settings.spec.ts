@@ -62,7 +62,7 @@ for (const viewport of [{ width: 1365, height: 900 }, { width: 390, height: 844 
     await dialog.getByRole("button", { name: "Authorize this device" }).click();
     await expect(dialog).not.toBeVisible();
     expect(state.writes).toHaveLength(1);
-    expect(state.writes[0]).toMatchObject({ source: "default", workspace_id: "workspace-1", include_held_requests: true, approval_totp_code: "123456" });
+    expect(state.writes[0]).toMatchObject({ action: "enable", confirm: "cloud-review.enable", source: "default", workspace_id: "workspace-1", include_held_requests: true, approval_totp_code: "123456" });
     await page.reload();
     await expect(section).toContainText("Cloud Review is enabled for this device");
     await expect(section.getByRole("button", { name: "Enable Cloud Review" })).toHaveCount(0);

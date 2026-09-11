@@ -71,6 +71,9 @@ export function CloudReviewSettings() {
 
   async function confirm() {
     if (!status || !action || pending) return;
+    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
+      status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false,
+    )) return;
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -163,7 +166,7 @@ export function CloudReviewSettings() {
                 <input type="checkbox" checked={includeHeld} onChange={(event) => setIncludeHeld(event.target.checked)} disabled={pending} className="mt-1" />
                 <span>Also send {status.held_events.toLocaleString()} previously unassigned events to the connected workspace.
                   <span className="mt-1 block text-xs text-slate-600">Requests tied to another account or workspace stay isolated.</span>
-                  <span className="mt-1 block break-all text-xs text-slate-600">Workspace: {status.workspace_id}</span>
+                  <span className="mt-1 block break-all text-xs text-slate-600">Workspace: {status.workspace_id ?? "Not connected"}</span>
                 </span>
               </label>
             ) : null}

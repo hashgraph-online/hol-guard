@@ -188,6 +188,7 @@ class StoreConnectionSchemaMixin:
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
     _storage_gate_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
+    _last_sqlite_recovery_details: dict[str, bool] | None = None
 
     def _current_thread_owns_storage_recovery(self) -> bool:
         return getattr(self._storage_recovery_local, "owner", None) == id(self)
@@ -320,6 +321,9 @@ class StoreConnectionSchemaMixin:
 
                     cloud_restored = salvage_cloud_review_state(source=quarantined, destination=self.path)
                     cli_restored = salvage_local_cli_state(source=quarantined, destination=self.path)
+                    # These independent stores recover atomically within their own
+                    # authority boundary; a CLI failure must not discard Review.
+                    self._last_sqlite_recovery_details = {"cloud_review": cloud_restored, "local_cli": cli_restored}
                     if cloud_restored or cli_restored:
                         self._last_sqlite_recovery = "reinitialized_salvaged"
                     else:

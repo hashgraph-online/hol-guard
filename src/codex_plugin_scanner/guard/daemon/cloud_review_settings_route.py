@@ -11,7 +11,9 @@ from .cloud_review_settings import CloudReviewSettingsError, ExactCloudReviewErr
 
 
 class JsonResponseWriter(Protocol):
-    def __call__(self, payload: object, *, status: int = 200, extra_headers: dict[str, str] | None = None) -> None: ...
+    def __call__(
+        self, payload: dict[str, object], *, status: int = 200, extra_headers: dict[str, str] | None = None
+    ) -> None: ...
 
 
 def handle_cloud_review_settings(

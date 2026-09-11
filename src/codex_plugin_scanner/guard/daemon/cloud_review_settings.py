@@ -28,8 +28,14 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     status = exact_cloud_review_status(store)
     binding = store.get_review_event_oauth_binding()
     profile = store.get_cloud_sync_profile()
-    outbox = store.review_event_outbox_status(now=datetime.now(timezone.utc).isoformat())
-    sync = store.get_sync_payload("guard_cloud_review_sync_state")
+    outbox = store.review_event_outbox_status(
+        now=datetime.now(timezone.utc).isoformat(),
+        **({key: value for key, value in binding.items() if key != "oauth_source"} if binding else {}),
+    )
+    sync_key = "guard_cloud_review_sync_state"
+    if store.guard_source != "default":
+        sync_key += f":{store.guard_source}"
+    sync = store.get_sync_payload(sync_key)
     sync = sync if isinstance(sync, dict) else {}
     recovery = store.get_sync_payload(_RECOVERY_KEY)
     recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
@@ -40,7 +46,7 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         "expires_at": status.get("expires_at"),
         "workspace_id": binding["workspace_id"] if binding else None,
         "source": binding["oauth_source"] if binding else None,
-        "pending_uploads": outbox.get("depth", 0),
+        "pending_uploads": outbox.get("depth", 0) if binding else 0,
         "held_events": store.count_recoverable_unbound_review_events(),
         "isolated_events": outbox.get("quarantined_depth", 0),
         "activation_error": recovery.get("error"),
