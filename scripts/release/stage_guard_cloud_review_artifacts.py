@@ -13,6 +13,7 @@ _ARTIFACTS = {
     "docs/guard/contracts/guard-cloud-review.md": "guard-cloud-review/guard-cloud-review.md",
     "contracts/extensions/trust-class-map.v1.json": "extensions/trust-class-map.v1.json",
     "contracts/extensions/contribution.v1.schema.json": "extensions/contribution.v1.schema.json",
+    "contributions/extensions/command.blaizio.json": "extensions/contributions/command.blaizio.json",
     "contributions/extensions/command.blitcp.json": "extensions/contributions/command.blitcp.json",
     "contributions/extensions/command.noodle.json": "extensions/contributions/command.noodle.json",
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
