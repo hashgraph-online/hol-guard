@@ -15,12 +15,8 @@ _INPUT_KEYS = ("tool_input", "toolInput", "toolArgs", "arguments")
 _TOOL_NAME_KEYS = ("tool_name", "toolName", "name", "tool")
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _URL_RE = re.compile(r"(?:https?|ssh|git|ftp|ftps|sftp|file)://[^\s\"']+", re.IGNORECASE)
-_POSIX_ABS_PATH_RE = re.compile(
-    r"(?<![A-Za-z0-9:])(?:\"(/[^\"]+)\"|'(/[^']+)'|(/[^\s\"']+))"
-)
-_WINDOWS_ABS_PATH_RE = re.compile(
-    r"(?:\"[A-Za-z]:[\\/][^\"]+\"|'[A-Za-z]:[\\/][^']+'|[A-Za-z]:[\\/][^\s\"']+)"
-)
+_POSIX_ABS_PATH_RE = re.compile(r"(?<![A-Za-z0-9:])(?:\"(/[^\"]+)\"|'(/[^']+)'|(/[^\s\"']+))")
+_WINDOWS_ABS_PATH_RE = re.compile(r"(?:\"[A-Za-z]:[\\/][^\"]+\"|'[A-Za-z]:[\\/][^']+'|[A-Za-z]:[\\/][^\s\"']+)")
 _HOME_PATH_RE = re.compile(r"~[^\s\"']*")
 _ENV_ASSIGNMENT_RE = re.compile(
     r"\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*="
