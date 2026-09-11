@@ -16,6 +16,8 @@ from typing import Any, Literal
 
 from ..version import __version__
 from .adapters.base import HarnessContext
+from .aibom_cloud_contract import cloud_syncable_snapshots
+from .aibom_cloud_contract import inventory_snapshot_event as _inventory_snapshot_event
 from .aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     empty_content_upload_summary,
@@ -456,6 +458,7 @@ def sync_aibom_snapshots(
         trust_attestation_context=trust_attestation_context,
         primary_content_sources=primary_content_sources,
     )
+    snapshots = cloud_syncable_snapshots(snapshots)
     if not snapshots:
         synced_at = generated_at
         summary: dict[str, object] = {
@@ -463,7 +466,7 @@ def sync_aibom_snapshots(
             "synced_at": synced_at,
             "snapshots": 0,
             "accepted": 0,
-            "message": "No installed harness snapshots were available to sync.",
+            "message": "No cloud-compatible harness snapshots were available to sync.",
         }
         store.set_sync_payload("aibom_sync_summary", summary, synced_at)
         return summary
@@ -474,11 +477,7 @@ def sync_aibom_snapshots(
         _inventory_snapshot_event(
             snapshot=snapshot,
             workspace_id=workspace_id,
-            device_id=(
-                str(trust_attestation_context["deviceId"])
-                if isinstance(trust_attestation_context.get("deviceId"), str)
-                else None
-            ),
+            device_id=trust_attestation_context.get("deviceId"),
             generated_at=generated_at,
         )
         for snapshot in snapshots
@@ -904,26 +903,6 @@ def _aibom_connection_status(store: Any) -> str:
 def _sync_summary(store: Any) -> dict[str, object]:
     payload = store.get_sync_payload("aibom_sync_summary")
     return payload if isinstance(payload, dict) else {}
-
-
-def _inventory_snapshot_event(
-    *,
-    snapshot: GuardAgentInventorySnapshot,
-    workspace_id: str,
-    device_id: str | None,
-    generated_at: str,
-) -> dict[str, object]:
-    event_id = str(uuid.uuid4())
-    return {
-        "eventId": event_id,
-        "eventType": "agent.inventory_snapshot",
-        "idempotencyKey": snapshot.snapshot_id,
-        "occurredAt": generated_at,
-        "source": "edge",
-        "workspaceId": workspace_id,
-        "deviceId": device_id,
-        "payload": {"snapshot": serialize_inventory_snapshot(snapshot)},
-    }
 
 
 def _inventory_events_request_body(events: list[dict[str, object]]) -> bytes:

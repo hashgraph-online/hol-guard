@@ -21,14 +21,31 @@ PASEO_NATIVE_HARNESSES = {
 }
 _MAX_CONFIG_BYTES = 2 * 1024 * 1024
 _PROVIDER_ID = re.compile(r"^[a-z][a-z0-9-]{0,127}$")
-_COMMON_OVERRIDES = frozenset({"HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "PATH", "NODE_OPTIONS"})
+_COMMON_OVERRIDES = frozenset(
+    {
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "PATH",
+        "NODE_OPTIONS",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "BASH_ENV",
+        "ENV",
+    }
+)
 _RUNTIME_OVERRIDES = {
     "claude-code": ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_HOOKS", "CLAUDE_CODE_SIMPLE"),
     "codex": ("CODEX_HOME",),
     "copilot": ("COPILOT_HOME", "COPILOT_CONFIG_DIR", "XDG_CONFIG_HOME"),
     "opencode": ("OPENCODE_CONFIG", "OPENCODE_DISABLE", "XDG_CONFIG_HOME"),
     "pi": ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_PROFILE"),
-    "omp": ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_PROFILE", "OMP_AGENT_DIR", "OMP_PROFILE", "XDG_"),
+    "omp": ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_PROFILE", "OMP_AGENT_DIR", "OMP_PROFILE"),
 }
 
 

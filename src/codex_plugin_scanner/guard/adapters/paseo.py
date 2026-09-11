@@ -10,6 +10,7 @@ from .base import HarnessAdapter, HarnessContext
 from .paseo_config import PaseoProvider, paseo_config_path, paseo_providers, require_local_path
 from .paseo_install import (
     install_native,
+    native_context,
     preflight_native,
     protection_paths,
     provider_status,
@@ -81,7 +82,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
         # Preflight all known write targets before touching shared native settings.
         for target in targets:
             preflight_native(target, context)
-        for shim in self.guard_launcher_paths(context):
+        for shim in self.guard_launcher_paths(native_context(context)):
             require_local_path(context.guard_home, shim)
         # A failed repair must not leave a receipt claiming the new install succeeded.
         path.unlink(missing_ok=True)
@@ -90,7 +91,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
             proofs[target] = install_native(target, context)
         if paseo_providers(context) != providers:
             raise ValueError("Paseo providers changed during installation; rerun hol-guard install paseo.")
-        shim_manifest = install_guard_shim(self.harness, context)
+        shim_manifest = install_guard_shim(self.harness, native_context(context))
         receipt = write_receipt(context, proofs)
         return {
             **shim_manifest,
@@ -99,6 +100,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
             "config_path": str(path),
             "mode": "native-provider-hooks",
             "coverage_status": "limited",
+            "cloud_inventory_status": "native-providers-only",
             "runtime_verification": "not-performed",
             "providers": _provider_rows(providers, context, receipt),
             "protection_artifact_paths": protection_paths(receipt),
@@ -129,22 +131,22 @@ class PaseoHarnessAdapter(HarnessAdapter):
             rows = _provider_rows(paseo_providers(context), context, receipt)
             installed = any(row["status"] == "native-hooks-installed" for row in rows)
             changed = any(row["status"] == "changed" for row in rows)
-            incomplete = any(row["status"] in {"unsupported", "not-installed"} for row in rows)
+            incomplete = any(row["status"] in {"not-installed", "runtime-unavailable"} for row in rows)
             found = payload.get("installed") or payload.get("config_paths")
-            status = (
-                "broken"
-                if changed
-                else "active"
-                if installed and not incomplete
-                else "partial"
-                if found
-                else "not_found"
-            )
+            if changed:
+                status = "broken"
+            elif installed and not incomplete:
+                status = "active"
+            elif found:
+                status = "partial"
+            else:
+                status = "not_found"
             payload.update(
                 {
                     "setup_status": status,
                     "providers": rows,
                     "coverage_status": "limited",
+                    "cloud_inventory_status": "native-providers-only",
                     "runtime_verification": "not-performed",
                 }
             )

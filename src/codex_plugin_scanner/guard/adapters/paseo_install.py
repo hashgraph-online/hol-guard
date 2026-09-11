@@ -21,7 +21,6 @@ _NATIVE_CONFIGS = {
     "copilot": (".copilot/config.json", ".copilot/mcp-config.json"),
     "opencode": (
         ".config/opencode/opencode.json",
-        ".config/opencode/config.json",
         ".config/opencode/opencode.jsonc",
         ".config/opencode/plugins/hol-guard-pretool.ts",
     ),
@@ -107,8 +106,12 @@ def install_native(harness: str, context: HarnessContext) -> dict[str, object]:
     additional = [
         str(context.home_dir / relative)
         for relative in _NATIVE_CONFIGS[harness]
-        if (context.home_dir / relative).is_file()
+        if harness != "opencode" and (context.home_dir / relative).is_file()
     ]
+    for key in ("managed_hook_manifest_path", "managed_hook_config_path", "managed_plugin_path", "global_plugin_path"):
+        value = manifest.get(key)
+        if isinstance(value, str):
+            additional.append(value)
     bound = bind_managed_install_proof({**manifest, "protection_artifact_paths": additional}, context)
     proof = {"protection_artifact_proof": bound["protection_artifact_proof"]}
     if str(Path(primary).resolve()) not in _proof_paths(proof):
@@ -122,6 +125,8 @@ def install_native(harness: str, context: HarnessContext) -> dict[str, object]:
 
 
 def write_receipt(context: HarnessContext, proofs: dict[str, object]) -> dict[str, object]:
+    if not proofs or any(verify_managed_install_proof(proof, context) is not True for proof in proofs.values()):
+        raise ValueError("Native protection changed during Paseo installation; rerun setup before relying on it.")
     payload: dict[str, object] = {
         "schema_version": _RECEIPT_SCHEMA,
         "paseo_config_path": str(paseo_config_path(context).absolute()),

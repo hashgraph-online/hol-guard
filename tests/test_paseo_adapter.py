@@ -224,6 +224,10 @@ def test_preflight_checks_every_selected_provider_before_any_write(context: Harn
         {"env": {"PI_CODING_AGENT_DIR": "/another-home"}},
         {"env": {"PATH": "/custom-bin"}},
         {"env": {"HOL_GUARD_DISABLED": "1"}},
+        {"env": {"LD_PRELOAD": "/untrusted.so"}},
+        {"env": {"PYTHONPATH": "/untrusted-python"}},
+        {"env": {"BASH_ENV": "/untrusted.sh"}},
+        {"env": {"NODE_OPTIONS": "--require=/untrusted.js"}},
     ],
 )
 def test_custom_provider_execution_is_explicitly_uncovered(
@@ -233,6 +237,7 @@ def test_custom_provider_execution_is_explicitly_uncovered(
     manifest = PaseoHarnessAdapter().install(context)
     assert statuses(manifest)["pi"] == "native-hooks-installed"
     assert statuses(manifest)["custom-pi"] == "unsupported"
+    assert PaseoHarnessAdapter().diagnostics(context)["setup_status"] == "active"
 
 
 def test_default_providers_disabled_omp_and_acp_profile_contract(context: HarnessContext) -> None:
@@ -317,4 +322,140 @@ def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessCont
     assert managed["primary_integration"] == "native-provider-hooks"
     assert managed["coverage_status"] == "limited"
     assert managed["native_hooks"] is False
+    launcher = (context.guard_home / "bin/guard-paseo").read_text()
+    assert str(context.workspace_dir) not in launcher
+    assert "--workspace" not in launcher
     assert verify_managed_install_proof(managed["manifest"], context) is True
+
+
+def test_omp_accepts_unrelated_linux_session_environment(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    environment = {"XDG_RUNTIME_DIR": "/run/user/1000", "XDG_SESSION_TYPE": "wayland"}
+    configure(context, {"omp": {"enabled": True, "env": environment}})
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    manifest = PaseoHarnessAdapter().install(context)
+    assert statuses(manifest)["omp"] == "native-hooks-installed"
+
+
+def test_missing_enabled_native_runtime_reports_partial_coverage(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"pi": {"enabled": True}, "codex": {"enabled": True}})
+    monkeypatch.setattr(get_adapter("codex"), "resolved_executable", lambda _context: None)
+    adapter = PaseoHarnessAdapter()
+    adapter.install(context)
+    result = adapter.diagnostics(context)
+    assert result["setup_status"] == "partial"
+    assert statuses(result)["pi"] == "native-hooks-installed"
+    assert statuses(result)["codex"] == "runtime-unavailable"
+
+
+def test_opencode_unselected_config_files_do_not_invalidate_protection(context: HarnessContext) -> None:
+    configure(context, {"opencode": {"enabled": True}})
+    root = context.home_dir / ".config/opencode"
+    write_json(root / "opencode.json", {})
+    write_json(root / "opencode.jsonc", {})
+    (root / "config.json").write_text("not an OpenCode configuration", encoding="utf-8")
+    adapter = PaseoHarnessAdapter()
+    manifest = bind_managed_install_proof(adapter.install(context), context)
+    (root / "config.json").write_text("an unrelated edit", encoding="utf-8")
+    write_json(root / "opencode.jsonc", {"unused": "changed"})
+    assert verify_managed_install_proof(manifest, context) is True
+    assert adapter.diagnostics(context)["setup_status"] == "active"
+
+
+@pytest.mark.parametrize("provider,key", [("codex", "managed_hook_manifest_path"), ("opencode", "managed_plugin_path")])
+def test_native_managed_artifacts_participate_in_paseo_proofs(context: HarnessContext, provider: str, key: str) -> None:
+    configure(context, {provider: {"enabled": True}})
+    adapter = PaseoHarnessAdapter()
+    manifest = bind_managed_install_proof(adapter.install(context), context)
+    native = GuardStore(context.guard_home).get_managed_install(PASEO_NATIVE_HARNESSES[provider])
+    artifact = Path(native["manifest"][key])
+    artifact.unlink()
+    assert verify_managed_install_proof(manifest, context) is False
+    assert adapter.diagnostics(context)["setup_status"] == "broken"
+
+
+def test_child_drift_before_receipt_publication_rejects_install(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
+    native = get_adapter("pi")
+    original = native.install
+
+    def change_earlier_install(native_context: HarnessContext) -> dict[str, object]:
+        manifest = original(native_context)
+        write_json(context.home_dir / ".claude/settings.json", {"changed": True})
+        return manifest
+
+    monkeypatch.setattr(native, "install", change_earlier_install)
+    with pytest.raises(ValueError, match="Native protection changed"):
+        PaseoHarnessAdapter().install(context)
+    assert not receipt_path(context).exists()
+    assert (context.home_dir / ".pi/agent/extensions/hol-guard.ts").is_file()
+
+
+def test_paseo_capability_does_not_claim_uniform_fail_closed_hooks() -> None:
+    from codex_plugin_scanner.guard.protection_capabilities import protection_capability_payloads
+
+    capabilities = {item["harness"]: item for item in protection_capability_payloads()}
+    assert capabilities["paseo"]["fail_open_on_hook_failure"] is True
+    assert capabilities["paseo"]["limited"] is True
+    assert "some providers continue" in capabilities["paseo"]["honesty_sentence"]
+
+
+@pytest.mark.parametrize("include_native", [False, True])
+def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_content(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch, include_native: bool
+) -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.aibom_content_upload import empty_content_upload_summary
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
+    from codex_plugin_scanner.guard.runtime import runner
+
+    generated = "2026-09-11T00:00:00Z"
+    local = GuardAgentInventorySnapshot("paseo:local", "paseo:agent", "paseo", generated)
+    native = GuardAgentInventorySnapshot("pi:native", "pi:agent", "pi", generated)
+    snapshots = (local, native) if include_native else (local,)
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    sent: list[dict[str, object]] = []
+    uploads: list[tuple[object, ...]] = []
+
+    def collect(*_args, primary_content_sources, **_kwargs):
+        primary_content_sources.append(SimpleNamespace(snapshot_id=local.snapshot_id))
+        return snapshots
+
+    def request(_auth, *, data, **_kwargs):
+        sent.append(json.loads(data))
+        return object()
+
+    def upload(_store, _runner, auth, *, sources, **_kwargs):
+        uploads.append(sources)
+        return empty_content_upload_summary(), auth
+
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", collect)
+    monkeypatch.setattr(aibom_cli, "upload_primary_content_sources", upload)
+    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner, "_guard_sync_request", request)
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {"accepted": 1, "rejected": 0})
+    summary = aibom_cli.sync_aibom_snapshots(
+        store,
+        context,
+        generated_at=generated,
+        auth_context={"sync_url": "https://hol.test/api/v1/guard/events", "token": "test-token"},
+    )
+    assert summary["synced"] is True
+    assert summary["snapshots"] == int(include_native)
+    assert len(sent) == int(include_native)
+    assert all(event["payload"]["snapshot"]["agentType"] == "pi" for batch in sent for event in batch["events"])
+    assert all(not sources for sources in uploads)
+    assert serialize_inventory_snapshot(local)["agentType"] == "paseo"
+    with pytest.raises(ValueError, match="local-only"):
+        aibom_cli._inventory_snapshot_event(
+            snapshot=local, workspace_id="workspace-1", device_id=None, generated_at=generated
+        )

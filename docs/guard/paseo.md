@@ -63,6 +63,8 @@ Paseo's `agent.permission_requested` event is a best-effort notification. It doe
 | `not-installed` | A supported available provider has no recorded installation |
 | `changed` | A recorded native configuration, extension, or hook artifact changed or disappeared |
 
+Unsupported profiles remain coverage caveats and do not erase verified supported-provider installation. An enabled native provider that is unavailable or not installed makes aggregate setup `partial`; changed native artifacts make it `broken`.
+
 The report always says `coverage_status: limited` and `runtime_verification: not-performed`. A matching installation fingerprint is not a live model/tool execution attestation. Check native Guard receipts from a harmless action in a new Paseo session before relying on a deployment. Do not use real secrets as a smoke test.
 
 ```bash
@@ -73,6 +75,10 @@ hol-guard apps test paseo --json
 Repair validates configuration before modifying native settings. Malformed JSON, duplicate keys, oversize files, and unsafe managed paths are rejected. A failed multi-provider install does not leave a successful Paseo receipt. Native integrations successfully installed before a later failure remain installed and registered; rerun repair after correcting the failure. The adapter does not roll back shared protections to an older snapshot.
 
 Receipts are stored under Guard's `managed/paseo` directory, keyed by the Paseo configuration path. They contain native file fingerprints, not provider credentials. Config/extension fingerprints also participate in Guard's normal managed-install proof validation. New available providers and unsupported profiles are reflected by diagnostics rather than inferred from an old install flag.
+
+## Cloud inventory compatibility
+
+The Paseo composite inventory is available in local diagnostics and exports. It is not uploaded as a new `paseo` cloud agent type: the current portal contract does not accept that type yet. Guard continues syncing the supported native provider inventories under their existing identities. Paseo diagnostics expose `cloud_inventory_status: native-providers-only`. This avoids rejecting a batch of otherwise valid native inventories or uploading Paseo configuration content through an unsupported schema.
 
 ## Uninstall and ownership
 
