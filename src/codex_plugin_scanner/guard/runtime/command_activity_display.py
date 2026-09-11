@@ -15,14 +15,17 @@ _INPUT_KEYS = ("tool_input", "toolInput", "toolArgs", "arguments")
 _TOOL_NAME_KEYS = ("tool_name", "toolName", "name", "tool")
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _URL_RE = re.compile(r"(?:https?|ssh|git|ftp|ftps|sftp|file)://[^\s\"']+", re.IGNORECASE)
-_PATH_RE = re.compile(r"(?:~|/private/)[^\s\"']+")
+_POSIX_ABS_PATH_RE = re.compile(r"(?<![A-Za-z0-9:])(/[^\s\"']+)")
+_WINDOWS_ABS_PATH_RE = re.compile(r"[A-Za-z]:\\[^\s\"']+")
+_HOME_PATH_RE = re.compile(r"~[^\s\"']*")
 _ENV_ASSIGNMENT_RE = re.compile(
     r"\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*="
     r"(?:'(?:\\'|[^'])*'|\"(?:\\\"|[^\"])*\"|\S+)",
     re.IGNORECASE,
 )
 _HEREDOC_RE = re.compile(
-    r"(?P<op><{2}-?[ \t]*[\"']?(?P<tag>\w+)[\"']?[ \t]*\n)(?P<body>.*?)(?P<end>\n[ \t]*(?P=tag)\b)",
+    r"(?P<op><{2}-?[ \t]*(?P<quote>['\"]?)(?P<tag>[^\s'\"\\]+)(?P=quote)[ \t]*\n)"
+    r"(?P<body>.*?)(?P<end>\n[ \t]*(?P=tag)\b)",
     re.DOTALL,
 )
 
@@ -60,7 +63,7 @@ def build_invocation_preview(command_text: str | None, *, home_dir: Path | str |
     stripped = command_text.strip()
     if not stripped:
         return None
-    redacted = _redact_home_prefix(_scrub_residual_private_text(stripped), home_dir=home_dir)
+    redacted = _scrub_residual_private_text(_redact_home_prefix(stripped, home_dir=home_dir))
     preview = redact_sensitive_text(redact_text(redacted).text).strip()
     if not preview:
         return None
@@ -138,7 +141,9 @@ def _scrub_residual_private_text(value: str) -> str:
     scrubbed = _HEREDOC_RE.sub(r"\g<op>…\g<end>", value)
     scrubbed = _ENV_ASSIGNMENT_RE.sub("[redacted]", scrubbed)
     scrubbed = _URL_RE.sub("[redacted]", scrubbed)
-    scrubbed = _PATH_RE.sub("[redacted]", scrubbed)
+    scrubbed = _POSIX_ABS_PATH_RE.sub("[redacted]", scrubbed)
+    scrubbed = _WINDOWS_ABS_PATH_RE.sub("[redacted]", scrubbed)
+    scrubbed = _HOME_PATH_RE.sub("[redacted]", scrubbed)
     scrubbed = _EMAIL_RE.sub("[redacted]", scrubbed)
     return redact_text(scrubbed).text
 

@@ -49,6 +49,15 @@ def test_invocation_preview_scrubs_spaced_heredocs_urls_and_quoted_secrets() -> 
     assert remote is not None
     assert "git push" in remote
     assert "ssh://internal.example/path" not in remote
+    posix_path = build_invocation_preview("cat /etc/passwd")
+    assert posix_path is not None
+    assert "/etc/passwd" not in posix_path
+    windows_path = build_invocation_preview(r"type C:\Secrets\token.txt")
+    assert windows_path is not None
+    assert r"C:\Secrets\token.txt" not in windows_path
+    punctuated = build_invocation_preview("git push origin main << 'end.json'\nHEREDOC_PRIVATE\nend.json")
+    assert punctuated is not None
+    assert "HEREDOC_PRIVATE" not in punctuated
 
 
 def test_payload_preview_reads_native_tool_input() -> None:
