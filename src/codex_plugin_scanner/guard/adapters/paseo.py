@@ -29,6 +29,7 @@ PASEO_COVERAGE_LIMIT = (
 def _provider_rows(
     providers: tuple[PaseoProvider, ...], context: HarnessContext, receipt: dict[str, object]
 ) -> list[dict[str, object]]:
+    """Combine credential-free provider metadata with verified installation status."""
     return [{**provider.to_dict(), "status": provider_status(provider, context, receipt)} for provider in providers]
 
 
@@ -39,9 +40,11 @@ class PaseoHarnessAdapter(HarnessAdapter):
     fallback_hint = "Check the native provider in Guard on the daemon host; Paseo notifications do not enforce policy."
 
     def policy_path(self, context: HarnessContext) -> Path:
+        """Locate the daemon configuration without treating it as a Guard policy file."""
         return paseo_config_path(context)
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
+        """Discover enabled provider identities without exposing their environment values."""
         available = self.resolved_executable(context) is not None
         paths: tuple[str, ...] = ()
         artifacts: tuple[GuardArtifact, ...] = ()
@@ -70,6 +73,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
         return HarnessDetection(self.harness, bool(paths) or available, available, paths, artifacts, warnings)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        """Install shared native hooks and publish a receipt only after their proofs verify."""
         providers = paseo_providers(context)
         path = receipt_path(context)
         rows = _provider_rows(providers, context, {})
@@ -113,6 +117,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        """Remove Paseo-owned artifacts without disabling other clients' shared native hooks."""
         receipt_path(context).unlink(missing_ok=True)
         return {
             **remove_guard_shim(self.harness, context),
@@ -125,6 +130,7 @@ class PaseoHarnessAdapter(HarnessAdapter):
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        """Report current per-provider coverage and installation drift without claiming live execution."""
         payload = super().diagnostics(context)
         try:
             receipt = read_receipt(context)

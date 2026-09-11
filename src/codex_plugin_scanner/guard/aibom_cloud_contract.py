@@ -26,6 +26,7 @@ def inventory_snapshot_event(
     device_id: object,
     generated_at: str,
 ) -> dict[str, object]:
+    """Create a cloud-compatible event and reject local-only composite inventories."""
     if snapshot.agent_type == "paseo":
         raise ValueError("Paseo composite inventory is local-only; sync its native provider inventories instead.")
     event_id = str(uuid.uuid4())

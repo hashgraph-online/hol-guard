@@ -6,6 +6,7 @@ from ..adapters.contracts import contract_for
 
 
 def managed_install_payload(managed_install: dict[str, object]) -> dict[str, object]:
+    """Summarize recorded integration ownership without inventing native Paseo hook support."""
     payload = dict(managed_install)
     harness = str(payload.get("harness") or "")
     protection_contract = contract_for(harness)

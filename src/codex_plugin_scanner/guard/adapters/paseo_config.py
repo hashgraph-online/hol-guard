@@ -57,6 +57,7 @@ class PaseoProvider:
     unsupported_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
+        """Expose provider identity and coverage limits without copying credentials."""
         return {
             "provider": self.provider_id,
             "native_harness": self.native_harness,
@@ -66,6 +67,7 @@ class PaseoProvider:
 
 
 def paseo_config_path(context: HarnessContext) -> Path:
+    """Select the daemon home while respecting an explicitly supplied Guard home."""
     override = "" if context.home_override_explicit else os.environ.get("PASEO_HOME", "").strip()
     if not override:
         return context.home_dir / ".paseo" / "config.json"
@@ -98,6 +100,7 @@ def require_local_path(root: Path, path: Path) -> None:
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject duplicate keys instead of silently accepting ambiguous provider settings."""
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
@@ -134,6 +137,7 @@ def read_config_object(path: Path) -> dict[str, object]:
 
 
 def _object_field(payload: dict[str, object], key: str) -> dict[str, object]:
+    """Read an optional object field without silently accepting malformed configuration."""
     value = payload.get(key, {})
     if not isinstance(value, dict):
         raise ValueError(f"Paseo {key} must be a JSON object.")
@@ -141,6 +145,7 @@ def _object_field(payload: dict[str, object], key: str) -> dict[str, object]:
 
 
 def _override_reason(harness: str, entry: dict[str, object]) -> str | None:
+    """Identify execution overrides that can relocate or bypass native protection."""
     if "command" in entry:
         return "Custom provider commands require separate native Guard configuration and verification."
     environment = _object_field(entry, "env")
@@ -155,7 +160,15 @@ def _override_reason(harness: str, entry: dict[str, object]) -> str | None:
     return None
 
 
-def _provider(provider_id: str, raw: object) -> PaseoProvider:
+def _effective_provider_entry(raw: dict[str, object], base: object) -> dict[str, object]:
+    """Merge the inherited native command and environment before classifying coverage."""
+    if not isinstance(base, dict):
+        raise ValueError("Paseo inherited provider configuration must be a JSON object.")
+    return {**base, **raw, "env": {**_object_field(base, "env"), **_object_field(raw, "env")}}
+
+
+def _provider(provider_id: str, raw: object, entries: dict[str, object]) -> PaseoProvider:
+    """Classify a profile using its effective inherited command and environment."""
     if not _PROVIDER_ID.fullmatch(provider_id) or not isinstance(raw, dict):
         raise ValueError("Paseo providers must use valid provider IDs and JSON objects.")
     enabled = raw.get("enabled", provider_id != "omp")
@@ -163,19 +176,23 @@ def _provider(provider_id: str, raw: object) -> PaseoProvider:
         raise ValueError("Paseo provider enabled must be a boolean.")
     base = raw.get("extends", provider_id)
     native = PASEO_NATIVE_HARNESSES.get(base) if isinstance(base, str) else None
-    reason = (
-        _override_reason(native, raw)
-        if native is not None
-        else "ACP and plugin providers require a separately verified native Guard integration."
-    )
+    reason = "ACP and plugin providers require a separately verified native Guard integration."
+    if native is not None:
+        inherited = entries.get(str(base), {}) if base != provider_id else {}
+        effective = _effective_provider_entry(raw, inherited)
+        if isinstance(inherited, dict) and "extends" in inherited:
+            reason = "Nested provider inheritance requires separate native Guard verification."
+        else:
+            reason = _override_reason(native, effective)
     return PaseoProvider(provider_id, native, enabled, reason)
 
 
 def paseo_providers(context: HarnessContext) -> tuple[PaseoProvider, ...]:
+    """Read bounded provider configuration and include the supported native defaults."""
     payload = read_config_object(paseo_config_path(context))
     providers = _object_field(_object_field(payload, "agents"), "providers")
     if len(providers) > 256:
         raise ValueError("Paseo provider configuration exceeds the supported provider count.")
     entries: dict[str, object] = {key: {} for key in PASEO_NATIVE_HARNESSES}
     entries.update(providers)
-    return tuple(_provider(key, value) for key, value in sorted(entries.items()))
+    return tuple(_provider(key, value, entries) for key, value in sorted(entries.items()))

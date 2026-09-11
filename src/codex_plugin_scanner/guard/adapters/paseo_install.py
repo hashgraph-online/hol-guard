@@ -32,10 +32,12 @@ _NATIVE_CONFIGS = {
 def native_context(context: HarnessContext) -> HarnessContext:
     # Paseo chooses a different cwd for every session/worktree. Do not pin hooks
     # to the workspace from which the user happened to run the installer.
+    """Install hooks for the daemon user rather than the caller's current worktree."""
     return replace(context, workspace_dir=None, workspace_override_explicit=False)
 
 
 def receipt_path(context: HarnessContext) -> Path:
+    """Derive a safe per-daemon receipt path inside Guard's managed state."""
     identity = str(paseo_config_path(context).absolute())
     suffix = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
     path = context.guard_home / "managed" / "paseo" / f"{suffix}.json"
@@ -44,6 +46,7 @@ def receipt_path(context: HarnessContext) -> Path:
 
 
 def read_receipt(context: HarnessContext) -> dict[str, object]:
+    """Validate that a receipt belongs to this daemon configuration and schema."""
     payload = read_config_object(receipt_path(context))
     if not payload:
         return {}
@@ -57,6 +60,7 @@ def read_receipt(context: HarnessContext) -> dict[str, object]:
 
 
 def _proof_paths(proof: dict[str, object]) -> list[str]:
+    """Extract only explicitly recorded native protection artifact paths."""
     envelope = proof.get("protection_artifact_proof")
     artifacts = envelope.get("artifacts", []) if isinstance(envelope, dict) else []
     if not isinstance(artifacts, list):
@@ -65,6 +69,7 @@ def _proof_paths(proof: dict[str, object]) -> list[str]:
 
 
 def provider_status(provider: PaseoProvider, context: HarnessContext, receipt: dict[str, object]) -> str:
+    """Distinguish disabled, unsupported, unavailable, missing, and changed native installs."""
     if not provider.enabled:
         return "disabled"
     if provider.unsupported_reason or provider.native_harness is None:
@@ -80,6 +85,7 @@ def provider_status(provider: PaseoProvider, context: HarnessContext, receipt: d
 
 
 def preflight_native(harness: str, context: HarnessContext) -> None:
+    """Validate every known native write target before shared configuration changes."""
     for relative in _NATIVE_CONFIGS[harness]:
         path = context.home_dir / relative
         require_local_path(context.home_dir, path)
@@ -97,6 +103,7 @@ def preflight_native(harness: str, context: HarnessContext) -> None:
 
 
 def install_native(harness: str, context: HarnessContext) -> dict[str, object]:
+    """Install and register one native provider with all required artifact proofs."""
     from ..store import GuardStore
 
     manifest = get_adapter(harness).install(native_context(context))
@@ -125,6 +132,7 @@ def install_native(harness: str, context: HarnessContext) -> dict[str, object]:
 
 
 def write_receipt(context: HarnessContext, proofs: dict[str, object]) -> dict[str, object]:
+    """Publish a private receipt only while every native proof still verifies."""
     if not proofs or any(verify_managed_install_proof(proof, context) is not True for proof in proofs.values()):
         raise ValueError("Native protection changed during Paseo installation; rerun setup before relying on it.")
     payload: dict[str, object] = {
@@ -137,6 +145,7 @@ def write_receipt(context: HarnessContext, proofs: dict[str, object]) -> dict[st
 
 
 def protection_paths(receipt: dict[str, object]) -> list[str]:
+    """Deduplicate the native artifact paths included in the composite proof."""
     proofs = receipt.get("native_proofs", {})
     if not isinstance(proofs, dict):
         return []

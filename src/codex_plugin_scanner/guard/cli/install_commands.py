@@ -183,7 +183,11 @@ def build_harness_setup_plan(
             {
                 "step_id": "disconnect",
                 "title": f"Disconnect {contract.display_name}",
-                "body": "Remove Guard managed config for this app.",
+                "body": (
+                    "Remove Paseo's receipt and launcher. Shared native provider protection remains installed."
+                    if adapter.harness == "paseo"
+                    else "Remove Guard managed config for this app."
+                ),
                 "command": ["hol-guard", "apps", "disconnect", adapter.harness],
                 "writes_config": True,
                 "requires_confirmation": True,

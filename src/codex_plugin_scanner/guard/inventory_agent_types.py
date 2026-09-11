@@ -39,6 +39,7 @@ _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
 
 
 def agent_type(value: str) -> AgentInventoryType:
+    """Normalize a harness identity to the inventory contract's supported agent types."""
     for agent_type in _AGENT_INVENTORY_TYPES:
         if value == agent_type:
             return agent_type

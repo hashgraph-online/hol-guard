@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 @pytest.fixture
 def context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
+    """Isolate native homes and substitute executable discovery without skipping installers."""
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"
     home.mkdir()
@@ -47,11 +48,13 @@ def context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
 
 
 def write_json(path: Path, payload: object) -> None:
+    """Write a deterministic JSON fixture inside the isolated test home."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def configure(context: HarnessContext, providers: dict[str, object]) -> Path:
+    """Disable unrelated native providers while preserving unrelated Paseo settings."""
     entries: dict[str, object] = {name: {"enabled": False} for name in PASEO_NATIVE_HARNESSES}
     entries.update(providers)
     path = paseo_config_path(context)
@@ -60,12 +63,14 @@ def configure(context: HarnessContext, providers: dict[str, object]) -> Path:
 
 
 def statuses(payload: dict[str, object]) -> dict[str, str]:
+    """Index the public provider report by profile identity."""
     return {item["provider"]: item["status"] for item in payload["providers"]}
 
 
 @pytest.mark.adapter_contract
 @pytest.mark.parametrize("provider", tuple(PASEO_NATIVE_HARNESSES))
 def test_paseo_installs_real_native_hooks_and_registers_native_proofs(context: HarnessContext, provider: str) -> None:
+    """Exercise each real native installer and verify both native and composite records."""
     path = configure(context, {provider: {"enabled": True}})
     original = path.read_bytes()
     adapter = PaseoHarnessAdapter()
@@ -85,6 +90,7 @@ def test_paseo_installs_real_native_hooks_and_registers_native_proofs(context: H
 
 
 def test_claude_preserves_user_hooks_and_installs_pretool_for_all_workspaces(context: HarnessContext) -> None:
+    """Preserve user permissions and hooks while adding workspace-independent protection."""
     configure(context, {"claude": {"enabled": True}})
     settings = context.home_dir / ".claude/settings.json"
     user_hook = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo user-hook"}]}
@@ -101,12 +107,14 @@ def test_claude_preserves_user_hooks_and_installs_pretool_for_all_workspaces(con
 def test_shared_profiles_install_once_and_repeat_install_is_idempotent(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Share one native installation across profiles without duplicating hooks during repair."""
     configure(context, {"pi": {"enabled": True}, "pi-work": {"extends": "pi", "label": "Work"}})
     native = get_adapter("pi")
     original_install = native.install
     calls: list[HarnessContext] = []
 
     def record_install(native_context: HarnessContext) -> dict[str, object]:
+        """Record each real native install and the context it received."""
         calls.append(native_context)
         return original_install(native_context)
 
@@ -126,6 +134,7 @@ def test_shared_profiles_install_once_and_repeat_install_is_idempotent(
 @pytest.mark.security_critical
 @pytest.mark.parametrize("changed_file", ("settings.json", "extensions/hol-guard.ts"))
 def test_native_hook_drift_is_not_reported_as_protected(context: HarnessContext, changed_file: str) -> None:
+    """Removing a required native artifact invalidates both diagnostics and the composite proof."""
     configure(context, {"pi": {"enabled": True}})
     adapter = PaseoHarnessAdapter()
     manifest = bind_managed_install_proof(adapter.install(context), context)
@@ -137,6 +146,7 @@ def test_native_hook_drift_is_not_reported_as_protected(context: HarnessContext,
 
 
 def test_uninstall_keeps_shared_hooks_settings_credentials_and_native_records(context: HarnessContext) -> None:
+    """Paseo disconnection must not remove protection still used by other clients."""
     path = configure(context, {"pi": {"enabled": True, "env": {"API_KEY": "test-private-value"}}})
     adapter = PaseoHarnessAdapter()
     adapter.install(context)
@@ -163,6 +173,7 @@ def test_uninstall_keeps_shared_hooks_settings_credentials_and_native_records(co
     ],
 )
 def test_malformed_paseo_configuration_is_not_overwritten(context: HarnessContext, bad: object) -> None:
+    """Invalid provider types fail before any native settings or Guard state are written."""
     path = paseo_config_path(context)
     write_json(path, bad)
     original = path.read_bytes()
@@ -176,6 +187,7 @@ def test_malformed_paseo_configuration_is_not_overwritten(context: HarnessContex
     "raw", [b'{"agents":', b"null", b'{"agents":{},"agents":{}}', b"\xff", b" " * (2 * 1024 * 1024 + 1)]
 )
 def test_unsafe_json_is_bounded_and_never_echoed(context: HarnessContext, raw: bytes) -> None:
+    """Reject ambiguous, malformed, and oversized configuration without rewriting it."""
     path = configure(context, {})
     path.write_bytes(raw)
     with pytest.raises(ValueError, match="Cannot safely read configuration"):
@@ -188,6 +200,7 @@ def test_unsafe_json_is_bounded_and_never_echoed(context: HarnessContext, raw: b
 def test_native_symlink_targets_are_rejected_before_install(
     context: HarnessContext, tmp_path: Path, relative: str
 ) -> None:
+    """Prevent native configuration writes from following links outside the declared home."""
     configure(context, {"pi": {"enabled": True}})
     target = tmp_path / "outside"
     link = context.home_dir / relative
@@ -207,6 +220,7 @@ def test_native_symlink_targets_are_rejected_before_install(
 
 
 def test_preflight_checks_every_selected_provider_before_any_write(context: HarnessContext) -> None:
+    """A later provider's invalid settings must prevent earlier native writes."""
     configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
     path = context.home_dir / ".pi/agent/settings.json"
     path.parent.mkdir(parents=True)
@@ -233,6 +247,7 @@ def test_preflight_checks_every_selected_provider_before_any_write(context: Harn
 def test_custom_provider_execution_is_explicitly_uncovered(
     context: HarnessContext, override: dict[str, object]
 ) -> None:
+    """Keep custom execution excluded while preserving verified supported-provider status."""
     configure(context, {"pi": {"enabled": True}, "custom-pi": {"extends": "pi", "label": "Custom", **override}})
     manifest = PaseoHarnessAdapter().install(context)
     assert statuses(manifest)["pi"] == "native-hooks-installed"
@@ -241,6 +256,7 @@ def test_custom_provider_execution_is_explicitly_uncovered(
 
 
 def test_default_providers_disabled_omp_and_acp_profile_contract(context: HarnessContext) -> None:
+    """Match built-in defaults without assigning native coverage to an ACP profile."""
     defaults = {provider.provider_id: provider for provider in paseo_providers(context)}
     assert len(defaults) == 6
     assert defaults["omp"].enabled is False
@@ -253,6 +269,7 @@ def test_default_providers_disabled_omp_and_acp_profile_contract(context: Harnes
 
 
 def test_credentials_do_not_enter_manifest_diagnostics_or_inventory(context: HarnessContext) -> None:
+    """Leave credentials in Paseo configuration but exclude them from exported Guard state."""
     secret = "sk-do-not-persist-this-paseo-provider-secret"
     path = configure(context, {"pi": {"enabled": True, "env": {"API_KEY": secret}}})
     adapter = PaseoHarnessAdapter()
@@ -268,6 +285,7 @@ def test_credentials_do_not_enter_manifest_diagnostics_or_inventory(context: Har
 
 
 def test_home_selection_and_per_instance_receipts(context: HarnessContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Respect explicit homes and keep distinct daemon receipts separate."""
     custom = context.home_dir / "another-paseo"
     monkeypatch.setenv("PASEO_HOME", str(custom))
     assert paseo_config_path(context) == context.home_dir / ".paseo/config.json"
@@ -284,6 +302,7 @@ def test_home_selection_and_per_instance_receipts(context: HarnessContext, monke
 def test_missing_runtime_cannot_create_an_active_install(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Do not publish an installation receipt without an available supported native runtime."""
     configure(context, {"pi": {"enabled": True}})
     monkeypatch.setattr(get_adapter("pi"), "resolved_executable", lambda _context: None)
     with pytest.raises(ValueError, match="No supported, enabled"):
@@ -294,6 +313,7 @@ def test_missing_runtime_cannot_create_an_active_install(
 def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A failed repair invalidates composite success without rolling back shared protection."""
     configure(context, {"pi": {"enabled": True}})
     adapter = PaseoHarnessAdapter()
     adapter.install(context)
@@ -301,6 +321,7 @@ def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks
     original = extension.read_bytes()
 
     def fail(_context: HarnessContext) -> dict[str, object]:
+        """Simulate a native installer failure after an earlier successful installation."""
         raise ValueError("test installation failure")
 
     monkeypatch.setattr(get_adapter("pi"), "install", fail)
@@ -312,6 +333,7 @@ def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks
 
 
 def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessContext) -> None:
+    """Verify the public install summary, safe dry run, and workspace-free launcher."""
     configure(context, {"pi": {"enabled": True}})
     plan = build_harness_setup_plan("install", "paseo", context, dry_run=True)
     assert plan
@@ -331,6 +353,7 @@ def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessCont
 def test_omp_accepts_unrelated_linux_session_environment(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Normal Linux desktop variables must not prevent installation of OMP hooks."""
     environment = {"XDG_RUNTIME_DIR": "/run/user/1000", "XDG_SESSION_TYPE": "wayland"}
     configure(context, {"omp": {"enabled": True, "env": environment}})
     for key, value in environment.items():
@@ -342,6 +365,7 @@ def test_omp_accepts_unrelated_linux_session_environment(
 def test_missing_enabled_native_runtime_reports_partial_coverage(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """An unavailable enabled runtime cannot be hidden by another verified native install."""
     configure(context, {"pi": {"enabled": True}, "codex": {"enabled": True}})
     monkeypatch.setattr(get_adapter("codex"), "resolved_executable", lambda _context: None)
     adapter = PaseoHarnessAdapter()
@@ -353,6 +377,7 @@ def test_missing_enabled_native_runtime_reports_partial_coverage(
 
 
 def test_opencode_unselected_config_files_do_not_invalidate_protection(context: HarnessContext) -> None:
+    """Unrelated OpenCode-home files must not participate in Guard artifact proofs."""
     configure(context, {"opencode": {"enabled": True}})
     root = context.home_dir / ".config/opencode"
     write_json(root / "opencode.json", {})
@@ -368,6 +393,7 @@ def test_opencode_unselected_config_files_do_not_invalidate_protection(context: 
 
 @pytest.mark.parametrize("provider,key", [("codex", "managed_hook_manifest_path"), ("opencode", "managed_plugin_path")])
 def test_native_managed_artifacts_participate_in_paseo_proofs(context: HarnessContext, provider: str, key: str) -> None:
+    """Deleting an authenticated manifest or managed plugin invalidates composite protection."""
     configure(context, {provider: {"enabled": True}})
     adapter = PaseoHarnessAdapter()
     manifest = bind_managed_install_proof(adapter.install(context), context)
@@ -381,11 +407,13 @@ def test_native_managed_artifacts_participate_in_paseo_proofs(context: HarnessCo
 def test_child_drift_before_receipt_publication_rejects_install(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Reject success when an earlier child changes before the composite receipt is written."""
     configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
     native = get_adapter("pi")
     original = native.install
 
     def change_earlier_install(native_context: HarnessContext) -> dict[str, object]:
+        """Simulate another writer changing the first provider during the second install."""
         manifest = original(native_context)
         write_json(context.home_dir / ".claude/settings.json", {"changed": True})
         return manifest
@@ -398,6 +426,7 @@ def test_child_drift_before_receipt_publication_rejects_install(
 
 
 def test_paseo_capability_does_not_claim_uniform_fail_closed_hooks() -> None:
+    """Keep the public failure-behavior claim consistent with the supported native providers."""
     from codex_plugin_scanner.guard.protection_capabilities import protection_capability_payloads
 
     capabilities = {item["harness"]: item for item in protection_capability_payloads()}
@@ -410,6 +439,7 @@ def test_paseo_capability_does_not_claim_uniform_fail_closed_hooks() -> None:
 def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_content(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch, include_native: bool
 ) -> None:
+    """Keep unsupported composite events and content out of otherwise valid native cloud batches."""
     from types import SimpleNamespace
 
     from codex_plugin_scanner.guard import aibom_cli
@@ -427,14 +457,17 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
     uploads: list[tuple[object, ...]] = []
 
     def collect(*_args, primary_content_sources, **_kwargs):
+        """Provide local and native fixtures while exposing a local-only content candidate."""
         primary_content_sources.append(SimpleNamespace(snapshot_id=local.snapshot_id))
         return snapshots
 
     def request(_auth, *, data, **_kwargs):
+        """Capture the outgoing cloud event body without making a network request."""
         sent.append(json.loads(data))
         return object()
 
     def upload(_store, _runner, auth, *, sources, **_kwargs):
+        """Record content candidates passed to the uploader without transferring files."""
         uploads.append(sources)
         return empty_content_upload_summary(), auth
 

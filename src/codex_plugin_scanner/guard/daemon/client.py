@@ -6,8 +6,11 @@ import json
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
+from contextlib import closing
+from http.client import HTTPConnection, HTTPException
 from pathlib import Path
 from typing import TypeGuard
+from urllib.parse import urlsplit
 
 from .manager import (
     clear_guard_daemon_state,
@@ -16,6 +19,38 @@ from .manager import (
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+
+
+def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, object] | None:
+    """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
+    try:
+        parsed = urlsplit(daemon_url)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in {"127.0.0.1", "::1"}
+            or parsed.port is None
+            or not 1 <= parsed.port <= 65_535
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        # HTTPConnection neither consults proxy environment variables nor follows
+        # redirects. Never forward the daemon token to a redirected authority.
+        with closing(HTTPConnection(parsed.hostname, parsed.port, timeout=1.0)) as connection:
+            connection.request("GET", "/v1/healthz/details", headers={"X-Guard-Token": auth_token})
+            response = connection.getresponse()
+            if response.status != 200:
+                return None
+            content = response.read(65_537)
+        if len(content) > 65_536:
+            return None
+        payload = json.loads(content.decode("utf-8"))
+        return payload if isinstance(payload, dict) else None
+    except (OSError, ValueError, HTTPException):
+        return None
 
 
 class GuardDaemonRequestError(RuntimeError):
