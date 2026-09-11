@@ -79,6 +79,8 @@ assert(isConnectableAppHarness("codex"), "registered AI app is connectable");
 assert(isConnectableAppHarness("pi-agent"), "registered AI app alias is connectable");
 assert(isConnectableAppHarness("omp"), "Oh My Pi is a connectable app");
 assert(!isConnectableAppHarness("bunx"), "package runner is not sent to AI app setup");
+assert(!isConnectableAppHarness("bun"), "Bun package tool is not sent to AI app setup");
+assert(!isConnectableAppHarness("npm"), "npm package tool is not sent to AI app setup");
 assert(!isConnectableAppHarness("guard-cli"), "Guard's internal source is not sent to AI app setup");
 assert(!isConnectableAppHarness("package-firewall"), "package firewall source is not sent to AI app setup");
 assert(appSetupTarget("bunx") === "package-firewall", "bunx settings route to package firewall controls");

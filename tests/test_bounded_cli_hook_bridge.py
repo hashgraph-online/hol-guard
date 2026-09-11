@@ -162,6 +162,109 @@ def test_success_preserves_child_stdout_and_returncode(
     assert output.getvalue() == '{"decision":"deny"}\n'
 
 
+def test_grok_bridge_rewrites_daemon_review_after_wait(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    monkeypatch.setattr(
+        grok_approval_resume,
+        "wait_for_grok_live_approval",
+        lambda **_kwargs: "allow",
+    )
+    stdout, _stderr, code = bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=tmp_path / "guard-home",
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=json.dumps(
+            {
+                "decision": "deny",
+                "policy_action": "review",
+                "approval_requests": [{"request_id": "req-1"}],
+            }
+        ),
+        stderr="",
+        exit_code=2,
+    )
+    assert code == 0
+    assert json.loads(stdout)["decision"] == "allow"
+
+
+def test_grok_daemon_review_translation_keeps_wait_metadata() -> None:
+    stdout, _stderr, code = bounded_cli_hook_bridge._daemon_response_to_native(
+        {
+            "policy_action": "review",
+            "reason": "needs review",
+            "approval_requests": [{"request_id": "req-1"}],
+            "primary_approval_request_id": "req-1",
+        },
+        harness="grok",
+        event_name="PreToolUse",
+    )
+    payload = json.loads(stdout)
+    assert code == 2
+    assert payload["decision"] == "deny"
+    assert payload["policy_action"] == "review"
+    assert payload["approval_requests"] == [{"request_id": "req-1"}]
+    assert payload["primary_approval_request_id"] == "req-1"
+
+
+def test_grok_bridge_clamps_wait_to_remaining_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    seen: dict[str, object] = {}
+
+    def capture(response: dict[str, object], **kwargs: object) -> dict[str, object]:
+        seen["timeout_seconds"] = kwargs["timeout_seconds"]
+        return response
+
+    monkeypatch.setattr(grok_approval_resume, "apply_grok_pretool_approval_wait", capture)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 80\n", encoding="utf-8")
+    bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=guard_home,
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=json.dumps({"decision": "deny", "policy_action": "review"}),
+        stderr="",
+        exit_code=2,
+        timeout_seconds=2.9,
+    )
+    assert seen["timeout_seconds"] == 2
+
+
+def test_grok_bridge_preserves_daemon_result_when_store_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    def boom(*_args: object, **_kwargs: object) -> str:
+        del _args, _kwargs
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(grok_approval_resume, "apply_grok_pretool_approval_wait", boom)
+    original = json.dumps({"decision": "deny", "policy_action": "review"})
+    stdout, stderr, code = bounded_cli_hook_bridge._apply_grok_bridge_approval_wait(
+        guard_home=tmp_path / "guard-home",
+        harness="grok",
+        input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+        stdout=original,
+        stderr="keep-stderr",
+        exit_code=2,
+    )
+    assert stdout == original
+    assert stderr == "keep-stderr"
+    assert code == 2
+
+
 def _signed_bundle_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     bundle = tmp_path / "HOL Guard.app"
     macos = bundle / "Contents" / "MacOS"

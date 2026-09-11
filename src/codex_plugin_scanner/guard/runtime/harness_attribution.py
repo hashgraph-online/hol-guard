@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from collections.abc import Mapping
+from pathlib import PurePath
 
 _CURSOR_ENV_MARKERS = frozenset(
     {
@@ -21,6 +23,60 @@ _CURSOR_ENV_MARKERS = frozenset(
 # read as an attribution signal only; policy scoping never keys off them.
 _CLAUDE_CODE_ENV_MARKERS = frozenset({"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"})
 _CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX"})
+
+_PROCESS_HARNESSES = {
+    "codex": "codex",
+    "claude": "claude-code",
+    "cursor": "cursor",
+    "cursor-agent": "cursor",
+    "zcode": "zcode",
+    "zcode-cli": "zcode",
+    "grok": "grok",
+    "pi": "pi",
+    "omp": "omp",
+    "opencode": "opencode",
+}
+
+
+def resolve_parent_process_harness() -> str | None:
+    """Best-effort display attribution when a harness supplies no env marker.
+
+    Inspect executable names only, never arguments or process environments.
+    Bound traversal and elapsed time; failures leave the origin unknown. This
+    signal must never be used as an authorization or policy selector.
+    """
+    if os.name == "nt":
+        return None
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-axo", "pid=,ppid=,comm="],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=0.5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    parents: dict[int, tuple[int, str]] = {}
+    for row in result.stdout.splitlines():
+        try:
+            process, parent, executable = row.strip().split(maxsplit=2)
+            parents[int(process)] = (int(parent), executable)
+        except ValueError:
+            continue
+    pid = os.getppid()
+    seen: set[int] = set()
+    for _ in range(8):
+        if pid <= 1 or pid in seen or pid not in parents:
+            break
+        seen.add(pid)
+        pid, executable = parents[pid]
+        harness = _PROCESS_HARNESSES.get(PurePath(executable).name.lower())
+        if harness:
+            return harness
+    return None
 
 
 def _zcode_env_markers() -> frozenset[str]:

@@ -26,3 +26,7 @@ def strip_harness_env_markers(monkeypatch: pytest.MonkeyPatch) -> None:
     for marker in HARNESS_ENV_MARKERS:
         monkeypatch.delenv(marker, raising=False)
     monkeypatch.setenv("__CFBundleIdentifier", "com.apple.Terminal")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.package_protect_projection.resolve_parent_process_harness",
+        lambda: None,
+    )

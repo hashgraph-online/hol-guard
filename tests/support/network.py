@@ -54,7 +54,15 @@ def urlopen_json(request: urllib.request.Request, *, timeout: float = 15, attemp
             raise ValueError("hook response must be an object")
         except urllib.error.HTTPError:
             raise
-        except (http.client.IncompleteRead, http.client.RemoteDisconnected, TimeoutError, urllib.error.URLError) as exc:
+        except (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+            TimeoutError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+            urllib.error.URLError,
+        ) as exc:
             last_error = exc
             time.sleep(0.05)
     assert last_error is not None

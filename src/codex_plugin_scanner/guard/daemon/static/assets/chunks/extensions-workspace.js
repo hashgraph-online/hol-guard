@@ -1,4 +1,4 @@
-import { aC as fetchLocalCliApi, r as reactExports, aD as fetchExtensionControlApi, j as jsxRuntimeExports, aE as useResolvedApprovalGate, ab as HiMiniLockClosed, M as HiMiniExclamationTriangle, aF as HiMiniArrowPath, t as HiMiniShieldCheck, aG as HiMiniInformationCircle, aH as isApprovalProofSubmitDisabled, z as HiMiniXMark, aI as ApprovalProofFieldInputs, aJ as buildApprovalProofCredentials, aK as GenIcon, N as HiMiniBolt, aL as HiMiniGlobeAlt, aM as HiMiniCube, I as HiMiniCloud, aN as HiMiniServerStack, b as HiMiniCommandLine, aO as HiMiniFolder, aP as FaWindows, aQ as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aR as approvalProofRecentlySatisfied, aS as HiMiniArrowLeft, aT as HiMiniPlus, a4 as HiMiniClipboardDocumentCheck, a5 as HiMiniClipboard, ad as HiMiniAdjustmentsHorizontal, aU as HiMiniCheck, ax as HiMiniMagnifyingGlass, y as HiMiniSparkles, aV as HiMiniNoSymbol, aW as startGuardCloudConnect, aX as HiMiniArrowTopRightOnSquare, aw as WorkspacePageHeader, aY as guardAwareHref } from "../guard-dashboard.js";
+import { aD as fetchLocalCliApi, r as reactExports, aE as fetchExtensionControlApi, j as jsxRuntimeExports, aF as useResolvedApprovalGate, ac as HiMiniLockClosed, N as HiMiniExclamationTriangle, aG as HiMiniArrowPath, v as HiMiniShieldCheck, aH as HiMiniInformationCircle, aI as isApprovalProofSubmitDisabled, B as HiMiniXMark, aJ as ApprovalProofFieldInputs, aK as buildApprovalProofCredentials, aL as GenIcon, P as HiMiniBolt, aM as HiMiniGlobeAlt, aN as HiMiniCube, J as HiMiniCloud, aO as HiMiniServerStack, b as HiMiniCommandLine, aP as HiMiniFolder, aQ as FaWindows, aR as FaAws, q as HiMiniCheckCircle, c as HiMiniChevronRight, F as HiMiniChevronDown, aS as approvalProofRecentlySatisfied, aT as HiMiniArrowLeft, aU as HiMiniPlus, a5 as HiMiniClipboardDocumentCheck, a6 as HiMiniClipboard, ae as HiMiniAdjustmentsHorizontal, aV as HiMiniCheck, ay as HiMiniMagnifyingGlass, z as HiMiniSparkles, aW as HiMiniNoSymbol, aX as startGuardCloudConnect, aY as HiMiniArrowTopRightOnSquare, ax as WorkspacePageHeader, aZ as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -24,6 +24,7 @@ function parseExtensionRoute(pathname) {
   if (!encoded || encoded.includes("/")) return { kind: "invalid" };
   try {
     const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
     if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
     return { kind: "detail", extensionId: decoded };
   } catch {
@@ -3035,7 +3036,9 @@ const BY_EXTENSION_ID = {
   "command.platform.vercel": ["vercel"],
   "command.platform.netlify": ["netlify"],
   "command.platform.heroku": ["heroku"],
-  "command.dns": CLOUD_CLUSTER,
+  "command.dns.aws": ["aws"],
+  "command.dns.gcp": ["gcp"],
+  "command.dns.azure": ["azure"],
   "command.cdn": CLOUD_CLUSTER,
   "command.api-gateway": CLOUD_CLUSTER,
   "command.load-balancer": CLOUD_CLUSTER,

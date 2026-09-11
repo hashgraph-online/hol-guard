@@ -66,6 +66,7 @@ export function parseExtensionRoute(pathname: string): ExtensionRoute {
   if (!encoded || encoded.includes("/")) return { kind: "invalid" };
   try {
     const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
     if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
     return { kind: "detail", extensionId: decoded };
   } catch {

@@ -19,6 +19,7 @@ from .managed_controls_policy_bundle import (
     managed_controls_layers_from_activation_state,
     managed_controls_revision_from_state,
 )
+from .runtime.command_dns_extensions import expand_legacy_dns_layers
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.command_matcher_contracts import MatcherContractError, canonical_contract_value
 from .runtime.extension_control_authority import (
@@ -1127,6 +1128,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         catalog_digest = registry.catalog_digest
         previous_manifest = self._load_catalog_manifest(previous.catalog_digest, key=key) or {}
         current_manifest = self._catalog_target_manifest(registry)
+        previous = replace(previous, layers=expand_legacy_dns_layers(previous.layers))
 
         def keep(control: ExtensionControl) -> bool:
             return preserve_migrated_extension_control(

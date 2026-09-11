@@ -138,11 +138,10 @@ def category_for_extension(extension_id: str) -> str:
     if extension_id in {
         "command.api-gateway",
         "command.cdn",
-        "command.dns",
         "command.infrastructure-as-code",
         "command.kubernetes-operations",
         "command.load-balancer",
-    } or extension_id.startswith("command.cloud."):
+    } or extension_id.startswith(("command.cloud.", "command.dns.")):
         return "cloud-infrastructure"
     if extension_id.startswith(("command.backup.", "command.database.", "command.storage.")):
         return "data-resilience"
