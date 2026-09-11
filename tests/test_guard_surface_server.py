@@ -1062,7 +1062,20 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            hook_payload = urlopen_json(hook_request, timeout=15)
+            hook_deadline = time.monotonic() + 5
+            while True:
+                try:
+                    hook_payload = urlopen_json(hook_request, timeout=15)
+                    break
+                except urllib.error.URLError as exc:
+                    if not isinstance(
+                        exc.reason,
+                        (BrokenPipeError, ConnectionAbortedError, ConnectionRefusedError, ConnectionResetError),
+                    ):
+                        raise
+                    if time.monotonic() >= hook_deadline:
+                        raise
+                    time.sleep(0.05)
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):

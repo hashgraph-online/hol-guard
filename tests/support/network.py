@@ -55,8 +55,6 @@ def urlopen_json(request: urllib.request.Request, *, timeout: float = 15, attemp
         except urllib.error.HTTPError:
             raise
         except urllib.error.URLError as exc:
-            if isinstance(exc.reason, ConnectionRefusedError):
-                raise
             last_error = exc
             time.sleep(0.05)
         except (

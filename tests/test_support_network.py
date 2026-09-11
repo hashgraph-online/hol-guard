@@ -66,18 +66,20 @@ def test_urlopen_json_does_not_retry_http_errors(monkeypatch: pytest.MonkeyPatch
     assert attempts["count"] == 1
 
 
-def test_urlopen_json_does_not_retry_connection_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_urlopen_json_retries_connection_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     attempts = {"count": 0}
 
     def fake_urlopen(_request: object, timeout: float | None = None) -> _JsonResponse:
         del timeout
         attempts["count"] += 1
-        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+        if attempts["count"] == 1:
+            raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+        return _JsonResponse(b'{"decision":"deny"}')
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     monkeypatch.setattr("tests.support.network.time.sleep", lambda _seconds: None)
 
-    with pytest.raises(urllib.error.URLError):
-        urlopen_json(urllib.request.Request("http://127.0.0.1/v1/hooks/pi"))
+    payload = urlopen_json(urllib.request.Request("http://127.0.0.1/v1/hooks/pi"))
 
-    assert attempts["count"] == 1
+    assert payload == {"decision": "deny"}
+    assert attempts["count"] == 2
