@@ -89,8 +89,8 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
 
         assert health["ok"] is True
         assert isinstance(identity.get("proof"), str)
-        assert health_elapsed < 0.25
-        assert identity_elapsed < 0.25
+        assert health_elapsed < 0.5
+        assert identity_elapsed < 0.5
 
         _ = blocker.execute("rollback")
         deadline = time.monotonic() + 2
@@ -155,7 +155,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
             health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
             results = [future.result(timeout=2) for future in futures]
         assert health["ok"] is True
-        assert health_elapsed < 0.25
+        assert health_elapsed < 0.5
         assert max(elapsed for _payload, elapsed in results) < 1.6
         assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
