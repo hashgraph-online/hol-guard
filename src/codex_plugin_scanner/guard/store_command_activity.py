@@ -15,6 +15,7 @@ from .runtime.command_activity_contract import (
     CommandActivityMatch,
     CorrelationHandle,
 )
+from .runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 from .runtime.command_shadow_evaluation import CommandShadowObservation
 from .store_command_activity_lifecycle import (
     COMMAND_PERSISTENCE_ERROR_DOMAIN,
@@ -166,7 +167,7 @@ def _validated_invocation_preview(value: str | None) -> str | None:
     if not isinstance(value, str) or "\x00" in value:
         raise ValueError("invalid_invocation_preview")
     stripped = value.strip()
-    if not stripped or len(stripped) > 4096:
+    if not stripped or len(stripped) > INVOCATION_PREVIEW_MAX_CHARS:
         raise ValueError("invalid_invocation_preview")
     return stripped
 

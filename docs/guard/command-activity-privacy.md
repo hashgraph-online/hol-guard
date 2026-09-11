@@ -63,7 +63,7 @@ The core activity, match, correlation, and cloud-aggregate types must never stor
 
 Positive field allowlists and closed typed values enforce this boundary on those types. Redaction is not sufficient there.
 
-The local dashboard may show a redacted invocation preview so operators can see which command Guard checked. That preview is local-only: it is omitted from hook journals, cloud aggregates, and analytics, and it must still drop secrets, tokens, private paths, URLs, emails, environment assignments, and heredoc bodies. The exact original command string must not appear on command-activity API, diagnostics, log, or journal surfaces.
+The local dashboard may show a redacted invocation preview so operators can see which command Guard checked. That preview is local-only: it is omitted from hook journals, cloud aggregates, and analytics, and it must still drop secrets, tokens, private paths, URLs, emails, secret-bearing environment assignments, and heredoc bodies. The exact original command string must not appear on command-activity API, diagnostics, log, or journal surfaces. A local recovery sidecar may retain the same redacted preview until the activity row is persisted, then it is deleted with the journal record.
 
 ## Correlation
 

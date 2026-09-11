@@ -76,6 +76,9 @@ def test_native_pre_and_post_keep_authoritative_decision(
     journal_path = store.guard_home / "runtime-hook-evidence.jsonl"
     if journal_path.exists():
         assert "echo example" not in journal_path.read_text(encoding="utf-8")
+    sidecar_path = store.guard_home / "runtime-hook-evidence.preview.jsonl"
+    if sidecar_path.exists():
+        assert "echo example" not in sidecar_path.read_text(encoding="utf-8")
     assert writer.stats()["failures"] == 0
 
 

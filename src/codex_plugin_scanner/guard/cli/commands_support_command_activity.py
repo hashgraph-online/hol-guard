@@ -18,11 +18,11 @@ from ..runtime.command_activity_contract import (
     CommandExecutionStatus,
     CorrelationHandle,
 )
-from ..runtime.command_activity_display import build_invocation_preview_from_payload
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_display import build_invocation_preview_from_payload
 from ..runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_correlated_post_activity,
