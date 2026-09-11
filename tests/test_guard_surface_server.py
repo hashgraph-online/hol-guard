@@ -1062,7 +1062,29 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            hook_payload = urlopen_json(hook_request, timeout=15)
+            hook_deadline = time.monotonic() + 5
+            last_post_error: BaseException | None = None
+            while True:
+                remaining = hook_deadline - time.monotonic()
+                if remaining <= 0:
+                    if last_post_error is not None:
+                        raise last_post_error
+                    raise TimeoutError("PI hook POST did not become reachable after healthz")
+                try:
+                    hook_payload = urlopen_json(
+                        hook_request,
+                        timeout=min(2.0, max(0.1, remaining)),
+                        attempts=1,
+                    )
+                    break
+                except ConnectionRefusedError as exc:
+                    last_post_error = exc
+                    time.sleep(0.05)
+                except urllib.error.URLError as exc:
+                    if not isinstance(exc.reason, ConnectionRefusedError):
+                        raise
+                    last_post_error = exc
+                    time.sleep(0.05)
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):
