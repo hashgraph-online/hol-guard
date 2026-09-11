@@ -52,3 +52,13 @@ def test_failed_literal_cd_does_not_hide_or_branch_read(tmp_path: Path) -> None:
     assessment = assess_shell_reads(command, cwd=workspace, home_dir=tmp_path / "home")
     assert assessment.requires_review
     assert assessment.incomplete
+
+
+def test_failed_literal_cd_or_recovery_does_not_hide_later_and_read(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    command = "cd missing || true && cat .env"
+
+    assessment = assess_shell_reads(command, cwd=workspace, home_dir=tmp_path / "home")
+    assert assessment.requires_review
+    assert assessment.incomplete
