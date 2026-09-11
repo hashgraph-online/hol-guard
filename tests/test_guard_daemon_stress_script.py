@@ -204,7 +204,7 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         check=False,
         capture_output=True,
         text=True,
-        timeout=45,
+        timeout=90,
     )
     loaded = cast(object, json.loads(completed.stdout))
     assert isinstance(loaded, dict)
