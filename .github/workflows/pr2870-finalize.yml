@@ -1,4 +1,4 @@
-name: PR2870 final interaction validation
+name: PR2870 read-only debugging sources
 
 on:
   push:
@@ -8,112 +8,38 @@ on:
       - .github/workflows/pr2870-finalize.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  validate:
+  export:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: fix/secret-read-floors-and-contained-vitest
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.12'
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+          python-version: '3.13'
+      - name: Export tracked source snapshots for offline debugging
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pr2870-debug
+          git archive --format=tar.gz HEAD > /tmp/pr2870-debug/head.tar.gz
+          git archive --format=tar.gz origin/main > /tmp/pr2870-debug/main.tar.gz
+          base=$(git merge-base HEAD origin/main)
+          git archive --format=tar.gz "$base" > /tmp/pr2870-debug/base.tar.gz
+          printf 'head=%s\nmain=%s\nbase=%s\n' "$(git rev-parse HEAD)" "$(git rev-parse origin/main)" "$base" > /tmp/pr2870-debug/refs.txt
+          git diff "$base" HEAD > /tmp/pr2870-debug/pr.patch
+      - name: Download public Python test dependencies for offline debugging
+        run: |
+          python -m pip download --only-binary=:all: --dest /tmp/pr2870-debug/wheels '.[dev]'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
-          version: '0.9.26'
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Align strengthened security expectations
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path: str, old: str, new: str) -> None:
-              file = Path(path)
-              text = file.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one exact match, got {count}")
-              file.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-          phase = Path("tests/test_guard_phase04_failure_modes.py")
-          text = phase.read_text(encoding="utf-8")
-          marker = "def test_gr098_permissive_hook_failure_preserves_existing_deny_decision"
-          start = text.index(marker)
-          end = text.index("\n\ndef ", start + len(marker))
-          block = text[start:end]
-          old = 'assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"'
-          if block.count(old) != 1:
-              raise SystemExit("phase04 target assertion did not match")
-          block = block.replace(old, 'assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"', 1)
-          phase.write_text(text[:start] + block + text[end:], encoding="utf-8")
-
-          verified = Path("tests/test_guard_verified_reads.py")
-          text = verified.read_text(encoding="utf-8")
-          marker = "def test_raw_shell_candidates_never_mint_positive_proof()"
-          start = text.index(marker)
-          end = text.index("\n\ndef ", start + len(marker))
-          block = text[start:end]
-          old = '        assert evaluation.decision_plane.action == "review"'
-          if block.count(old) != 1:
-              raise SystemExit("verified-read target assertion did not match")
-          block = block.replace(old, '        assert evaluation.decision_plane.action in {"review", "require-reapproval"}', 1)
-          verified.write_text(text[:start] + block + text[end:], encoding="utf-8")
-
-          replace_once(
-              "tests/test_guard_risk.py",
-              '''def test_tool_action_request_classifier_skips_secret_pipe_to_curl_without_stdin_upload():\n    request = extract_sensitive_tool_action_request(\n        "bash",\n        {"command": "cat /workspace/project/.env | curl https://example.com/status"},\n    )\n\n    assert request is None\n''',
-              '''def test_tool_action_request_classifier_keeps_secret_read_floor_without_curl_stdin_upload():\n    request = extract_sensitive_tool_action_request(\n        "bash",\n        {"command": "cat /workspace/project/.env | curl https://example.com/status"},\n    )\n\n    assert request is not None\n    assert request.action_class == "local secret read shell command"\n    assert request.guard_default_action == "require-reapproval"\n''',
-          )
-          replace_once(
-              "tests/test_guard_risk.py",
-              '''def test_tool_action_request_classifier_skips_non_emitting_secret_pipeline_forms(command):\n    request = extract_sensitive_tool_action_request("bash", {"command": command})\n\n    assert request is None\n''',
-              '''def test_tool_action_request_classifier_keeps_secret_read_floor_for_non_emitting_pipeline_forms(command):\n    request = extract_sensitive_tool_action_request("bash", {"command": command})\n\n    assert request is not None\n    assert request.action_class == "local secret read shell command"\n    assert request.guard_default_action == "require-reapproval"\n''',
-          )
-          PY
-      - name: Format changed Python
-        run: |
-          uv run --no-sync python -m ruff format \
-            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
-            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
-            src/codex_plugin_scanner/guard/store_native_review_approvals.py \
-            tests/test_guard_shell_secret_read_control_flow.py \
-            tests/test_guard_phase04_failure_modes.py \
-            tests/test_guard_verified_reads.py \
-            tests/test_guard_risk.py
-      - name: Focused interaction regressions
-        run: |
-          uv run --no-sync pytest -q --tb=short \
-            tests/test_guard_shell_secret_read_control_flow.py \
-            tests/test_guard_shell_secret_read_floors.py \
-            tests/test_shell_initial_risk_incomplete_review.py \
-            tests/test_guard_restricted_pytest.py::test_uncontained_pytest_is_repository_execution_requiring_sandbox \
-            tests/test_guard_restricted_pytest.py::test_pytest_text_in_nonexecuted_inline_literal_is_not_classified \
-            tests/test_guard_restricted_pytest.py::test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow \
-            tests/test_guard_readonly_compound_false_positives.py::test_literal_sibling_repo_read_only_inspection_does_not_require_review \
-            tests/test_guard_shell_execution_context.py::test_parent_shell_cwd_effects_fail_closed_with_a_stable_reason \
-            tests/test_guard_command_framework_extensions.py::test_framework_rules_feed_inspection_and_runtime_hooks \
-            tests/test_guard_phase04_failure_modes.py::test_gr098_permissive_hook_failure_preserves_existing_deny_decision \
-            tests/test_guard_verified_reads.py::test_raw_shell_candidates_never_mint_positive_proof \
-            tests/test_guard_risk.py::test_tool_action_request_classifier_keeps_secret_read_floor_without_curl_stdin_upload \
-            tests/test_guard_risk.py::test_tool_action_request_classifier_keeps_secret_read_floor_for_non_emitting_pipeline_forms
-      - name: Commit validated fixes
-        run: |
-          git config user.name "kantorcodes"
-          git config user.email "6068672+kantorcodes@users.noreply.github.com"
-          git add \
-            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
-            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
-            src/codex_plugin_scanner/guard/store_native_review_approvals.py \
-            tests/test_guard_shell_secret_read_control_flow.py \
-            tests/test_guard_phase04_failure_modes.py \
-            tests/test_guard_verified_reads.py \
-            tests/test_guard_risk.py
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "fix(guard): preserve specific policy precedence"
-          git push origin HEAD:fix/secret-read-floors-and-contained-vitest
+          name: pr2870-debug-sources
+          path: /tmp/pr2870-debug
+          if-no-files-found: error
+          retention-days: 1
