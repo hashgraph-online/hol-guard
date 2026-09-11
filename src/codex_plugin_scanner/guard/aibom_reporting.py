@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -155,10 +157,10 @@ def _artifact_rows_from_store(
         trust_verdict = str(item.get("last_policy_action") or "unknown")
         harness = str(item.get("harness") or "")
         artifact_id = str(item.get("artifact_id") or "")
-        row: dict[str, object] = dict(item)
+        row = api._redact_inventory_store_item(item, home_dir=context.home_dir)
         row["trust_verdict"] = trust_verdict
         extensions = metadata_by_artifact.get((harness, artifact_id))
-        config_path = api._store_row_config_path(row) if str(row.get("artifact_type") or "") == "skill_file" else None
+        config_path = api._store_row_config_path(item) if str(item.get("artifact_type") or "") == "skill_file" else None
         config_path_exists = config_path.exists() if config_path is not None else None
         if not extensions:
             extensions = api._store_only_artifact_metadata_extensions(
@@ -272,6 +274,12 @@ def _aibom_connection_status(store: Any) -> str:
     return "sync_required"
 
 
+def _markdown_table_cell(value: object) -> str:
+    """Keep untrusted text literal and confined to one Markdown table cell."""
+    text = html.escape(" ".join(str(value).splitlines()), quote=False)
+    return re.sub(r"([\\|`*_\[\]()!~])", r"\\\1", text)
+
+
 def _render_aibom_markdown(payload: dict[str, object]) -> str:
     """Render the redacted inventory report as human-readable Markdown."""
     layer_summary = payload.get("layer_summary")
@@ -310,12 +318,12 @@ def _render_aibom_markdown(payload: dict[str, object]) -> str:
         for item in artifacts:
             if not isinstance(item, dict):
                 continue
-            lines.append(
-                "| "
-                f"{item.get('artifact_name', '')} | {item.get('harness', '')} | {item.get('artifact_type', '')} | "
-                f"{item.get('source_scope', '')} | {item.get('trust_verdict', '')} | "
-                f"{'yes' if item.get('present') else 'no'} |"
-            )
+            cells = [
+                _markdown_table_cell(item.get(field, ""))
+                for field in ("artifact_name", "harness", "artifact_type", "source_scope", "trust_verdict")
+            ]
+            cells.append("yes" if item.get("present") else "no")
+            lines.append("| " + " | ".join(cells) + " |")
     if isinstance(trust_summary, dict):
         lines.extend(
             [
