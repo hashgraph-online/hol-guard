@@ -136,6 +136,265 @@ def test_frozen_package_shim_wrapper_uses_current_hol_guard_shim(
     assert command[0] == str(shim)
 
 
+@pytest.mark.parametrize(
+    "stale_binding",
+    ("wrapper", "sidecar-shebang", "sidecar-base-command", "both"),
+)
+def test_package_shim_status_repairs_trusted_old_runtime_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stale_binding: str,
+) -> None:
+    from codex_plugin_scanner.guard import package_shim_frozen
+
+    core_dir = tmp_path / "core"
+    versioned = core_dir / "versions" / "3.0.151" / "hol-guard"
+    versioned.parent.mkdir(parents=True)
+    versioned.write_text("", encoding="utf-8")
+    versioned.chmod(0o755)
+    current = core_dir / "current-hol-guard"
+    current.write_text("", encoding="utf-8")
+    current.chmod(0o755)
+    old_bundle = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+    old_bundle.parent.mkdir(parents=True)
+    old_bundle.write_text("", encoding="utf-8")
+    old_bundle.chmod(0o755)
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(versioned))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.MACOS_BUNDLED_HOL_GUARD",
+        old_bundle,
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    monkeypatch.setattr(
+        guard_shims_module,
+        "_detect_system_package_managers",
+        lambda _context, path_env=None: (["npm"], []),
+    )
+
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr(guard_shims_module, "package_shim_interpreter", lambda: str(old_bundle))
+        old_runtime.setattr(package_shim_frozen, "package_shim_interpreter", lambda: str(old_bundle))
+        guard_shims_module.install_package_shims(context, managers=("npm",))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    wrapper_path = shim_dir / "npm"
+    sidecar_path = shim_dir / ".npm.py"
+    if stale_binding == "wrapper":
+        wrapper_path.write_text(
+            "\n".join(
+                (
+                    "#!/bin/sh",
+                    f'exec {shlex.quote(str(current))} {shlex.quote(str(sidecar_path))} "$@"',
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+    elif stale_binding == "sidecar-shebang":
+        sidecar_lines = sidecar_path.read_text(encoding="utf-8").splitlines()
+        sidecar_lines[0] = f"#!{current}"
+        sidecar_path.write_text("\n".join(sidecar_lines) + "\n", encoding="utf-8")
+    elif stale_binding == "sidecar-base-command":
+        sidecar_lines = sidecar_path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(sidecar_lines):
+            if line.startswith("base_command = "):
+                sidecar_lines[index] = line.replace(str(old_bundle), str(current), 1)
+                break
+        sidecar_path.write_text("\n".join(sidecar_lines) + "\n", encoding="utf-8")
+
+    status = guard_shims_module.package_shim_status(context)
+    details = next(item for item in status["manager_details"] if item["manager"] == "npm")
+    assert details["integrity"] == "stale"
+
+    repaired = guard_shims_module.repair_package_shims(context, managers=("npm",))
+
+    assert repaired["repaired"] == ["npm"]
+    restored_wrapper = wrapper_path.read_text(encoding="utf-8")
+    restored_sidecar = sidecar_path.read_text(encoding="utf-8")
+    assert shlex.split(restored_wrapper.splitlines()[1])[1] == str(current)
+    assert restored_sidecar.splitlines()[0] == f"#!{current}"
+    command_line = next(line for line in restored_sidecar.splitlines() if line.startswith("base_command = "))
+    command = ast.literal_eval(command_line.split("=", 1)[1].strip())
+    assert command[0] == str(current)
+    assert command[command.index("--home") + 1] == str(context.home_dir)
+    assert command[command.index("--workspace") + 1] == str(context.workspace_dir)
+
+
+@pytest.mark.parametrize(
+    "tampering",
+    ("wrapper-old-target", "wrapper-current-target", "sidecar-home", "sidecar-workspace"),
+)
+def test_package_shim_status_does_not_classify_trusted_runtime_tampering_as_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tampering: str,
+) -> None:
+    from codex_plugin_scanner.guard import package_shim_frozen
+
+    core_dir = tmp_path / "core"
+    versioned = core_dir / "versions" / "3.0.151" / "hol-guard"
+    versioned.parent.mkdir(parents=True)
+    versioned.write_text("", encoding="utf-8")
+    versioned.chmod(0o755)
+    current = core_dir / "current-hol-guard"
+    current.write_text("", encoding="utf-8")
+    current.chmod(0o755)
+    old_bundle = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+    old_bundle.parent.mkdir(parents=True)
+    old_bundle.write_text("", encoding="utf-8")
+    old_bundle.chmod(0o755)
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(versioned))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.MACOS_BUNDLED_HOL_GUARD",
+        old_bundle,
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    monkeypatch.setattr(
+        guard_shims_module,
+        "_detect_system_package_managers",
+        lambda _context, path_env=None: (["npm"], []),
+    )
+
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr(guard_shims_module, "package_shim_interpreter", lambda: str(old_bundle))
+        old_runtime.setattr(package_shim_frozen, "package_shim_interpreter", lambda: str(old_bundle))
+        guard_shims_module.install_package_shims(context, managers=("npm",))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    wrapper_path = shim_dir / "npm"
+    sidecar_path = shim_dir / ".npm.py"
+    if tampering.startswith("wrapper-"):
+        wrong_target = old_bundle if tampering == "wrapper-old-target" else current
+        wrapper_path.write_text(
+            "\n".join(
+                (
+                    "#!/bin/sh",
+                    f'exec {shlex.quote(str(old_bundle))} {shlex.quote(str(wrong_target))} "$@"',
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+    else:
+        changed_path = tmp_path / f"attacker-{tampering}"
+        sidecar_lines = sidecar_path.read_text(encoding="utf-8").splitlines()
+        changed_flag = "--home" if tampering == "sidecar-home" else "--workspace"
+        for index, line in enumerate(sidecar_lines):
+            if line.startswith("base_command = "):
+                parts = line.split("=", 1)
+                command = ast.literal_eval(parts[1].strip())
+                command[command.index(changed_flag) + 1] = str(changed_path)
+                sidecar_lines[index] = f"{parts[0].strip()} = {command!r}"
+                break
+        sidecar_path.write_text("\n".join(sidecar_lines) + "\n", encoding="utf-8")
+
+    status = guard_shims_module.package_shim_status(context)
+
+    details = next(item for item in status["manager_details"] if item["manager"] == "npm")
+    assert details["integrity"] == "tampered"
+
+
+def test_package_shim_status_does_not_trust_untrusted_sidecar_base_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = core_dir / "versions" / "3.0.151" / "hol-guard"
+    versioned.parent.mkdir(parents=True)
+    versioned.write_text("", encoding="utf-8")
+    versioned.chmod(0o755)
+    current = core_dir / "current-hol-guard"
+    current.write_text("", encoding="utf-8")
+    current.chmod(0o755)
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(versioned))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.MACOS_BUNDLED_HOL_GUARD",
+        tmp_path / "missing-bundle",
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    monkeypatch.setattr(
+        guard_shims_module,
+        "_detect_system_package_managers",
+        lambda _context, path_env=None: (["npm"], []),
+    )
+
+    guard_shims_module.install_package_shims(context, managers=("npm",))
+    sidecar_path = context.guard_home / "package-shims" / "bin" / ".npm.py"
+    outsider = tmp_path / "untrusted-launcher"
+    outsider.write_text("", encoding="utf-8")
+    outsider.chmod(0o755)
+    sidecar_lines = sidecar_path.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(sidecar_lines):
+        if line.startswith("base_command = "):
+            sidecar_lines[index] = line.replace(str(current), str(outsider), 1)
+            break
+    sidecar_path.write_text("\n".join(sidecar_lines) + "\n", encoding="utf-8")
+
+    status = guard_shims_module.package_shim_status(context)
+
+    details = next(item for item in status["manager_details"] if item["manager"] == "npm")
+    assert details["integrity"] == "tampered"
+
+
+def test_package_shim_status_keeps_trusted_runtime_code_drift_tampered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core_dir = tmp_path / "core"
+    versioned = core_dir / "versions" / "3.0.151" / "hol-guard"
+    versioned.parent.mkdir(parents=True)
+    versioned.write_text("", encoding="utf-8")
+    versioned.chmod(0o755)
+    current = core_dir / "current-hol-guard"
+    current.write_text("", encoding="utf-8")
+    current.chmod(0o755)
+    old_bundle = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+    old_bundle.parent.mkdir(parents=True)
+    old_bundle.write_text("", encoding="utf-8")
+    old_bundle.chmod(0o755)
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(versioned))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.MACOS_BUNDLED_HOL_GUARD",
+        old_bundle,
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    monkeypatch.setattr(
+        guard_shims_module,
+        "_detect_system_package_managers",
+        lambda _context, path_env=None: (["npm"], []),
+    )
+
+    from codex_plugin_scanner.guard import package_shim_frozen
+
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr(guard_shims_module, "package_shim_interpreter", lambda: str(old_bundle))
+        old_runtime.setattr(package_shim_frozen, "package_shim_interpreter", lambda: str(old_bundle))
+        guard_shims_module.install_package_shims(context, managers=("npm",))
+    sidecar_path = context.guard_home / "package-shims" / "bin" / ".npm.py"
+    sidecar_path.write_text(sidecar_path.read_text(encoding="utf-8") + "\nraise SystemExit(23)\n", encoding="utf-8")
+
+    status = guard_shims_module.package_shim_status(context)
+
+    details = next(item for item in status["manager_details"] if item["manager"] == "npm")
+    assert details["integrity"] == "tampered"
+
+
 def test_package_shim_status_stale_when_wrapper_interpreter_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

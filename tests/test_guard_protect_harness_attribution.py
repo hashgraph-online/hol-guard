@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.protect_approvals import _protect_approval_item, _protect_request_artifact
 from codex_plugin_scanner.guard.local_supply_chain import _is_fresh_artifact_approval, build_package_protect_payload
@@ -231,6 +232,79 @@ def test_guard_protect_keeps_guard_cli_attribution_outside_harness_env(
     queued = store.list_approval_requests(status="pending", limit=10)
     assert queued
     assert all(item["harness"] == "guard-cli" for item in queued)
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_harness"),
+    [
+        (("bun", "run", "build"), "guard-cli"),
+        (("npm", "run", "build"), "guard-cli"),
+        (("custom-tool", "run", "build"), "custom-tool"),
+    ],
+)
+def test_guard_protect_receipt_classifies_package_tool_fallback_without_inventing_custom_origin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: tuple[str, ...],
+    expected_harness: str,
+) -> None:
+    strip_harness_env_markers(monkeypatch)
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    store = GuardStore(home_dir)
+
+    payload, exit_code = build_protect_payload(
+        command=list(command),
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-09-10T00:00:00+00:00",
+    )
+
+    assert exit_code == 0
+    assert payload["request"]["harness"] is None
+    assert payload["receipt"]["harness"] == expected_harness
+    assert store.list_receipts(limit=1)[0]["harness"] == expected_harness
+
+
+def test_guard_protect_package_tool_fallback_preserves_shared_runtime_origin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    strip_harness_env_markers(monkeypatch)
+    monkeypatch.setenv("CODEX_SANDBOX", "1")
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    store = GuardStore(home_dir)
+
+    payload, exit_code = build_protect_payload(
+        command=["bun", "run", "build"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-09-10T00:00:00+00:00",
+    )
+
+    assert exit_code == 0
+    assert payload["request"]["harness"] is None
+    assert payload["receipt"]["harness"] == "codex"
+    assert store.list_receipts(limit=1)[0]["harness"] == "codex"
+
+
+def test_guard_protect_receipt_preserves_explicit_request_harness() -> None:
+    request = protect.parse_protect_command(["codex", "mcp", "add", "server"])
+    verdict = protect.ProtectVerdict(
+        action="allow",
+        reason="test",
+        risk_signals=(),
+        matched_advisories=(),
+    )
+
+    receipt = protect._build_install_receipt(request, verdict)
+
+    assert receipt.harness == "codex"
 
 
 @pytest.mark.usefixtures("bundle_first_cloud")
