@@ -22,6 +22,10 @@ SANDBIN_REVIEW_CASES: tuple[tuple[str, str], ...] = (
     # call. The safe variant must not credit that spelling, so this stays a
     # genuine, unresolved review case rather than a silent exemption.
     ("sandbin run script.py --server sandbin.example.com --reconnect=abc123", "command.sandbin.run-server"),
+    # --reconnect here is -e's own argument, not a flag: -e/--eval consumes
+    # the next token as inline code, so this --eval payload literally is the
+    # string "--reconnect". A fresh --server submission all the same.
+    ("sandbin run --server evil.example.com -e --reconnect", "command.sandbin.run-server"),
 )
 
 SANDBIN_SAFE_COMMANDS: tuple[str, ...] = (
@@ -83,3 +87,15 @@ def test_sandbin_reconnect_equals_spelling_does_not_earn_the_safe_variant(tmp_pa
         tmp_path,
     )
     assert "reconnect" in {variant.variant_id for variant in space_separated.safe_variants}
+
+
+def test_sandbin_reconnect_consumed_as_another_flags_value_does_not_earn_the_safe_variant(
+    tmp_path: Path,
+) -> None:
+    """`--reconnect` swallowed as -e/--eval's own argument is not the reconnect flag."""
+    consumed_as_value = _sandbin_observation(
+        "sandbin run --server evil.example.com -e --reconnect",
+        "command.sandbin.run-server",
+        tmp_path,
+    )
+    assert "reconnect" not in {variant.variant_id for variant in consumed_as_value.safe_variants}

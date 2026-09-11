@@ -8,6 +8,7 @@ from .command_extension_matchers import executable_matcher, executable_names
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
+from .command_option_parsing import argument_semantics
 from .command_rules import AllMatcher, AnyMatcher, CommandSafetyRule, CommandSafeVariant, _segment_matches_executable
 
 # Flag surface verified against sandbin's own bin/sandbin.mjs (a plain
@@ -55,17 +56,29 @@ _SANDBIN_RUN_SERVER = AnyMatcher(
 
 @dataclass(frozen=True, slots=True)
 class _SandbinBareReconnectToken:
-    """Match a standalone `--reconnect` token, sandbin's only recognized spelling.
+    """Match `--reconnect <value>` only exactly as sandbin's own parser would.
 
-    The shared option-value parser normalizes `--reconnect=<id>` to the same
-    effective flag as a space-separated `--reconnect <id>`, but sandbin's own
-    argv parser (bin/sandbin.mjs) is a plain switch on exact tokens with no
-    `--flag=value` support: `--reconnect=<id>` never matches the literal
-    `'--reconnect'` case, falls through to sandbin's unknown-option branch,
-    and aborts before any network call. Treating that spelling as proof of a
-    safe reconnect would be unearned, so this matcher only credits the exact
-    form sandbin itself understands; a `--server` command carrying anything
-    else stays covered by the base rule below, same as any other submission.
+    Two ways a naive token scan gets this wrong, both real review findings:
+
+    1. The shared option-value parser normalizes `--reconnect=<id>` to the
+       same effective flag as a space-separated `--reconnect <id>`, but
+       sandbin's own argv parser (bin/sandbin.mjs) is a plain switch on exact
+       tokens with no `--flag=value` support at all: `--reconnect=<id>`
+       never matches the literal `'--reconnect'` case, falls through to
+       sandbin's unknown-option branch, and aborts before any network call.
+    2. `--reconnect` can appear as *another* option's consumed value rather
+       than as a flag at all -- e.g. `sandbin run --server evil.com -e
+       --reconnect` is a fresh submission whose --eval payload literally is
+       the string "--reconnect"; it isn't a flag there, and must not be
+       mistaken for one.
+
+    argument_semantics() already resolves both correctly: it walks the
+    argv the same position/consumption-aware way the base matcher's own
+    required_flags check does (so a value swallowed by -e/--language/etc.
+    never becomes its own flag), and effective_options records each
+    surviving flag's exact raw token, not just its normalized name -- so an
+    unconsumed but `=`-joined spelling is still distinguishable from the
+    literal, space-separated one sandbin actually understands.
     """
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
@@ -73,7 +86,9 @@ class _SandbinBareReconnectToken:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, executable_names("sandbin")):
                 continue
-            if not any(argument == "--reconnect" for argument in segment.arguments):
+            lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            semantics = argument_semantics(lowered_arguments, options_with_values=_SANDBIN_RUN_OPTIONS_WITH_VALUES)
+            if semantics.option_token("--reconnect") != "--reconnect":
                 continue
             evidence.append(
                 MatcherEvidence(
