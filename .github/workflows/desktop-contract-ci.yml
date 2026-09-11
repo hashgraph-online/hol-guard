@@ -1,28 +1,55 @@
-name: PR2870 remediation
+name: Desktop contract CI
 
 on:
   pull_request:
     paths:
+      - src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser.py
+      - src/codex_plugin_scanner/guard/cli/commands_router.py
+      - src/codex_plugin_scanner/guard/cli/commands_support.py
+      - src/codex_plugin_scanner/guard/cli/product.py
+      - src/codex_plugin_scanner/guard/store_approvals.py
+      - src/codex_plugin_scanner/guard/store_approval_facade.py
+      - src/codex_plugin_scanner/guard/store_receipts.py
+      - tests/test_guard_desktop_contract.py
+      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - docs/guard/desktop-bootstrap-contract.md
+      - .github/workflows/desktop-contract-ci.yml
+  push:
+    branches:
+      - release/3.0
+    paths:
+      - src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser.py
+      - src/codex_plugin_scanner/guard/cli/commands_router.py
+      - src/codex_plugin_scanner/guard/cli/commands_support.py
+      - src/codex_plugin_scanner/guard/cli/product.py
+      - src/codex_plugin_scanner/guard/store_approvals.py
+      - src/codex_plugin_scanner/guard/store_approval_facade.py
+      - src/codex_plugin_scanner/guard/store_receipts.py
+      - tests/test_guard_desktop_contract.py
+      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - docs/guard/desktop-bootstrap-contract.md
       - .github/workflows/desktop-contract-ci.yml
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: pr2870-remediation-${{ github.ref }}
+  group: desktop-contract-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  remediate:
+  contract:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Check out branch head
+      - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -38,74 +65,49 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra dev --python 3.12
 
-      - name: Refresh tightened decision contracts
+      - name: Validate formatting and lint
         run: |
+          uv run --no-sync python -m ruff format --check \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser.py \
+            src/codex_plugin_scanner/guard/store_approvals.py \
+            src/codex_plugin_scanner/guard/store_approval_facade.py \
+            src/codex_plugin_scanner/guard/store_receipts.py \
+            tests/test_guard_desktop_contract.py
+          uv run --no-sync python -m ruff check \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser.py \
+            src/codex_plugin_scanner/guard/store_approvals.py \
+            src/codex_plugin_scanner/guard/store_approval_facade.py \
+            src/codex_plugin_scanner/guard/store_receipts.py \
+            tests/test_guard_desktop_contract.py
+
+      - name: Run Desktop contract tests
+        run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
+
+      - name: Validate source-bound decision evidence
+        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
+
+      - name: Smoke test CLI projection
+        run: |
+          export HOL_GUARD_HOME="$RUNNER_TEMP/guard-home"
+          mkdir -p "$HOL_GUARD_HOME"
+          uv run --no-sync hol-guard desktop bootstrap --json > "$RUNNER_TEMP/desktop-bootstrap.json"
           python - <<'PY'
+          import json
+          import os
           from pathlib import Path
 
-          decision_test = Path("tests/test_guard_command_decision_diff.py")
-          text = decision_test.read_text(encoding="utf-8")
-          old = '''        "allow|block": 9373,
-                  "allow|require-reapproval": 16691,
-                  "allow|review": 250,
-                  "block|block": 4167,
-                  "review|block": 19794,
-                  "review|review": 725,'''
-          new = '''        "allow|block": 9373,
-                  "allow|require-reapproval": 8358,
-                  "allow|review": 250,
-                  "block|block": 4167,
-                  "review|block": 19794,
-                  "review|require-reapproval": 8333,
-                  "review|review": 725,'''
-          if old not in text:
-              raise SystemExit("decision transition contract did not match expected source")
-          decision_test.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-          copilot_test = Path("tests/test_guard_copilot_benign_policy_hint.py")
-          text = copilot_test.read_text(encoding="utf-8")
-          text = text.replace("import shlex\nimport sys\n", "", 1)
-          start = text.index("_BENIGN_COMMAND = (")
-          end = text.index("\n\n\ndef _copilot_payload", start)
-          text = text[:start] + '_BENIGN_COMMAND = "pwd"' + text[end:]
-          copilot_test.write_text(text, encoding="utf-8")
+          path = Path(os.environ["RUNNER_TEMP"]) / "desktop-bootstrap.json"
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          assert payload["schema"] == "guard-desktop-bootstrap.v1"
+          assert payload["status"] in {
+              "ready",
+              "attention_required",
+              "setup_required",
+              "runtime_unavailable",
+              "incompatible",
+          }
           PY
-
-      - name: Format and validate changed code
-        run: |
-          uv run --no-sync python -m ruff format \
-            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
-            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
-            src/codex_plugin_scanner/guard/store_native_review_approvals.py \
-            tests/test_guard_command_decision_diff.py \
-            tests/test_guard_copilot_benign_policy_hint.py
-          uv run --no-sync python -m ruff check \
-            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
-            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
-            src/codex_plugin_scanner/guard/store_native_review_approvals.py \
-            tests/test_guard_command_decision_diff.py \
-            tests/test_guard_copilot_benign_policy_hint.py
-
-      - name: Run focused regressions
-        run: |
-          uv run --no-sync pytest \
-            tests/test_guard_command_decision_diff.py \
-            tests/test_guard_copilot_benign_policy_hint.py \
-            --tb=short
-          uv run --no-sync python tests/guard_command_decision_diff.py --check
-
-      - name: Commit remediation
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add \
-            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
-            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
-            src/codex_plugin_scanner/guard/store_native_review_approvals.py \
-            tests/test_guard_command_decision_diff.py \
-            tests/test_guard_copilot_benign_policy_hint.py
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "test(guard): align tightened security contracts"
-          git push origin HEAD:${{ github.head_ref }}
