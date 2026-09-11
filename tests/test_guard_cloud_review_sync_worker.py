@@ -52,6 +52,39 @@ class Store:
 
 
 class TestIndependentWorker:
+    def test_late_connection_wakes_delivery_without_restarting_daemon(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import threading
+
+        store = Store(tmp_path)
+        profile = store.get_cloud_sync_profile()
+        connected = False
+        stop = threading.Event()
+        uploads: list[str] = []
+
+        class ConnectOnWait:
+            def generation(self) -> int:
+                return 0
+
+            def wait(self, generation: int, timeout: float) -> int:
+                nonlocal connected
+                del generation, timeout
+                if connected:
+                    stop.set()
+                connected = True
+                return 1
+
+        monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: profile if connected else {})
+        monkeypatch.setattr(cloud_review_sync_module, "_resolve_cloud_review_sync_auth_context", lambda _store: {})
+        monkeypatch.setattr(
+            cloud_review_sync_module,
+            "sync_cloud_review_events_once",
+            lambda _store, _auth: uploads.append("uploaded") or {"synced": 0},
+        )
+        cloud_review_sync_worker._cloud_sync_sync_loop(store, stop, ConnectOnWait(), poll_interval=30, error_backoff=30)
+        assert uploads == ["uploaded"]
+
     def test_worker_owns_live_review_sync(
         self,
         tmp_path: Path,
@@ -201,7 +234,7 @@ class TestIndependentWorker:
         new_worker = start_cloud_sync_sync_worker(store, existing=existing)  # type: ignore[arg-type]
         assert new_worker is existing
 
-    def test_start_worker_returns_none_without_cloud_profile(
+    def test_start_worker_waits_for_late_cloud_connection(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -209,7 +242,12 @@ class TestIndependentWorker:
         store = Store(tmp_path)
         monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: {})
 
-        assert start_cloud_sync_sync_worker(store) is None
+        worker = start_cloud_sync_sync_worker(store)
+        try:
+            assert worker is not None
+            assert worker.thread.is_alive()
+        finally:
+            stop_cloud_sync_sync_worker(worker)
 
     def test_start_worker_with_existing_stopped_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         store = Store(tmp_path)

@@ -2170,6 +2170,39 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
   return readJson<GuardSettingsPayload>("/v1/settings");
 }
 
+export type CloudReviewSettingsStatus = {
+  enabled: boolean;
+  connected: boolean;
+  reason: string | null;
+  expires_at: string | null;
+  workspace_id: string | null;
+  source: string | null;
+  pending_uploads: number;
+  held_events: number;
+  isolated_events: number;
+  last_synced_at: string | null;
+  delivery_state: string;
+  approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;
+  activation_error?: string | null;
+};
+
+export async function fetchCloudReviewSettings(): Promise<CloudReviewSettingsStatus> {
+  return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", { cache: "no-store" });
+}
+
+export async function changeCloudReviewSettings(input: {
+  action: "enable" | "disable";
+  workspace_id: string | null;
+  source: string | null;
+  include_held_requests: boolean;
+} & ApprovalGateWriteProof): Promise<CloudReviewSettingsStatus> {
+  return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, confirm: `cloud-review.${input.action}` }),
+  });
+}
+
 export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
