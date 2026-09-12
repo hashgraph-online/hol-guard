@@ -26,11 +26,16 @@ KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.kim.add",
     ),
     (
-        "kim remove morning",
+        "python -m kim add water --every 6h -m hydrate",
+        "kim reminder add command",
+        "command.kim.add",
+    ),
+    ("kim remove morning", "kim reminder remove command", "command.kim.remove"),
+    (
+        "kim remove evening --oneshot",
         "kim reminder remove command",
         "command.kim.remove",
     ),
-    ("kim remove evening --oneshot", "kim reminder remove command", "command.kim.remove"),
     (
         'kim update morning -I 4h -t "Updated" -m "Shifted schedule"',
         "kim reminder update command",
@@ -41,7 +46,60 @@ KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "kim reminder update command",
         "command.kim.update",
     ),
+    ("kim enable morning", "kim reminder enable command", "command.kim.enable"),
+    ("xargs python3 -m kim enable evening", "kim reminder enable command", "command.kim.enable"),
+    ("kim disable morning", "kim reminder disable command", "command.kim.disable"),
+    (
+        "kim disable morning --oneshot",
+        "kim reminder disable command",
+        "command.kim.disable",
+    ),
+    (
+        'kim remind -t "Lunch" -m "Walk"',
+        "kim one-shot reminder command",
+        "command.kim.remind",
+    ),
+    ("kim import reminders.json", "kim reminder import command", "command.kim.import"),
+    (
+        "xargs kim import backup.json",
+        "kim reminder import command",
+        "command.kim.import",
+    ),
+    ("kim export", "kim reminder export command", "command.kim.export"),
+    (
+        "kim export -f ics -o out.ics",
+        "kim reminder export command",
+        "command.kim.export",
+    ),
+    ("kim start", "kim daemon start command", "command.kim.start"),
     ("kim stop", "kim daemon stop command", "command.kim.stop"),
+    ("kim edit", "kim config edit command", "command.kim.edit"),
+    ("py -m kim sound --set chime", "kim sound settings command", "command.kim.sound"),
+    ("kim sound --clear", "kim sound settings command", "command.kim.sound"),
+    (
+        "python3 -m kim slack --set",
+        "kim slack settings command",
+        "command.kim.slack",
+    ),
+    (
+        "kim slack --test --channel ops",
+        "kim slack settings command",
+        "command.kim.slack",
+    ),
+    ("kim interactive", "kim interactive command", "command.kim.interactive"),
+    ("kim -i", "kim interactive command", "command.kim.interactive"),
+    ("exec kim interactive", "kim interactive command", "command.kim.interactive"),
+    (
+        "kim self-update --channel stable",
+        "kim self-update command",
+        "command.kim.self-update",
+    ),
+    ("kim uninstall", "kim uninstall command", "command.kim.uninstall"),
+    (
+        "exec python -m kim uninstall",
+        "kim uninstall command",
+        "command.kim.uninstall",
+    ),
 )
 
 
@@ -72,5 +130,9 @@ KIM_READONLY_COMMANDS: tuple[str, ...] = (
     "kim status",
     "kim logs",
     "kim logs -n 100",
+    "kim logs --json",
+    "kim validate",
+    "kim completion bash",
+    "kim completion zsh",
     "kim -v",
 )

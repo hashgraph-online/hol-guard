@@ -3,7 +3,7 @@
   "id": "command.kim",
   "version": "1.0.0",
   "name": "kim",
-  "description": "Reviews kim commands that mutate the local reminder config or stop the reminder daemon.",
+  "description": "Reviews kim commands that mutate the local reminder config, daemon state, or notification settings.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -20,11 +20,23 @@
     "kim reminder add command",
     "kim reminder remove command",
     "kim reminder update command",
-    "kim daemon stop command"
+    "kim reminder enable command",
+    "kim reminder disable command",
+    "kim one-shot reminder command",
+    "kim reminder import command",
+    "kim reminder export command",
+    "kim daemon start command",
+    "kim daemon stop command",
+    "kim config edit command",
+    "kim sound settings command",
+    "kim slack settings command",
+    "kim interactive command",
+    "kim self-update command",
+    "kim uninstall command"
   ],
   "saferAlternatives": [
     "Preview the reminder list and daemon state with kim list and kim status before mutating them.",
-    "Confirm the exact reminder name before removing or updating it."
+    "Confirm the exact reminder name before removing, disabling, or updating it."
   ],
   "detector": {
     "kind": "python-module",
