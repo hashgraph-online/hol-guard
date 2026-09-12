@@ -14,13 +14,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          curl --fail --silent --show-error --location --max-time 45 \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            'https://api.github.com/repos/hashgraph-online/hol-guard/actions/jobs/103574802776/logs' \
+            --output validation-full.log
           python3 - <<'PY'
-          import os, urllib.request, pathlib
-          request = urllib.request.Request(
-              'https://api.github.com/repos/hashgraph-online/hol-guard/actions/jobs/103574802776/logs',
-              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
-          with urllib.request.urlopen(request, timeout=30) as response:
-              text = response.read(8_000_000).decode('utf-8', errors='replace')
+          import pathlib
+          text = pathlib.Path('validation-full.log').read_text(encoding='utf-8', errors='replace')
           start = text.find('Run set -euo pipefail', text.find('Source transfer mismatch'))
           excerpt = text[start:] if start >= 0 else '\n'.join(text.splitlines()[-150:])
           pathlib.Path('validation-errors.log').write_text(excerpt[-16000:])
