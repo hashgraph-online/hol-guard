@@ -1,16 +1,16 @@
-name: Paseo main patch validation
+name: Paseo current source inspection
 on:
   push:
     branches: [inspect/paseo-main-ci-source]
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: paseo-isolated-validation
   cancel-in-progress: true
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -18,110 +18,24 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: '0.9.26'
           enable-cache: false
-      - name: Apply only the reviewed patch to the exact PR head
-        shell: bash
+      - name: Export exact source and offline test dependencies
         run: |
           set -euo pipefail
-          exec > >(tee "$RUNNER_TEMP/paseo-transfer.log") 2>&1
-          cp -R .github/paseo-port "$RUNNER_TEMP/paseo-port"
-          git checkout --detach 11d09bb2be53923dff4981181eacf7da9402dcae
-          test "$(git rev-parse HEAD)" = 11d09bb2be53923dff4981181eacf7da9402dcae
-          test -z "$(git status --porcelain)"
-          python "$RUNNER_TEMP/paseo-port/changes.py"
-          python "$RUNNER_TEMP/paseo-port/type_fix.py"
-          uv sync --frozen --extra dev --python 3.12
-          python - <<'PY'
-          from pathlib import Path
-          import json, subprocess, hashlib, os
-          expected=json.loads((Path(os.environ['RUNNER_TEMP'])/'paseo-port/expected.json').read_text())
-          paths=sorted(expected)
-          py=[p for p in paths if p.endswith('.py')]
-          subprocess.run(['uv','run','--no-sync','ruff','format',*py],check=True)
-          subprocess.run(['uv','run','--no-sync','ruff','check','--fix',*py],check=True)
-          subprocess.run(['uv','run','--no-sync','ruff','format',*py],check=True)
-          mismatches=[p for p in paths if hashlib.sha256(Path(p).read_bytes()).hexdigest()!=expected[p]]
-          if mismatches: raise RuntimeError('Source transfer mismatch: '+str(mismatches))
-          subprocess.run(['git','add','--',*paths],check=True)
-          actual=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
-          assert actual==paths,(actual,paths)
-          subprocess.run(['git','diff','--cached','--check'],check=True)
-          PY
-      - name: Validate types and ownership without changing any existing gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          exec > >(tee "$RUNNER_TEMP/paseo-checks.log") 2>&1
-          uv run --no-sync ruff check src
-          uv run --no-sync ruff format --check src
-          uv run --no-sync basedpyright --level error
-          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py --root . --base-ref 7321a98fda6add267318df8af7ecab1a9a9003ab --json "$RUNNER_TEMP/ownership.json"
-      - name: Exercise the native installations and review regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          exec > >(tee "$RUNNER_TEMP/paseo-tests.log") 2>&1
-          interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
-          target="$(realpath "$interpreter")"
-          mode="$(stat -c '%a' "$target")"
-          if (( (8#$mode & 2) != 0 )); then
-            replacement="${interpreter}.guard-ci"
-            cp --dereference "$target" "$replacement"
-            chmod 0755 "$replacement"
-            mv "$replacement" "$target"
-          fi
-          uv run --no-sync pytest -q --tb=short \
-            tests/test_paseo_adapter.py tests/test_paseo_inherited_profiles.py \
-            tests/test_paseo_review_boundaries.py tests/test_grok_hook_validation.py \
-            tests/test_guard_aibom_cli.py tests/test_guard_aibom_export_safety.py \
-            tests/test_guard_daemon_health_transport.py tests/test_guard_daemon_runtime_repair.py \
-            tests/test_guard_protection_recovery.py tests/test_guard_grok_protection.py \
-            tests/test_update_grok_repair.py
-      - name: Store verified commit objects without moving any branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          import json, subprocess, urllib.request, os, base64, hashlib
-          parent='11d09bb2be53923dff4981181eacf7da9402dcae'
-          api='https://api.github.com/repos/hashgraph-online/hol-guard/'
-          expected=json.loads((Path(os.environ['RUNNER_TEMP'])/'paseo-port/expected.json').read_text())
-          def request(path,data=None):
-              req=urllib.request.Request(api+path,data=None if data is None else json.dumps(data).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='GET' if data is None else 'POST')
-              with urllib.request.urlopen(req,timeout=30) as response: return json.load(response)
-          assert request('git/ref/heads/fix/paseo-adapter-main')['object']['sha']==parent
-          entries=[]
-          for path,digest in sorted(expected.items()):
-              data=Path(path).read_bytes()
-              assert hashlib.sha256(data).hexdigest()==digest,path
-              blob=request('git/blobs',{'content':base64.b64encode(data).decode(),'encoding':'base64'})
-              entries.append({'path':path,'mode':'100644','type':'blob','sha':blob['sha']})
-          tree=request('git/trees',{'base_tree':'acefe23d6499545846dfd2c3e4bcd7233ee86e34','tree':entries})
-          assert tree['sha']==subprocess.check_output(['git','write-tree'],text=True).strip()
-          message='fix(paseo): close main-port review and ownership gaps\n\nPreserve receipts, validate managed paths, retain native content sync, and correct coverage and Grok readiness. Keep current main security gates intact.\n\nSigned-off-by: Michael Kantor <6068672+kantorcodes@users.noreply.github.com>'
-          commit=request('git/commits',{'message':message,'tree':tree['sha'],'parents':[parent],'author':{'name':'Michael Kantor','email':'6068672+kantorcodes@users.noreply.github.com'}})
-          assert [item['sha'] for item in commit['parents']]==[parent]
-          out=Path('paseo-validation');out.mkdir()
-          (out/'result.json').write_text(json.dumps({'parent':parent,'commit':commit['sha'],'tree':tree['sha'],'paths':sorted(expected),'source_sha256':expected,'checks':'ruff, formatting, basedpyright, ownership and focused pytest passed; full PR CI still required'},indent=2)+'\n')
-          (out/'tests.log').write_text((Path(os.environ['RUNNER_TEMP'])/'paseo-tests.log').read_text())
-          print(json.dumps({'commit':commit['sha'],'tree':tree['sha']}))
-          PY
+          mkdir -p inspection/wheels
+          git archive --format=tar.gz --output=inspection/head.tar.gz ba7aaa37c6145a3bc668191bf8d6a6067ead2dbf
+          git checkout --detach ba7aaa37c6145a3bc668191bf8d6a6067ead2dbf
+          uv export --frozen --no-dev --no-emit-project --no-hashes > inspection/requirements.txt
+          python -m pip download --dest inspection/wheels -r inspection/requirements.txt pytest
+          git ls-tree -r HEAD > inspection/git-tree.txt
+          sha256sum inspection/head.tar.gz > inspection/SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
         with:
-          name: paseo-main-validation
-          path: |
-            paseo-validation/
-            ${{ runner.temp }}/paseo-transfer.log
-            ${{ runner.temp }}/paseo-checks.log
-            ${{ runner.temp }}/paseo-tests.log
-            ${{ runner.temp }}/ownership.json
+          name: paseo-current-source-and-dependencies
+          path: inspection/
           retention-days: 1
           if-no-files-found: error
