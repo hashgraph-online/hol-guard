@@ -162,10 +162,13 @@ def requeue_pending_request_events(
     source: str,
     changed_at: str,
     require_binding: bool = False,
+    snapshot_repair_sequences: dict[str, int] | None = None,
 ) -> int:
     connection.execute("begin immediate")
     current_binding = load_review_oauth_binding(connection, source)
     if require_binding and current_binding is None:
+        return 0
+    if snapshot_repair_sequences is not None and not snapshot_repair_sequences:
         return 0
     current_identity = (
         (
@@ -178,28 +181,58 @@ def requeue_pending_request_events(
         if current_binding is not None
         else None
     )
-    rows = connection.execute(
-        """
+    request_query = """
         select request_id from approval_requests
         where status = 'pending' and oauth_source = ?
-        order by coalesce(last_seen_at, created_at), request_id
-        """,
-        (source,),
+    """
+    request_parameters: list[object] = [source]
+    if snapshot_repair_sequences is not None:
+        request_query += " and request_id in (" + ", ".join("?" for _ in snapshot_repair_sequences) + ")"
+        request_parameters.extend(snapshot_repair_sequences)
+    rows = connection.execute(
+        request_query + " order by coalesce(last_seen_at, created_at), request_id", request_parameters
     ).fetchall()
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
-        existing_snapshot = connection.execute(
-            """
+        if require_binding and current_binding is not None:
+            established = connection.execute(
+                """
+                select 1 from guard_review_outbox_request_sequences
+                where local_request_id = ? and oauth_source = ?
+                  and oauth_subject_hash = ? and workspace_id = ?
+                  and machine_id = ? and machine_installation_id = ?
+                """,
+                (
+                    request_id,
+                    source,
+                    current_binding["oauth_subject_hash"],
+                    current_binding["workspace_id"],
+                    current_binding["machine_id"],
+                    current_binding["machine_installation_id"],
+                ),
+            ).fetchone()
+            if established is None:
+                # Enabling decisions is not consent to upload another account's
+                # requests or requests whose original identity was lost.
+                continue
+        snapshot_query = """
             select oauth_source, oauth_subject_hash, workspace_id, machine_id,
                    machine_installation_id, binding_status
             from guard_review_outbox_events
             where local_request_id = ?
               and event_type = 'review.request.snapshot_requeued'
-              and acknowledged_at is null
-            limit 1
-            """,
-            (request_id,),
+        """
+        snapshot_parameters: list[object] = [request_id]
+        if snapshot_repair_sequences is None:
+            snapshot_query += " and acknowledged_at is null"
+        else:
+            # A newer durable snapshot already repairs this event. Do not keep
+            # appending snapshots if an older server repeats the rejection.
+            snapshot_query += " and request_sequence > ?"
+            snapshot_parameters.append(snapshot_repair_sequences[request_id])
+        existing_snapshot = connection.execute(
+            snapshot_query + " order by request_sequence desc limit 1", snapshot_parameters
         ).fetchone()
         if (
             existing_snapshot is not None

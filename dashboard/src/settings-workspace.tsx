@@ -77,6 +77,7 @@ import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
+import { CloudReviewSettings } from "./settings/cloud-review-settings";
 export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
@@ -1518,6 +1519,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   checked={draft.sync}
                   onChange={handleSyncToggle}
                 />
+                <CloudReviewSettings />
                 <SettingsSelectRow
                   label="Cloud receipt privacy"
                   description="Choose how much command detail Guard includes when syncing receipts. Secrets are always removed."

@@ -160,14 +160,16 @@ def _complete_sync_state(
 ) -> tuple[str, dict[str, object]]:
     completed_at = _now()
     outbox_status = store.review_event_outbox_status(now=completed_at, **delivery_binding)
+    pending_error = errors[0] if errors else outbox_status.get("last_error")
+    if accepted > 0 or outbox_status["depth"] == 0:
+        state["last_success_at"] = completed_at
     state.update(
         {
-            "state": "idle",
+            "state": "error" if pending_error and outbox_status["depth"] else "idle",
             "last_sync_at": completed_at,
-            "last_success_at": completed_at,
             "synced_count": accepted,
             "rejected_count": rejected,
-            "last_error": errors[0] if errors else None,
+            "last_error": pending_error,
             "outbox_depth": outbox_status["depth"],
             "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
         }
@@ -330,6 +332,7 @@ def sync_cloud_review_events_once(
                 acknowledged_sequences: list[int] = []
                 retry_sequences: list[int] = []
                 retry_results: list[dict[str, object]] = []
+                snapshot_repairs: dict[str, int] = {}
                 valid_results = True
                 for index, item in enumerate(per_event_results):
                     if (
@@ -344,6 +347,13 @@ def sync_cloud_review_events_once(
                     else:
                         retry_sequences.append(sequences[index])
                         retry_results.append(item)
+                        if item.get("code") == "review_event_snapshot_required":
+                            request_id = events[index].get("localRequestId")
+                            request_sequence = events[index].get("localEventSequence")
+                            if isinstance(request_id, str) and type(request_sequence) is int:
+                                snapshot_repairs[request_id] = max(
+                                    snapshot_repairs.get(request_id, 0), request_sequence
+                                )
                 if (
                     valid_results
                     and sum(bool(item["accepted"]) for item in per_event_results) == accepted
@@ -358,6 +368,10 @@ def sync_cloud_review_events_once(
                             now=_now(),
                             error=message,
                             **delivery_binding,
+                        )
+                    if snapshot_repairs:
+                        store.requeue_pending_review_events(
+                            changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
                         )
                     continue
 

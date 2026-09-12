@@ -2321,6 +2321,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = maybe_auto_revert_watch(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
+        if parsed.path == "/v1/cloud-review":
+            from .cloud_review_settings import cloud_review_settings_status
+
+            self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            return
         if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
@@ -2774,6 +2779,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/command-queue/worker/refresh":
             self._handle_command_queue_worker_refresh()
+            return
+        if parsed.path == "/v1/cloud-review":
+            self._handle_cloud_review_settings(payload)
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
@@ -5552,6 +5560,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ),
         )
 
+    def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:
+        from .cloud_review_settings_route import handle_cloud_review_settings
+
+        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
+        handle_cloud_review_settings(
+            self.server.store,
+            payload,
+            refresh_workers=lifecycle.refresh_command_queue_worker if lifecycle is not None else None,
+            write_json=self._write_json,
+            write_approval_gate_error=self._write_approval_gate_error,
+        )
+
     def _handle_command_queue_worker_refresh(self) -> None:
         lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
         if lifecycle is None:
@@ -6669,6 +6689,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/capabilities",
             "/v1/sessions",
             "/v1/runtime",
@@ -7611,6 +7632,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _requires_header_token(path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/clients/attach",
             "/v1/clients/heartbeat",
             "/v1/sessions/start",
@@ -8026,7 +8048,7 @@ class GuardDaemonServer:
         self._diagnostics.record("daemon_ready")
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
-        """Apply a changed local Cloud Review capability without a daemon restart."""
+        """Apply changed Cloud connectivity and consent without a daemon restart."""
 
         with self._finish_service_lock:
             self._command_queue_worker, running = refresh_command_queue_worker(
@@ -8034,9 +8056,15 @@ class GuardDaemonServer:
                 self._command_queue_worker,
                 shutting_down=self._shutdown_started.is_set(),
             )
+            from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
+
+            self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
+                self._server.store, self._cloud_review_sync_worker, shutting_down=self._shutdown_started.is_set()
+            )
         return {
             "operation": "guard.review.resolveExact",
             "running": running,
+            "sync_running": sync_running,
         }
 
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
