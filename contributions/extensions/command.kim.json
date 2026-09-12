@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.kim",
+  "version": "1.0.0",
+  "name": "kim",
+  "description": "Reviews kim commands that mutate the local reminder config or stop the reminder daemon.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.pratikwayal01",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#4F46E5" },
+  "homepage": "https://github.com/pratikwayal01/kim",
+  "license": "MIT",
+  "executables": ["kim"],
+  "ecosystemIds": ["kim"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "kim reminder add command",
+    "kim reminder remove command",
+    "kim reminder update command",
+    "kim daemon stop command"
+  ],
+  "saferAlternatives": [
+    "Preview the reminder list and daemon state with kim list and kim status before mutating them.",
+    "Confirm the exact reminder name before removing or updating it."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_kim_extensions"
+  }
+}
