@@ -28,7 +28,7 @@ from .command_tokens import executable_name
 #   prove a job or an apply absent
 
 _ERRAND_EXECUTABLES = executable_names("errand")
-_WRAPPER_EXECUTABLES: frozenset[str] = frozenset({"exec", "xargs"})
+_WRAPPER_EXECUTABLES: frozenset[str] = executable_names("exec") | executable_names("xargs")
 # Only wrapper options with append-only argv semantics are consumed. Replacement
 # options (-I, -i, -J, --replace) and unknown options leave the launcher uncertain.
 _WRAPPER_OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
