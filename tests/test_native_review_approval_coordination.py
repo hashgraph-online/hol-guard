@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -30,14 +34,76 @@ def _edge(harness: str, *, url: str = "https://example.test") -> dict[str, objec
     }
 
 
+def _test_request_digest(harness: str, payload: object, workspace: object) -> str:
+    semantic = dict(payload) if isinstance(payload, dict) else payload
+    if isinstance(semantic, dict):
+        for key in (
+            "event",
+            "eventName",
+            "hook_event_name",
+            "hookEventName",
+            "hook_name",
+            "hookName",
+            "timestamp",
+            "timestamp_ms",
+            "timestampMs",
+            "created_at",
+            "createdAt",
+            "received_at",
+            "receivedAt",
+        ):
+            semantic.pop(key, None)
+    encoded = json.dumps(
+        {"harness": harness, "payload": semantic, "workspace": str(workspace) if workspace is not None else None},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object]) -> tuple[HookWorker, GuardStore]:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "auto",
     )
+
+    def review_raw_hook_native(*_args: object, **kwargs: object) -> dict[str, object]:
+        rendered = copy.deepcopy(edge)
+        result = rendered["result"]
+        assert isinstance(result, dict)
+        harness = str(rendered["harness"])
+        workspace = kwargs.get("cwd")
+        digest = _test_request_digest(harness, kwargs.get("payload"), workspace)
+        rendered["receipt"] = {
+            "schema": "guard-native-hook-decision-receipt.v1",
+            "version": 1,
+            "authority": "rust",
+            "decision_id": digest,
+            "request_id": f"sha256:{digest}",
+            "request_digest": digest,
+            "harness": harness,
+            "event_name": "PreToolUse",
+            "payload_kind": "inline",
+            "policy_generation": 1,
+            "policy_digest": None,
+            "rule_digest": None,
+            "runtime_identity": None,
+            "decision": result["decision"],
+            "model_output_action": "not_applicable",
+            "policy_action": result["policy_action"],
+            "observed_policy_action": None,
+            "reason_code": result["reason_code"],
+            "workspace_bound": workspace is not None,
+            "source_ref_external_allowed": False,
+            "reviewed_output_sha256": None,
+            "observe_mode": False,
+            "deadline_budget_ms": None,
+        }
+        return rendered
+
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: edge,
+        review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")
     store.upsert_runtime_state(
@@ -78,6 +144,7 @@ def test_cursor_native_review_asks_and_queues_approval(
     pending = store.list_approval_requests(status="pending")
     assert len(pending) == 1
     assert pending[0]["policy_action"] == "review"
+    assert str(pending[0]["artifact_hash"]).startswith("native-review-v4:")
     envelope = pending[0].get("action_envelope_json")
     assert isinstance(envelope, dict)
     assert envelope["tool_name"] == "WebFetch"
@@ -186,7 +253,7 @@ def test_native_review_honors_resolved_allow_on_retry(
     resolved = store.resolve_harness_native_approval_request(
         request_id,
         reason="cursor accepted the native review",
-        resolved_at="2026-09-05T00:01:00+00:00",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
         expected_harness="cursor",
     )
     assert resolved is True
@@ -221,7 +288,7 @@ def test_native_review_allow_does_not_cross_workspace_or_tool(
     assert store.resolve_harness_native_approval_request(
         request_id,
         reason="cursor accepted the native review",
-        resolved_at="2026-09-05T00:01:00+00:00",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
         expected_harness="cursor",
     )
     other_workspace = worker.review_http_payload(
@@ -246,3 +313,198 @@ def test_native_review_allow_does_not_cross_workspace_or_tool(
         workspace=tmp_path / "workspace",
     )
     assert other_tool["policy_action"] == "review"
+
+
+@pytest.mark.parametrize("mutation", ("replay", "expired", "future", "input", "legacy", "floor"))
+def test_native_review_retry_is_bound_expiring_and_one_use(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    edge = _edge("cursor")
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat .env", "timeout": 1000},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": workspace,
+    }
+    first = worker.review_http_payload(**kwargs)
+    request_id = first["approval_request_id"]
+    assert isinstance(request_id, str)
+    approved_at = datetime.now(timezone.utc)
+    if mutation == "expired":
+        approved_at -= timedelta(minutes=6)
+    elif mutation == "future":
+        approved_at += timedelta(minutes=1)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=approved_at.isoformat(),
+        expected_harness="cursor",
+    )
+    if mutation == "input":
+        payload["tool_input"]["timeout"] = 2000
+    elif mutation == "legacy":
+        with store._connect() as connection:
+            connection.execute(
+                "update approval_requests set artifact_hash = ? where request_id = ?", (request_id, request_id)
+            )
+    elif mutation == "floor":
+        edge["result"]["reason_code"] = "native_sensitive_access_review"
+    elif mutation == "replay":
+        second = worker.review_http_payload(**kwargs)
+        assert second["policy_action"] == "allow"
+    response = worker.review_http_payload(**kwargs)
+    assert response["policy_action"] == "review"
+    assert response.get("approval_reuse_status") != "accepted"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "bash check.sh",
+        "sh check.sh",
+        "ash check.sh",
+        "python3 check.py",
+        "python3.12 check.py",
+        "python3 -m reader",
+        "node check.js",
+        "./check",
+        "bunx vitest run __tests__/guard-extension-public-promotions.test.ts --reporter=dot",
+    ),
+)
+def test_mutable_code_launches_never_reuse_python_side_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    edge = _edge("cursor")
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": workspace,
+    }
+    first = worker.review_http_payload(**kwargs)
+    request_id = first["approval_request_id"]
+    assert isinstance(request_id, str)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    second = worker.review_http_payload(**kwargs)
+    assert second["policy_action"] == "review"
+    assert second.get("approval_reuse_status") != "accepted"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "PATH=/tmp/tools cat .env",
+        "LC_ALL=C cat .env",
+        "cat .env\n./check",
+        "cat .env\r\nbash check.sh",
+    ),
+)
+def test_environment_and_command_lists_never_reuse_python_side_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    edge = _edge("cursor")
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": workspace,
+    }
+    first = worker.review_http_payload(**kwargs)
+    request_id = first["approval_request_id"]
+    assert isinstance(request_id, str)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    second = worker.review_http_payload(**kwargs)
+    assert second["policy_action"] == "review"
+    assert second.get("approval_reuse_status") != "accepted"
+
+
+def test_native_review_retry_is_atomic_between_two_consumers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    edge = _edge("cursor")
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat .env"}}
+    response = worker.review_http_payload(
+        payload=payload,
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+    )
+    request_id = response["approval_request_id"]
+    assert isinstance(request_id, str)
+    now = datetime.now(timezone.utc).isoformat()
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=now,
+        expected_harness="cursor",
+    )
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    barrier = Barrier(2)
+
+    def consume() -> bool:
+        barrier.wait(timeout=10)
+        return store.consume_native_review_approval(
+            harness="cursor",
+            artifact_id=request["artifact_id"],
+            artifact_name=request["artifact_name"],
+            artifact_hash=request["artifact_hash"],
+            launch_target=request["launch_target"],
+            workspace=str(workspace),
+            now=now,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: consume(), range(2)))
+    assert sorted(results) == [False, True]

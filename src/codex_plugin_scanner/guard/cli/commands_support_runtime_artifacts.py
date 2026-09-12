@@ -657,12 +657,7 @@ def _hook_runtime_artifact(
         )
     runtime_artifacts: list[GuardArtifact] = []
     verified_local_runner = isinstance(raw_command_text, str) and (
-        direct_local_vitest_execution_context(
-            raw_command_text,
-            cwd=workspace,
-            home_dir=home_dir,
-        )
-        or direct_local_typescript_execution_context(
+        direct_local_typescript_execution_context(
             raw_command_text,
             cwd=workspace,
             home_dir=home_dir,
@@ -671,7 +666,12 @@ def _hook_runtime_artifact(
     if (
         package_intent is not None
         and not verified_local_runner
-        and not _routine_local_runner_has_complete_evidence(package_intent)
+        # Test and lint runners execute repository-controlled code. Local
+        # identity is evidence, not authority to omit their package review.
+        and not (
+            _routine_local_runner_has_complete_evidence(package_intent)
+            and all(item.package_name == "tsc" for item in package_intent.local_executions)
+        )
     ):
         runtime_artifacts.append(
             build_package_request_artifact(

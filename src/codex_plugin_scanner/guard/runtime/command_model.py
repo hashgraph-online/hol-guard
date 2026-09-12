@@ -129,6 +129,7 @@ def parse_shell_command(
     dialect: CommandDialect = "posix",
     transport: CommandTransport = "shell_string",
     extraction_provenance: str = "guard-shell",
+    normalize_wrappers: bool = True,
 ) -> CanonicalCommand:
     """Parse one command without expansion, execution, or persistent state."""
 
@@ -179,8 +180,15 @@ def parse_shell_command(
             uncertainty_reason="command_byte_limit_exceeded",
         )
 
-    normalization = normalize_transparent_shell_command(raw_text, cwd=cwd, home_dir=home_dir)
-    normalized_text = normalization.normalized_command
+    if normalize_wrappers:
+        normalization = normalize_transparent_shell_command(raw_text, cwd=cwd, home_dir=home_dir)
+        normalized_text = normalization.normalized_command
+        wrapper_chain = normalization.wrapper_chain
+    else:
+        # Source inspection needs the original executable, redirections and
+        # shell command-string boundaries, not a transparent-wrapper rewrite.
+        normalized_text = raw_text
+        wrapper_chain = ()
     confidence: ParseConfidence = "exact"
     uncertainty_reason: str | None = None
     if command_bytes > SHELL_COMMAND_NORMALIZE_MAX_BYTES:
@@ -198,7 +206,7 @@ def parse_shell_command(
             dialect=dialect,
             transport=transport,
             extraction_provenance=extraction_provenance,
-            wrapper_chain=normalization.wrapper_chain,
+            wrapper_chain=wrapper_chain,
             segments=(),
             redirects=(),
             embedded_commands=(),
@@ -220,7 +228,7 @@ def parse_shell_command(
                 dialect=dialect,
                 transport=transport,
                 extraction_provenance=extraction_provenance,
-                wrapper_chain=normalization.wrapper_chain,
+                wrapper_chain=wrapper_chain,
                 segments=tuple(segments),
                 redirects=(),
                 embedded_commands=(),
@@ -281,7 +289,7 @@ def parse_shell_command(
         dialect=dialect,
         transport=transport,
         extraction_provenance=extraction_provenance,
-        wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
+        wrapper_chain=(*wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
         redirects=command_redirects,
         embedded_commands=embedded_commands,

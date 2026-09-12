@@ -57,10 +57,15 @@ def try_execute_contained_node_command(
     """Run one exact local test or lint command, or return to Guard review."""
 
     normalized_manager = manager.strip().lower()
-    if normalized_manager != "npx":
+    if normalized_manager not in {"npx", "bunx"}:
         return None
     try:
         canonical_workspace = _canonical_directory(workspace)
+        # The OS backends expose system runtime roots read-only. A project
+        # beneath one of those roots would bypass omission via an absolute path.
+        system_roots = ("/System", "/usr", "/bin", "/lib", "/lib64", "/sbin")
+        if any(canonical_workspace.is_relative_to(Path(root).resolve(strict=False)) for root in system_roots):
+            return None
     except ValueError:
         return None
     intent = parse_package_intent(
@@ -84,7 +89,7 @@ def try_execute_contained_node_command(
     try:
         executable_relative = executable.relative_to(canonical_workspace).as_posix()
         reject_external_node_modules(canonical_workspace)
-        workspace_digest, inputs = complete_workspace_snapshot(canonical_workspace)
+        workspace_digest, inputs = complete_workspace_snapshot(canonical_workspace, exclude_protected=True)
         executable_digest = file_sha256(str(executable))
         node_path = _resolve_node(environment.get("PATH", ""), shim_directory)
         node_digest = file_sha256(node_path)
@@ -95,11 +100,13 @@ def try_execute_contained_node_command(
     snapshot_digests = {item.snapshot_path: f"sha256:{item.content_digest}" for item in inputs}
     expected_snapshot_digests = {
         "package.json": evidence.root_manifest_hash,
-        "package-lock.json": evidence.lockfile_hash,
+        evidence.lockfile_name: evidence.lockfile_hash,
         f"node_modules/{evidence.runner}/package.json": evidence.package_manifest_hash,
         executable_relative: evidence.executable_hash,
     }
     if any(snapshot_digests.get(path) != digest for path, digest in expected_snapshot_digests.items()):
+        return None
+    if any(path not in snapshot_digests for path in evidence.input_files):
         return None
     launch_digest = _binding_digest(
         {
