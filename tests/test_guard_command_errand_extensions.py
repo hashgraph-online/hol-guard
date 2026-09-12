@@ -40,6 +40,9 @@ ERRAND_RUN_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "env BUILD_MODE=test errand -- make test",
         "exec errand -- make test",
         "xargs -n 1 errand -- make test",
+        "errand.exe -- make test",
+        "errand.cmd --on linux -- make test",
+        "exec errand.exe -- make test",
     )
 )
 ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
@@ -52,6 +55,7 @@ ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "errand fetch --json --apply linux/job",
         "exec errand fetch --apply linux/job",
         "xargs -n 1 errand fetch --apply linux/job",
+        "errand.exe fetch --apply linux/job",
     )
 )
 ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
@@ -70,6 +74,8 @@ ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
     "errand fetch --help",
     "xargs errand ps",
     "exec errand doctor",
+    "errand.exe ps",
+    "errand.cmd doctor",
 )
 
 

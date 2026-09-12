@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
@@ -15,6 +15,7 @@ from .command_rules import (
     _after_leading_options,
     _segment_matches_executable,
 )
+from .command_tokens import executable_name
 
 # CLI surface verified against Errand v0.4.2 (cmd/errand: main.go, run.go,
 # run_config.go, fetch.go). Dispatch is on argv[1]: a known subcommand runs
@@ -123,12 +124,12 @@ class ErrandRunMatcher:
             if segment.executable is None:
                 continue
             for launcher in self.launchers:
-                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
+                if not _segment_matches_executable(segment, executable_names(launcher[0])):
                     continue
                 arguments = segment.arguments
                 if len(launcher) > 1:
                     arguments = _after_leading_options(arguments, self.leading_options_with_values, frozenset())
-                    if arguments[:1] != launcher[1:]:
+                    if not arguments or executable_name(arguments[0]) not in executable_names(launcher[1]):
                         break
                     arguments = arguments[1:]
                 if self._executes_job(arguments):
