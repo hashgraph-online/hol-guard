@@ -78,6 +78,8 @@ def _validate_permissions(
     permissions: object,
     allow_write: bool,
 ) -> list[WorkflowPolicyViolation]:
+    """Reject implicit grants, unsupported scopes, and workflow-wide write access."""
+
     if not isinstance(permissions, dict):
         return [
             WorkflowPolicyViolation(
