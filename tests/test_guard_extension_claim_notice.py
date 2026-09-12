@@ -296,7 +296,7 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "allow_renames:" in text
     assert "contributions/extension-listings/**" in text
     assert "pull-requests: write" in text
-    assert "issues: write" in text
+    assert "issues: write" not in text
     assert "persist-credentials: false" in text
     assert "--allow-renames" in text
     assert "notify_merged_extension_claimants.py" in text
