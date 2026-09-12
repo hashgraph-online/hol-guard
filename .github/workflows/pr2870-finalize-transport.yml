@@ -1,0 +1,65 @@
+name: PR 2870 finalize transport
+
+on:
+  push:
+    branches:
+      - fix/secret-read-floors-and-contained-vitest
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.repository == 'hashgraph-online/hol-guard'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: fix/secret-read-floors-and-contained-vitest
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Apply verified final patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/pr2870-finalize/*.b64 | base64 -d > /tmp/pr2870-final.patch
+          test "$(sha256sum /tmp/pr2870-final.patch | cut -d' ' -f1)" = "1238dc81c1fec91dd1de213a51129704475ebd93e24db91c2e2f52f88b05aafa"
+          git apply --check /tmp/pr2870-final.patch
+          git apply /tmp/pr2870-final.patch
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py \
+            src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py \
+            src/codex_plugin_scanner/guard/runtime/command_evaluation.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_request_classifier.py \
+            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
+            tests/test_guard_command_decision_diff.py \
+            tests/test_guard_compound_developer_inspection.py \
+            tests/test_guard_risk.py \
+            tests/test_guard_shell_read_syntax_fidelity.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py \
+            src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py \
+            src/codex_plugin_scanner/guard/runtime/command_evaluation.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_initial_risk.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_request_classifier.py \
+            src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py \
+            tests/test_guard_command_decision_diff.py \
+            tests/test_guard_compound_developer_inspection.py \
+            tests/test_guard_risk.py \
+            tests/test_guard_shell_read_syntax_fidelity.py
+          git diff --check
+          rm -rf .github/pr2870-finalize
+          git add -A
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit -m "fix(guard): preserve review floors and policy precedence"
+          git push origin HEAD:fix/secret-read-floors-and-contained-vitest
