@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.librarybridge",
+  "version": "1.0.0",
+  "name": "LibraryBridge",
+  "description": "Reviews LibraryBridge commands that move Steam Proton data, restore it, remove retained originals, or write Lutris definitions.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.amcdev7",
+    "displayName": "Community",
+    "url": "https://github.com/amcdev7/LibraryBridge"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#2563EB" },
+  "homepage": "https://github.com/amcdev7/LibraryBridge",
+  "license": "MIT",
+  "executables": ["librarybridge"],
+  "ecosystemIds": ["librarybridge"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "LibraryBridge fix command",
+    "LibraryBridge undo command",
+    "LibraryBridge backup command",
+    "LibraryBridge Lutris import command"
+  ],
+  "referenceUrls": ["https://github.com/amcdev7/LibraryBridge"],
+  "saferAlternatives": [
+    "Use the matching LibraryBridge --dry-run command and review it before applying changes."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_librarybridge_extensions"
+  }
+}
