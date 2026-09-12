@@ -13,17 +13,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Archive exact reviewed source and base
+      - name: Export pinned development formatter
         run: |
+          python3 -m venv /tmp/paseo-tools
+          /tmp/paseo-tools/bin/python -m pip install 'ruff==0.15.17'
           mkdir -p inspection
-          git archive --format=tar.gz --output=inspection/paseo-main-head.tar.gz 11d09bb2be53923dff4981181eacf7da9402dcae
-          git archive --format=tar.gz --output=inspection/paseo-main-base.tar.gz 7321a98fda6add267318df8af7ecab1a9a9003ab
-          git show 11d09bb2be53923dff4981181eacf7da9402dcae:.github/workflows/rust-authority-ownership.yml > inspection/ownership-workflow.yml
-          git ls-tree -r --name-only 11d09bb2be53923dff4981181eacf7da9402dcae scripts/ci ci > inspection/audit-paths.txt
-          sha256sum inspection/*.tar.gz > inspection/SHA256SUMS
+          cp /tmp/paseo-tools/bin/ruff inspection/ruff
+          sha256sum inspection/ruff > inspection/SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: paseo-main-source-inspection
+          name: paseo-main-formatter
           path: inspection/
           retention-days: 1
           if-no-files-found: error
