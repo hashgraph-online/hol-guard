@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "32b40fe1176292bebcedb537bc3dc57594c2c2805fe5b2b7c766444cbe9a44a7",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -57,6 +57,7 @@
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
     "command.kubernetes-secrets",
+    "command.librarybridge",
     "command.load-balancer",
     "command.mcp-filesystem",
     "command.messaging.kafka",
@@ -95,7 +96,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 249,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -260,6 +261,10 @@
     "command.kubernetes-operations.permission.set-resources": "kubectl set image deployment/api api=registry.example.com/api:v2",
     "command.kubernetes-operations.permission.taint-nodes": "kubectl taint nodes node-a dedicated=ops:NoExecute",
     "command.kubernetes-secrets.permission.secret-read": "kubectl get secret db-credentials -o yaml",
+    "command.librarybridge.permission.backup": "librarybridge backup",
+    "command.librarybridge.permission.fix": "librarybridge fix",
+    "command.librarybridge.permission.lutris-import": "librarybridge lutris import",
+    "command.librarybridge.permission.undo": "librarybridge undo",
     "command.load-balancer.permission.delete": "aws elb delete-load-balancer",
     "command.mcp-filesystem.permission.mcp-filesystem-tool": "npx -y @modelcontextprotocol/server-filesystem",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
@@ -603,6 +608,10 @@
     "command.kubernetes-operations.permission.set-resources",
     "command.kubernetes-operations.permission.taint-nodes",
     "command.kubernetes-secrets.permission.secret-read",
+    "command.librarybridge.permission.backup",
+    "command.librarybridge.permission.fix",
+    "command.librarybridge.permission.lutris-import",
+    "command.librarybridge.permission.undo",
     "command.load-balancer.permission.delete",
     "command.mcp-filesystem.permission.mcp-filesystem-tool",
     "command.messaging.kafka.permission.delete",
@@ -696,7 +705,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 236,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -857,6 +866,10 @@
     "command.kubernetes-operations.helm-upgrade",
     "command.kubernetes-operations.helm-rollback",
     "command.kubernetes-secrets.secret-read",
+    "command.librarybridge.fix",
+    "command.librarybridge.undo",
+    "command.librarybridge.backup",
+    "command.librarybridge.lutris-import",
     "command.load-balancer.delete",
     "command.messaging.kafka.delete",
     "command.messaging.nats.delete",
