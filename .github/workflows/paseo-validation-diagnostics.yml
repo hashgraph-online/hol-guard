@@ -1,0 +1,34 @@
+name: Paseo validation diagnostics
+on:
+  push:
+    branches: [inspect/paseo-main-ci-source]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Extract the failed validation step
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os, urllib.request, pathlib
+          request = urllib.request.Request(
+              'https://api.github.com/repos/hashgraph-online/hol-guard/actions/jobs/103574802776/logs',
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              text = response.read(8_000_000).decode('utf-8', errors='replace')
+          start = text.find('Run set -euo pipefail', text.find('Source transfer mismatch'))
+          excerpt = text[start:] if start >= 0 else '\n'.join(text.splitlines()[-150:])
+          pathlib.Path('validation-errors.log').write_text(excerpt[-16000:])
+          print(excerpt[-12000:])
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paseo-validation-errors
+          path: validation-errors.log
+          retention-days: 1
+          if-no-files-found: error
