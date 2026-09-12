@@ -101,11 +101,15 @@ def test_concurrent_retirement_waits_for_containment_proof(
     results: dict[str, bool] = {}
 
     def prove_containment(_process: object, _signal: int) -> bool:
+        """Pause the containment result until the competing retirement has started."""
+
         entered.set()
         assert release.wait(timeout=5)
         return tree_contained
 
     def retire_second() -> None:
+        """Attempt shutdown while another caller is still proving containment."""
+
         second_started.set()
         results["second"] = retire_worker_slot(slot)
 
