@@ -9,6 +9,7 @@ import shlex
 from pathlib import Path
 
 from ...models import GuardArtifact
+from ...redaction import redact_text
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import evaluate_command
 from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -394,10 +395,14 @@ def build_tool_action_request_artifact(
     if request.pytest_config_identity_sha256 is not None:
         fingerprint_payload["pytest_config_identity_sha256"] = request.pytest_config_identity_sha256
     fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
-    request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
+    display_command_text = redact_text(request.command_text).text
+    display_raw_command_text = (
+        redact_text(request.raw_command_text).text if request.raw_command_text is not None else None
+    )
+    request_summary = f"Requested `{request.tool_name}` action `{display_command_text}` ({request.action_class})."
     if wrapper_chain:
         request_summary = (
-            f"Requested `{request.tool_name}` action `{request.command_text}` via transparent wrappers "
+            f"Requested `{request.tool_name}` action `{display_command_text}` via transparent wrappers "
             f"`{' -> '.join(wrapper_chain)}` ({request.action_class})."
         )
     risk_summary = tool_action_risk_summary(request)
@@ -427,13 +432,13 @@ def build_tool_action_request_artifact(
         command=policy_command,
         metadata={
             "tool_name": request.tool_name,
-            "command_text": request.command_text,
+            "command_text": display_command_text,
             "action_class": request.action_class,
             "request_summary": request_summary,
             "runtime_request_signals": [risk_summary],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": runtime_reason,
-            "raw_command_text": request.raw_command_text,
+            "raw_command_text": display_raw_command_text,
             "wrapper_chain": list(wrapper_chain),
             "command_security_identity": evaluation.command.security_identity,
             "command_action_floor": evaluation.decision_plane.action,

@@ -154,22 +154,25 @@ def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Pa
 
 
 @pytest.mark.parametrize("harness", ("omp", "pi", "codex", "claude-code", "gemini", "cursor"))
-def test_harnesses_do_not_call_bounded_workspace_python_script_destructive(tmp_path: Path, harness: str) -> None:
+def test_harnesses_review_bounded_workspace_python_script_without_calling_it_destructive(
+    tmp_path: Path, harness: str
+) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "PelicanMarkdownWebsite" / "websiteToBuild"
     script = workspace / "scripts" / "wp_to_pelican.py"
     script.parent.mkdir(parents=True)
     script.write_text("print('converted')\n", encoding="utf-8")
 
-    assert (
-        _artifact(
-            f"cd {workspace} && python3 scripts/wp_to_pelican.py 2>&1",
-            home=home,
-            harness=harness,
-            workspace=workspace,
-        )
-        is None
+    artifact = _artifact(
+        f"cd {workspace} && python3 scripts/wp_to_pelican.py 2>&1",
+        home=home,
+        harness=harness,
+        workspace=workspace,
     )
+
+    assert artifact is not None
+    assert artifact.metadata["command_action_floor"] == "require-reapproval"
+    assert artifact.metadata["action_class"] != "destructive shell command"
 
 
 @pytest.mark.parametrize(
@@ -211,7 +214,7 @@ def _write_local_vitest(workspace: Path, *, with_lock: bool) -> None:
     (workspace / "node_modules" / ".bin" / "vitest").symlink_to("../vitest/vitest.mjs")
 
 
-def test_declared_local_vitest_runner_does_not_require_repeated_review(tmp_path: Path) -> None:
+def test_declared_local_vitest_runner_requires_execution_review(tmp_path: Path) -> None:
     home = tmp_path / "home"
     active_workspace = home / "projects" / "active"
     test_workspace = home / "projects" / "tested"
@@ -224,7 +227,9 @@ def test_declared_local_vitest_runner_does_not_require_repeated_review(tmp_path:
         workspace=active_workspace,
     )
 
-    assert artifact is None
+    assert artifact is not None
+    assert artifact.artifact_type == "package_request"
+    assert artifact.metadata["runtime_request_reason_code"] == "local_package_execution_review"
 
 
 def test_local_vitest_without_lock_evidence_still_requires_review(tmp_path: Path) -> None:

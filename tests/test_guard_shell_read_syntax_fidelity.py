@@ -80,3 +80,30 @@ def test_proven_home_inspection_preserves_original_redirection(tmp_path: Path) -
     (workspace / "src").mkdir(parents=True)
     command = f"cd {workspace} && grep -rn TODO src 2>/dev/null | head -20"
     assert not assess_shell_reads(command, cwd=None, home_dir=home).requires_review
+
+
+def test_shell_line_continuation_stays_in_one_execution_segment(tmp_path: Path) -> None:
+    command = "sed -i '' \\" + "\n  -e 's/old/new/g' \\" + "\n  src/example.ts"
+    context = model_shell_execution_context(command, cwd=tmp_path)
+    assert len(context.segments) == 1
+    assert context.segments[0].tokens == (
+        "sed",
+        "-i",
+        "",
+        "-e",
+        "s/old/new/g",
+        "src/example.ts",
+    )
+
+
+def test_known_python_module_does_not_inherit_generic_local_module_floor(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/example.py").write_text("value = 1\n", encoding="utf-8")
+    assessment = assess_shell_reads("python3 -m ruff format src/example.py", cwd=tmp_path, home_dir=tmp_path)
+    assert not assessment.requires_review
+
+
+def test_unknown_python_module_keeps_generic_local_module_floor(tmp_path: Path) -> None:
+    assessment = assess_shell_reads("python3 -m reader", cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.requires_review
+    assert assessment.script_requested

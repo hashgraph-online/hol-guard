@@ -210,6 +210,11 @@ def evaluate_command(
             | _direct_github_permission_ids(command)
         )
     )
+    authority_failure = (
+        runtime_snapshot.authority_failure
+        if runtime_snapshot is not None and (extension_ids or permission_ids)
+        else None
+    )
     control_resolution = resolve_extension_controls(
         control_layers,
         registry,
@@ -219,7 +224,7 @@ def evaluate_command(
         observations=tuple(
             f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
         ),
-        authority_failure=runtime_snapshot.authority_failure if runtime_snapshot is not None else None,
+        authority_failure=authority_failure,
     )
     explicitly_enabled_permissions = frozenset(control_resolution.explicitly_enabled_permission_ids)
     relaxable_enabled_permissions = (

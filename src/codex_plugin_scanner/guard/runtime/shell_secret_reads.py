@@ -93,6 +93,46 @@ def _python_executable(name: str) -> bool:
     return _PYTHON_EXECUTABLE.fullmatch(name) is not None
 
 
+def _command_may_need_read_assessment(command_text: str) -> bool:
+    """Skip filesystem modeling when syntax cannot read files or launch local code."""
+
+    try:
+        tokens = split_shell_tokens(command_text)
+    except ValueError:
+        return True
+    interesting = {
+        *_SHELLS,
+        *_OTHER_READERS,
+        "cat",
+        "head",
+        "tail",
+        "sed",
+        "grep",
+        "egrep",
+        "fgrep",
+        "rg",
+        "read",
+        "command",
+        "exec",
+        "node",
+        "bun",
+        "ruby",
+        "perl",
+    }
+    for token in tokens:
+        if "<" in token:
+            return True
+        normalized = token.strip()
+        if not normalized:
+            continue
+        name = "." if normalized == "." else Path(normalized).name.lower()
+        if name in interesting or _python_executable(name):
+            return True
+        if _path_qualified(normalized):
+            return True
+    return False
+
+
 def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> str | None:
     """Classify a literal or metadata-resolved alias without opening secrets."""
 
@@ -163,6 +203,42 @@ def _unwrap_execution_builtin(
     return executable, args, False
 
 
+def _direct_secret_read_paths_from_tokens(
+    tokens: tuple[str, ...],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[str, ...]:
+    """Recover direct reader operands when the full command exceeds parser bounds."""
+
+    from .secret_file_request_services.local_read_operands import _shell_segment_file_operand_tokens
+
+    if not tokens:
+        return ()
+    executable, args, ambiguous = _unwrap_execution_builtin(tokens[0], tokens[1:])
+    if ambiguous or executable is None:
+        return ()
+    name = "." if executable == "." else Path(executable).name.lower()
+    args_list = list(args)
+    candidates = list(_shell_segment_file_operand_tokens([name, *args_list]))
+    if name in _OTHER_READERS:
+        candidates.extend(arg for arg in args_list if not arg.startswith("-"))
+    if name in {"source", "."}:
+        candidates.extend(args_list[:1])
+    for index, token in enumerate(args_list[:-1]):
+        if re.fullmatch(r"\d*<|\d*<>", token):
+            candidates.append(args_list[index + 1])
+    for token in args_list:
+        match = re.fullmatch(r"\d*<(?!<)(.+)", token)
+        if match is not None:
+            candidates.append(match.group(1))
+    return tuple(
+        dict.fromkeys(
+            path for value in candidates if (path := _sensitive_path(value, cwd=cwd, home_dir=home_dir)) is not None
+        )
+    )
+
+
 def direct_secret_read_paths(
     command: CanonicalCommand,
     *,
@@ -220,7 +296,7 @@ def _shell_command_string(executable: str, args: tuple[str, ...]) -> tuple[str |
         if arg.startswith("--command="):
             return arg.split("=", 1)[1], True
         if arg == "-s":
-            return None, True
+            return None, False
         if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
             from .interpreter_options import shell_interpreter_command_payload
 
@@ -269,17 +345,35 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
     return None
 
 
-def _python_module_launch(executable: str, args: tuple[str, ...]) -> bool:
-    """Return True when Python can import mutable workspace code via -m."""
+def _known_python_module_launch(executable: str, args: tuple[str, ...], *, cwd: Path | None) -> bool:
+    """Return True for a trusted tooling module handled by dedicated policy."""
 
     name = Path(executable or "").name.lower()
     if not _python_executable(name):
         return False
-    for arg in args:
+    from .secret_file_request_services.constants_core import _SAFE_PYTHON_MODULE_COMMANDS
+    from .secret_file_request_services.interpreter_observers import _python_module_may_be_shadowed
+    from .secret_file_request_services.pytest_config_safety import _python_module_root_from_args
+
+    module_root = _python_module_root_from_args(list(args))
+    return bool(module_root in _SAFE_PYTHON_MODULE_COMMANDS and not _python_module_may_be_shadowed(module_root, cwd))
+
+
+def _python_module_launch(executable: str, args: tuple[str, ...], *, cwd: Path | None) -> bool:
+    """Return True when Python may import mutable workspace code via ``-m``."""
+
+    name = Path(executable or "").name.lower()
+    if not _python_executable(name):
+        return False
+    if _known_python_module_launch(executable, args, cwd=cwd):
+        return False
+    for index, arg in enumerate(args):
         if arg == "--":
             return False
-        if arg == "-m":
+        if arg == "-m" or (arg.startswith("-m") and len(arg) > 2):
             return True
+        if arg in {"-W", "-X"} and index + 1 < len(args):
+            continue
         if not arg.startswith("-"):
             return False
     return False
@@ -403,6 +497,9 @@ def assess_shell_reads(
 ) -> ShellReadAssessment:
     """Assess direct and script-mediated reads without executing inspected code."""
 
+    if not _command_may_need_read_assessment(command_text):
+        return ShellReadAssessment((), (), False, False)
+
     from .secret_file_request_services.credential_exfiltration import _read_small_runtime_text_file
     from .secret_file_request_services.sensitive_read_pipeline import _resolved_runtime_path, _runtime_read_roots
 
@@ -496,6 +593,13 @@ def assess_shell_reads(
                 )
             )
             if model is None:
+                sensitive.extend(
+                    _direct_secret_read_paths_from_tokens(
+                        execution.tokens,
+                        cwd=execution.effective_cwd,
+                        home_dir=home_dir,
+                    )
+                )
                 if _segment_may_touch_local_data(execution) or owned_substitutions:
                     requested = True
                     incomplete = True
@@ -542,15 +646,22 @@ def assess_shell_reads(
                         if (path := _sensitive_path(literal, cwd=effective_cwd, home_dir=home_dir)) is not None
                     )
             payload, command_string_requested = _shell_command_string(executable, arguments)
+            shell_stdin_mode = name in _SHELLS and "-s" in arguments
+            input_redirect = any(redirect.operator.lstrip("0123456789") in {"<", "<>"} for redirect in model.redirects)
+            if shell_stdin_mode and (_flow_operator_before(execution) == "|" or input_redirect):
+                requested = True
+                incomplete = True
             if command_string_requested:
                 requested = True
                 if payload is None or len(payload.encode("utf-8")) > _MAX_INLINE_SCRIPT_BYTES or depth >= _MAX_DEPTH:
                     incomplete = True
                 else:
                     pending.append((payload, effective_cwd, depth + 1))
-            if _python_module_launch(executable, arguments):
+            if _python_module_launch(executable, arguments, cwd=effective_cwd):
                 requested = True
                 incomplete = True
+                continue
+            if _known_python_module_launch(executable, arguments, cwd=effective_cwd):
                 continue
             if _interpreter_inline_launch(executable, arguments):
                 continue

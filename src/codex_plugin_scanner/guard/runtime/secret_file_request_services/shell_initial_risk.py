@@ -21,6 +21,7 @@ from .request_models import ToolActionRequestMatch
 from .upload_arguments import _contains_encoded_or_encrypted_shell_command
 
 _LOCAL_SCRIPT_ACTION_CLASS = "local script execution shell command"
+_LOCAL_SECRET_READ_ACTION_CLASS = "local secret read shell command"
 
 
 def initial_shell_risk_match(
@@ -46,8 +47,12 @@ def initial_shell_risk_match(
         canonical_command=canonical_command,
         interpreter_executable_identities=interpreter_executable_identities,
     )
-    deferred_script_match = match if match is not None and match.action_class == _LOCAL_SCRIPT_ACTION_CLASS else None
-    if match is not None and deferred_script_match is None:
+    deferred_review_match = (
+        match
+        if match is not None and match.action_class in {_LOCAL_SCRIPT_ACTION_CLASS, _LOCAL_SECRET_READ_ACTION_CLASS}
+        else None
+    )
+    if match is not None and deferred_review_match is None:
         return True, match
     if extension_interaction.priority is not None:
         return True, ToolActionRequestMatch(
@@ -64,7 +69,7 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or gh_pr_create_uses_safe_ephemeral_body(raw_command_text)
     ):
-        return deferred_script_match is None, deferred_script_match
+        return deferred_review_match is None, deferred_review_match
     match = _github_shell_risk_match(
         tool_name=tool_name,
         normalized_tool_name=normalized_tool_name,
@@ -81,11 +86,11 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or is_nonexecuting_github_actions_read_workflow(raw_command_text, cwd=cwd)
     ):
-        return deferred_script_match is None, deferred_script_match
+        return deferred_review_match is None, deferred_review_match
     # Keep the generic execution floor available after more specific policies
     # classify the command. A pytest segment or an extension fallback must not
     # erase a separate, uninspected script launch from the same request.
-    return False, deferred_script_match
+    return False, deferred_review_match
 
 
 def _direct_shell_risk_match(

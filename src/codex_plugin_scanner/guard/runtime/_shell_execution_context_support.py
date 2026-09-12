@@ -96,8 +96,49 @@ class DirectoryOperation:
     reason_code: str | None = None
 
 
+def _remove_shell_line_continuations(command_text: str) -> str:
+    """Remove escaped physical newlines where POSIX shell joins the line."""
+
+    result: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command_text):
+        character = command_text[index]
+        if character == "'" and quote is None:
+            quote = "'"
+            result.append(character)
+            index += 1
+            continue
+        if character == "'" and quote == "'":
+            quote = None
+            result.append(character)
+            index += 1
+            continue
+        if character in {'"', "`"} and quote is None:
+            quote = character
+            result.append(character)
+            index += 1
+            continue
+        if character == quote and quote in {'"', "`"}:
+            quote = None
+            result.append(character)
+            index += 1
+            continue
+        if character == "\\" and quote != "'":
+            if command_text[index + 1 : index + 3] == "\r\n":
+                index += 3
+                continue
+            if command_text[index + 1 : index + 2] == "\n":
+                index += 2
+                continue
+        result.append(character)
+        index += 1
+    return "".join(result)
+
+
 def split_shell_tokens(command_text: str) -> tuple[str, ...]:
     command_text = _mask_heredoc_bodies(command_text)
+    command_text = _remove_shell_line_continuations(command_text)
     command_text = _protect_fd_redirection_ampersands(command_text)
     if _FIND_PLACEHOLDER_SENTINEL in command_text or _ESCAPED_SEMICOLON_SENTINEL in command_text:
         raise ValueError("reserved shell parsing sentinel")
