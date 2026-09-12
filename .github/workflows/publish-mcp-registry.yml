@@ -6,9 +6,8 @@ on:
     types: [completed]
     branches: [main, release/3.0]
 
-permissions:
-  contents: read
-  id-token: write
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
 
 concurrency:
   group: hol-guard-mcp-registry-${{ github.event.workflow_run.head_branch }}
@@ -16,6 +15,9 @@ concurrency:
 
 jobs:
   publish:
+    permissions:
+      contents: read
+      id-token: write
     name: Publish verified MCP metadata
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&

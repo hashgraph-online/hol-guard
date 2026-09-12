@@ -24,6 +24,7 @@
     "omp",
     "openclaw",
     "opencode",
+    "paseo",
     "pi",
     "zcode"
   ],
@@ -45,6 +46,7 @@
     "omp": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "openclaw": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
     "opencode": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "paseo": {"pre_tool_use": "unavailable", "post_tool_use": "unavailable"},
     "pi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical_source_ref"},
     "zcode": {"pre_tool_use": "installed_canonical", "post_tool_use": "normalizer_only_not_installed"}
   },

@@ -65,7 +65,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -344,7 +344,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
