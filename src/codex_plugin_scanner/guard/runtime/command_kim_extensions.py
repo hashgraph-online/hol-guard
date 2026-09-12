@@ -12,8 +12,12 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 # subcommand as the first argument after the kim launcher (the only root-level
 # options are -v/--version), so conservative matching keys off the exact
 # subcommand token. Read-only subcommands (`list`, `status`, `logs`,
-# `validate`, `completion`) deliberately stay out of these matchers so they
-# remain automatic even after the extension is enabled. The hidden
+# `validate`, `completion`) and read-only *forms* of effectful subcommands
+# deliberately stay out of these matchers so they remain automatic even after
+# the extension is enabled: `sound`/`slack` without a mutating flag only print
+# the current settings, and `export` without `-o/--output` prints to stdout.
+# The mutating forms require their mutation flag (`--set`/`--clear`/`--test`/
+# `--enable`/`--disable`, `--test`, `-o`/`--output` respectively). The hidden
 # `_remind-fire` subcommand is also excluded: it is a daemon-internal
 # implementation detail spawned by the daemon itself to fire scheduled
 # reminders (Windows `cmd /c kim _remind-fire ...`), so reviewing it would
@@ -73,14 +77,23 @@ def _kim_review_matcher(
     *,
     options_with_values: frozenset[str] = frozenset(),
     alias_subcommands: tuple[str, ...] = (),
+    required_flag_sets: tuple[frozenset[str], ...] = (),
 ) -> AnyMatcher:
-    """Review one effectful subcommand across every supported launcher."""
+    """Review one effectful subcommand across every supported launcher.
 
+    ``required_flag_sets`` restricts matching to invocations that carry at
+    least one of the given flag sets, so read-only inspection forms of a
+    subcommand (for example bare ``kim sound`` or ``kim slack``) stay
+    automatic.
+    """
+
+    flag_sets = required_flag_sets or (frozenset(),)
     matchers = tuple(
         executable_matcher(
             *launcher,
             subcommand,
             options_with_values=options_with_values,
+            required_flags=flags,
             allow_leading_options=launcher[0] in ("exec", "xargs"),
             leading_options_with_values=(
                 _WRAPPER_LEADING_OPTIONS_WITH_VALUES
@@ -90,12 +103,14 @@ def _kim_review_matcher(
             fail_secure_unknown_options=True,
         )
         for launcher in _KIM_LAUNCHERS
+        for flags in flag_sets
     )
     aliases = tuple(
         executable_matcher(
             *launcher,
             alias,
             options_with_values=options_with_values,
+            required_flags=flags,
             allow_leading_options=launcher[0] in ("exec", "xargs"),
             leading_options_with_values=(
                 _WRAPPER_LEADING_OPTIONS_WITH_VALUES
@@ -106,6 +121,7 @@ def _kim_review_matcher(
         )
         for launcher in _KIM_LAUNCHERS
         for alias in alias_subcommands
+        for flags in flag_sets
     )
     return AnyMatcher(matchers=(*matchers, *aliases))
 
@@ -117,12 +133,30 @@ _KIM_ENABLE = _kim_review_matcher("enable")
 _KIM_DISABLE = _kim_review_matcher("disable")
 _KIM_REMIND = _kim_review_matcher("remind", options_with_values=_KIM_REMIND_OPTIONS_WITH_VALUES)
 _KIM_IMPORT = _kim_review_matcher("import", options_with_values=_KIM_IMPORT_OPTIONS_WITH_VALUES)
-_KIM_EXPORT = _kim_review_matcher("export", options_with_values=_KIM_EXPORT_OPTIONS_WITH_VALUES)
+_KIM_EXPORT = _kim_review_matcher(
+    "export",
+    options_with_values=_KIM_EXPORT_OPTIONS_WITH_VALUES,
+    required_flag_sets=(frozenset({"-o"}), frozenset({"--output"})),
+)
 _KIM_START = _kim_review_matcher("start")
 _KIM_STOP = _kim_review_matcher("stop")
 _KIM_EDIT = _kim_review_matcher("edit")
-_KIM_SOUND = _kim_review_matcher("sound", options_with_values=_KIM_SOUND_OPTIONS_WITH_VALUES)
-_KIM_SLACK = _kim_review_matcher("slack", options_with_values=_KIM_SLACK_OPTIONS_WITH_VALUES)
+_KIM_SOUND = _kim_review_matcher(
+    "sound",
+    options_with_values=_KIM_SOUND_OPTIONS_WITH_VALUES,
+    required_flag_sets=(
+        frozenset({"--set"}),
+        frozenset({"--clear"}),
+        frozenset({"--test"}),
+        frozenset({"--enable"}),
+        frozenset({"--disable"}),
+    ),
+)
+_KIM_SLACK = _kim_review_matcher(
+    "slack",
+    options_with_values=_KIM_SLACK_OPTIONS_WITH_VALUES,
+    required_flag_sets=(frozenset({"--test"}),),
+)
 _KIM_INTERACTIVE = _kim_review_matcher(
     "interactive",
     alias_subcommands=("-i",),
@@ -429,3 +463,25 @@ KIM_COMMAND_EXTENSION_SPECS = (
         executables=("kim",),
     ),
 )
+
+# Runtime risk classes for every kim action class (Kilo review parity). Every
+# kim action that passes through these matchers is reviewed as a destructive
+# shell command, matching the shared ``COMMAND_ACTION_RISK_CLASSES`` contract.
+KIM_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
+    "kim reminder add command": ("destructive_shell",),
+    "kim reminder remove command": ("destructive_shell",),
+    "kim reminder update command": ("destructive_shell",),
+    "kim reminder enable command": ("destructive_shell",),
+    "kim reminder disable command": ("destructive_shell",),
+    "kim one-shot reminder command": ("destructive_shell",),
+    "kim reminder import command": ("destructive_shell",),
+    "kim reminder export command": ("destructive_shell",),
+    "kim daemon start command": ("destructive_shell",),
+    "kim daemon stop command": ("destructive_shell",),
+    "kim config edit command": ("destructive_shell",),
+    "kim sound settings command": ("destructive_shell",),
+    "kim slack settings command": ("destructive_shell",),
+    "kim interactive command": ("destructive_shell",),
+    "kim self-update command": ("destructive_shell",),
+    "kim uninstall command": ("destructive_shell",),
+}

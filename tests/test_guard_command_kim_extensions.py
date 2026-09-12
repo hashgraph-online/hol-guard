@@ -6,8 +6,29 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    risk_classes_for_command_action,
+)
+from codex_plugin_scanner.guard.runtime.command_kim_extensions import (
+    KIM_ACTION_RISK_CLASSES,
 )
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+
+KIM_READONLY_COMMANDS: tuple[str, ...] = (
+    "kim list",
+    "kim list -o",
+    "kim status",
+    "kim logs",
+    "kim logs -n 100",
+    "kim logs --json",
+    "kim validate",
+    "kim completion bash",
+    "kim completion zsh",
+    "kim -v",
+    "kim export",
+    "kim export -f json",
+    "kim sound",
+    "kim slack",
+)
 
 KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -65,7 +86,7 @@ KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "kim reminder import command",
         "command.kim.import",
     ),
-    ("kim export", "kim reminder export command", "command.kim.export"),
+    ("kim export -o reminders.json", "kim reminder export command", "command.kim.export"),
     (
         "kim export -f ics -o out.ics",
         "kim reminder export command",
@@ -77,12 +98,17 @@ KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("py -m kim sound --set chime", "kim sound settings command", "command.kim.sound"),
     ("kim sound --clear", "kim sound settings command", "command.kim.sound"),
     (
-        "python3 -m kim slack --set",
+        "kim sound --test",
+        "kim sound settings command",
+        "command.kim.sound",
+    ),
+    (
+        "python3 -m kim slack --test",
         "kim slack settings command",
         "command.kim.slack",
     ),
     (
-        "kim slack --test --channel ops",
+        'kim slack --test -t "Greeting" -m "Hello"',
         "kim slack settings command",
         "command.kim.slack",
     ),
@@ -124,15 +150,8 @@ def test_kim_mutations_reach_review_and_readonly_commands_stay_safe(tmp_path: Pa
         assert all(item.extension.extension_id != "command.kim" for item in observations), command
 
 
-KIM_READONLY_COMMANDS: tuple[str, ...] = (
-    "kim list",
-    "kim list -o",
-    "kim status",
-    "kim logs",
-    "kim logs -n 100",
-    "kim logs --json",
-    "kim validate",
-    "kim completion bash",
-    "kim completion zsh",
-    "kim -v",
-)
+def test_kim_action_classes_map_to_runtime_risk_classes() -> None:
+    """Every kim action class resolves to the same destructive-shell risk set."""
+
+    for action_class, risk_classes in KIM_ACTION_RISK_CLASSES.items():
+        assert risk_classes_for_command_action(action_class) == risk_classes
