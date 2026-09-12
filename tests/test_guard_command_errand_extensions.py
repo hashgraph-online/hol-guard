@@ -43,6 +43,9 @@ ERRAND_RUN_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "errand.exe -- make test",
         "errand.cmd --on linux -- make test",
         "exec errand.exe -- make test",
+        "xargs -E STOP errand -- make test",
+        "xargs -0 -r errand -- make test",
+        "errand --unknown -- make test",
     )
 )
 ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
@@ -56,6 +59,16 @@ ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "exec errand fetch --apply linux/job",
         "xargs -n 1 errand fetch --apply linux/job",
         "errand.exe fetch --apply linux/job",
+        # Go stops flag parsing at the first operand, so trailing tokens are operands.
+        "errand fetch --apply linux/job --help",
+        "errand fetch --apply linux/job --apply=false",
+        "errand fetch --apply=t linux/job",
+        "errand fetch --apply=false --apply linux/job",
+        "errand fetch $OPTIONS linux/job",
+        "errand fetch --apply=$APPLY linux/job",
+        "errand fetch [-]-apply linux/job",
+        "errand fetch --unknown --apply linux/job",
+        "xargs -E STOP errand fetch --apply linux/job",
     )
 )
 ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
@@ -71,11 +84,17 @@ ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
     "errand fetch linux/job",
     "errand fetch --output ./results linux/job",
     "errand fetch --apply=false linux/job",
+    "errand fetch --apply=0 linux/job",
+    "errand fetch --apply --apply=false linux/job",
+    "errand fetch linux/job --apply",
     "errand fetch --help",
+    "errand fetch --apply --help linux/job",
     "xargs errand ps",
+    "xargs -E STOP errand ps",
     "exec errand doctor",
     "errand.exe ps",
     "errand.cmd doctor",
+    "xargs -n 1 printf errand",
 )
 
 
