@@ -138,6 +138,24 @@ def test_python_flags_before_script_do_not_hide_local_execution(tmp_path: Path) 
         assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
 
 
+@pytest.mark.parametrize(
+    ("command", "filename"),
+    (
+        ("python3 - < payload.py", "payload.py"),
+        ("node - < payload.js", "payload.js"),
+    ),
+)
+def test_interpreter_stdin_requires_local_execution_review(command: str, filename: str, tmp_path: Path) -> None:
+    (tmp_path / filename).write_text("print('synthetic input')\n", encoding="utf-8")
+    assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.script_requested
+    assert assessment.incomplete
+    assert assessment.requires_review
+    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+    assert evaluation.minimum_action == "review"
+    assert evaluation.decision_plane.action == "require-reapproval"
+
+
 def test_python_module_mode_is_mutable_local_execution(tmp_path: Path) -> None:
     (tmp_path / "reader.py").write_text('open(".env").read()\n')
     assessment = assess_shell_reads("python3 -I -m reader", cwd=tmp_path, home_dir=tmp_path)
