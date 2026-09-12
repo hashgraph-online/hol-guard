@@ -99,3 +99,7 @@ The integration was checked against the Paseo 0.8 source snapshot [`f22a37e613e9
 - Native launch implementations under `packages/server/src/server/agent/providers`: Claude loads user/project/local settings, Codex starts the native app-server, Pi/OMP preserve extension-loading RPC launches, and OpenCode adds its bridge plugin without replacing the native integration.
 
 `tests/test_paseo_adapter.py` and `tests/test_paseo_inherited_profiles.py` exercise real native installers in isolated homes. Only executable discovery is substituted; no paid model requests or real credentials are required. Tests cover configuration preservation, native proof registration, workspace independence, custom profiles, unsupported overrides, malformed input, unsafe paths, repeated installation, drift, credential-free inventory, public CLI management, and conservative uninstall. These tests do not represent a live authenticated Paseo/model session.
+
+Paseo itself has no Guard hook endpoint or browser approval fallback. The ownership
+manifest therefore marks its own pre/post-tool routes unavailable; supported
+provider sessions keep their native harness identities and native Rust routes.

@@ -310,15 +310,16 @@ def test_missing_runtime_cannot_create_an_active_install(
     assert not receipt_path(context).exists()
 
 
-def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks(
+def test_install_failure_preserves_last_receipt_and_shared_hooks(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed repair invalidates composite success without rolling back shared protection."""
+    """An unchanged installation remains tracked when a repair fails before writing."""
     configure(context, {"pi": {"enabled": True}})
     adapter = PaseoHarnessAdapter()
     adapter.install(context)
     extension = context.home_dir / ".pi/agent/extensions/hol-guard.ts"
     original = extension.read_bytes()
+    original_receipt = receipt_path(context).read_bytes()
 
     def fail(_context: HarnessContext) -> dict[str, object]:
         """Simulate a native installer failure after an earlier successful installation."""
@@ -327,9 +328,9 @@ def test_install_failure_removes_old_receipt_but_does_not_uninstall_shared_hooks
     monkeypatch.setattr(get_adapter("pi"), "install", fail)
     with pytest.raises(ValueError, match="test installation failure"):
         adapter.install(context)
-    assert not receipt_path(context).exists()
+    assert receipt_path(context).read_bytes() == original_receipt
     assert extension.read_bytes() == original
-    assert adapter.diagnostics(context)["setup_status"] != "active"
+    assert adapter.diagnostics(context)["setup_status"] == "active"
 
 
 def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessContext) -> None:
@@ -459,6 +460,8 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
     def collect(*_args, primary_content_sources, **_kwargs):
         """Provide local and native fixtures while exposing a local-only content candidate."""
         primary_content_sources.append(SimpleNamespace(snapshot_id=local.snapshot_id))
+        if include_native:
+            primary_content_sources.append(SimpleNamespace(snapshot_id=native.snapshot_id))
         return snapshots
 
     def request(_auth, *, data, **_kwargs):
@@ -486,7 +489,9 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
     assert summary["snapshots"] == int(include_native)
     assert len(sent) == int(include_native)
     assert all(event["payload"]["snapshot"]["agentType"] == "pi" for batch in sent for event in batch["events"])
-    assert all(not sources for sources in uploads)
+    assert [source.snapshot_id for sources in uploads for source in sources] == (
+        [native.snapshot_id] if include_native else []
+    )
     assert serialize_inventory_snapshot(local)["agentType"] == "paseo"
     with pytest.raises(ValueError, match="local-only"):
         aibom_cli._inventory_snapshot_event(

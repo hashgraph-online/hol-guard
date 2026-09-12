@@ -175,6 +175,8 @@ def sync_aibom_snapshots(
         primary_content_sources=primary_content_sources,
     )
     snapshots = cloud_syncable_snapshots(snapshots)
+    cloud_snapshot_ids = {snapshot.snapshot_id for snapshot in snapshots}
+    primary_content_sources = [source for source in primary_content_sources if source.snapshot_id in cloud_snapshot_ids]
     if not snapshots:
         synced_at = generated_at
         summary: dict[str, object] = {

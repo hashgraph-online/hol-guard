@@ -80,14 +80,27 @@ def paseo_config_path(context: HarnessContext) -> Path:
     return root / "config.json"
 
 
-def require_local_path(root: Path, path: Path) -> None:
-    """Reject symlinks and non-regular leaves before managed native writes."""
+def require_local_path(root: Path, path: Path, *, home_dir: Path | None = None) -> None:
+    """Reject redirected ancestors and non-regular files before managed writes.
+
+    A supplied user home is an explicit trust anchor and may itself be symlinked.
+    Links below that home, including above a not-yet-created Guard root, are not.
+    """
+    root = Path(os.path.abspath(root))
+    path = Path(os.path.abspath(path))
     try:
-        relative = path.absolute().relative_to(root.absolute())
+        relative = path.relative_to(root)
     except ValueError as error:
         raise ValueError("Paseo managed path escapes its declared root.") from error
-    candidate = root
-    for part in ("", *relative.parts):
+    anchor = Path(root.anchor)
+    if home_dir is not None:
+        home = Path(os.path.abspath(home_dir))
+        if root.is_relative_to(home):
+            anchor = home.resolve()
+            root = anchor / root.relative_to(home)
+            path = root / relative
+    candidate = anchor
+    for part in ("", *path.relative_to(anchor).parts):
         candidate = candidate / part if part else candidate
         if candidate.is_symlink():
             raise ValueError(f"Paseo refuses a symlink in a managed path: {candidate}")
@@ -97,6 +110,8 @@ def require_local_path(root: Path, path: Path) -> None:
                 raise ValueError(f"Paseo requires regular managed files: {candidate}")
             if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink != 1:
                 raise ValueError(f"Paseo refuses a multiply-linked managed file: {candidate}")
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError("Paseo managed path escapes its declared root.")
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -144,18 +159,34 @@ def _object_field(payload: dict[str, object], key: str) -> dict[str, object]:
     return value
 
 
-def _override_reason(harness: str, entry: dict[str, object]) -> str | None:
+def _override_reason(harness: str, entry: dict[str, object], context: HarnessContext) -> str | None:
     """Identify execution overrides that can relocate or bypass native protection."""
     if "command" in entry:
         return "Custom provider commands require separate native Guard configuration and verification."
-    environment = _object_field(entry, "env")
-    if any(not isinstance(value, str) for value in environment.values()):
-        raise ValueError("Paseo provider environment values must be strings.")
+    environment: dict[str, str] = {}
+    for key, value in _object_field(entry, "env").items():
+        if not isinstance(value, str):
+            raise ValueError("Paseo provider environment values must be strings.")
+        environment[key] = value
     prefixes = (*_RUNTIME_OVERRIDES[harness], "HOL_GUARD_", "GUARD_")
+
+    def redirects(key: str, value: str) -> bool:
+        """Allow only the normal XDG home, never alternate native configuration roots."""
+        if key.upper() == "XDG_CONFIG_HOME" and (
+            not value or (Path(value).is_absolute() and Path(os.path.abspath(value)) == context.home_dir / ".config")
+        ):
+            return False
+        return key.upper().startswith(prefixes)
+
     provider_keys = {str(key).upper() for key in environment}
-    if provider_keys.intersection(_COMMON_OVERRIDES) or any(key.startswith(prefixes) for key in provider_keys):
+    if provider_keys.intersection(_COMMON_OVERRIDES) or any(
+        redirects(key, value) for key, value in environment.items()
+    ):
         return "Provider environment overrides may relocate or disable native Guard protection."
-    if any(value and key.upper().startswith(_RUNTIME_OVERRIDES[harness]) for key, value in os.environ.items()):
+    if any(
+        value and key.upper().startswith(_RUNTIME_OVERRIDES[harness]) and redirects(key, value)
+        for key, value in os.environ.items()
+    ):
         return "The current environment redirects this runtime; verify the daemon's native configuration separately."
     return None
 
@@ -167,7 +198,7 @@ def _effective_provider_entry(raw: dict[str, object], base: object) -> dict[str,
     return {**base, **raw, "env": {**_object_field(base, "env"), **_object_field(raw, "env")}}
 
 
-def _provider(provider_id: str, raw: object, entries: dict[str, object]) -> PaseoProvider:
+def _provider(provider_id: str, raw: object, entries: dict[str, object], context: HarnessContext) -> PaseoProvider:
     """Classify a profile using its effective inherited command and environment."""
     if not _PROVIDER_ID.fullmatch(provider_id) or not isinstance(raw, dict):
         raise ValueError("Paseo providers must use valid provider IDs and JSON objects.")
@@ -183,7 +214,7 @@ def _provider(provider_id: str, raw: object, entries: dict[str, object]) -> Pase
         if isinstance(inherited, dict) and "extends" in inherited:
             reason = "Nested provider inheritance requires separate native Guard verification."
         else:
-            reason = _override_reason(native, effective)
+            reason = _override_reason(native, effective, context)
     return PaseoProvider(provider_id, native, enabled, reason)
 
 
@@ -195,4 +226,4 @@ def paseo_providers(context: HarnessContext) -> tuple[PaseoProvider, ...]:
         raise ValueError("Paseo provider configuration exceeds the supported provider count.")
     entries: dict[str, object] = {key: {} for key in PASEO_NATIVE_HARNESSES}
     entries.update(providers)
-    return tuple(_provider(key, value, entries) for key, value in sorted(entries.items()))
+    return tuple(_provider(key, value, entries, context) for key, value in sorted(entries.items()))

@@ -122,22 +122,10 @@ def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
 
 
 def _grok_hook_command_is_guard(command: str) -> bool:
-    """Identify a real Guard hook command rather than a shell placeholder."""
-    lowered = command.lower()
-    tokens = lowered.replace("=", " ").replace(",", " ").split()
-    if not tokens:
-        return False
-    first = tokens[0].rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-    if first in {"echo", "true", "false", "printf", ":"}:
-        return False
-    return "hook" in lowered and (
-        "hol-guard" in tokens
-        or any(token.endswith("/hol-guard") or token.endswith("\\hol-guard") for token in tokens)
-        or "__guard-bounded-hook" in lowered
-        or "__guard-cursor-hook" in lowered
-        or "bounded_cli_hook_bridge" in lowered
-        or "codex_plugin_scanner.guard" in lowered
-    )
+    """Validate a serialized native hook invocation, not arbitrary Guard marker text."""
+    from .grok_hook_validation import is_grok_hook_command
+
+    return is_grok_hook_command(command)
 
 
 def _grok_prompt_hook_is_observe(prompt_hook: Path) -> bool:
@@ -177,18 +165,21 @@ def _grok_event_has_command_hook(entries: object) -> bool:
 
 
 def _grok_managed_config_is_active(managed_text: str) -> bool:
-    """Check the active managed section for the required credential deny rule."""
+    """Require the credential deny rule in the parsed managed permission table."""
     from ..adapters.grok_config import GUARD_MANAGED_BEGIN, GUARD_MANAGED_END
+    from ..codex_config import tomllib
 
     start = managed_text.find(GUARD_MANAGED_BEGIN)
     stop = managed_text.find(GUARD_MANAGED_END)
     if start < 0 or stop <= start:
         return False
-    for line in managed_text[start:stop].splitlines():
-        active = line.split("#", 1)[0].strip()
-        if "Read(**/.grok/auth/**)" in active:
-            return True
-    return False
+    try:
+        payload = tomllib.loads(managed_text[start:stop])
+    except (ValueError, TypeError):
+        return False
+    permission = payload.get("permission")
+    denied = permission.get("deny") if isinstance(permission, dict) else None
+    return isinstance(denied, list) and "Read(**/.grok/auth/**)" in denied
 
 
 def grok_hooks_protection_ready(context: HarnessContext) -> bool:
@@ -231,8 +222,15 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
             "Grok Guard observe hooks are missing prompt, session, or subagent events. "
             "Re-run `hol-guard apps repair grok`."
         )
-    managed_text = managed_config.read_text(encoding="utf-8") if managed_config.is_file() else ""
-    if not managed_config.is_file() or not _grok_managed_config_is_active(managed_text):
+    try:
+        managed_text = managed_config.read_text(encoding="utf-8") if managed_config.is_file() else ""
+        managed_read_error = False
+    except (OSError, UnicodeError):
+        managed_text = ""
+        managed_read_error = True
+    if managed_read_error:
+        warnings.append("Grok managed config could not be read. Re-run `hol-guard apps repair grok`.")
+    elif not managed_config.is_file() or not _grok_managed_config_is_active(managed_text):
         warnings.append(
             "Grok managed permission rules are missing from ~/.grok/managed_config.toml. "
             "Re-run `hol-guard apps connect grok`."

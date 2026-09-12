@@ -298,7 +298,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         config_paths=("~/.paseo/config.json",),
         event_surfaces=(),
         native_approval=False,
-        browser_fallback=True,
+        browser_fallback=False,
         resume_support=False,
         known_blind_spots=(
             "Protection is delegated to supported native providers on the Paseo daemon host. "

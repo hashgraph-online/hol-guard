@@ -257,6 +257,11 @@ def _redact_inventory_store_item(
     config_path = item.get("config_path")
     if isinstance(config_path, str) and config_path:
         redacted["config_path"] = api.redact_local_path(Path(config_path), home_dir=home_dir)
+    launch_command = item.get("launch_command")
+    if isinstance(launch_command, str):
+        from .inventory_contract import _redact_command_value
+
+        redacted["launch_command"] = _redact_command_value(launch_command, home_dir, None)
     return redacted
 
 

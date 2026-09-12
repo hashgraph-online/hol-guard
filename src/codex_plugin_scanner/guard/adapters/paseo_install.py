@@ -41,7 +41,7 @@ def receipt_path(context: HarnessContext) -> Path:
     identity = str(paseo_config_path(context).absolute())
     suffix = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
     path = context.guard_home / "managed" / "paseo" / f"{suffix}.json"
-    require_local_path(context.guard_home, path)
+    require_local_path(context.guard_home, path, home_dir=context.home_dir)
     return path
 
 
@@ -88,24 +88,27 @@ def preflight_native(harness: str, context: HarnessContext) -> None:
     """Validate every known native write target before shared configuration changes."""
     for relative in _NATIVE_CONFIGS[harness]:
         path = context.home_dir / relative
-        require_local_path(context.home_dir, path)
+        require_local_path(context.home_dir, path, home_dir=context.home_dir)
         if path.suffix == ".json":
             read_config_object(path)
     managed = context.guard_home / "managed" / harness
-    require_local_path(context.guard_home, managed)
+    require_local_path(context.guard_home, managed, home_dir=context.home_dir)
     if managed.is_dir():
         for path in managed.rglob("*"):
-            require_local_path(context.guard_home, path)
+            require_local_path(context.guard_home, path, home_dir=context.home_dir)
     if harness == "opencode":
-        require_local_path(context.guard_home, context.guard_home / "opencode/plugins/hol-guard-pretool.ts")
+        require_local_path(
+            context.guard_home, context.guard_home / "opencode/plugins/hol-guard-pretool.ts", home_dir=context.home_dir
+        )
     for path in get_adapter(harness).guard_launcher_paths(context):
-        require_local_path(context.guard_home, path)
+        require_local_path(context.guard_home, path, home_dir=context.home_dir)
 
 
 def install_native(harness: str, context: HarnessContext) -> dict[str, object]:
     """Install and register one native provider with all required artifact proofs."""
     from ..store import GuardStore
 
+    preflight_native(harness, context)
     manifest = get_adapter(harness).install(native_context(context))
     primary = manifest.get("config_path")
     if manifest.get("active") is not True or not isinstance(primary, str) or not Path(primary).is_file():

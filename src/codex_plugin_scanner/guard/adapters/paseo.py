@@ -89,14 +89,15 @@ class PaseoHarnessAdapter(HarnessAdapter):
         for target in targets:
             preflight_native(target, context)
         for shim in self.guard_launcher_paths(native_context(context)):
-            require_local_path(context.guard_home, shim)
-        # A failed repair must not leave a receipt claiming the new install succeeded.
-        path.unlink(missing_ok=True)
+            require_local_path(context.guard_home, shim, home_dir=context.home_dir)
+        # Keep the last verified receipt until atomic replacement succeeds.
         proofs: dict[str, object] = {}
         for target in targets:
             proofs[target] = install_native(target, context)
         if paseo_providers(context) != providers:
             raise ValueError("Paseo providers changed during installation; rerun hol-guard install paseo.")
+        for shim in self.guard_launcher_paths(native_context(context)):
+            require_local_path(context.guard_home, shim, home_dir=context.home_dir)
         shim_manifest = install_guard_shim(self.harness, native_context(context))
         receipt = write_receipt(context, proofs)
         return {

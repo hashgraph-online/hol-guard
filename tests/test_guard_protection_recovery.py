@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.adapters.grok import grok_runtime_hooks_verified
+from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
     _grok_managed_config_is_active,
@@ -175,7 +175,8 @@ def test_live_grok_hooks_reject_empty_observe_events(
         encoding="utf-8",
     )
     (ctx.home_dir / ".grok" / "managed_config.toml").write_text(
-        '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
+        "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+        'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
         encoding="utf-8",
     )
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
@@ -191,9 +192,7 @@ def test_live_grok_hooks_reject_managed_rule_outside_block(
     monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
     hooks_dir = ctx.home_dir / ".grok" / "hooks"
     hooks_dir.mkdir(parents=True)
-    command_hook = {
-        "hooks": [{"type": "command", "command": "hol-guard hook grok", "timeout": 15}]
-    }
+    command_hook = {"hooks": [{"type": "command", "command": "hol-guard hook grok", "timeout": 15}]}
     (hooks_dir / "hol-guard-pretooluse.json").write_text(
         json.dumps(
             {
@@ -247,13 +246,15 @@ def test_grok_hook_command_rejects_placeholder_invocations() -> None:
 def test_grok_managed_config_rejects_inline_commented_rule() -> None:
     assert (
         _grok_managed_config_is_active(
-            '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
+            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+            'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
         )
         is True
     )
     assert (
         _grok_managed_config_is_active(
-            "# BEGIN HOL GUARD MANAGED GROK\ndeny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
+            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+            "deny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
         )
         is False
     )

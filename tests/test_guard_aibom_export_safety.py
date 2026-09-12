@@ -41,6 +41,7 @@ def test_export_redacts_paths_without_changing_skill_presence(
         "last_policy_action": "allow",
         "present": True,
         "custom_field": "preserve-me",
+        "launch_command": f"python {home}/server.py --token fake-secret",
     }
     store = SimpleNamespace(list_inventory=lambda: [original], get_sync_payload=lambda _key: None)
     context = HarnessContext(home, skill_root, tmp_path / "guard")
@@ -57,6 +58,9 @@ def test_export_redacts_paths_without_changing_skill_presence(
     assert row["present"] is present
     assert row["trust_verdict"] == "allow"
     assert row["custom_field"] == "preserve-me"
+    assert row["launch_command"] == "python {home}/server.py --token redacted"
+    assert "fake-secret" not in json.dumps(payload)
+    assert original["launch_command"].endswith("--token fake-secret")
     assert str(skill_file) not in json.dumps(payload)
     assert str(home) not in json.dumps(payload)
     assert original["config_path"] == str(skill_file)
