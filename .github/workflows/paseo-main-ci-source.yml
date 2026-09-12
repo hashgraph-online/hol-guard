@@ -4,6 +4,9 @@ on:
     branches: [inspect/paseo-main-ci-source]
 permissions:
   contents: write
+concurrency:
+  group: paseo-isolated-validation
+  cancel-in-progress: true
 jobs:
   inspect:
     runs-on: ubuntu-24.04
@@ -24,11 +27,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/paseo-transfer.log") 2>&1
           cp -R .github/paseo-port "$RUNNER_TEMP/paseo-port"
           git checkout --detach 11d09bb2be53923dff4981181eacf7da9402dcae
           test "$(git rev-parse HEAD)" = 11d09bb2be53923dff4981181eacf7da9402dcae
           test -z "$(git status --porcelain)"
           python "$RUNNER_TEMP/paseo-port/changes.py"
+          python "$RUNNER_TEMP/paseo-port/type_fix.py"
           uv sync --frozen --extra dev --python 3.12
           python - <<'PY'
           from pathlib import Path
@@ -50,6 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/paseo-checks.log") 2>&1
           uv run --no-sync ruff check src
           uv run --no-sync ruff format --check src
           uv run --no-sync basedpyright --level error
@@ -58,6 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/paseo-tests.log") 2>&1
           interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           target="$(realpath "$interpreter")"
           mode="$(stat -c '%a' "$target")"
@@ -73,7 +80,7 @@ jobs:
             tests/test_guard_aibom_cli.py tests/test_guard_aibom_export_safety.py \
             tests/test_guard_daemon_health_transport.py tests/test_guard_daemon_runtime_repair.py \
             tests/test_guard_protection_recovery.py tests/test_guard_grok_protection.py \
-            tests/test_update_grok_repair.py | tee "$RUNNER_TEMP/paseo-tests.log"
+            tests/test_update_grok_repair.py
       - name: Store verified commit objects without moving any branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -112,7 +119,9 @@ jobs:
           name: paseo-main-validation
           path: |
             paseo-validation/
+            ${{ runner.temp }}/paseo-transfer.log
+            ${{ runner.temp }}/paseo-checks.log
             ${{ runner.temp }}/paseo-tests.log
             ${{ runner.temp }}/ownership.json
           retention-days: 1
-          if-no-files-found: warn
+          if-no-files-found: error
