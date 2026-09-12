@@ -67,8 +67,9 @@ def test_librarybridge_mutations_review_but_dry_runs_do_not(tmp_path: Path) -> N
             assert reviewed["classification"]["action_class"] == action_class, command
             assert reviewed["controlling_rule_id"] == rule_id, command
 
-            preview = inspect_command(f"{command} --dry-run", cwd=tmp_path, home_dir=tmp_path)
-            assert preview["status"] == "no_match", command
+            for preview_flag in ("--dry-run", "-n"):
+                preview = inspect_command(f"{command} {preview_flag}", cwd=tmp_path, home_dir=tmp_path)
+                assert preview["status"] == "no_match", f"{command} {preview_flag}"
 
         for command in ("librarybridge scan", "librarybridge storage"):
             observer = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)

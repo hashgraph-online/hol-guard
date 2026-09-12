@@ -56,6 +56,12 @@ def _safe_variants(matcher: AnyMatcher, name: str) -> tuple[CommandSafeVariant, 
         ),
         safe_flag_variant(
             matcher,
+            variant_id="no-act",
+            title=f"LibraryBridge {name} no-act",
+            flag="-n",
+        ),
+        safe_flag_variant(
+            matcher,
             variant_id="help",
             title=f"LibraryBridge {name} help",
             flag="--help",
