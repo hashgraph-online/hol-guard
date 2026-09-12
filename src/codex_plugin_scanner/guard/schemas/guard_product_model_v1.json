@@ -58,7 +58,8 @@
         "grok",
         "pi",
         "omp",
-        "zcode"
+        "zcode",
+        "paseo"
     ],
     "action_categories": [
         "secrets",

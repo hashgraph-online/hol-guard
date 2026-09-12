@@ -484,8 +484,8 @@ def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
     from ..cli.install_commands import _grok_pretool_is_catchall, _grok_prompt_hook_is_observe
 
     hooks_dir = GrokHarnessAdapter._hooks_dir(context)
-    return _grok_pretool_is_catchall(hooks_dir / GUARD_HOOK_PRETOOL_FILE) and _grok_prompt_hook_is_observe(
-        hooks_dir / GUARD_HOOK_PROMPT_FILE
+    return _grok_pretool_is_catchall(hooks_dir / GUARD_HOOK_PRETOOL_FILE, context) and _grok_prompt_hook_is_observe(
+        hooks_dir / GUARD_HOOK_PROMPT_FILE, context
     )
 
 
