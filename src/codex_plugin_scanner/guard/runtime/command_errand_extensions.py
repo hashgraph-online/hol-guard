@@ -248,6 +248,8 @@ class ErrandCommandMatcher:
                     if index + 1 >= len(arguments):
                         return False  # Go reports a missing value and exits
                     index += 1
+                    if _may_expand(arguments[index]):
+                        return True  # word splitting may turn the value into options
             elif name not in self.run_flags:
                 return True  # unknown option cannot prove a job absent
             index += 1
@@ -271,6 +273,8 @@ class ErrandCommandMatcher:
                     if index + 1 >= len(arguments):
                         return apply
                     index += 1
+                    if _may_expand(arguments[index]):
+                        return True  # word splitting may turn the value into options
             elif name == "apply":
                 if not has_value or value in _GO_TRUE:
                     apply = True

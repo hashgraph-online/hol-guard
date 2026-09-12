@@ -46,6 +46,7 @@ ERRAND_RUN_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "xargs -E STOP errand -- make test",
         "xargs -0 -r errand -- make test",
         "errand --unknown -- make test",
+        "errand --on $OPTIONS --help",
     )
 )
 ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
@@ -66,6 +67,7 @@ ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "errand fetch --apply=false --apply linux/job",
         "errand fetch $OPTIONS linux/job",
         "errand fetch --apply=$APPLY linux/job",
+        "errand fetch --on $OPTIONS linux/job",
         "errand fetch [-]-apply linux/job",
         "errand fetch --unknown --apply linux/job",
         "xargs -E STOP errand fetch --apply linux/job",
