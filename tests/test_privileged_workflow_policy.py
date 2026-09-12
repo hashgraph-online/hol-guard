@@ -97,13 +97,16 @@ jobs:
 """,
     )
 
-    assert validate_privileged_workflows(tmp_path) == ()
+    violations = validate_privileged_workflows(tmp_path)
+    assert [violation.code for violation in violations] == ["workflow-write-permission"]
+    assert violations[0].job == "<workflow>"
 
 
 def test_privileged_job_accepts_commit_pins_and_exact_uv_version(tmp_path: Path) -> None:
     _write_workflow(
         tmp_path,
         f"""
+permissions: {{}}
 jobs:
   release:
     permissions:
