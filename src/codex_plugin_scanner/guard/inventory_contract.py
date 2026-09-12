@@ -17,6 +17,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ..path_support import resolves_within_root
 from ..version import __version__
+from .inventory_agent_types import _AGENT_INVENTORY_TYPES as _AGENT_INVENTORY_TYPES
+from .inventory_agent_types import AgentInventoryType
+from .inventory_agent_types import agent_type as _agent_type
 from .path_security import path_has_symlink_component
 from .skill_directory_identity import validated_complete_skill_directory_hash
 
@@ -63,36 +66,7 @@ InventorySeverity = Literal["critical", "high", "medium", "low", "info"]
 InventoryConfidence = Literal["high", "medium", "low", "unknown"]
 InventoryDriftState = Literal["new", "changed", "removed", "unchanged"]
 DockerProofStatus = Literal["passed", "failed", "skipped", "stale"]
-AgentInventoryType = Literal[
-    "hermes",
-    "openclaw",
-    "codex",
-    "claude-code",
-    "cursor",
-    "antigravity",
-    "gemini",
-    "opencode",
-    "kimi",
-    "grok",
-    "pi",
-    "omp",
-    "zcode",
-]
-_AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
-    "hermes",
-    "openclaw",
-    "codex",
-    "claude-code",
-    "cursor",
-    "antigravity",
-    "gemini",
-    "opencode",
-    "kimi",
-    "grok",
-    "pi",
-    "omp",
-    "zcode",
-)
+
 
 _SENSITIVE_KEY_RE = re.compile(
     r"(auth|authorization|bearer|token|secret|password|credential|api[^a-z0-9]?key)",
@@ -1351,13 +1325,6 @@ def _safe_finding_text(value: str, *, home_dir: Path, workspace_dir: Path | None
     redacted = _SENSITIVE_VALUE_RE.sub("redacted", value)
     redacted = _redact_command_value(redacted, home_dir, workspace_dir)
     return redacted[:500]
-
-
-def _agent_type(value: str) -> AgentInventoryType:
-    for agent_type in _AGENT_INVENTORY_TYPES:
-        if value == agent_type:
-            return agent_type
-    return "codex"
 
 
 def _item_kind(artifact_type: str) -> InventoryItemKind:

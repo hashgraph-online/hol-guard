@@ -2,49 +2,17 @@
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
 from pathlib import Path
-
-from typing_extensions import override
 
 from .discovery import load_authenticated_daemon_state
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION, load_guard_daemon_auth_token
 
-_MAX_HEALTH_DETAILS_BYTES = 65_536
-
-
-class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
-    @override
-    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
-        return None
-
 
 def _proxy_disabled_health_details(url: str, auth_token: str) -> dict[str, object] | None:
-    request = urllib.request.Request(
-        f"{url}/v1/healthz/details",
-        headers={"X-Guard-Token": auth_token},
-        method="GET",
-    )
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
-        _RejectRedirectHandler(),
-    )
-    try:
-        with opener.open(request, timeout=1.0) as response:
-            if getattr(response, "status", None) != 200:
-                return None
-            response_bytes = response.read(_MAX_HEALTH_DETAILS_BYTES + 1)
-    except (OSError, ValueError, urllib.error.URLError):
-        return None
-    if len(response_bytes) > _MAX_HEALTH_DETAILS_BYTES:
-        return None
-    try:
-        payload = json.loads(response_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return payload if isinstance(payload, dict) else None
+    """Use the bounded loopback client without changing authenticated identity checks."""
+    from .client import read_guard_health_details
+
+    return read_guard_health_details(url, auth_token)
 
 
 def verified_live_guard_daemon_identity(guard_home: Path) -> dict[str, object] | None:
