@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.routed",
+  "version": "1.0.0",
+  "name": "Routed",
+  "description": "Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.routed",
+    "displayName": "Community",
+    "url": "https://github.com/bshea-1/routed"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#2563EB" },
+  "homepage": "https://github.com/bshea-1/routed",
+  "license": "MIT",
+  "executables": ["routed"],
+  "ecosystemIds": ["routed"],
+  "riskClasses": ["destructive_shell", "execution", "network_egress"],
+  "actionClasses": [
+    "Routed adapter mutation command",
+    "Routed doctor reconciliation command",
+    "Routed update command"
+  ],
+  "referenceUrls": ["https://github.com/bshea-1/routed#readme"],
+  "saferAlternatives": [
+    "Run routed doctor without --fix or routed update with --check to inspect state before applying changes."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_routed_extensions"
+  }
+}
