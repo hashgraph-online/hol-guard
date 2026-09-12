@@ -83,6 +83,58 @@ def test_read_only_or_empty_defaults_are_allowed(tmp_path: Path, header: str) ->
     assert validate_privileged_workflows(tmp_path) == ()
 
 
+@pytest.mark.parametrize("scope", ["content", "CONTENTS", " contents", "contents ", "security_events", "unknown", "*"])
+@pytest.mark.parametrize("job_level", [False, True])
+def test_unknown_or_noncanonical_scope_names_are_rejected(tmp_path: Path, scope: str, job_level: bool) -> None:
+    entry = f'"{scope}": read'
+    header = "permissions: {}" if job_level else f"permissions:\n  {entry}"
+    job = f"    permissions:\n      {entry}\n" if job_level else ""
+    _write_workflow(tmp_path, header, job)
+    assert [item.code for item in validate_privileged_workflows(tmp_path)] == ["permission-invalid"]
+
+
+@pytest.mark.parametrize("scope,level", [("id-token", "read"), ("vulnerability-alerts", "write")])
+@pytest.mark.parametrize("job_level", [False, True])
+def test_scope_specific_invalid_access_levels_are_rejected(
+    tmp_path: Path, scope: str, level: str, job_level: bool
+) -> None:
+    entry = f"{scope}: {level}"
+    header = "permissions: {}" if job_level else f"permissions:\n  {entry}"
+    job = f"    permissions:\n      {entry}\n" if job_level else ""
+    _write_workflow(tmp_path, header, job)
+    assert [item.code for item in validate_privileged_workflows(tmp_path)] == ["permission-invalid"]
+
+
+@pytest.mark.parametrize(
+    "scope,levels",
+    [
+        ("actions", ("read", "write", "none")),
+        ("artifact-metadata", ("read", "write", "none")),
+        ("attestations", ("read", "write", "none")),
+        ("checks", ("read", "write", "none")),
+        ("code-quality", ("read", "write", "none")),
+        ("contents", ("read", "write", "none")),
+        ("deployments", ("read", "write", "none")),
+        ("discussions", ("read", "write", "none")),
+        ("id-token", ("write", "none")),
+        ("issues", ("read", "write", "none")),
+        ("packages", ("read", "write", "none")),
+        ("pages", ("read", "write", "none")),
+        ("pull-requests", ("read", "write", "none")),
+        ("security-events", ("read", "write", "none")),
+        ("statuses", ("read", "write", "none")),
+        ("vulnerability-alerts", ("read", "none")),
+    ],
+)
+def test_documented_scope_levels_are_accepted(tmp_path: Path, scope: str, levels: tuple[str, ...]) -> None:
+    for level in levels:
+        _write_workflow(tmp_path, "permissions: {}", f"    permissions:\n      {scope}: {level}\n")
+        assert validate_privileged_workflows(tmp_path) == ()
+        if level != "write":
+            _write_workflow(tmp_path, f"permissions:\n  {scope}: {level}")
+            assert validate_privileged_workflows(tmp_path) == ()
+
+
 def test_explicit_job_grants_do_not_inherit_root_scopes(tmp_path: Path) -> None:
     path = _write_workflow(tmp_path, "permissions:\n  contents: read", "    permissions: {}\n")
     path.write_text(path.read_text().replace(PINNED_ACTION, "actions/checkout@v4"))

@@ -14,6 +14,30 @@ import yaml
 _FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 _EXACT_UV_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
+# GitHub Actions workflow-syntax permission table, checked 2026-09-12.
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
+_PERMISSION_LEVELS = {
+    scope: frozenset({"read", "write", "none"})
+    for scope in (
+        "actions",
+        "artifact-metadata",
+        "attestations",
+        "checks",
+        "code-quality",
+        "contents",
+        "deployments",
+        "discussions",
+        "issues",
+        "packages",
+        "pages",
+        "pull-requests",
+        "security-events",
+        "statuses",
+    )
+} | {
+    "id-token": frozenset({"write", "none"}),
+    "vulnerability-alerts": frozenset({"read", "none"}),
+}
 
 
 @dataclass(frozen=True)
@@ -67,16 +91,16 @@ def _validate_permissions(
     for scope, level in permissions.items():
         if (
             not isinstance(scope, str)
-            or not scope.strip()
+            or scope not in _PERMISSION_LEVELS
             or not isinstance(level, str)
-            or level not in {"read", "write", "none"}
+            or level not in _PERMISSION_LEVELS[scope]
         ):
             violations.append(
                 WorkflowPolicyViolation(
                     workflow_path,
                     job_name,
                     "permission-invalid",
-                    f"Invalid permission {scope!r}: {level!r}; use a named scope with read, write, or none.",
+                    f"Invalid permission {scope!r}: {level!r}; use an exact supported scope and access level.",
                 )
             )
         elif level == "write" and not allow_write:
