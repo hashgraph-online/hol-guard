@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce immutable toolchain inputs in privileged GitHub Actions jobs."""
+"""Enforce least-privilege token grants and immutable privileged-job toolchains."""
 
 from __future__ import annotations
 
@@ -14,6 +14,30 @@ import yaml
 _FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 _EXACT_UV_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
+# GitHub Actions workflow-syntax permission table, checked 2026-09-12.
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
+_PERMISSION_LEVELS = {
+    scope: frozenset({"read", "write", "none"})
+    for scope in (
+        "actions",
+        "artifact-metadata",
+        "attestations",
+        "checks",
+        "code-quality",
+        "contents",
+        "deployments",
+        "discussions",
+        "issues",
+        "packages",
+        "pages",
+        "pull-requests",
+        "security-events",
+        "statuses",
+    )
+} | {
+    "id-token": frozenset({"write", "none"}),
+    "vulnerability-alerts": frozenset({"read", "none"}),
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +69,52 @@ def _has_write_capability(permissions: object) -> bool:
     if isinstance(permissions, str):
         return permissions.strip().lower() == "write-all"
     return any(str(value).strip().lower() == "write" for value in _mapping(permissions).values())
+
+
+def _validate_permissions(
+    *,
+    workflow_path: Path,
+    job_name: str,
+    permissions: object,
+    allow_write: bool,
+) -> list[WorkflowPolicyViolation]:
+    """Reject implicit grants, unsupported scopes, and workflow-wide write access."""
+
+    if not isinstance(permissions, dict):
+        return [
+            WorkflowPolicyViolation(
+                workflow_path,
+                job_name,
+                "permission-map-required",
+                "Declare a permission map ({} for none); inherited defaults and wildcard grants are forbidden.",
+            )
+        ]
+    violations: list[WorkflowPolicyViolation] = []
+    for scope, level in permissions.items():
+        if (
+            not isinstance(scope, str)
+            or scope not in _PERMISSION_LEVELS
+            or not isinstance(level, str)
+            or level not in _PERMISSION_LEVELS[scope]
+        ):
+            violations.append(
+                WorkflowPolicyViolation(
+                    workflow_path,
+                    job_name,
+                    "permission-invalid",
+                    f"Invalid permission {scope!r}: {level!r}; use an exact supported scope and access level.",
+                )
+            )
+        elif level == "write" and not allow_write:
+            violations.append(
+                WorkflowPolicyViolation(
+                    workflow_path,
+                    job_name,
+                    "workflow-write-permission",
+                    f"Move {scope}: write to the job that needs it; workflow defaults must be read-only or empty.",
+                )
+            )
+    return violations
 
 
 def _effective_permissions(workflow: dict[object, object], job: dict[object, object]) -> object:
@@ -136,7 +206,7 @@ def _validate_privileged_job(
 
 
 def validate_privileged_workflows(root: Path) -> tuple[WorkflowPolicyViolation, ...]:
-    """Return policy violations for explicitly write-capable workflow jobs."""
+    """Validate token defaults, job grants, and write-capable job toolchains."""
 
     workflows_dir = root / ".github" / "workflows"
     violations: list[WorkflowPolicyViolation] = []
@@ -155,9 +225,31 @@ def validate_privileged_workflows(root: Path) -> tuple[WorkflowPolicyViolation, 
                 )
             )
             continue
+        if not isinstance(raw_workflow, dict):
+            violations.append(
+                WorkflowPolicyViolation(workflow_path, "<workflow>", "workflow-invalid", "Expected a workflow mapping.")
+            )
+            continue
         workflow = _mapping(raw_workflow)
+        violations.extend(
+            _validate_permissions(
+                workflow_path=workflow_path,
+                job_name="<workflow>",
+                permissions=workflow.get("permissions"),
+                allow_write=False,
+            )
+        )
         for raw_job_name, raw_job in _mapping(workflow.get("jobs")).items():
             job = _mapping(raw_job)
+            if "permissions" in job:
+                violations.extend(
+                    _validate_permissions(
+                        workflow_path=workflow_path,
+                        job_name=str(raw_job_name),
+                        permissions=job["permissions"],
+                        allow_write=True,
+                    )
+                )
             if not job or not _has_write_capability(_effective_permissions(workflow, job)):
                 continue
             violations.extend(

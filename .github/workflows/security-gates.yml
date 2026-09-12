@@ -29,7 +29,13 @@ jobs:
           version: "0.9.26"
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
-      - name: Enforce privileged workflow pins
+      - name: Validate workflow policy code
+        run: |
+          uv run --no-sync ruff check scripts/check_privileged_workflows.py tests/test_privileged_workflow_policy.py tests/test_workflow_token_permissions.py
+          uv run --no-sync ruff format --check scripts/check_privileged_workflows.py tests/test_privileged_workflow_policy.py tests/test_workflow_token_permissions.py
+      - name: Run workflow permission regressions
+        run: uv run --no-sync pytest -q tests/test_privileged_workflow_policy.py tests/test_workflow_token_permissions.py
+      - name: Enforce least-privilege permissions and immutable toolchains
         run: uv run --no-sync python scripts/check_privileged_workflows.py
 
   semgrep:

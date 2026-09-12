@@ -287,6 +287,8 @@ def test_changed_extension_ids_track_renames_and_ignore_removed_files() -> None:
 
 
 def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
+    """Claim notices retain merge checks and PR-comment access without issue-management access."""
+
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "pull_request_target:" in text
     assert "types: [closed]" in text
@@ -296,7 +298,7 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "allow_renames:" in text
     assert "contributions/extension-listings/**" in text
     assert "pull-requests: write" in text
-    assert "issues: write" in text
+    assert "issues: write" not in text
     assert "persist-credentials: false" in text
     assert "--allow-renames" in text
     assert "notify_merged_extension_claimants.py" in text
