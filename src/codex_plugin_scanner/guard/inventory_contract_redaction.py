@@ -42,7 +42,7 @@ def redact_url(value: str) -> str:
         parsed = urlsplit(value)
     except ValueError:
         return "malformed_url_redacted"
-    hostname = parsed.hostname or parsed.netloc
+    hostname = parsed.hostname or ""
     if ":" in hostname and not hostname.startswith("["):
         hostname = f"[{hostname}]"
     netloc = hostname
@@ -240,7 +240,7 @@ def _safe_json(
     key_sensitive = parent_sensitive or bool(parent_key and _SENSITIVE_KEY_RE.search(parent_key))
     if isinstance(value, dict):
         return {
-            _sanitize_serializer_string(str(key), parent_sensitive=parent_sensitive): _safe_json(
+            _sanitize_serializer_string(str(key)): _safe_json(
                 item,
                 parent_key=str(key),
                 parent_sensitive=key_sensitive,
