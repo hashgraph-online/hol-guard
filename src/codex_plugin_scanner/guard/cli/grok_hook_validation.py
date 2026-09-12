@@ -86,8 +86,6 @@ def is_grok_hook_command(command: str) -> bool:
     """Reject marker-only commands without executing untrusted hook text or code."""
     try:
         args = _arguments(command)
-        if args == ("hol-guard", "hook", "grok"):
-            return True  # Retain the legacy direct invocation, not shell wrappers.
         if len(args) == 9:
             return _desktop_proxy(args)
         if len(args) == 3 and args[1] == "__guard-bounded-hook":
