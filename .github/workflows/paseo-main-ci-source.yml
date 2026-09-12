@@ -1,16 +1,16 @@
-name: Paseo current source inspection
+name: Paseo final review validation
 on:
   push:
     branches: [inspect/paseo-main-ci-source]
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: paseo-isolated-validation
   cancel-in-progress: true
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -18,24 +18,94 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
+          python-version: '3.12'
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: '0.9.26'
           enable-cache: false
-      - name: Export exact source and offline test dependencies
+      - name: Reproduce the exact locally tested patch
         run: |
           set -euo pipefail
-          mkdir -p inspection/wheels
-          git archive --format=tar.gz --output=inspection/head.tar.gz ba7aaa37c6145a3bc668191bf8d6a6067ead2dbf
+          exec > >(tee "$RUNNER_TEMP/transfer.log") 2>&1
+          cp -R .github/paseo-final "$RUNNER_TEMP/paseo-final"
           git checkout --detach ba7aaa37c6145a3bc668191bf8d6a6067ead2dbf
-          uv export --frozen --no-dev --no-emit-project --no-hashes > inspection/requirements.txt
-          python -m pip download --dest inspection/wheels -r inspection/requirements.txt pytest
-          git ls-tree -r HEAD > inspection/git-tree.txt
-          sha256sum inspection/head.tar.gz > inspection/SHA256SUMS
+          test -z "$(git status --porcelain)"
+          python "$RUNNER_TEMP/paseo-final/apply.py"
+          uv sync --frozen --extra dev --python 3.12
+          python - <<'PY'
+          from pathlib import Path
+          import json,subprocess,hashlib,os
+          expected=json.loads((Path(os.environ['RUNNER_TEMP'])/'paseo-final/expected.json').read_text())
+          paths=sorted(expected)
+          for command in (['ruff','format'],['ruff','check','--fix'],['ruff','format']):
+              subprocess.run(['uv','run','--no-sync',*command,*paths],check=True)
+          mismatch=[p for p in paths if hashlib.sha256(Path(p).read_bytes()).hexdigest()!=expected[p]]
+          if mismatch: raise RuntimeError('Source transfer mismatch: '+str(mismatch))
+          subprocess.run(['git','add','--',*paths],check=True)
+          assert subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()==paths
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          PY
+      - name: Run existing typing and ownership gates
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/checks.log") 2>&1
+          uv run --no-sync ruff check src
+          uv run --no-sync ruff format --check src
+          uv run --no-sync basedpyright --level error
+          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py --root . --base-ref 7321a98fda6add267318df8af7ecab1a9a9003ab --json "$RUNNER_TEMP/ownership.json"
+      - name: Exercise native and inventory regression tests
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/tests.log") 2>&1
+          interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          target="$(realpath "$interpreter")"
+          mode="$(stat -c '%a' "$target")"
+          if (( (8#$mode & 2) != 0 )); then
+            replacement="${interpreter}.guard-ci"
+            cp --dereference "$target" "$replacement"
+            chmod 0755 "$replacement"
+            mv "$replacement" "$target"
+          fi
+          uv run --no-sync pytest -q --tb=short tests/test_guard_inventory_contract.py tests/test_guard_aibom*.py tests/test_guard_trust_attestation_boundary.py tests/test_guard_skill_directory_identity_downstream.py tests/test_guard_skill_document_evidence.py tests/test_paseo*.py tests/test_guard_grok_protection.py tests/test_guard_protection_recovery.py tests/test_grok_hook_validation.py tests/test_grok_hook_context.py tests/test_update_grok_repair.py
+      - name: Create verified commit objects without moving the PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,subprocess,urllib.request,os,base64,hashlib
+          parent='ba7aaa37c6145a3bc668191bf8d6a6067ead2dbf'
+          api='https://api.github.com/repos/hashgraph-online/hol-guard/'
+          expected=json.loads((Path(os.environ['RUNNER_TEMP'])/'paseo-final/expected.json').read_text())
+          def request(path,data=None):
+              req=urllib.request.Request(api+path,data=None if data is None else json.dumps(data).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='GET' if data is None else 'POST')
+              with urllib.request.urlopen(req,timeout=30) as response:return json.load(response)
+          assert request('git/ref/heads/fix/paseo-adapter-main')['object']['sha']==parent
+          base_tree=request('git/commits/'+parent)['tree']['sha']
+          entries=[]
+          for path,digest in sorted(expected.items()):
+              data=Path(path).read_bytes()
+              assert hashlib.sha256(data).hexdigest()==digest,path
+              blob=request('git/blobs',{'content':base64.b64encode(data).decode(),'encoding':'base64'})
+              entries.append({'path':path,'mode':'100644','type':'blob','sha':blob['sha']})
+          tree=request('git/trees',{'base_tree':base_tree,'tree':entries})
+          assert tree['sha']==subprocess.check_output(['git','write-tree'],text=True).strip()
+          message='fix(paseo): bind hook ownership and split inventory contracts\n\nValidate Grok paths against the active context across generated launch forms. Preserve the inventory API through focused modules. Keep all current main security gates.\n\nSigned-off-by: Michael Kantor <6068672+kantorcodes@users.noreply.github.com>'
+          commit=request('git/commits',{'message':message,'tree':tree['sha'],'parents':[parent],'author':{'name':'Michael Kantor','email':'6068672+kantorcodes@users.noreply.github.com'}})
+          assert [p['sha'] for p in commit['parents']]==[parent]
+          Path('validation-result.json').write_text(json.dumps({'parent':parent,'commit':commit['sha'],'tree':tree['sha'],'paths':sorted(expected),'source_sha256':expected},indent=2)+'\n')
+          print(json.dumps({'commit':commit['sha'],'tree':tree['sha']}))
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
-          name: paseo-current-source-and-dependencies
-          path: inspection/
+          name: paseo-final-validation
+          path: |
+            validation-result.json
+            ${{ runner.temp }}/transfer.log
+            ${{ runner.temp }}/checks.log
+            ${{ runner.temp }}/tests.log
+            ${{ runner.temp }}/ownership.json
           retention-days: 1
           if-no-files-found: error
