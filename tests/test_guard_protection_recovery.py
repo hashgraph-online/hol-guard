@@ -40,9 +40,10 @@ def _clear_grok_home(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
+    """Match the machine-wide installs registered with workspace=None in these tests."""
     return HarnessContext(
         home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "workspace",
+        workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
 

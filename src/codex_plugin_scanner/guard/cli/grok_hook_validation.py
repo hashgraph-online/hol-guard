@@ -8,7 +8,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from ..adapters.base import _shell_command
+from ..adapters.base import HarnessContext, _shell_command
 from ..stable_guard_cli import prune_safe_cli_executable
 
 
@@ -24,7 +24,7 @@ def _arguments(command: str) -> tuple[str, ...]:
     return args if args and _shell_command(args) == command.strip() else ()
 
 
-def _config(text: str, executable: str, *, frozen: bool) -> dict[str, object] | None:
+def _config(text: str, executable: str, *, frozen: bool, context: HarnessContext | None) -> dict[str, object] | None:
     """Bind the bridge configuration to its executable and Grok hook invocation."""
     config = json.loads(text)
     if not isinstance(config, dict) or config.get("harness") != "grok":
@@ -56,10 +56,24 @@ def _config(text: str, executable: str, *, frozen: bool) -> dict[str, object] | 
         return None
     if any(not Path(value).is_absolute() for key, value in parsed.items() if key != "--harness"):
         return None
+    if context is not None and not _matches_context(parsed, context):
+        return None
     return config
 
 
-def _desktop_proxy(args: tuple[str, ...]) -> bool:
+def _matches_context(options: dict[str, str], context: HarnessContext) -> bool:
+    """Require the bridge's store, effective home, and workspace to match its owner."""
+    expected = {"--guard-home": context.guard_home, "--home": context.home_dir}
+    actual = {"--guard-home": options["--guard-home"], "--home": options.get("--home", str(Path.home()))}
+    if any(Path(actual[key]).resolve() != path.resolve() for key, path in expected.items()):
+        return False
+    workspace = options.get("--workspace")
+    if context.workspace_dir is None:
+        return workspace is None
+    return workspace is not None and Path(workspace).resolve() == context.workspace_dir.resolve()
+
+
+def _desktop_proxy(args: tuple[str, ...], context: HarnessContext | None) -> bool:
     """Accept only the generated macOS script and its verified same-team app paths."""
     from ..adapters import desktop_hook_proxy as proxy
 
@@ -77,28 +91,28 @@ def _desktop_proxy(args: tuple[str, ...]) -> bool:
         return False
     if proxy._bundle_for_executable(core_path) != bundle_path or not team or team == "not set":
         return False
-    if not _config(config, core, frozen=True):
+    if not _config(config, core, frozen=True, context=context):
         return False
     return all(proxy._codesign_team(path) == team for path in (candidate_path, core_path, bundle_path))
 
 
-def is_grok_hook_command(command: str) -> bool:
+def is_grok_hook_command(command: str, context: HarnessContext | None = None) -> bool:
     """Reject marker-only commands without executing untrusted hook text or code."""
     try:
         args = _arguments(command)
         if len(args) == 9:
-            return _desktop_proxy(args)
+            return _desktop_proxy(args, context)
         if len(args) == 3 and args[1] == "__guard-bounded-hook":
             expected = Path(prune_safe_cli_executable(sys.executable)).resolve()
             return (
                 bool(getattr(sys, "frozen", False))
                 and Path(args[0]).is_absolute()
                 and Path(args[0]).resolve() == expected
-                and _config(args[2], args[0], frozen=True) is not None
+                and _config(args[2], args[0], frozen=True, context=context) is not None
             )
         if len(args) != 5 or args[1:3] != ("-I", "-c"):
             return False
-        config = _config(args[4], args[0], frozen=False)
+        config = _config(args[4], args[0], frozen=False, context=context)
         if (
             config is None
             or not Path(args[0]).is_absolute()

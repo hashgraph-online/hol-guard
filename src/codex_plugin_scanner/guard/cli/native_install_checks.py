@@ -95,7 +95,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
     }
 
 
-def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
+def _grok_pretool_is_catchall(pretool_hook: Path, context: HarnessContext | None = None) -> bool:
     """Check that Grok uses one managed catch-all pre-tool hook."""
     if not pretool_hook.is_file():
         return False
@@ -118,17 +118,21 @@ def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
     if not isinstance(nested, list) or len(nested) != 1 or not isinstance(nested[0], dict):
         return False
     command = nested[0].get("command")
-    return nested[0].get("type") == "command" and isinstance(command, str) and _grok_hook_command_is_guard(command)
+    return (
+        nested[0].get("type") == "command"
+        and isinstance(command, str)
+        and _grok_hook_command_is_guard(command, context)
+    )
 
 
-def _grok_hook_command_is_guard(command: str) -> bool:
+def _grok_hook_command_is_guard(command: str, context: HarnessContext | None = None) -> bool:
     """Validate a serialized native hook invocation, not arbitrary Guard marker text."""
     from .grok_hook_validation import is_grok_hook_command
 
-    return is_grok_hook_command(command)
+    return is_grok_hook_command(command, context)
 
 
-def _grok_prompt_hook_is_observe(prompt_hook: Path) -> bool:
+def _grok_prompt_hook_is_observe(prompt_hook: Path, context: HarnessContext | None = None) -> bool:
     """Verify the required Grok observation events have managed command hooks."""
     if not prompt_hook.is_file():
         return False
@@ -142,10 +146,10 @@ def _grok_prompt_hook_is_observe(prompt_hook: Path) -> bool:
     if not isinstance(hooks, dict):
         return False
     required = ("UserPromptSubmit", "SubagentStart", "SessionStart")
-    return all(_grok_event_has_command_hook(hooks.get(event_name)) for event_name in required)
+    return all(_grok_event_has_command_hook(hooks.get(event_name), context) for event_name in required)
 
 
-def _grok_event_has_command_hook(entries: object) -> bool:
+def _grok_event_has_command_hook(entries: object, context: HarnessContext | None = None) -> bool:
     """Find a valid Guard command hook in a native event configuration."""
     if not isinstance(entries, list) or not entries:
         return False
@@ -159,7 +163,7 @@ def _grok_event_has_command_hook(entries: object) -> bool:
             if not isinstance(hook_entry, dict) or hook_entry.get("type") != "command":
                 continue
             command = hook_entry.get("command")
-            if isinstance(command, str) and _grok_hook_command_is_guard(command):
+            if isinstance(command, str) and _grok_hook_command_is_guard(command, context):
                 return True
     return False
 
@@ -213,11 +217,11 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     warnings: list[str] = []
     if not pretool_hook.is_file() or not prompt_hook.is_file():
         warnings.append("Grok Guard hook files are missing from ~/.grok/hooks/. Re-run `hol-guard apps connect grok`.")
-    elif not _grok_pretool_is_catchall(pretool_hook):
+    elif not _grok_pretool_is_catchall(pretool_hook, context):
         warnings.append(
             "Grok Guard pre-tool hook still uses a stale per-tool matcher list. Re-run `hol-guard apps repair grok`."
         )
-    elif not _grok_prompt_hook_is_observe(prompt_hook):
+    elif not _grok_prompt_hook_is_observe(prompt_hook, context):
         warnings.append(
             "Grok Guard observe hooks are missing prompt, session, or subagent events. "
             "Re-run `hol-guard apps repair grok`."
@@ -249,7 +253,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     return {
         "pretool_hook_installed": pretool_hook.is_file(),
         "prompt_hook_installed": prompt_hook.is_file(),
-        "pretool_catchall_installed": _grok_pretool_is_catchall(pretool_hook),
+        "pretool_catchall_installed": _grok_pretool_is_catchall(pretool_hook, context),
         "managed_config_installed": managed_config.is_file(),
         "launch_shim_installed": shim_path.is_file(),
         "warnings": warnings,
