@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   finalize:
-    if: github.repository == 'hashgraph-online/hol-guard' && github.event.head_commit.message == 'ci: apply verified PR 2870 review fixes'
+    if: "${{ github.repository == 'hashgraph-online/hol-guard' && github.event.head_commit.message == 'ci: rerun PR 2870 transport' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
