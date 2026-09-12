@@ -35,11 +35,11 @@ jobs:
           git diff "$base" HEAD > /tmp/pr2870-debug/pr.patch
       - name: Download public Python test dependencies for offline debugging
         run: |
-          python -m pip download --only-binary=:all: --dest /tmp/pr2870-debug/wheels '.[dev]'
+          python -m pip download --only-binary=:all: --dest /tmp/pr2870-debug/wheels '.[dev]' 'ruff==0.15.17'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: pr2870-debug-sources
           path: /tmp/pr2870-debug
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 3
