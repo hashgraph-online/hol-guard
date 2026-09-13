@@ -394,7 +394,7 @@ export function whyPaused(request: GuardApprovalRequest): string {
     case "tool-call":
       if ((request.artifact_name ?? "").startsWith("chrome-devtools:")
         || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
-        return "This clicks or inspects a page in the browser. Confirm it if you meant to.";
+        return "This uses the browser. Confirm it if you meant to.";
       }
       return "This uses an outside tool. Guard stops new tools by default.";
     default:

@@ -176,13 +176,15 @@ def _which_package_launcher(launcher: str) -> str | None:
     """Resolve a launcher on PATH, skipping Guard package shims."""
 
     path_value = os.environ.get("PATH", "")
-    parts = [
-        part
-        for part in path_value.split(os.pathsep)
-        if part and "package-shims" not in Path(part).as_posix()
-    ]
-    search_path = os.pathsep.join(parts) if parts else None
-    return shutil.which(launcher, path=search_path) if search_path is not None else shutil.which(launcher)
+    parts = [part for part in path_value.split(os.pathsep) if part and not _is_guard_package_shim_dir(part)]
+    if not parts:
+        return None
+    return shutil.which(launcher, path=os.pathsep.join(parts))
+
+
+def _is_guard_package_shim_dir(part: str) -> bool:
+    posix = Path(part).expanduser().as_posix().rstrip("/")
+    return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
 
 
 def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:

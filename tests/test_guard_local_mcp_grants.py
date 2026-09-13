@@ -25,7 +25,11 @@ def _clean_npx() -> str | None:
     parts = [
         part
         for part in path_value.split(os.pathsep)
-        if part and "package-shims" not in Path(part).as_posix()
+        if part
+        and not (
+            Path(part).as_posix().rstrip("/").endswith("/package-shims/bin")
+            or "/.hol-guard/package-shims/" in Path(part).as_posix()
+        )
     ]
     return shutil.which("npx", path=os.pathsep.join(parts)) if parts else shutil.which("npx")
 
@@ -307,6 +311,57 @@ def test_same_package_extra_npx_flags_still_match_allow_all(tmp_path: Path) -> N
     )
     assert decision.action == "allow"
     assert decision.source == "local-mcp-extension"
+
+
+def test_explicit_package_version_change_does_not_inherit_grant(tmp_path: Path) -> None:
+    npx = _clean_npx()
+    if npx is None:
+        pytest.skip("npx is not on PATH")
+    enrolled = build_mcp_server_identity(
+        config_path="",
+        command="npx",
+        args=("-y", "chrome-devtools-mcp@1.0.0"),
+        transport="stdio",
+    )
+    runtime = build_mcp_server_identity(
+        config_path="",
+        command=npx,
+        args=("-y", "chrome-devtools-mcp@2.0.0"),
+        transport="stdio",
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(
+        store,
+        enrolled,
+        states={"click": "allow", "other": "allow"},
+        example_label="npx -y chrome-devtools-mcp@1.0.0",
+        commands=(
+            LocalCliCommand("click", "click", "click", "Click a page element"),
+            LocalCliCommand("other", "Other tools", "server …", "other"),
+        ),
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="chrome-devtools",
+        tool_name="click",
+        source_scope="global",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=runtime,
+    )
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
+
+
+def test_shim_only_path_does_not_resolve_package_launcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_protection import resolved_package_launcher_executable
+
+    shim_bin = tmp_path / ".hol-guard" / "package-shims" / "bin"
+    shim_bin.mkdir(parents=True)
+    impostor = shim_bin / "npx"
+    impostor.write_text("#!/bin/sh\nexit 0\n")
+    impostor.chmod(0o755)
+    monkeypatch.setenv("PATH", str(shim_bin))
+    assert resolved_package_launcher_executable("npx") is None
 
 
 def test_different_package_does_not_inherit_npx_grant(tmp_path: Path) -> None:
