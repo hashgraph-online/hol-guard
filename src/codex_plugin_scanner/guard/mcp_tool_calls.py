@@ -475,14 +475,6 @@ def evaluate_tool_call(
     )
     saved_decision = policy_lookup["decision"]
     ignored_integrity = policy_lookup["ignored_local_integrity"]
-    saved_action_name = saved_decision.get("action") if saved_decision is not None else None
-    if (
-        current.source == "local-mcp-extension"
-        and current.action == "allow"
-        and ignored_integrity is None
-        and saved_action_name != "block"
-    ):
-        return current
     if saved_decision is None and ignored_integrity is None:
         diagnosed_reason = store.approval_reuse_validation_reason(
             artifact.harness,

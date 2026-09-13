@@ -280,6 +280,18 @@ assert(
   "queued MCP tool calls are labeled as MCP tools, not shell commands"
 );
 
+const nativeToolCall: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "bash",
+  changed_fields: ["first_seen"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command", command: "git status" }
+};
+assert(
+  resolveTerminalLabel(nativeToolCall) === "Command",
+  "native pre-tool reviews keep their envelope command label"
+);
+
 const packageRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
   action_envelope_json: { ...BASE_ENVELOPE, action_type: "package_script", package_manager: "npm", package_name: "lodash", script_name: null }

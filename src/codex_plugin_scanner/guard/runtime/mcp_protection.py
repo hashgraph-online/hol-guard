@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from hashlib import sha256
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
 from .approval_context import build_configured_environment_hash
 
@@ -143,6 +144,31 @@ def package_launcher_name(command: str) -> str | None:
 
     command_name = _command_name(command)
     return command_name if command_name in _PACKAGE_LAUNCHERS else None
+
+
+def resolved_package_launcher_executable(command: str) -> Path | None:
+    """Resolve a package launcher to a real executable, or None if unknown."""
+
+    launcher = package_launcher_name(command)
+    if launcher is None:
+        return None
+    candidate = Path(command).expanduser()
+    if candidate.is_absolute():
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError:
+            return None
+    else:
+        found = shutil.which(command) or shutil.which(launcher)
+        if found is None:
+            return None
+        try:
+            resolved = Path(found).resolve(strict=True)
+        except OSError:
+            return None
+    if not resolved.is_file() or package_launcher_name(resolved.name) != launcher:
+        return None
+    return resolved
 
 
 def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:

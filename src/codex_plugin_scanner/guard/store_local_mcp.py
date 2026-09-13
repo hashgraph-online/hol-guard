@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from .runtime.local_cli_commands import LocalCliCommand, LocalCliCommandState
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
-from .runtime.mcp_protection import package_launcher_name
+from .runtime.mcp_protection import resolved_package_launcher_executable
 from .store_local_cli import _grant_from_row, _row_values
 from .store_local_cli_schema import ensure_local_cli_schema
 
@@ -226,8 +226,8 @@ def _equivalent_package_launcher_observation(
 ) -> tuple[str, str] | None:
     """Match a this-device MCP grant across PATH vs absolute launcher paths."""
 
-    launcher = package_launcher_name(command or "")
-    if launcher is None or not isinstance(args_hash, str) or not args_hash.strip():
+    requested = resolved_package_launcher_executable(command or "")
+    if requested is None or not isinstance(args_hash, str) or not args_hash.strip():
         return None
     rows = connection.execute(
         """
@@ -242,7 +242,8 @@ def _equivalent_package_launcher_observation(
         cli_id, identity_hash, server_command = _row_values(row, 3)
         if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
             continue
-        if package_launcher_name(str(server_command or "")) == launcher:
+        stored = resolved_package_launcher_executable(str(server_command or ""))
+        if stored is not None and stored == requested:
             return cli_id, identity_hash
     return None
 

@@ -626,7 +626,7 @@ export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | nu
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
-  if (item.artifact_type === "tool_call") {
+  if (item.artifact_type === "tool_call" && item.changed_fields.includes("runtime_tool_call")) {
     return item.changed_fields.includes("runtime_browser_tool_call") ? "Browser tool" : "MCP tool";
   }
   const actionType = envelope?.action_type;
