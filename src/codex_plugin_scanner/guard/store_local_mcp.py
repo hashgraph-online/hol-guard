@@ -249,7 +249,6 @@ def _equivalent_package_launcher_observation(
         left join local_cli_grant as g on g.cli_id = o.cli_id
         where o.surface = 'mcp'
         order by case when g.state = 'blocked' then 0 else 1 end, o.last_seen_at desc, o.cli_id asc
-        limit 64
         """
     ).fetchall()
     for row in rows:
@@ -299,13 +298,6 @@ def _normalized_package_version(value: str | None) -> str:
         return "latest"
     text = value.strip()
     return text or "latest"
-
-
-def _normalized_package_source(value: str | None) -> str:
-    if not isinstance(value, str):
-        return "default"
-    text = value.strip()
-    return text or "default"
 
 
 def _normalized_identity_hash(value: str | None) -> str | None:
