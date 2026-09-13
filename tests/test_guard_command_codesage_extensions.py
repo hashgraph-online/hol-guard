@@ -1,4 +1,4 @@
-"""CodeSage setup review and automatic inspection command contracts."""
+"""CodeSage setup review and non-matching inspection contracts for the Python reference evaluator."""
 
 from __future__ import annotations
 
@@ -27,6 +27,8 @@ from tests.command_extension_contracts import assert_reviewed_command_cases, ass
 
 
 def _enabled_snapshot() -> ExtensionControlRuntimeSnapshot:
+    """Prevent inactive reference rules from making no-match assertions pass vacuously."""
+
     digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     layer = ExtensionControlLayer(
         schema_version=CONTROL_SCHEMA_VERSION,
@@ -45,7 +47,7 @@ def _enabled_snapshot() -> ExtensionControlRuntimeSnapshot:
     )
 
 
-def test_codesage_reviews_setup_and_keeps_inspection_automatic(tmp_path: Path) -> None:
+def test_codesage_reviews_setup_and_adds_no_inspection_requirement(tmp_path: Path) -> None:
     with use_extension_control_snapshot(_enabled_snapshot()):
         assert_reviewed_command_cases(
             (
@@ -104,7 +106,7 @@ def test_codesage_setup_variants_reach_inspection_and_runtime_review(tmp_path: P
         assert_reviewed_command_cases(cases, tmp_path)
 
 
-def test_codesage_help_and_inspection_remain_automatic_when_enabled(tmp_path: Path) -> None:
+def test_codesage_help_and_inspection_add_no_review_requirement_when_enabled(tmp_path: Path) -> None:
     cases = (
         *(
             f"codesage {arguments} {flag}"

@@ -86,10 +86,11 @@ CODESAGE_COMMAND_RULES = tuple(
 CODESAGE_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.codesage",
-        name="CodeSage setup protection",
+        name="CodeSage Python reference rules",
         description=(
-            "Reviews CodeSage hook installation and MCP registration changes. "
-            "Doctor, status, and search do not require review from this extension."
+            "Python reference rules for CodeSage hook installation and MCP registration. "
+            "Production native hooks do not consume these rules. "
+            "Enabling the extension does not make doctor, status, or search automatic."
         ),
         action_classes=tuple(item[1] for item in _SETUP_COMMANDS),
         risk_classes=("destructive_shell",),
