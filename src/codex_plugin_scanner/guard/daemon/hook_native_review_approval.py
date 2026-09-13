@@ -66,7 +66,12 @@ def pause_native_pre_tool_for_approval(
         failed["reason_code"] = "native_review_queue_failed"
         failed["reason"] = "HOL Guard could not record this review for approval."
         return harness_json_from_native_pre_tool(harness, failed)
-    response = harness_json_from_native_pre_tool_review(harness, native_result, approval=queued)
+    response = harness_json_from_native_pre_tool_review(
+        harness,
+        native_result,
+        approval=queued,
+        guard_home=guard_home,
+    )
     response["prompted"] = True
     response["approval_center_url"] = _native_review_approval_center_url(store)
     return response

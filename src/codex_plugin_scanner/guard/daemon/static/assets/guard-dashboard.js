@@ -14763,8 +14763,6 @@ function normalizeHarnessSlug(harness) {
 function isDisplayableHarness(harness) {
   return normalizeHarnessSlug(harness) !== null;
 }
-const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 function isWatchOnlyObservation(item) {
   return (item.scanner_evidence ?? []).some(
     (evidence) => typeof evidence === "object" && evidence !== null && "source" in evidence && evidence.source === "observe_mode_inbox"
@@ -30730,8 +30728,24 @@ function ReviewWorkspace(props) {
     ] })
   ] });
 }
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
+const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
+const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+function queueErrorIsUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  if (lower.includes("unauthorized")) {
+    return true;
+  }
+  return /request failed with 401(?:\D|$)/.test(lower);
+}
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
+  const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -30750,16 +30764,19 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
+  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: QUEUE_CONNECTION_ERROR_HEADLINE }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.message }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: QUEUE_CONNECTION_ERROR_INSTRUCTION }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
-      props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
-      props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
-      props.approvalUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.approvalUrl, variant: "outline", children: "Open dashboard" })
+      sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
+      sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
+      sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
+      sessionMissing ? null : props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
+      sessionMissing ? null : props.approvalUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.approvalUrl, variant: "outline", children: "Open dashboard" })
     ] })
   ] }) });
 }

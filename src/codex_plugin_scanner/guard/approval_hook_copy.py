@@ -42,16 +42,34 @@ def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | Non
     return None
 
 
-def with_approval_review_url(reason: str, payload: Mapping[str, object]) -> str:
+def live_approval_review_url(url: str, *, guard_home: Path | None) -> str:
+    """Attach a loopback dashboard session fragment so the link opens signed-in."""
+
+    if not url or guard_home is None or not is_loopback_approval_url(url):
+        return url
+    token = load_guard_daemon_auth_token(guard_home)
+    tokenized = build_approval_browser_url(url, auth_token=token)
+    return tokenized if tokenized else url
+
+
+def with_approval_review_url(
+    reason: str,
+    payload: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> str:
     """Keep the pause reason and always include the approval URL when Guard queued one."""
 
     review_url = approval_review_url_from_payload(payload)
     stripped = reason.strip()
     if review_url is None:
         return stripped
-    if review_url in stripped:
+    live_url = live_approval_review_url(review_url, guard_home=guard_home)
+    if live_url != review_url and review_url in stripped:
+        return stripped.replace(review_url, live_url, 1)
+    if live_url in stripped:
         return stripped
-    return f"{stripped} Open HOL Guard to approve or keep this blocked: {review_url}."
+    return f"{stripped} Open HOL Guard to approve or keep this blocked: {live_url}."
 
 
 def is_loopback_approval_url(url: str) -> bool:
@@ -123,7 +141,7 @@ def live_hook_approval_context(
         review_url = approval_review_url_from_payload(response_payload)
     if review_url is None or not is_loopback_approval_url(review_url):
         return message
-    tokenized = build_approval_browser_url(review_url, auth_token=token)
+    tokenized = live_approval_review_url(review_url, guard_home=guard_home)
     if not tokenized or tokenized == review_url:
         return message
     return message.replace(review_url, tokenized, 1)

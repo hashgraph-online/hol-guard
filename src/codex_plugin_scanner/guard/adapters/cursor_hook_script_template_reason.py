@@ -44,14 +44,23 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
         (value.strip() for value in candidates if isinstance(value, str) and value.strip()),
         None,
     )
+    live_url = review_url
     suffix = ""
     if review_url is not None:
-        suffix = "Open HOL Guard to approve or keep this blocked: " + review_url + "."
+        try:
+            from codex_plugin_scanner.guard.approval_hook_copy import live_approval_review_url
+
+            live_url = live_approval_review_url(review_url, guard_home=Path(GUARD_HOME))
+        except Exception:
+            live_url = review_url
+        suffix = "Open HOL Guard to approve or keep this blocked: " + live_url + "."
     if reason is None:
         if suffix:
             return "HOL Guard needs approval for this Cursor action. " + suffix
         return "HOL Guard blocked this Cursor action."
-    if not suffix or review_url in reason:
+    if review_url is not None and live_url != review_url and review_url in reason:
+        return reason.replace(review_url, live_url, 1)
+    if not suffix or (live_url is not None and live_url in reason):
         return reason
     return f"{reason} {suffix}"
 

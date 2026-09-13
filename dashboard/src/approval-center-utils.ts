@@ -22,8 +22,6 @@ export { resolveDecisionV2Detail, resolveEnvelopeDisplayText, resolveSecondaryRi
 
 export const EMPTY_QUEUE_TITLE = "Review queue is clear";
 export const STALE_REQUEST_COPY = "This request was already decided.";
-export const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-export const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 
 export type DataFlowEvidenceSummary = {
   signalTitle: string;

@@ -198,6 +198,7 @@ def harness_json_from_native_pre_tool_review(
     response: Mapping[str, object],
     *,
     approval: Mapping[str, object] | None,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Pause a native review without treating it as a terminal block."""
 
@@ -210,7 +211,13 @@ def harness_json_from_native_pre_tool_review(
         raw_request_id = approval.get("request_id")
         if isinstance(raw_url, str) and raw_url.strip():
             approval_url = raw_url.strip()
-            reason = f"{reason} Approve this request in HOL Guard: {approval_url}"
+            from ..approval_hook_copy import with_approval_review_url
+
+            reason = with_approval_review_url(
+                reason,
+                {"approval_url": approval_url},
+                guard_home=guard_home,
+            )
         if isinstance(raw_request_id, str) and raw_request_id.strip():
             approval_request_id = raw_request_id.strip()
     permission_decision = _native_review_permission_decision(harness)
