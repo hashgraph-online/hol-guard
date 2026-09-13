@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from hashlib import sha256
@@ -159,7 +160,7 @@ def resolved_package_launcher_executable(command: str) -> Path | None:
         except OSError:
             return None
     else:
-        found = shutil.which(command) or shutil.which(launcher)
+        found = _which_package_launcher(command) or _which_package_launcher(launcher)
         if found is None:
             return None
         try:
@@ -169,6 +170,19 @@ def resolved_package_launcher_executable(command: str) -> Path | None:
     if not resolved.is_file():
         return None
     return resolved
+
+
+def _which_package_launcher(launcher: str) -> str | None:
+    """Resolve a launcher on PATH, skipping Guard package shims."""
+
+    path_value = os.environ.get("PATH", "")
+    parts = [
+        part
+        for part in path_value.split(os.pathsep)
+        if part and "package-shims" not in Path(part).as_posix()
+    ]
+    search_path = os.pathsep.join(parts) if parts else None
+    return shutil.which(launcher, path=search_path) if search_path is not None else shutil.which(launcher)
 
 
 def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:

@@ -14570,6 +14570,9 @@ function whyPaused(request) {
     case "file-write":
       return "This writes to a file on your computer. Guard stops this by default.";
     case "tool-call":
+      if ((request.artifact_name ?? "").startsWith("chrome-devtools:") || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
+        return "This clicks or inspects a page in the browser. Confirm it if you meant to.";
+      }
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
       if (isPackageDependencyMutationRequest(request)) {
@@ -15092,11 +15095,18 @@ function resolveFileReadPath(item) {
   if (paths.length > 0) return paths[0];
   return item.launch_target ?? null;
 }
+function isBrowserToolReview(item) {
+  const name = item.artifact_name ?? "";
+  if (name.startsWith("chrome-devtools:")) {
+    return true;
+  }
+  return item.changed_fields.some((field) => field.toLowerCase().includes("browser"));
+}
 function resolveTerminalLabel(item) {
   const envelope = item.action_envelope_json;
   if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
   if (item.artifact_type === "tool_call" && item.changed_fields.includes("runtime_tool_call")) {
-    return item.changed_fields.includes("runtime_browser_tool_call") ? "Browser tool" : "MCP tool";
+    return isBrowserToolReview(item) ? "Browser tool" : "MCP tool";
   }
   const actionType = envelope?.action_type;
   if (actionType === "shell_command") return "Command";
