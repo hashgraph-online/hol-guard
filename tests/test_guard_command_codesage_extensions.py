@@ -27,6 +27,8 @@ from tests.command_extension_contracts import assert_reviewed_command_cases, ass
 
 
 def _enabled_snapshot() -> ExtensionControlRuntimeSnapshot:
+    """Prevent inactive reference rules from making no-match assertions pass vacuously."""
+
     digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     layer = ExtensionControlLayer(
         schema_version=CONTROL_SCHEMA_VERSION,

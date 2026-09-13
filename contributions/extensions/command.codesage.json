@@ -2,8 +2,8 @@
   "schemaVersion": "guard.extension-contribution.v1",
   "id": "command.codesage",
   "version": "1.0.0",
-  "name": "CodeSage",
-  "description": "Reviews CodeSage hook installation and MCP registration changes while leaving doctor, status, and search automatic.",
+  "name": "CodeSage Python reference rules",
+  "description": "Python reference rules for CodeSage hook installation and MCP registration. Production native hooks do not consume these rules. Enabling the extension does not make doctor, status, or search automatic.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
