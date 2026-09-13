@@ -2506,7 +2506,7 @@ function ApprovalPasswordSection(props) {
 }
 function cloudReviewStatusCopy(status) {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
-  if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization.";
+  if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
   if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
@@ -2526,9 +2526,9 @@ function CloudReviewSettings() {
   const dialog = reactExports.useRef(null);
   const revision = reactExports.useRef(0);
   useFocusTrap(action !== null, dialog);
-  const refresh = reactExports.useCallback(async () => {
+  const refresh = reactExports.useCallback(async (showLoading = true) => {
     const current = ++revision.current;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const result = await fetchCloudReviewSettings();
       if (current !== revision.current) return;
@@ -2550,13 +2550,22 @@ function CloudReviewSettings() {
   }, [refresh]);
   reactExports.useEffect(() => {
     const onFocus = () => {
-      if (action === null) void refresh();
+      if (action === null && !document.hidden) void refresh(false);
     };
     window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(onFocus, 15e3);
     return () => {
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(timer);
     };
   }, [refresh, action]);
+  function openConfirmation(nextAction) {
+    revision.current += 1;
+    setAction(nextAction);
+    setError(null);
+  }
   function close() {
     if (pending) return;
     setAction(null);
@@ -2606,6 +2615,7 @@ function CloudReviewSettings() {
   let statusCopy = error;
   if (status) statusCopy = cloudReviewStatusCopy(status);
   if (loading) statusCopy = "Checking device authorization...";
+  const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at)) ? new Date(status.last_synced_at) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -2633,16 +2643,32 @@ function CloudReviewSettings() {
         }
       )
     ] }),
+    status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.connected ? "Connected" : "Not connected" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.enabled ? "Enabled" : "Confirmation needed" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Last activity delivered" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: deliveredAt ? /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: deliveredAt.toISOString(), children: deliveredAt.toLocaleString(void 0, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        }) }) : "Not recorded yet" })
+      ] })
+    ] }) : null,
     status?.connected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
       !status.enabled || needsRecovery ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           disabled: loading || pending,
-          onClick: () => {
-            setAction("enable");
-            setError(null);
-          },
+          onClick: () => openConfirmation("enable"),
           className: "min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50",
           children: status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"
         }
@@ -2652,10 +2678,7 @@ function CloudReviewSettings() {
         {
           type: "button",
           disabled: loading || pending,
-          onClick: () => {
-            setAction("disable");
-            setError(null);
-          },
+          onClick: () => openConfirmation("disable"),
           className: "min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50",
           children: "Turn off Cloud Review"
         }

@@ -22,6 +22,7 @@ from .cloud_review_event_delivery import (
     post_review_events,
 )
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
+from .cloud_review_retry_recovery import repair_retry_identity_failures
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
 from .local_request_snapshots import (
     _cloud_scrub_text,
@@ -155,6 +156,7 @@ def _complete_sync_state(
     delivery_binding: dict[str, str],
     *,
     accepted: int,
+    delivered: int,
     rejected: int,
     errors: list[str],
 ) -> tuple[str, dict[str, object]]:
@@ -163,6 +165,8 @@ def _complete_sync_state(
     pending_error = errors[0] if errors else outbox_status.get("last_error")
     if accepted > 0 or outbox_status["depth"] == 0:
         state["last_success_at"] = completed_at
+    if delivered > 0:
+        state.update({"last_delivery_at": completed_at, "last_delivery_binding": delivery_binding})
     state.update(
         {
             "state": "error" if pending_error and outbox_status["depth"] else "idle",
@@ -179,11 +183,9 @@ def _complete_sync_state(
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
-    """Return whether Cloud already owns a newer authoritative request state.
+    """Ignore refreshes superseded by an authoritative Cloud decision.
 
-    ``decision_queued`` means a Cloud decision was durably queued for delivery;
-    subsequent local refresh/resolution events cannot replace it. The eventual
-    ``decision_applied`` acknowledgement travels as a separate outbox event.
+    Decision application acknowledgements travel as separate outbox events.
     """
     if item.get("code") == "stale_sequence":
         return True
@@ -255,7 +257,7 @@ def sync_cloud_review_events_once(
 
     state, batch_binding_key, batch_limits = _prepare_sync_batch_state(store, delivery_binding)
 
-    total_accepted = total_rejected = 0
+    total_accepted = total_rejected = total_delivered = 0
     all_errors: list[str] = []
     batches = 0
 
@@ -320,6 +322,9 @@ def sync_cloud_review_events_once(
             rejected = int(rejected_value) if isinstance(rejected_value, (int, float)) else 0
             total_accepted += accepted
             total_rejected += rejected
+            delivered = response.get("delivered")
+            if isinstance(delivered, int) and not isinstance(delivered, bool) and 0 <= delivered <= accepted:
+                total_delivered += delivered
             batches += 1
             batch_limits = next_review_batch_limits(batch_limits, response)
             _persist_sync_batch_limits(store, state, batch_binding_key, batch_limits)
@@ -360,6 +365,9 @@ def sync_cloud_review_events_once(
                     and len(per_event_results) - accepted == rejected
                 ):
                     store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
+                    retry_sequences, retry_results = repair_retry_identity_failures(
+                        store, sequences=retry_sequences, results=retry_results, binding=delivery_binding
+                    )
                     if retry_sequences:
                         message = _retry_result_message(retry_results)
                         all_errors.append(message)
@@ -403,6 +411,7 @@ def sync_cloud_review_events_once(
             state,
             delivery_binding,
             accepted=total_accepted,
+            delivered=total_delivered,
             rejected=total_rejected,
             errors=all_errors,
         )

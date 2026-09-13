@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
+from .cloud_review_retry_recovery import prepare_retry_identity_replay
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,6 +130,7 @@ def _cloud_sync_sync_loop(
     from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
     error_streak = 0
+    prepared_binding: dict[str, str] | None = None
     while not stop_event.is_set():
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
@@ -141,6 +143,10 @@ def _cloud_sync_sync_loop(
                 wake_signal.wait(observed_generation, poll_interval)
                 continue
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
+            binding = store.get_review_event_oauth_binding()
+            if isinstance(binding, dict) and binding != prepared_binding:
+                _ = prepare_retry_identity_replay(store, binding=binding)
+                prepared_binding = binding
             result = sync.sync_cloud_review_events_once(store, auth_context)
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):

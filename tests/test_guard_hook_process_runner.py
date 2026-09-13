@@ -818,7 +818,8 @@ def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Pa
 
 
 def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=2)
+    timeout_seconds = 2.0 * under_coverage_scale(3.0)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=timeout_seconds)
     try:
         runner.start()
         first_slot = next(iter(runner._all_slots.values()))  # pyright: ignore[reportPrivateUsage]
@@ -846,7 +847,7 @@ def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> No
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-            deadline=time.monotonic() + 2,
+            deadline=time.monotonic() + timeout_seconds,
         )
     finally:
         runner.close()

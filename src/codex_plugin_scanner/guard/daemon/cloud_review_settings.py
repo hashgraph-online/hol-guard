@@ -28,9 +28,10 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     status = exact_cloud_review_status(store)
     binding = store.get_review_event_oauth_binding()
     profile = store.get_cloud_sync_profile()
+    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
     outbox = store.review_event_outbox_status(
         now=datetime.now(timezone.utc).isoformat(),
-        **({key: value for key, value in binding.items() if key != "oauth_source"} if binding else {}),
+        **(delivery_binding or {}),
     )
     sync_key = "guard_cloud_review_sync_state"
     if store.guard_source != "default":
@@ -50,7 +51,11 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         "held_events": store.count_recoverable_unbound_review_events(),
         "isolated_events": outbox.get("quarantined_depth", 0),
         "activation_error": recovery.get("error"),
-        "last_synced_at": sync.get("last_success_at"),
+        "last_synced_at": (
+            sync.get("last_delivery_at")
+            if delivery_binding is not None and sync.get("last_delivery_binding") == delivery_binding
+            else None
+        ),
         "delivery_state": sync.get("state", "idle"),
         "approval_gate": public_config(store.guard_home).to_dict(),
     }

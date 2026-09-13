@@ -11,7 +11,7 @@ import { ConnectGuardCloudButton } from "../connect-guard-cloud-button";
 
 export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
-  if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization.";
+  if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
   if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
@@ -33,9 +33,9 @@ export function CloudReviewSettings() {
   const revision = useRef(0);
   useFocusTrap(action !== null, dialog);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showLoading = true) => {
     const current = ++revision.current;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const result = await fetchCloudReviewSettings();
       if (current !== revision.current) return;
@@ -56,10 +56,22 @@ export function CloudReviewSettings() {
   }, [refresh]);
 
   useEffect(() => {
-    const onFocus = () => { if (action === null) void refresh(); };
+    const onFocus = () => { if (action === null && !document.hidden) void refresh(false); };
     window.addEventListener("focus", onFocus);
-    return () => { window.removeEventListener("focus", onFocus); };
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(onFocus, 15_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(timer);
+    };
   }, [refresh, action]);
+
+  function openConfirmation(nextAction: "enable" | "disable") {
+    revision.current += 1;
+    setAction(nextAction);
+    setError(null);
+  }
 
   function close() {
     if (pending) return;
@@ -106,6 +118,8 @@ export function CloudReviewSettings() {
   let statusCopy = error;
   if (status) statusCopy = cloudReviewStatusCopy(status);
   if (loading) statusCopy = "Checking device authorization...";
+  const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at))
+    ? new Date(status.last_synced_at) : null;
   return (
     <section aria-labelledby="cloud-review-heading" className="border-t border-slate-200 pt-4">
       <div className="flex items-start justify-between gap-3">
@@ -125,16 +139,36 @@ export function CloudReviewSettings() {
           <HiMiniArrowPath aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
+      {status ? (
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+          <div className="min-w-0">
+            <dt className="text-xs text-slate-600">Cloud connection</dt>
+            <dd className="mt-1 font-medium text-brand-dark">{status.connected ? "Connected" : "Not connected"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-slate-600">Cloud decisions</dt>
+            <dd className="mt-1 font-medium text-brand-dark">{status.enabled ? "Enabled" : "Confirmation needed"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-slate-600">Last activity delivered</dt>
+            <dd className="mt-1 font-medium text-brand-dark">
+              {deliveredAt ? <time dateTime={deliveredAt.toISOString()}>{deliveredAt.toLocaleString(undefined, {
+                month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+              })}</time> : "Not recorded yet"}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
       {status?.connected ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {!status.enabled || needsRecovery ? (
-            <button type="button" disabled={loading || pending} onClick={() => { setAction("enable"); setError(null); }}
+            <button type="button" disabled={loading || pending} onClick={() => openConfirmation("enable")}
               className="min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"}
             </button>
           ) : null}
           {status.enabled ? (
-            <button type="button" disabled={loading || pending} onClick={() => { setAction("disable"); setError(null); }}
+            <button type="button" disabled={loading || pending} onClick={() => openConfirmation("disable")}
               className="min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50">
               Turn off Cloud Review
             </button>
