@@ -21,6 +21,8 @@ from codex_plugin_scanner.version import __version__
 
 _COMMANDS_HUB = "codex_plugin_scanner.guard.cli.commands"
 _CLI_MODULE = "codex_plugin_scanner.cli"
+_COMMANDS_PARSER = "codex_plugin_scanner.guard.cli.commands_parser"
+_COMMANDS_SUPPORT = "codex_plugin_scanner.guard.cli.commands_support"
 
 
 def _run_as_hol_guard(argv: list[str]) -> tuple[int, str]:
@@ -49,6 +51,71 @@ def test_hol_guard_version_answers_without_command_surface(monkeypatch: pytest.M
     assert code == 0
     assert output.strip() == f"hol-guard {__version__}"
     assert _COMMANDS_HUB not in sys.modules
+
+
+def test_desktop_bootstrap_fast_path_argv_rejects_overrides() -> None:
+    from codex_plugin_scanner.guard.cli.desktop_bootstrap import is_desktop_bootstrap_fast_path_argv
+
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap"]) is True
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--json"]) is True
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--help"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--guard-home", "other"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "dashboard-update"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["status"]) is False
+
+
+def test_hol_guard_desktop_bootstrap_json_skips_command_surface(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_PREFLIGHT", "1")
+    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    code, output = _run_as_hol_guard(["desktop", "bootstrap", "--json"])
+
+    payload = json.loads(output)
+    assert code == 0
+    assert payload["schema"] == "guard-desktop-bootstrap.v1"
+    assert _COMMANDS_HUB not in sys.modules
+    assert _COMMANDS_PARSER not in sys.modules
+    assert _COMMANDS_SUPPORT not in sys.modules
+
+
+def test_hol_guard_desktop_bootstrap_fast_path_maps_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import desktop_bootstrap
+
+    monkeypatch.setattr(
+        desktop_bootstrap,
+        "run_desktop_bootstrap_cli",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("desktop bootstrap failed")),
+    )
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    previous_argv = sys.argv
+    sys.argv = ["hol-guard", "desktop", "bootstrap", "--json"]
+    try:
+        captured_err = io.StringIO()
+        with contextlib.redirect_stderr(captured_err), contextlib.redirect_stdout(io.StringIO()):
+            from codex_plugin_scanner.cli import main
+
+            code = main(["desktop", "bootstrap", "--json"])
+    finally:
+        sys.argv = previous_argv
+
+    assert code == 1
+    assert "desktop bootstrap failed" in captured_err.getvalue()
 
 
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:

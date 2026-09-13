@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.metadata
 import json
 import sys
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 from ..dashboard_launcher import build_desktop_dashboard_session_url, desktop_bootstrap_is_preflight
-from ._commands_shared import *  # noqa: F403
 
 DESKTOP_BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 _MAX_PENDING_APPROVALS = 20
