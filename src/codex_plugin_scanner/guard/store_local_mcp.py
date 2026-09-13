@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .runtime.local_cli_commands import LocalCliCommand, LocalCliCommandState
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
+from .runtime.mcp_protection import package_launcher_name
 from .store_local_cli import _grant_from_row, _row_values
 from .store_local_cli_schema import ensure_local_cli_schema
 
@@ -189,6 +190,12 @@ class StoreLocalMcpMixin:
                 ),
             ).fetchone()
             if observation is None:
+                observation = _equivalent_package_launcher_observation(
+                    connection,
+                    command=command,
+                    args_hash=args_hash,
+                )
+            if observation is None:
                 return None
             cli_id, identity_hash = _row_values(observation, 2)
             if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
@@ -209,6 +216,35 @@ class StoreLocalMcpMixin:
         grant["commands"] = self.read_local_cli_command_catalog(cli_id)
         grant["command_states"] = self.read_local_cli_command_states(cli_id)
         return grant
+
+
+def _equivalent_package_launcher_observation(
+    connection: sqlite3.Connection,
+    *,
+    command: str | None,
+    args_hash: str | None,
+) -> tuple[str, str] | None:
+    """Match a this-device MCP grant across PATH vs absolute launcher paths."""
+
+    launcher = package_launcher_name(command or "")
+    if launcher is None or not isinstance(args_hash, str) or not args_hash.strip():
+        return None
+    rows = connection.execute(
+        """
+        select cli_id, identity_hash, server_command
+        from local_cli_observation
+        where surface = 'mcp' and server_args_hash = ?
+        order by last_seen_at desc, cli_id asc
+        """,
+        (args_hash,),
+    ).fetchall()
+    for row in rows:
+        cli_id, identity_hash, server_command = _row_values(row, 3)
+        if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
+            continue
+        if package_launcher_name(str(server_command or "")) == launcher:
+            return cli_id, identity_hash
+    return None
 
 
 def _normalized_identity_hash(value: str | None) -> str | None:

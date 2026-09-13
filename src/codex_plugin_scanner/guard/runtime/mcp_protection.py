@@ -135,9 +135,19 @@ def mcp_tool_identity_metadata(identity: McpToolIdentity) -> dict[str, object]:
     }
 
 
-def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:
+_PACKAGE_LAUNCHERS = frozenset({"bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"})
+
+
+def package_launcher_name(command: str) -> str | None:
+    """Return the canonical package-launcher basename, if this command is one."""
+
     command_name = _command_name(command)
-    if command_name not in {"bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"}:
+    return command_name if command_name in _PACKAGE_LAUNCHERS else None
+
+
+def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:
+    command_name = package_launcher_name(command)
+    if command_name is None:
         return None, None
     package_token = _package_token(command_name=command_name, args=args)
     if package_token is None:

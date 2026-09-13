@@ -626,11 +626,15 @@ export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | nu
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
+  if (item.artifact_type === "tool_call") {
+    return item.changed_fields.includes("runtime_browser_tool_call") ? "Browser tool" : "MCP tool";
+  }
   const actionType = envelope?.action_type;
   if (actionType === "shell_command") return "Command";
   if (actionType === "prompt") return "Prompt excerpt";
   if (actionType === "file_read" || actionType === "file_write") return "File path";
   if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "browser_action") return "Browser tool";
   if (actionType === "package_script") return "Package";
   if (actionType === "network_request") return "Network destination";
 

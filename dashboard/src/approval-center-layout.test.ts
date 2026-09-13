@@ -252,6 +252,34 @@ assert(
   "T482: resolveTerminalLabel returns 'MCP server / tool' for mcp_tool action type"
 );
 
+const queuedBrowserTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:evaluate_script",
+  changed_fields: ["runtime_tool_call", "runtime_browser_tool_call"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools evaluate_script current page"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedBrowserTool) === "Browser tool",
+  "queued browser MCP tool calls are labeled as browser tools, not shell commands"
+);
+
+const queuedMcpTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "filesystem:read_file",
+  changed_fields: ["runtime_tool_call"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command" }
+};
+assert(
+  resolveTerminalLabel(queuedMcpTool) === "MCP tool",
+  "queued MCP tool calls are labeled as MCP tools, not shell commands"
+);
+
 const packageRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
   action_envelope_json: { ...BASE_ENVELOPE, action_type: "package_script", package_manager: "npm", package_name: "lodash", script_name: null }
