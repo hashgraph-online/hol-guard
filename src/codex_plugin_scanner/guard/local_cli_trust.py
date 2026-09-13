@@ -139,6 +139,7 @@ def matching_local_mcp_grant(
         args_hash=args_hash,
         package_name=_mcp_server_package_field(artifact, "package_name"),
         package_version=_mcp_server_package_field(artifact, "package_version"),
+        package_source=_mcp_server_package_field(artifact, "package_source"),
     )
     if not isinstance(grant, Mapping):
         return None

@@ -21,6 +21,7 @@ class McpServerIdentity:
     args_hash: str
     package_name: str | None
     package_version: str | None
+    package_source: str
     transport: str
     env_keys: tuple[str, ...]
     env_values_hash: str
@@ -50,6 +51,7 @@ def build_mcp_server_identity(
     """Build a stable server identity with secret-safe configured env binding."""
 
     package_name, package_version = _package_identity(command, args)
+    package_source = package_source_token(command, args)
     env_key_set = {key.strip() for key in env_keys if key.strip()}
     if env is not None:
         env_key_set.update(key.strip() for key in env if key.strip())
@@ -76,6 +78,7 @@ def build_mcp_server_identity(
         args_hash=args_hash,
         package_name=package_name,
         package_version=package_version,
+        package_source=package_source,
         transport=transport,
         env_keys=env_keys,
         env_values_hash=env_values_hash,
@@ -118,6 +121,7 @@ def mcp_server_identity_metadata(identity: McpServerIdentity) -> dict[str, objec
         "args_hash": identity.args_hash,
         "package_name": identity.package_name,
         "package_version": identity.package_version,
+        "package_source": identity.package_source,
         "transport": identity.transport,
         "env_keys": list(identity.env_keys),
         "env_values_hash": identity.env_values_hash,
@@ -185,6 +189,39 @@ def _which_package_launcher(launcher: str) -> str | None:
 def _is_guard_package_shim_dir(part: str) -> bool:
     posix = Path(part).expanduser().as_posix().rstrip("/")
     return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
+
+
+_PACKAGE_SOURCE_FLAGS = (
+    "--registry",
+    "--index-url",
+    "--extra-index-url",
+    "--index",
+)
+
+
+def package_source_token(command: str, args: tuple[str, ...]) -> str:
+    """Return a canonical package-source token, or 'default' when none is set."""
+
+    sources: list[str] = []
+    index = 0
+    while index < len(args):
+        value = args[index].strip()
+        matched = False
+        for flag in _PACKAGE_SOURCE_FLAGS:
+            equals = f"{flag}="
+            if value == flag and index + 1 < len(args):
+                sources.append(f"{flag}={args[index + 1].strip()}")
+                index += 2
+                matched = True
+                break
+            if value.startswith(equals):
+                sources.append(f"{flag}={value.partition('=')[2].strip()}")
+                index += 1
+                matched = True
+                break
+        if not matched:
+            index += 1
+    return "|".join(sources) if sources else "default"
 
 
 def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:

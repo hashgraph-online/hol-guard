@@ -160,6 +160,7 @@ class StoreLocalMcpMixin:
         args_hash: str | None = None,
         package_name: str | None = None,
         package_version: str | None = None,
+        package_source: str | None = None,
     ) -> dict[str, object] | None:
         hash_value = _normalized_identity_hash(server_identity_hash)
         if hash_value is None:
@@ -198,6 +199,7 @@ class StoreLocalMcpMixin:
                     command=command,
                     package_name=package_name,
                     package_version=package_version,
+                    package_source=package_source,
                 )
             if observation is None:
                 return None
@@ -228,6 +230,7 @@ def _equivalent_package_launcher_observation(
     command: str | None,
     package_name: str | None,
     package_version: str | None,
+    package_source: str | None,
 ) -> tuple[str, str] | None:
     """Match a this-device MCP grant for the same package launcher and package."""
 
@@ -236,6 +239,9 @@ def _equivalent_package_launcher_observation(
     if requested is None or not runtime_package:
         return None
     runtime_version = _normalized_package_version(package_version)
+    if not isinstance(package_source, str) or not package_source.strip():
+        return None
+    runtime_source = package_source.strip()
     rows = connection.execute(
         """
         select o.cli_id, o.identity_hash, o.server_command, o.example_label, g.state
@@ -243,17 +249,18 @@ def _equivalent_package_launcher_observation(
         left join local_cli_grant as g on g.cli_id = o.cli_id
         where o.surface = 'mcp'
         order by case when g.state = 'blocked' then 0 else 1 end, o.last_seen_at desc, o.cli_id asc
+        limit 64
         """
     ).fetchall()
     for row in rows:
         cli_id, identity_hash, server_command, example_label, _grant_state = _row_values(row, 5)
         if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
             continue
-        stored_package, stored_version = _observation_package_identity(
+        stored_package, stored_version, stored_source = _observation_package_identity(
             server_command if isinstance(server_command, str) else None,
             example_label if isinstance(example_label, str) else None,
         )
-        if stored_package != runtime_package or stored_version != runtime_version:
+        if stored_package != runtime_package or stored_version != runtime_version or stored_source != runtime_source:
             continue
         stored = resolved_package_launcher_executable(str(server_command or ""))
         if stored is not None and stored == requested:
@@ -264,15 +271,15 @@ def _equivalent_package_launcher_observation(
 def _observation_package_identity(
     server_command: str | None,
     example_label: str | None,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str]:
     if not isinstance(example_label, str) or not example_label.strip():
-        return None, None
+        return None, None, "default"
     try:
         parts = shlex.split(example_label)
     except ValueError:
-        return None, None
+        return None, None, "default"
     if not parts:
-        return None, None
+        return None, None, "default"
     command = server_command or parts[0]
     identity = build_mcp_server_identity(
         config_path="",
@@ -280,7 +287,11 @@ def _observation_package_identity(
         args=tuple(parts[1:]),
         transport="stdio",
     )
-    return identity.package_name, _normalized_package_version(identity.package_version)
+    return (
+        identity.package_name,
+        _normalized_package_version(identity.package_version),
+        identity.package_source,
+    )
 
 
 def _normalized_package_version(value: str | None) -> str:
@@ -288,6 +299,13 @@ def _normalized_package_version(value: str | None) -> str:
         return "latest"
     text = value.strip()
     return text or "latest"
+
+
+def _normalized_package_source(value: str | None) -> str:
+    if not isinstance(value, str):
+        return "default"
+    text = value.strip()
+    return text or "default"
 
 
 def _normalized_identity_hash(value: str | None) -> str | None:

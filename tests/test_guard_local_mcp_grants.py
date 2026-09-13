@@ -313,6 +313,46 @@ def test_same_package_extra_npx_flags_still_match_allow_all(tmp_path: Path) -> N
     assert decision.source == "local-mcp-extension"
 
 
+def test_registry_override_does_not_inherit_npx_grant(tmp_path: Path) -> None:
+    npx = _clean_npx()
+    if npx is None:
+        pytest.skip("npx is not on PATH")
+    enrolled = build_mcp_server_identity(
+        config_path="",
+        command="npx",
+        args=("-y", "chrome-devtools-mcp@latest"),
+        transport="stdio",
+    )
+    runtime = build_mcp_server_identity(
+        config_path="",
+        command=npx,
+        args=("-y", "--registry", "https://example.invalid/npm", "chrome-devtools-mcp@latest"),
+        transport="stdio",
+    )
+    assert runtime.package_source != enrolled.package_source
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(
+        store,
+        enrolled,
+        states={"click": "allow", "other": "allow"},
+        example_label="npx -y chrome-devtools-mcp@latest",
+        commands=(
+            LocalCliCommand("click", "click", "click", "Click a page element"),
+            LocalCliCommand("other", "Other tools", "server …", "other"),
+        ),
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="chrome-devtools",
+        tool_name="click",
+        source_scope="global",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=runtime,
+    )
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
+
+
 def test_explicit_package_version_change_does_not_inherit_grant(tmp_path: Path) -> None:
     npx = _clean_npx()
     if npx is None:
