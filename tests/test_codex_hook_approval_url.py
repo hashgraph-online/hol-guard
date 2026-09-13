@@ -46,6 +46,17 @@ def test_stored_hook_copy_does_not_include_guard_token() -> None:
     assert "guard-token=" not in stored
 
 
+def test_stored_hook_copy_uses_primary_url_without_approval_center_field() -> None:
+    payload = {
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-2",
+        "approval_request_id": "req-codex-2",
+    }
+    stored = _native_approval_center_context(payload, harness="codex")
+    assert stored is not None
+    assert "http://127.0.0.1:5474/requests/req-codex-2" in stored
+    assert "Open HOL Guard to approve or keep this blocked:" in stored
+
+
 def test_live_hook_copy_adds_scoped_token_on_loopback(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     _write_daemon_token(guard_home, "secret-daemon-token")

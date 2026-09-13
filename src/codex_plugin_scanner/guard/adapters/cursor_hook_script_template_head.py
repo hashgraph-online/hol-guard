@@ -462,8 +462,24 @@ def _cursor_read_file_permission(permission: str) -> str:
     return "allow"
 
 
+def _cursor_review_url(guard_payload: dict[str, object]) -> str | None:
+    for key in ("primary_approval_url", "approval_url", "guardApprovalUrl"):
+        value = guard_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    queued = guard_payload.get("approval_requests")
+    if isinstance(queued, list):
+        for item in queued:
+            if not isinstance(item, Mapping):
+                continue
+            value = item.get("approval_url")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
 def _cursor_reason(guard_payload: dict[str, object]) -> str:
-    primary_url = guard_payload.get("primary_approval_url")
+    review_url = _cursor_review_url(guard_payload)
     reason: str | None = None
     for key in ("reason", "stopReason", "systemMessage", "review_hint", "risk_summary", "why_now", "risk_headline"):
         value = guard_payload.get(key)
@@ -485,14 +501,11 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
                     reason = value.strip()
                     break
     if reason is None:
-        if isinstance(primary_url, str) and primary_url.strip():
-            return f"HOL Guard needs approval for this Cursor action. Review it at {primary_url.strip()}."
+        if review_url is not None:
+            return f"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: {review_url}."
         return "HOL Guard blocked this Cursor action."
-    if isinstance(primary_url, str) and primary_url.strip():
-        url_str = primary_url.strip()
-        if url_str in reason:
-            return reason
-        return f"{reason} Review: {url_str}"
-    return reason
+    if review_url is None or review_url in reason:
+        return reason
+    return f"{reason} Open HOL Guard to approve or keep this blocked: {review_url}."
 
 '''
