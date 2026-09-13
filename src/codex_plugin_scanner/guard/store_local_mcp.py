@@ -246,7 +246,8 @@ def _equivalent_package_launcher_observation(
         """
         select o.cli_id, o.identity_hash, o.server_command, o.example_label, g.state
         from local_cli_observation as o
-        left join local_cli_grant as g on g.cli_id = o.cli_id
+        join local_cli_grant as g
+          on g.cli_id = o.cli_id and g.identity_hash = o.identity_hash
         where o.surface = 'mcp'
         order by case when g.state = 'blocked' then 0 else 1 end, o.last_seen_at desc, o.cli_id asc
         """
