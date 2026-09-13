@@ -1050,7 +1050,7 @@ def _live_guard_daemon_identity(
     pid = payload.get("pid")
     if not isinstance(pid, int) or pid <= 0 or not _guard_daemon_pid_is_running(pid):
         return None
-    if expected_pid is not None and pid != expected_pid:
+    if expected_pid is not None and not _guard_daemon_pid_is_spawned_launch(pid, expected_pid):
         return None
     url = f"http://127.0.0.1:{port}"
     try:
@@ -2808,6 +2808,36 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _guard_daemon_parent_pid(pid: int) -> int | None:
+    """Return the parent PID for a live process, or ``None`` when it cannot be proven."""
+
+    if pid <= 0:
+        return None
+    if os.name == "nt":
+        return None
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    output = _bounded_process_query_stdout([ps_path, "-p", str(pid), "-o", "ppid="])
+    if output is None:
+        return None
+    try:
+        parent_pid = int(output.strip())
+    except ValueError:
+        return None
+    return parent_pid if parent_pid > 0 else None
+
+
+def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
+    """Match the launched handle, including a PyInstaller one-file child."""
+
+    if expected_pid <= 0:
+        return False
+    if pid == expected_pid:
+        return True
+    return _guard_daemon_parent_pid(pid) == expected_pid and _guard_daemon_pid_is_running(expected_pid)
 
 
 def _guard_daemon_pid_is_proven_dead(pid: int) -> bool:
