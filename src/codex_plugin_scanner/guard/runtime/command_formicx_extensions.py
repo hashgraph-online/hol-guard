@@ -119,15 +119,11 @@ FORMICX_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.formicx.agent-start",
         title="formicx agent process start",
-        description=(
-            "Identifies `formicx agent start`, which launches a background OS subprocess for an agent."
-        ),
+        description=("Identifies `formicx agent start`, which launches a background OS subprocess for an agent."),
         severity="medium",
         risk_classes=("destructive_shell",),
         action_classes=("formicx agent process start command",),
-        safer_alternatives=(
-            "Inspect agent details using `formicx agent status <agent>` before starting.",
-        ),
+        safer_alternatives=("Inspect agent details using `formicx agent status <agent>` before starting.",),
         matcher=_FORMICX_AGENT_START,
         default_mode="review",
         safe_variants=(
@@ -142,15 +138,11 @@ FORMICX_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.formicx.agent-stop",
         title="formicx agent process stop",
-        description=(
-            "Identifies `formicx agent stop`, which terminates a running agent OS subprocess."
-        ),
+        description=("Identifies `formicx agent stop`, which terminates a running agent OS subprocess."),
         severity="medium",
         risk_classes=("destructive_shell",),
         action_classes=("formicx agent process stop command",),
-        safer_alternatives=(
-            "Check active agent status using `formicx agent status <agent>` before stopping.",
-        ),
+        safer_alternatives=("Check active agent status using `formicx agent status <agent>` before stopping.",),
         matcher=_FORMICX_AGENT_STOP,
         default_mode="review",
         safe_variants=(
@@ -165,15 +157,11 @@ FORMICX_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.formicx.agent-restart",
         title="formicx agent process restart",
-        description=(
-            "Identifies `formicx agent restart`, which stops and restarts an agent process."
-        ),
+        description=("Identifies `formicx agent restart`, which stops and restarts an agent process."),
         severity="medium",
         risk_classes=("destructive_shell",),
         action_classes=("formicx agent process restart command",),
-        safer_alternatives=(
-            "Check active agent status using `formicx agent status <agent>` before restarting.",
-        ),
+        safer_alternatives=("Check active agent status using `formicx agent status <agent>` before restarting.",),
         matcher=_FORMICX_AGENT_RESTART,
         default_mode="review",
         safe_variants=(

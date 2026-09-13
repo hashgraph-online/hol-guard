@@ -65,9 +65,10 @@ FORMICX_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
 
 def test_formicx_mutation_commands_trigger_review_observations(tmp_path: Path) -> None:
     """Mutation lifecycle commands (register, start, stop, restart) trigger review observations."""
-    for command, _action_class, rule_id in FORMICX_REVIEW_CASES:
+    for command, _action_class, _rule_id in FORMICX_REVIEW_CASES:
         evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
-        assert any(item.extension.extension_id == "command.formicx" for item in evaluation.extension_observations), command
+        is_matched = any(item.extension.extension_id == "command.formicx" for item in evaluation.extension_observations)
+        assert is_matched, command
 
 
 FORMICX_SAFE_COMMANDS: tuple[str, ...] = (

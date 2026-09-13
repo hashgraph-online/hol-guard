@@ -10,6 +10,7 @@ from .command_database_extensions import DATABASE_COMMAND_EXTENSION_SPECS, DATAB
 from .command_dns_extensions import DNS_COMMAND_EXTENSION_SPECS, DNS_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_EXTENSION_SPECS, DOMAIN_COMMAND_RULES
 from .command_extension_specs import CommandExtensionValues, command_extension_values
+from .command_formicx_extensions import FORMICX_COMMAND_EXTENSION_SPECS, FORMICX_COMMAND_RULES
 from .command_framework_extensions import FRAMEWORK_COMMAND_EXTENSION_SPECS, FRAMEWORK_COMMAND_RULES
 from .command_github_rules import GITHUB_COMMAND_EXTENSION_SPECS, GITHUB_COMMAND_RULES
 from .command_managed_service_extensions import MANAGED_SERVICE_COMMAND_EXTENSION_SPECS, MANAGED_SERVICE_COMMAND_RULES
@@ -18,7 +19,6 @@ from .command_platform_extensions import PLATFORM_COMMAND_EXTENSION_SPECS, PLATF
 from .command_probe_extensions import PROBE_COMMAND_EXTENSION_SPECS, PROBE_COMMAND_RULES
 from .command_remote_extensions import REMOTE_COMMAND_EXTENSION_SPECS, REMOTE_COMMAND_RULES
 from .command_repo2nb_extensions import REPO2NB_COMMAND_EXTENSION_SPECS, REPO2NB_COMMAND_RULES
-from .command_formicx_extensions import FORMICX_COMMAND_EXTENSION_SPECS, FORMICX_COMMAND_RULES
 from .command_search_messaging_extensions import (
     SEARCH_MESSAGING_COMMAND_EXTENSION_SPECS,
     SEARCH_MESSAGING_COMMAND_RULES,
