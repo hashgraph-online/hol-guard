@@ -1,0 +1,46 @@
+name: Run Everyday 2588 remediation
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-101-200
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply fixes
+        run: python scripts/tmp_remediate_2588.py
+      - name: Validate semantic tests
+        run: |
+          uv sync --frozen --extra dev --python 3.12
+          uv run pytest -x -vv --tb=short tests/test_guard_semantic_explanations.py
+      - name: Validate full targeted suite
+        run: |
+          uv run ruff format src/codex_plugin_scanner/guard/runtime/semantic_explanations.py src/codex_plugin_scanner/guard/runtime/action_explanation_builder.py tests/test_guard_semantic_explanations.py tests/test_guard_action_explanation_builder.py
+          uv run ruff check src/codex_plugin_scanner/guard/runtime/semantic_explanations.py src/codex_plugin_scanner/guard/runtime/action_explanation_builder.py tests/test_guard_semantic_explanations.py tests/test_guard_action_explanation_builder.py
+          uv run pytest -q tests/test_guard_semantic_explanations.py tests/test_guard_action_explanation_builder.py tests/test_guard_action_explanation_contract.py tests/test_guard_presentation_mode.py
+          cd dashboard
+          bun install --frozen-lockfile
+          bun test src/action-explanation.test.tsx src/presentation-mode.test.ts
+          bun run build
+      - name: Commit
+        run: |
+          rm scripts/tmp_remediate_2588.py .github/workflows/tmp-run-remediate-2588.yml
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: address Everyday semantic review findings" -m "Signed-off-by: Michael Kantor <6068672+kantorcodes@users.noreply.github.com>"
+          git push origin HEAD:feat/everyday-mode-101-200
+
+# diagnose remediation 2026-09-02
