@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,6 +21,37 @@ _GUARD_TOKEN_FRAGMENT = re.compile(
 
 def _without_guard_token_fragment(text: str) -> str:
     return _GUARD_TOKEN_FRAGMENT.sub("", text)
+
+
+def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | None:
+    """Return the local approval-center URL the harness should open, if one exists."""
+
+    for key in ("primary_approval_url", "approval_url", "guardApprovalUrl"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    queued = payload.get("approval_requests")
+    if not isinstance(queued, list):
+        return None
+    for item in queued:
+        if not isinstance(item, Mapping):
+            continue
+        value = item.get("approval_url")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def with_approval_review_url(reason: str, payload: Mapping[str, object]) -> str:
+    """Keep the pause reason and always include the approval URL when Guard queued one."""
+
+    review_url = approval_review_url_from_payload(payload)
+    stripped = reason.strip()
+    if review_url is None:
+        return stripped
+    if review_url in stripped:
+        return stripped
+    return f"{stripped} Open HOL Guard to approve or keep this blocked: {review_url}."
 
 
 def is_loopback_approval_url(url: str) -> bool:
@@ -86,11 +118,10 @@ def live_hook_approval_context(
         return message
     from .cli.commands_support_interaction import _preferred_approval_review_url
 
-    approval_center_url = response_payload.get("approval_center_url")
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
-        return message
-    review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
-    if not is_loopback_approval_url(review_url):
+    review_url = _preferred_approval_review_url(response_payload, harness=harness)
+    if review_url is None:
+        review_url = approval_review_url_from_payload(response_payload)
+    if review_url is None or not is_loopback_approval_url(review_url):
         return message
     tokenized = build_approval_browser_url(review_url, auth_token=token)
     if not tokenized or tokenized == review_url:
