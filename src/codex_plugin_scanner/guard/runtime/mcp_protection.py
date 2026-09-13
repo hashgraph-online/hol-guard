@@ -166,7 +166,7 @@ def resolved_package_launcher_executable(command: str) -> Path | None:
             resolved = Path(found).resolve(strict=True)
         except OSError:
             return None
-    if not resolved.is_file() or package_launcher_name(resolved.name) != launcher:
+    if not resolved.is_file():
         return None
     return resolved
 
