@@ -46,6 +46,16 @@ def _queue_local_protect_approvals(
     try:
         approval_center_url = ensure_approval_daemon(guard_home)
     except RuntimeError:
+        response_payload.pop("primary_approval_url", None)
+        evaluation = response_payload.get("supply_chain_evaluation")
+        if isinstance(evaluation, dict):
+            user_copy = evaluation.get("user_copy")
+            if not isinstance(user_copy, dict):
+                user_copy = {}
+                evaluation["user_copy"] = user_copy
+            user_copy["dashboard_url"] = None
+            user_copy["harness_message"] = "Guard could not create a local approval request. This command has not run."
+            user_copy["next_step"] = "Run hol-guard daemon repair\nThen retry this command."
         return
     detection = HarnessDetection(
         harness=artifact.harness,

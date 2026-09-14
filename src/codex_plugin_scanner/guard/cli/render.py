@@ -293,6 +293,26 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
+def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_map = _coerce_object_dict(user_copy)
+    lines: list[str] = []
+    harness_message = str(user_copy_map.get("harness_message") or "").strip()
+    if harness_message:
+        lines.append(harness_message)
+
+    next_step = str(user_copy_map.get("next_step") or "").strip()
+    if next_step and next_step not in harness_message:
+        lines.append(f"Next step: {next_step}")
+
+    dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
+    if dashboard_url and not any(dashboard_url in line for line in lines):
+        lines.append(f"Review: {dashboard_url}")
+
+    return lines
+
+
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -328,21 +348,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    dashboard_url = str(user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and dashboard_url not in harness_message:
-        lines.append(f"Review: {dashboard_url}")
-
+    lines.extend(_protect_guidance_lines(payload))
     return "\n".join(lines)
 
 
@@ -2148,19 +2154,15 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = str(user_copy.get("harness_message") or "").strip()
-            if harness_message:
-                console.print(
-                    Panel(
-                        Text(harness_message, no_wrap=False, overflow="fold"),
-                        title="Guard guidance",
-                        border_style="magenta",
-                    )
-                )
+    guidance = _protect_guidance_lines(payload)
+    if guidance:
+        console.print(
+            Panel(
+                Text("\n".join(guidance), no_wrap=False, overflow="fold"),
+                title="Guard guidance",
+                border_style="magenta",
+            )
+        )
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))
