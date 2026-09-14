@@ -19,7 +19,7 @@
   "actionClasses": [
     "shellroute routed command execution",
     "shellroute proxy lifecycle command",
-    "shellroute api key reveal"
+    "shellroute API key reveal"
   ],
   "referenceUrls": ["https://github.com/shellroute/shellroute-cli"],
   "saferAlternatives": ["Check status, balance, and countries before routing traffic, and keep the API key in a secret store."],

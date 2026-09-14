@@ -26,7 +26,7 @@ _RUN_ACTION = "shellroute routed command execution"
 _RUN_RULE = "command.shellroute.run"
 _PROXY_ACTION = "shellroute proxy lifecycle command"
 _PROXY_RULE = "command.shellroute.proxy"
-_REVEAL_ACTION = "shellroute api key reveal"
+_REVEAL_ACTION = "shellroute API key reveal"
 _REVEAL_RULE = "command.shellroute.reveal-key"
 
 SHELLROUTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
@@ -166,3 +166,5 @@ def test_shellroute_extension_publishes_official_reference() -> None:
 def test_shellroute_action_classes_publish_risk_classes() -> None:
     for action_class, risk_classes in SHELLROUTE_ACTION_RISK_CLASSES.items():
         assert risk_classes_for_command_action(action_class) == risk_classes
+    # Public action classes keep display casing; the lookup normalizes to the lowercase map key.
+    assert risk_classes_for_command_action(_REVEAL_ACTION) == ("local_secret_read",)

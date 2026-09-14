@@ -118,7 +118,7 @@ SHELLROUTE_COMMAND_RULES = (
         description="Identifies `shellroute reveal-key`, which prints the stored account API key to the terminal.",
         severity="high",
         risk_classes=("local_secret_read",),
-        action_classes=("shellroute api key reveal",),
+        action_classes=("shellroute API key reveal",),
         safer_alternatives=(
             "Give automation the key through the platform's secret store as `SHELLROUTE_API_KEY` "
             "instead of printing it in a session.",
@@ -148,7 +148,7 @@ SHELLROUTE_COMMAND_EXTENSION_SPECS = (
         action_classes=(
             "shellroute routed command execution",
             "shellroute proxy lifecycle command",
-            "shellroute api key reveal",
+            "shellroute API key reveal",
         ),
         risk_classes=("destructive_shell", "execution", "local_secret_read", "network_egress"),
         safer_alternatives=(
