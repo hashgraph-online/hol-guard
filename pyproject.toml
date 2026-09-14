@@ -205,8 +205,9 @@ relative_files = true
 source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
 also_copy = [
   "src/codex_plugin_scanner",
+  "contracts/extensions",
   "contracts/guard-cloud-review",
-  "docs/guard/contracts/guard-cloud-review.md",
+  "docs/guard/contracts",
 ]
 pytest_add_cli_args_test_selection = [
   "tests/test_guard_command_model.py",
