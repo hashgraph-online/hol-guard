@@ -20,6 +20,7 @@ from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
@@ -66,7 +67,6 @@ from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
 from .runtime.github_workflow_runtime import (
-    github_workflow_requires_local_once,
     issue_github_workflow_capability_for_resolution,
 )
 from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
@@ -796,7 +796,7 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
@@ -819,7 +819,7 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
@@ -1835,21 +1835,6 @@ def _now() -> str:
 def _approval_once_policy_expires_at(resolved_at: str) -> str:
     parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
-
-
-def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
-    artifact_type = request.get("artifact_type")
-    if artifact_type == "package_request":
-        return False
-    artifact_id = request.get("artifact_id")
-    if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
-        return False
-    if github_workflow_requires_local_once(request):
-        return True
-    launch_target = request.get("launch_target")
-    if not isinstance(launch_target, str):
-        return False
-    return launch_target.startswith(("npm ", "npx ", "pnpm ", "yarn ", "bun "))
 
 
 def _record_local_once_approval(

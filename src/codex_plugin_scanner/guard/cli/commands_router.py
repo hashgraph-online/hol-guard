@@ -118,9 +118,14 @@ def _invoke_guard_handler(handler: object, args: argparse.Namespace, **kwargs: o
 
 
 def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
-    """Prime local integrity state in the long-lived daemon process."""
+    """Do not prime integrity while constructing the daemon process.
 
-    return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+    Desktop waits for the approval-center URL. Secret-store priming on a large
+    Guard home can exceed that timeout before HTTP accepts.
+    """
+
+    del args
+    return False
 
 
 def _should_allow_system_keyring(args: argparse.Namespace) -> bool:

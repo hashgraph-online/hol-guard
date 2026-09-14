@@ -66,12 +66,12 @@ def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path:
     assert cloud_review_settings_status(store)["pending_uploads"] == 1
     alternate = GuardStore(store.guard_home, source="alternate")
     now = datetime.now(timezone.utc).isoformat()
-    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "idle", "last_success_at": "default"}, now)
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "idle", "last_delivery_at": "default"}, now)
     store.set_sync_payload(
-        "guard_cloud_review_sync_state:alternate", {"state": "error", "last_success_at": "alternate"}, now
+        "guard_cloud_review_sync_state:alternate", {"state": "error", "last_delivery_at": "alternate"}, now
     )
     result = cloud_review_settings_status(alternate)
-    assert result["last_synced_at"] == "alternate"
+    assert result["last_synced_at"] is None
     assert result["delivery_state"] == "error"
     assert result["pending_uploads"] == 0
 

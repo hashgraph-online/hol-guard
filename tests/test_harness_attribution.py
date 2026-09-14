@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,
     cursor_runtime_detected,
+    origin_harness_env,
     resolve_environment_harness,
     resolve_runtime_hook_harness,
 )
@@ -43,6 +44,18 @@ def test_resolve_environment_harness_matches_each_runtime_family() -> None:
     assert resolve_environment_harness({"CLAUDE_CODE_ENTRYPOINT": "cli"}) == "claude-code"
     assert resolve_environment_harness({"CURSOR_TRACE_ID": "trace-1"}) == "cursor"
     assert resolve_environment_harness({"CODEX_SANDBOX": "1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_THREAD_ID": "thread-1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_HOME": "/tmp/codex-home"}) is None
+    assert resolve_environment_harness({"GROK_AGENT": "1"}) == "grok"
+    assert resolve_environment_harness({"GROK_SESSION_ID": "session-1"}) == "grok"
+    assert resolve_environment_harness({"GROK_HOME": "/tmp/grok-home"}) is None
+    assert resolve_environment_harness({"OPENCODE_CONFIG_CONTENT": "{}"}) == "opencode"
+    assert resolve_environment_harness({"OPENCODE_CONFIG": "/tmp/opencode.json"}) is None
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "grok"}) == "grok"
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "guard-cli"}) is None
+    assert origin_harness_env("grok") == {"HOL_GUARD_ORIGIN_HARNESS": "grok"}
+    assert origin_harness_env("guard-cli") == {}
+    assert origin_harness_env("unknown") == {}
 
 
 def test_resolve_environment_harness_ignores_blank_and_unrelated_env() -> None:

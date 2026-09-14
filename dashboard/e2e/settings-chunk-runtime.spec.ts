@@ -80,7 +80,7 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
   return { settingsUpdates };
 }
 
-test("production Settings chunk initializes without React bridge failures", async ({ page }) => {
+test("production Settings password proof submits with Enter without React bridge failures", async ({ page }) => {
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   page.on("console", (message) => {
@@ -94,7 +94,7 @@ test("production Settings chunk initializes without React bridge failures", asyn
   await page.getByRole("button", { name: /Approval gate/ }).click();
   await page.getByRole("button", { name: "Set up authenticator" }).click();
   await page.getByLabel("Approval password").fill("test-password");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Approval password").press("Enter");
   await expect(
     page.getByRole("img", { name: "Scan this QR code in Google Authenticator or another TOTP app" })
   ).toBeVisible();
@@ -113,10 +113,75 @@ test("first-time approval password setup is discoverable beside the gate", async
   await expect(setupDialog.getByRole("textbox", { name: "Password", exact: true })).toBeVisible();
   await expect(setupDialog.getByRole("textbox", { name: "Confirm password", exact: true })).toBeVisible();
   await setupDialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
-  await setupDialog.getByRole("textbox", { name: "Confirm password", exact: true }).fill("test-password");
-  await setupDialog.getByRole("button", { name: "Save settings" }).click();
+  const confirmation = setupDialog.getByRole("textbox", { name: "Confirm password", exact: true });
+  await confirmation.fill("different-password");
+  await confirmation.press("Enter");
+  await expect(setupDialog.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  expect(fixture.settingsUpdates).toHaveLength(0);
+  await confirmation.fill("test-password");
+  await confirmation.press("Enter");
   await expect.poll(() => fixture.settingsUpdates).toHaveLength(1);
   const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
   expect(updateSettings).toBeDefined();
   expect(Object.keys(updateSettings ?? {})).toEqual(["approval_gate"]);
+});
+
+test("Enter on Go back cancels password proof rather than confirming it", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, unconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const dialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await dialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
+  await dialog.getByRole("textbox", { name: "Confirm password", exact: true }).fill("test-password");
+  await expect(dialog.getByRole("button", { name: "Save settings" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Go back" }).press("Enter");
+  await expect(dialog).toBeHidden();
+  expect(fixture.settingsUpdates).toHaveLength(0);
+});
+
+test("Authenticator proof submits once with Enter and stays guarded while pending", async ({ page }) => {
+  const totpSettings = {
+    ...gatedSettingsPayload,
+    settings: {
+      ...gatedSettingsPayload.settings,
+      approval_gate: { ...gatedSettingsPayload.settings.approval_gate, totp_enabled: true },
+    },
+  };
+  await mountSettingsFixture(page, totpSettings);
+  let submissions = 0;
+  let releaseRequest: () => void = () => {};
+  const pendingRequest = new Promise<void>((resolve) => { releaseRequest = resolve; });
+  await page.route("**/v1/settings", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    submissions += 1;
+    await pendingRequest;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(totpSettings) });
+  });
+  try {
+    await page.goto(`/settings?${DAEMON}&section=approval`);
+    await page.getByRole("button", { name: "Change password", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("New password", { exact: true }).fill("next-password");
+    await dialog.getByLabel("Confirm password", { exact: true }).fill("next-password");
+    const code = dialog.getByLabel("Authenticator code", { exact: true });
+    await code.press("Enter");
+    expect(submissions).toBe(0);
+    await code.fill("123456");
+    await code.press("Enter");
+    await expect.poll(() => submissions).toBe(1);
+    await expect(dialog.getByRole("button", { name: "Working…" })).toBeDisabled();
+    await code.press("Enter");
+    await dialog.locator("form").evaluate((form) => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(submissions).toBe(1);
+    releaseRequest();
+    await expect(dialog).toBeHidden();
+    expect(submissions).toBe(1);
+  } finally {
+    releaseRequest();
+  }
 });

@@ -212,6 +212,24 @@ def test_writer_workflows_start_empty_and_preserve_needed_job_grants(
     workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text(encoding="utf-8"))
     assert workflow["permissions"] == {}
     assert workflow["jobs"][job]["permissions"] == permissions
+    if filename == "publish-mcp-registry.yml":
+        publish = workflow["jobs"][job]
+        assert publish["needs"] == "verify"
+        assert workflow["jobs"]["verify"]["permissions"] == {"actions": "read", "contents": "read"}
+        expected_guard = " && ".join(
+            (
+                "needs.verify.outputs.sha != ''",
+                "needs.verify.outputs.branch != ''",
+                "vars.RELEASE_PUBLISHING_ENABLED == 'true'",
+                "github.event.workflow_run.conclusion == 'success'",
+                'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
+                "github.event.workflow_run.run_attempt == 1",
+                "github.event.workflow_run.head_repository.full_name == github.repository",
+                'contains(fromJSON(\'["main", "release/3.0"]\'), github.event.workflow_run.head_branch)',
+                "!contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')",
+            )
+        )
+        assert " ".join(publish["if"].split()) == expected_guard
 
 
 def test_security_gate_runs_permission_policy_on_pull_requests() -> None:

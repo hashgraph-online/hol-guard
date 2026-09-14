@@ -231,6 +231,20 @@ export function protectionHealthFor(
   return { harness: STABLE_ID.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
 }
 
+export function isUnsupportedPlatformCheck(check: GuardProtectionCheck): boolean {
+  return check.reason_code === "unsupported_platform";
+}
+
+export function repairableProtectionGaps(checks: GuardProtectionCheck[]): GuardProtectionCheck[] {
+  return checks.filter(
+    (check) => check.status !== "pass" && !isUnsupportedPlatformCheck(check),
+  );
+}
+
+export function hasRepairableProtectionGap(checks: GuardProtectionCheck[]): boolean {
+  return repairableProtectionGaps(checks).length > 0;
+}
+
 export function remainingProtectionRepairParts(health: GuardProtectionHealth): {
   failedHookHarnesses: string[];
   evidenceFailed: boolean;
@@ -254,6 +268,7 @@ export function remainingProtectionRepairMessage(
   const remainingParts = remainingProtectionRepairParts(health);
   const failedHookApps = remainingParts.failedHookHarnesses.map(displayName);
   const remainingMessages: string[] = [];
+  const unsupportedCount = health.checks.filter(isUnsupportedPlatformCheck).length;
   if (remainingParts.needsConnectedApp) {
     remainingMessages.push("Connect an AI app to start local protection.");
   }
@@ -263,6 +278,11 @@ export function remainingProtectionRepairMessage(
     );
   }
   if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+  if (unsupportedCount > 0) {
+    remainingMessages.push(
+      "Containment remains unavailable on this platform, so full protection cannot be reached here.",
+    );
+  }
   const remaining = remainingMessages.length > 0
     ? remainingMessages.join(" ")
     : "A local protection check still needs attention.";

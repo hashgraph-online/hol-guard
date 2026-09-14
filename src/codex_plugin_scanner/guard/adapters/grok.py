@@ -40,11 +40,12 @@ from .grok_config import (
     append_hooks_dir_artifacts,
     append_mcp_artifacts,
     append_permission_artifacts,
-    build_managed_config_block,
     build_observe_hook_json,
     build_pretool_hook_json,
     degraded_mode_warnings,
+    prepare_managed_config_text,
     remove_managed_block,
+    restore_compat_hooks,
 )
 from .grok_executable import (
     GrokExecutableResolution,
@@ -391,9 +392,12 @@ class GrokHarnessAdapter(HarnessAdapter):
         prompt_path.write_text(json.dumps(build_observe_hook_json(hook_command), indent=2) + "\n", encoding="utf-8")
 
         existing_text = managed_config_path.read_text(encoding="utf-8") if managed_config_path.is_file() else ""
-        cleaned_text = remove_managed_block(existing_text)
-        managed_block = build_managed_config_block(hook_command)
-        managed_config_path.write_text(f"{cleaned_text.rstrip()}\n\n{managed_block}\n".lstrip(), encoding="utf-8")
+        merged_text, prior_compat_hooks = prepare_managed_config_text(
+            existing_text,
+            hook_command,
+            saved_prior_hooks=_prior_compat_hooks_from_state(self._state_path(context)),
+        )
+        managed_config_path.write_text(merged_text, encoding="utf-8")
 
         self._state_path(context).write_text(
             json.dumps(
@@ -401,6 +405,7 @@ class GrokHarnessAdapter(HarnessAdapter):
                     "managed_config_path": str(managed_config_path),
                     "pretool_hook_path": str(pretool_path),
                     "prompt_hook_path": str(prompt_path),
+                    "prior_compat_hooks": prior_compat_hooks,
                 },
                 indent=2,
             )
@@ -441,7 +446,10 @@ class GrokHarnessAdapter(HarnessAdapter):
         if managed_config_path.is_file():
             _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
             existing_text = managed_config_path.read_text(encoding="utf-8")
-            managed_config_path.write_text(remove_managed_block(existing_text).rstrip() + "\n", encoding="utf-8")
+            cleaned = remove_managed_block(existing_text)
+            prior_compat_hooks = _prior_compat_hooks_from_state(self._state_path(context))
+            restored = restore_compat_hooks(cleaned, prior_compat_hooks)
+            managed_config_path.write_text(restored.rstrip() + "\n", encoding="utf-8")
 
         for hook_name in (GUARD_HOOK_PRETOOL_FILE, GUARD_HOOK_PROMPT_FILE):
             hook_path = hooks_dir / hook_name
@@ -471,6 +479,23 @@ class GrokHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
+
+
+def _prior_compat_hooks_from_state(state_path: Path) -> dict[str, str | None]:
+    if not state_path.is_file():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    raw = payload.get("prior_compat_hooks") if isinstance(payload, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    restored: dict[str, str | None] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and (value is None or isinstance(value, str)):
+            restored[key] = value
+    return restored
 
 
 def grok_runtime_hooks_verified(context: HarnessContext) -> bool:

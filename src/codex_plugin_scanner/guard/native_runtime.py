@@ -591,11 +591,7 @@ def review_post_tool_native(
 
 
 def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:
-    excerpt_hash = (
-        hashlib.sha256(response.reviewed_excerpt.encode("utf-8")).hexdigest()
-        if response.reviewed_excerpt is not None
-        else None
-    )
+    excerpt_hash = native_output_sha256(response.reviewed_excerpt) if response.reviewed_excerpt is not None else None
     return (
         response.decision,
         response.model_output_action,
@@ -608,6 +604,12 @@ def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:
     )
 
 
+def native_output_sha256(text: str) -> str:
+    """Hash bounded native-hook output for recording and parity evidence."""
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 __all__ = [
     "NativeRuntimeCapabilities",
     "NativeRuntimeHealthSnapshot",
@@ -615,6 +617,7 @@ __all__ = [
     "NativeRuntimeManifest",
     "NativeRuntimeStatus",
     "native_mode",
+    "native_output_sha256",
     "native_runtime_health",
     "native_runtime_status",
     "parity_signature",

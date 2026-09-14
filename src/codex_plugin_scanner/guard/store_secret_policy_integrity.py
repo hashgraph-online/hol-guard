@@ -295,6 +295,15 @@ class StoreSecretPolicyIntegrityMixin:
         return self._get_secret_from_store(secret_store, secret_id)
 
     @staticmethod
+    def _policy_integrity_secret_store_is_unavailable(secret_store: SecretStore | None) -> bool:
+        if isinstance(secret_store, SystemKeyringSecretStore):
+            return secret_store._is_unavailable()
+        if isinstance(secret_store, FallbackSecretStore):
+            primary = secret_store.primary
+            return isinstance(primary, SystemKeyringSecretStore) and primary._is_unavailable()
+        return False
+
+    @staticmethod
     def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
         return (
             isinstance(secret_store, SystemKeyringSecretStore)
@@ -406,9 +415,10 @@ class StoreSecretPolicyIntegrityMixin:
         return [token]
 
     def _policy_integrity_backend_name(self) -> str:
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
-        return _secret_store_backend_name(self._policy_integrity_secret_store)
+        return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         cached = self._cached_policy_integrity_secret_material
@@ -967,7 +977,8 @@ class StoreSecretPolicyIntegrityMixin:
             raw_key, key_id = cast(tuple[bytes | None, str | None], prefetched_secret_material)
         else:
             raw_key, key_id = self._policy_integrity_secret_material(create=create_key)
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)

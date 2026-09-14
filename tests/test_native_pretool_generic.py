@@ -184,6 +184,7 @@ def test_generic_review_result_renders_grok_review_decision_with_approval() -> N
     assert rendered["decision"] == "deny"
     assert rendered["policy_action"] == "review"
     assert rendered["approval_request_id"] == "req-1"
+    assert "http://127.0.0.1/pending/req-1" in str(rendered.get("reason"))
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "deny"
@@ -258,6 +259,10 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         lambda *_args, **_kwargs: edge,
     )
     store = GuardStore(tmp_path / "guard-home")
+    token_path = tmp_path / "guard-home" / "daemon-auth-token"
+    (tmp_path / "guard-home").chmod(0o700)
+    token_path.write_text("secret-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",
@@ -281,6 +286,11 @@ def test_native_review_queues_approval_without_escaping_to_cli(
     assert response["policy_action"] == "review"
     assert isinstance(response.get("approval_request_id"), str)
     assert str(response.get("approval_url", "")).startswith("http://127.0.0.1:4781/requests/")
+    assert "guard-token=" not in str(response.get("approval_url"))
+    assert str(response.get("approval_url")) in str(response.get("reason"))
+    assert "guard-token=" in str(response.get("reason"))
+    assert "secret-daemon-token" not in str(response.get("reason"))
+    assert response.get("approval_center_url") == "http://127.0.0.1:4781"
     pending = store.list_approval_requests(status="pending")
     assert len(pending) == 1
     assert pending[0]["request_id"] == response["approval_request_id"]

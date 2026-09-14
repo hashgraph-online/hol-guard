@@ -191,6 +191,72 @@ def test_wait_until_health_ready_retries_until_ready(monkeypatch: pytest.MonkeyP
     stress_runtime.wait_until_health_ready("http://127.0.0.1:1")
 
 
+def test_wait_until_daemon_lifecycle_ready_retries_until_ready(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    states = iter((False, True))
+
+    monkeypatch.setattr(stress_script, "_daemon_lifecycle_is_ready", lambda _home: next(states))
+    monkeypatch.setattr(stress_script.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(stress_script.time, "monotonic", lambda: 0.0)
+
+    stress_script._wait_until_daemon_lifecycle_ready(tmp_path)
+
+
+def test_soak_capacity_gate_ignores_listen_ready_startup_floor() -> None:
+    assert not stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=1, workers=1, ready=1, busy=0
+    )
+    assert stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=2, workers=2, ready=2, busy=0
+    )
+    assert stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=1, target=1, workers=1, ready=1, busy=0
+    )
+    assert not stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=2, workers=2, ready=2, busy=1
+    )
+
+
+def test_soak_baseline_does_not_accept_deferred_startup_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execution = stress_script._StressExecution(
+        daemon_url="http://127.0.0.1:1",
+        endpoint="http://127.0.0.1:1/v1/hooks/pi",
+        auth_token="token",
+        initial_pid=123,
+        guard_home=Path("guard-home"),
+    )
+    reports = iter(
+        (
+            {"hook_workers": {"configured": 4, "target": 1, "workers": 1, "ready": 1, "busy": 0}},
+            {"hook_workers": {"configured": 4, "target": 1, "workers": 1, "ready": 1, "busy": 0}},
+            {"hook_workers": {"configured": 4, "target": 2, "workers": 2, "ready": 2, "busy": 0}},
+        )
+    )
+    requests: list[str] = []
+
+    monkeypatch.setattr(stress_script, "_WARMUP_CONCURRENCY", 4)
+
+    def healthz_details(_execution: stress_runtime.StressExecution) -> dict[str, object]:
+        return next(reports)
+
+    def stress_request(*_args: object) -> float:
+        requests.append("request")
+        return 1.0
+
+    monkeypatch.setattr(stress_script, "_healthz_details", healthz_details)
+    monkeypatch.setattr(stress_script, "_stress_request", stress_request)
+    monkeypatch.setattr(stress_script, "_update_pid_stability", lambda *_args: None)
+    monkeypatch.setattr(stress_script, "_sample_stress_runtime", lambda *_args: None)
+    monkeypatch.setattr(stress_script, "_collect_batch", lambda *_args, **_kwargs: None)
+
+    stress_script._stabilize_full_worker_capacity(execution)
+
+    assert requests == ["request", "request", "request"]
+
+
 def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> None:
     script = Path(__file__).parents[1] / "scripts" / "stress_guard_daemon.py"
     completed = subprocess.run(
