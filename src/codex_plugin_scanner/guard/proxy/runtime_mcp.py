@@ -66,6 +66,7 @@ from ..runtime.approval_context import (
 )
 from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
@@ -782,6 +783,8 @@ class RuntimeMcpGuardProxy:
         # before any saved allow can be reused against it.
         self._reset_child_process_state()
         launch_env = _configured_server_launch_environment(self.server_env_keys)
+        child_env = dict(launch_env)
+        child_env.update(origin_harness_env(self.harness))
         configured_env = _configured_server_environment(launch_env, self.server_env_keys)
         self._active_runtime_launch_identity = build_runtime_launch_identity(
             self.command[0] if self.command else "",
@@ -818,7 +821,7 @@ class RuntimeMcpGuardProxy:
                 stderr=None,
                 text=True,
                 cwd=self.context.workspace_dir,
-                env=launch_env,
+                env=child_env,
                 executable=resolved_runtime_launch_executable(self._active_runtime_launch_identity),
             )
             if not self._verify_post_spawn_launch_identity(launch_env=launch_env):
