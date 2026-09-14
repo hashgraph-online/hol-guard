@@ -1449,3 +1449,17 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
 
     assert environments[0]["HOL_GUARD_HOOK_FAILURE_KIND"] == "overload"
     assert environments[1]["HOL_GUARD_HOOK_FAILURE_KIND"] == "transport-failure"
+
+
+def test_empty_wire_payload_keeps_envelope_reason_code_metrics() -> None:
+    runner = HookProcessRunner(process_limit=1)
+    try:
+        runner._record_response_metrics(  # pyright: ignore[reportPrivateUsage]
+            {},
+            envelope_reason_code="native_hook_event_unavailable",
+        )
+        stats = runner.stats()
+        assert stats["reason_codes"]["native_hook_event_unavailable"] == 1
+        assert stats["decisions"]["unknown"] == 1
+    finally:
+        runner.close()
