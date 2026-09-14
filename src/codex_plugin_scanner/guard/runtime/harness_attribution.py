@@ -22,9 +22,9 @@ _CURSOR_ENV_MARKERS = frozenset(
 # process that inherits one of them was spawned from that harness. They are
 # read as an attribution signal only; policy scoping never keys off them.
 _CLAUDE_CODE_ENV_MARKERS = frozenset({"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"})
-_CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX", "CODEX_HOME", "CODEX_THREAD_ID"})
-_GROK_ENV_MARKERS = frozenset({"GROK_AGENT", "GROK_SESSION_ID", "GROK_HOME"})
-_OPENCODE_ENV_MARKERS = frozenset({"OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"})
+_CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX", "CODEX_THREAD_ID"})
+_GROK_ENV_MARKERS = frozenset({"GROK_AGENT", "GROK_SESSION_ID"})
+_OPENCODE_ENV_MARKERS = frozenset({"OPENCODE_CONFIG_CONTENT"})
 ORIGIN_HARNESS_ENV = "HOL_GUARD_ORIGIN_HARNESS"
 _ORIGIN_HARNESS_VALUES = frozenset(
     {
