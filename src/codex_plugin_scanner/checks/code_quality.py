@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -79,6 +80,51 @@ def _has_shell_injection_pattern(content: str) -> bool:
     return False
 
 
+def _python_eval_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
+    eval_names = {"eval"}
+    builtins_names = {"builtins", "__builtins__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            builtins_names.update(alias.asname or alias.name for alias in node.names if alias.name == "builtins")
+        elif isinstance(node, ast.ImportFrom) and node.module == "builtins" and node.level == 0:
+            eval_names.update(alias.asname or alias.name for alias in node.names if alias.name == "eval")
+    return eval_names, builtins_names
+
+
+def _has_python_eval(content: str) -> bool:
+    """Distinguish Python eval usage from no-argument methods such as Module.eval()."""
+    try:
+        tree = ast.parse(content.removeprefix("\ufeff"))
+    except (SyntaxError, ValueError, RecursionError):
+        # Malformed files or syntax newer than this interpreter keep the text check.
+        return bool(EVAL_RE.search(content))
+
+    eval_names, builtins_names = _python_eval_bindings(tree)
+    for node in ast.walk(tree):
+        # Keep builtin references conservative: aliases and partial application can
+        # execute code without spelling eval(...) at the eventual call site.
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in eval_names:
+            return True
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Load)
+            and node.attr == "eval"
+            and isinstance(node.value, ast.Name)
+            and node.value.id in builtins_names
+        ):
+            return True
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "eval"
+            and (node.args or node.keywords)
+        ):
+            # Unknown receivers with any payload, including *args/**kwargs, retain
+            # the finding. No receiver name or dependency import is an allowlist.
+            return True
+    return False
+
+
 def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[str] = []
     for fpath in _find_code_files(plugin_dir, files):
@@ -86,7 +132,8 @@ def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> Ch
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if EVAL_RE.search(content):
+        has_eval = _has_python_eval(content) if fpath.suffix == ".py" else bool(EVAL_RE.search(content))
+        if has_eval:
             findings.append(f"{fpath.relative_to(plugin_dir)}: eval()")
         if FUNCTION_RE.search(content):
             findings.append(f"{fpath.relative_to(plugin_dir)}: new Function()")
