@@ -68,12 +68,7 @@ def _wheel_version_for_filename(version: str) -> str:
 
 
 def _safe_archive_path(name: str) -> bool:
-    if (
-        not name
-        or "\\" in name
-        or "\x00" in name
-        or any(ord(character) < 0x20 for character in name)
-    ):
+    if not name or "\\" in name or "\x00" in name or any(ord(character) < 0x20 for character in name):
         return False
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts or any(part in {"", "."} for part in path.parts):
@@ -120,10 +115,7 @@ def _open_regular_file(path: Path, *, max_bytes: int, label: str) -> BinaryIO:
             raise NativeWheelError(f"{label} changed while being opened")
         before_identity = (getattr(before, "st_dev", None), getattr(before, "st_ino", None))
         opened_identity = (getattr(opened, "st_dev", None), getattr(opened, "st_ino", None))
-        identities_available = all(
-            value not in {None, 0}
-            for value in (*before_identity, *opened_identity)
-        )
+        identities_available = all(value not in {None, 0} for value in (*before_identity, *opened_identity))
         if identities_available and before_identity != opened_identity:
             raise NativeWheelError(f"{label} changed while being opened")
         return os.fdopen(fd, "rb")
@@ -212,11 +204,7 @@ def _load_source_wheel(path: Path, *, version: str) -> SourceWheel:
         raise NativeWheelError("source wheel project identity or version does not match")
 
     wheel_text = entries[wheel_path].decode("utf-8")
-    tags = [
-        line.removeprefix("Tag:").strip()
-        for line in wheel_text.splitlines()
-        if line.startswith("Tag:")
-    ]
+    tags = [line.removeprefix("Tag:").strip() for line in wheel_text.splitlines() if line.startswith("Tag:")]
     if tags != ["py3-none-any"]:
         raise NativeWheelError("source wheel must be the canonical py3-none-any artifact")
     if f"{_NATIVE_DIR}/hol-guard-runtime" in entries or f"{_NATIVE_DIR}/hol-guard-runtime.exe" in entries:
@@ -337,11 +325,7 @@ def _verify_runtime_provenance(
 
 def _rewrite_wheel_metadata(raw: bytes, *, platform_tag: str) -> bytes:
     lines = raw.decode("utf-8").splitlines()
-    rewritten = [
-        line
-        for line in lines
-        if not line.startswith("Root-Is-Purelib:") and not line.startswith("Tag:")
-    ]
+    rewritten = [line for line in lines if not line.startswith("Root-Is-Purelib:") and not line.startswith("Tag:")]
     rewritten.extend(["Root-Is-Purelib: false", f"Tag: py3-none-{platform_tag}"])
     return ("\n".join(rewritten).rstrip("\n") + "\n").encode("utf-8")
 
@@ -457,9 +441,7 @@ def build_native_wheel(
         "runtime_size": len(runtime_bytes),
     }
     entries[runtime_path] = runtime_bytes
-    entries[_RUNTIME_MANIFEST_PATH] = (
-        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
-    ).encode()
+    entries[_RUNTIME_MANIFEST_PATH] = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
     modes[runtime_path] = 0o755
     modes[_RUNTIME_MANIFEST_PATH] = 0o644
     modes[source.wheel_path] = 0o644
@@ -467,9 +449,7 @@ def build_native_wheel(
     modes[source.record_path] = 0o644
 
     safe_output_dir = _prepare_output_dir(output_dir)
-    output_path = safe_output_dir / (
-        f"hol_guard-{_wheel_version_for_filename(version)}-py3-none-{platform_tag}.whl"
-    )
+    output_path = safe_output_dir / (f"hol_guard-{_wheel_version_for_filename(version)}-py3-none-{platform_tag}.whl")
     _write_output_wheel_exclusive(output_path, entries, modes)
     return output_path
 

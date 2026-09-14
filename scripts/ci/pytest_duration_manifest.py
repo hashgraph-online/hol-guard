@@ -91,12 +91,7 @@ def _validate_durations(values: Mapping[str, float] | Mapping[object, object]) -
     for node_id, value in values.items():
         if not isinstance(node_id, str) or not node_id:
             raise ValueError("pytest duration data has an invalid node id")
-        if (
-            not isinstance(value, (int, float))
-            or isinstance(value, bool)
-            or not math.isfinite(value)
-            or value < 0
-        ):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             raise ValueError(f"pytest duration data has an invalid duration for {node_id!r}")
         durations[node_id] = float(value)
     return durations

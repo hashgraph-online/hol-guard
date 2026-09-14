@@ -12,10 +12,7 @@ from urllib.request import Request, urlopen
 PROJECT = "hashgraph-online_hol-guard"
 REPOSITORY = "hashgraph-online/hol-guard"
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-METRICS = (
-    "new_coverage,new_lines_to_cover,new_uncovered_lines,"
-    "new_conditions_to_cover,new_uncovered_conditions"
-)
+METRICS = "new_coverage,new_lines_to_cover,new_uncovered_lines,new_conditions_to_cover,new_uncovered_conditions"
 
 
 def read_json(service: str, path: str, **parameters: object) -> object:
@@ -53,12 +50,14 @@ def sonar_pages(path: str, field: str, **parameters: object) -> dict:
 
 def sonar_snapshot(pull_request: int | None) -> dict:
     scope = {} if pull_request is None else {"pullRequest": pull_request}
-    issues = sonar_pages(
-        "/api/issues/search", "issues", componentKeys=PROJECT, resolved="false", **scope
-    )
+    issues = sonar_pages("/api/issues/search", "issues", componentKeys=PROJECT, resolved="false", **scope)
     measures = sonar_pages(
-        "/api/measures/component_tree", "components", component=PROJECT,
-        metricKeys=METRICS, qualifiers="FIL", **scope,
+        "/api/measures/component_tree",
+        "components",
+        component=PROJECT,
+        metricKeys=METRICS,
+        qualifiers="FIL",
+        **scope,
     )
     snapshot = {
         "issues": issues,
@@ -75,8 +74,11 @@ def sonar_snapshot(pull_request: int | None) -> dict:
             )
             if has_gaps:
                 sources[component["key"]] = read_json(
-                    "sonar", "/api/sources/lines", key=component["key"],
-                    **{"from": 1, "to": 1000}, **scope,
+                    "sonar",
+                    "/api/sources/lines",
+                    key=component["key"],
+                    **{"from": 1, "to": 1000},
+                    **scope,
                 )
         snapshot["sources"] = sources
     return snapshot
@@ -143,12 +145,22 @@ def _collect_report(output: Path, report: dict) -> None:
             head = pull["head"]["sha"]
             report["pull_requests"][str(number)] = {"head": head, "checks": [], "checks_complete": False}
             checks = github_pages(f"/repos/{REPOSITORY}/commits/{head}/check-runs", "check_runs")
-            checks = [{key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")}
-                      for item in checks]
+            checks = [
+                {key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")} for item in checks
+            ]
             report["pull_requests"][str(number)].update(checks=checks, checks_complete=True)
-            print("PR", number, "head", head, "nonpassing checks",
-                  [(c["id"], c["name"], c["status"], c["conclusion"]) for c in checks
-                   if c["conclusion"] not in {"success", "skipped", "neutral"}])
+            print(
+                "PR",
+                number,
+                "head",
+                head,
+                "nonpassing checks",
+                [
+                    (c["id"], c["name"], c["status"], c["conclusion"])
+                    for c in checks
+                    if c["conclusion"] not in {"success", "skipped", "neutral"}
+                ],
+            )
         except errors as error:
             _record_error(report, name, error)
     for number in scopes:
