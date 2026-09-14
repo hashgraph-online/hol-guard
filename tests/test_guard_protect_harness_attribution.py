@@ -7,7 +7,7 @@ import os
 import sqlite3
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -159,12 +159,9 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
         original_run = subprocess.run
 
         def process_snapshot(command, **kwargs):
-            if command[:3] == ["/bin/ps", "-axo", "pid=,ppid=,command="] or command == [
-                "/bin/ps",
-                "-axo",
-                "pid=,ppid=,comm=",
-            ]:
-                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {origin}\n", "")
+            if command == ["/bin/ps", "-axo", "pid=,ppid=,comm="]:
+                executable = PurePath(origin).name if "/" in origin or "\\" in origin else origin
+                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {executable}\n", "")
             return original_run(command, **kwargs)
 
         monkeypatch.setattr(harness_attribution.os, "getppid", lambda: 42)

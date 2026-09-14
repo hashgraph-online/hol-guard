@@ -74,7 +74,7 @@ def resolve_parent_process_harness() -> str | None:
         return None
     try:
         result = subprocess.run(
-            ["/bin/ps", "-axo", "pid=,ppid=,command="],
+            ["/bin/ps", "-axo", "pid=,ppid=,comm="],
             capture_output=True,
             text=True,
             check=False,
@@ -87,8 +87,8 @@ def resolve_parent_process_harness() -> str | None:
     parents: dict[int, tuple[int, str]] = {}
     for row in result.stdout.splitlines():
         try:
-            process, parent, command = row.strip().split(maxsplit=2)
-            parents[int(process)] = (int(parent), command.split()[0] if command else "")
+            process, parent, executable = row.strip().split(maxsplit=2)
+            parents[int(process)] = (int(parent), executable)
         except ValueError:
             continue
     pid = os.getppid()
