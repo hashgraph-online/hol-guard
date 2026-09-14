@@ -14,11 +14,20 @@ EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache
 # A direct eval call is dangerous.  The prior word-boundary matcher also
 # classified Puppeteer's $eval/$$eval and arbitrary member calls (client.eval)
 # as dynamic execution, although none invokes the global eval function.
-DIRECT_EVAL_RE = re.compile(r"(?<![\w$.])eval\s*(?:\?\.)?\s*\(")
+DIRECT_EVAL_RE = re.compile(r"(?<![\w$.#])eval\s*(?:\?\.)?\s*\(")
 EXPLICIT_GLOBAL_EVAL_RE = re.compile(
-    r"\b(?:globalThis|window|global|builtins|__builtins__)\s*(?:\?\.|\.)\s*eval\s*(?:\?\.)?\s*\("
+    r"(?<![\w$.#])(?:globalThis|window|global|builtins|__builtins__)"
+    r"\s*(?:\?\.|\.)\s*eval\s*(?:\?\.)?\s*\("
 )
 FUNCTION_RE = re.compile(r"new\s+Function\s*\(")
+DECLARATION_SUFFIX_RE = re.compile(
+    r"[ \t]*(?:/\*[^\r\n]*\*/[ \t]*)?"
+    r"(?:\{|:[ \t]*[^={;\r\n]+[ \t]*(?:\{|;))"
+)
+SINGLE_LINE_DECLARATION_RE = re.compile(
+    r"eval\s*\(.*\)[ \t]*(?:/\*[^\r\n]*\*/[ \t]*)?"
+    r"(?:\{|:[ \t]*[^={;\r\n]+[ \t]*(?:\{|;))"
+)
 INTERPOLATED_TEMPLATE_PATTERN = r"`[^`]*\$\{[^}]+\}[^`]*`"
 TS_TEMPLATE_SUFFIX_PATTERN = r"(?:[ \t]+(?:as|satisfies)[ \t]+[^;\n]+)?"
 SHELL_CALL_PATTERN = r"(?:execSync|spawnSync|exec|spawn)"
@@ -117,10 +126,20 @@ def _is_eval_declaration(content: str, match: re.Match[str]) -> bool:
     if closing_paren is None:
         return False
 
-    suffix = content[closing_paren + 1 :].lstrip()
-    # A body immediately after a parameter list is a JavaScript/TypeScript
-    # method declaration.  A direct eval call cannot validly be followed by it.
-    if suffix.startswith("{") or re.match(r":\s*[^={;]+\s*{", suffix):
+    # A declaration body or TypeScript signature must start on the same line as
+    # the closing parameter delimiter.  Consuming a newline here would mistake
+    # a valid direct call followed by a standalone block for a method body.
+    if DECLARATION_SUFFIX_RE.match(content, closing_paren + 1):
+        return True
+
+    # The balanced-parenthesis helper intentionally remains lightweight and
+    # does not parse regular-expression literals.  A same-line declaration
+    # fallback still recognizes e.g. `eval(value = /)/) {}` without allowing a
+    # following-line block to suppress a direct call.
+    line_end = content.find("\n", match.start())
+    if line_end == -1:
+        line_end = len(content)
+    if SINGLE_LINE_DECLARATION_RE.match(content, match.start(), line_end):
         return True
 
     line_start = content.rfind("\n", 0, match.start()) + 1
