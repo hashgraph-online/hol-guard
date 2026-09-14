@@ -44,6 +44,14 @@ assert.doesNotMatch(
   authorityActionErrorMessage(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
   /authority_not_recoverable/,
 );
+assert.match(
+  authorityActionErrorMessage(
+    new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable"),
+    "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+    "powershell",
+  ),
+  /custom install.*command controls recover-authority.*PowerShell/,
+);
 const baseEffective: EffectiveExtensionControls = {
   schema_version: "1.0.0", health: "recovery-required", revision: 4, catalog_digest: "a".repeat(64),
   global_lockdown: false, controls: [], failures: [], layers: [],
@@ -85,6 +93,24 @@ assert.match(unenrolledMarkup, /Finish setting up protection/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
+const windowsUnenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: {
+    ...baseEffective,
+    health: "unenrolled",
+    terminal_commands: {
+      shell: "powershell",
+      enroll: "& 'C:\\custom install\\hol-guard.exe' command controls enroll",
+      recover_authority: "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+    },
+  },
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(windowsUnenrolledMarkup, /custom install.*command controls enroll/);
+assert.match(windowsUnenrolledMarkup, /Run this in PowerShell/);
+assert.doesNotMatch(windowsUnenrolledMarkup, /hol-guard command controls enroll/);
 
 const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "unenrolled" },

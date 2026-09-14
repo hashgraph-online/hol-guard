@@ -266,6 +266,22 @@ assert(
   "queued browser MCP tool calls are labeled as browser tools, not shell commands"
 );
 
+const queuedClickWithoutBrowserField: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:click",
+  changed_fields: ["runtime_tool_call", "browser interaction on page element"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools click page element"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedClickWithoutBrowserField) === "Browser tool",
+  "chrome-devtools click reviews are labeled as browser tools even without runtime_browser_tool_call"
+);
+
 const queuedMcpTool: GuardApprovalRequest = {
   ...BASE_REQUEST,
   artifact_type: "tool_call",

@@ -453,11 +453,13 @@ class SystemKeyringSecretStore:
     """Cross-platform OS credential store backed by the Python keyring library."""
 
     _MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS = 5.0
+    _WINDOWS_NO_SUCH_LOGON_SESSION = 1312
     _macos_keychain_health_cache: tuple[float, bool] | None = None
     _native_macos_security_reads_cache: tuple[tuple[int, int], bool] | None = None
 
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
+        self._windows_keyring_unavailable = False
 
     @staticmethod
     def _load_keyring_module():
@@ -673,6 +675,29 @@ class SystemKeyringSecretStore:
             return False
         return True
 
+    @classmethod
+    def _is_windows_keyring_session_unavailable(cls, error: BaseException) -> bool:
+        if sys.platform != "win32":
+            return False
+        return cls._WINDOWS_NO_SUCH_LOGON_SESSION in {
+            getattr(error, "winerror", None),
+            getattr(error, "errno", None),
+        }
+
+    def _mark_windows_keyring_unavailable(self) -> None:
+        if self._windows_keyring_unavailable:
+            return
+        self._windows_keyring_unavailable = True
+        _store_logger.warning(
+            "Guard system keyring writes are unavailable in this Windows session; policy integrity is degraded."
+        )
+
+    def _clear_windows_keyring_unavailable(self) -> None:
+        self._windows_keyring_unavailable = False
+
+    def _is_unavailable(self) -> bool:
+        return self._windows_keyring_unavailable
+
     def set_secret(self, secret_id: str, value: str) -> None:
         keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
@@ -680,13 +705,25 @@ class SystemKeyringSecretStore:
                 "Guard system keyring backend is unavailable; the Python 'keyring' "
                 "package could not be imported. Reinstall hol-guard to restore it."
             )
-        keyring_module.set_password(self.service_name, secret_id, value)
+        try:
+            keyring_module.set_password(self.service_name, secret_id, value)
+        except Exception as error:
+            if not self._is_windows_keyring_session_unavailable(error):
+                raise
+            self._mark_windows_keyring_unavailable()
+            raise
+        self._clear_windows_keyring_unavailable()
 
     def get_secret(self, secret_id: str) -> str | None:
         keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
             return None
-        value = keyring_module.get_password(self.service_name, secret_id)
+        try:
+            value = keyring_module.get_password(self.service_name, secret_id)
+        except Exception as error:
+            if not self._is_windows_keyring_session_unavailable(error):
+                raise
+            return None
         return value if isinstance(value, str) and value else None
 
     @classmethod

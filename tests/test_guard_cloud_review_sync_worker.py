@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
 class Store:
     """Minimal GuardStore stand-in for event and worker contracts."""
 
+    guard_source = "default"
+
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self.path = guard_home / "guard.db"
@@ -25,6 +27,9 @@ class Store:
 
     def get_sync_payload(self, key: str) -> object | None:
         return self._payloads.get(key)
+
+    def get_review_event_oauth_binding(self) -> None:
+        return None
 
     def set_sync_payload(self, key: str, payload: object, now: str) -> None:
         self._payloads[key] = payload

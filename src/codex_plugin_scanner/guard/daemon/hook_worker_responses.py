@@ -427,7 +427,11 @@ def observe_lifecycle_fail_safe_response(
     """Continue prompt/session inventory hooks when native review cannot run."""
 
     canonical = _canonical_hook_harness(harness)
-    if canonical in {"grok", "hermes", "openclaw", "pi", "omp"}:
+    if canonical == "grok":
+        # Grok UserPromptSubmit honors only "block". "allow" is logged as an
+        # unknown decision and shown as a hook failure. Empty JSON is success.
+        return {}
+    if canonical in {"hermes", "openclaw", "pi", "omp"}:
         return {
             "decision": "allow",
             "policy_action": "allow",

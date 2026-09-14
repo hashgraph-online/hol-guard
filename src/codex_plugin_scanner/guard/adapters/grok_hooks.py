@@ -192,7 +192,12 @@ def grok_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
-    if recording_only or _is_observe_only_event(event_name):
+    if _is_observe_only_event(event_name):
+        # UserPromptSubmit honors only "block". "allow" is logged as an
+        # unknown decision and shown as a hook failure. Session and
+        # subagent observe events ignore stdout; an empty object is success.
+        return {}
+    if recording_only:
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
@@ -245,7 +250,7 @@ def emit_grok_hook_response(
         approval_payload=live_payload,
         recording_only=recording_only,
     )
-    _last_grok_policy_action = "allow" if payload.get("decision") == "allow" else live_action
+    _last_grok_policy_action = "allow" if payload.get("decision") not in {"deny", "block"} else live_action
     stream = output_stream if output_stream is not None else sys.stdout
     stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
     stream.flush()

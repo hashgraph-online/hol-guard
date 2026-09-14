@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping
 from uuid import uuid4
 
+from .continuation_snapshot import validated_continuation_snapshot
+from .review_correlation import cloud_review_correlation_id
 from .review_event_integrity import review_event_payload_digest
 from .store_review_event_outbox_binding import bind_review_events_for_request, load_review_oauth_binding
 from .store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION, review_event_payload_json
@@ -163,6 +166,7 @@ def requeue_pending_request_events(
     changed_at: str,
     require_binding: bool = False,
     snapshot_repair_sequences: dict[str, int] | None = None,
+    only_retry_identity_drift: bool = False,
 ) -> int:
     connection.execute("begin immediate")
     current_binding = load_review_oauth_binding(connection, source)
@@ -182,7 +186,7 @@ def requeue_pending_request_events(
         else None
     )
     request_query = """
-        select request_id from approval_requests
+        select request_id, continuation_snapshot_json from approval_requests
         where status = 'pending' and oauth_source = ?
     """
     request_parameters: list[object] = [source]
@@ -195,6 +199,17 @@ def requeue_pending_request_events(
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
+        if only_retry_identity_drift:
+            try:
+                frozen = validated_continuation_snapshot(json.loads(row["continuation_snapshot_json"]))
+            except (TypeError, ValueError):
+                frozen = None
+            if (
+                frozen is None
+                or frozen["capability"] not in {"retry-only", "unsupported"}
+                or frozen["correlationId"] == cloud_review_correlation_id(request_id)
+            ):
+                continue
         if require_binding and current_binding is not None:
             established = connection.execute(
                 """

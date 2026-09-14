@@ -133,7 +133,14 @@ def matching_local_mcp_grant(
     if identity_hash is None:
         return None
     command, args_hash = _mcp_server_launch(artifact)
-    grant = lookup(identity_hash, command=command, args_hash=args_hash)
+    grant = lookup(
+        identity_hash,
+        command=command,
+        args_hash=args_hash,
+        package_name=_mcp_server_package_field(artifact, "package_name"),
+        package_version=_mcp_server_package_field(artifact, "package_version"),
+        package_source=_mcp_server_package_field(artifact, "package_source"),
+    )
     if not isinstance(grant, Mapping):
         return None
     raw_state = grant.get("state")
@@ -171,6 +178,20 @@ def _mcp_server_launch(artifact: GuardArtifact) -> tuple[str | None, str | None]
     command_text = command.strip() if isinstance(command, str) and command.strip() else None
     args_text = args_hash.strip() if isinstance(args_hash, str) and args_hash.strip() else None
     return command_text, args_text
+
+
+def _mcp_server_package_field(artifact: GuardArtifact, field: str) -> str | None:
+    metadata = artifact.metadata
+    if not isinstance(metadata, Mapping):
+        return None
+    identity = metadata.get("mcp_server_identity")
+    if not isinstance(identity, Mapping):
+        return None
+    value = identity.get(field)
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
 
 
 def _mcp_server_identity_hash(artifact: GuardArtifact) -> str | None:

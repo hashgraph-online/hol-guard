@@ -3,6 +3,7 @@ import type {
   ExtensionCatalogItem,
   ExtensionCatalogResponse,
   ExtensionControlLayer,
+  ExtensionControlTerminalCommands,
   ExtensionPermission,
   ExtensionRule,
   ExtensionRuleSafeVariant,
@@ -118,6 +119,16 @@ function version(value: unknown, label: string): string {
   const candidate = string(value, label);
   if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
   return candidate;
+}
+
+function terminalCommands(value: unknown): ExtensionControlTerminalCommands | undefined {
+  if (value === undefined) return undefined;
+  const item = record(value, "effective.terminal_commands");
+  return {
+    ...(item.shell === undefined ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"] as const) }),
+    enroll: string(item.enroll, "effective.terminal_commands.enroll"),
+    recover_authority: string(item.recover_authority, "effective.terminal_commands.recover_authority"),
+  };
 }
 
 function stringList(value: unknown, label: string, max = EXTENSION_CLIENT_LIMITS.relationshipIds): string[] {
@@ -419,6 +430,7 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
     controls,
     layers,
     failures,
+    terminal_commands: terminalCommands(root.terminal_commands),
     projection: root.projection === undefined ? undefined : normalizeEffectiveExtensionControlProjection(root.projection),
     managed_controls: managedControls,
   };

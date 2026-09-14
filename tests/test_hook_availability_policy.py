@@ -381,8 +381,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert prompt["decision"] == "allow"
-    assert prompt["policy_action"] == "allow"
+    assert prompt == {}
     session = availability_harness_response(
         {"hook_event_name": "SessionStart"},
         harness="grok",
@@ -390,7 +389,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert session["decision"] == "allow"
+    assert session == {}
     aliased = availability_harness_response(
         {"hookEventName": "session_start"},
         harness="grok",
@@ -398,8 +397,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert aliased["decision"] == "allow"
-    assert aliased["policy_action"] == "allow"
+    assert aliased == {}
     subagent = availability_harness_response(
         {"hook_event_name": "subagent_start"},
         harness="grok",
@@ -407,7 +405,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert subagent["decision"] == "allow"
+    assert subagent == {}
     submitted = availability_harness_response(
         {"hook_event_name": "UserPromptSubmitted"},
         harness="grok",
@@ -415,8 +413,7 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert submitted["decision"] == "allow"
-    assert submitted["policy_action"] == "allow"
+    assert submitted == {}
     compact = availability_harness_response(
         {"hook_event_name": " userpromptsubmit "},
         harness="grok",
@@ -424,7 +421,15 @@ def test_availability_continues_prompt_lifecycle_and_still_pauses_tools(tmp_path
         reason_code="native_hook_event_unavailable",
         reason="native unavailable",
     )
-    assert compact["decision"] == "allow"
+    assert compact == {}
+    grok_post = availability_harness_response(
+        {"hook_event_name": "PostToolUse", "tool_name": "Read"},
+        harness="grok",
+        event_name="PostToolUse",
+        reason_code="native_post_tool_unavailable",
+        reason="native unavailable",
+    )
+    assert grok_post == {}
     withheld = availability_harness_response(
         {"hook_event_name": "PostToolUse", "tool_name": "Read"},
         harness="cursor",

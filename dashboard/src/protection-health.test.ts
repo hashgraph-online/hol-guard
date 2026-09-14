@@ -5,6 +5,8 @@ import {
   normalizeProtectionHealth,
   PROTECTION_CHECK_IDS,
   PROTECTION_PROVING_GRACE_MS,
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
   protectionHeadlineFor,
   protectionHealthFor,
   protectionPresentationState,
@@ -55,6 +57,35 @@ decisionFailure[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
   reason_code: "decision_stream_failed",
 };
 assert.equal(normalizeProtectionHealth(payload(decisionFailure)).state, "degraded");
+
+const unsupportedContainment = checks();
+for (const checkId of ["decision_plane_compatibility", "containment_compatibility", "sandbox"] as const) {
+  unsupportedContainment[PROTECTION_CHECK_IDS.indexOf(checkId)] = {
+    check_id: checkId,
+    status: "fail",
+    reason_code: "unsupported_platform",
+  };
+}
+const unsupportedContainmentHealth = normalizeProtectionHealth(payload(unsupportedContainment));
+assert(isUnsupportedPlatformCheck(unsupportedContainment[6]), "unsupported platform gaps use a stable reason code");
+assert(
+  !hasRepairableProtectionGap(unsupportedContainmentHealth.checks),
+  "unsupported-only containment gaps do not offer a futile aggregate repair",
+);
+const mixedContainment = unsupportedContainment.map((check) => (
+  check.check_id === "harness_hooks"
+    ? { check_id: check.check_id, status: "fail" as const, reason_code: "hook_verification_failed" }
+    : check
+));
+const mixedContainmentHealth = normalizeProtectionHealth(payload(mixedContainment));
+assert(
+  hasRepairableProtectionGap(mixedContainmentHealth.checks),
+  "mixed unsupported and ordinary gaps retain a supported repair path",
+);
+assert.match(
+  remainingProtectionRepairMessage(mixedContainmentHealth, (harness) => harness).message,
+  /full protection cannot be reached here/,
+);
 
 const malformed = normalizeProtectionHealth({
   ...payload(checks().slice(0, -1)),
