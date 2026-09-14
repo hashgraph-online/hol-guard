@@ -37,6 +37,56 @@ class TestCheckNoEval:
             r = check_no_eval(Path(tmpdir))
             assert r.passed and r.points == 5
 
+    @pytest.mark.parametrize(
+        "source",
+        (
+            "eval(untrustedInput);",
+            "eval?.(untrustedInput);",
+            "globalThis.eval(untrustedInput);",
+            "globalThis?.eval?.(untrustedInput);",
+            "window.eval(untrustedInput);",
+            "global.eval(untrustedInput);",
+            "builtins.eval(untrusted_input)",
+            "__builtins__.eval(untrusted_input)",
+            'new Function("return untrustedInput");',
+        ),
+    )
+    def test_detects_direct_or_explicit_global_dynamic_execution(self, source: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "unsafe.js").write_text(source, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is False
+            assert result.points == 0
+
+    def test_ignores_member_eval_apis_and_method_declarations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "safe.js").write_text(
+                "await page.$eval('#status', node => node.textContent);\n"
+                "await page.$$eval('.item', nodes => nodes.length);\n"
+                "await client.eval('document.title');\n"
+                "class RuntimeClient {\n"
+                "  async eval(expression, { awaitPromise = true } = {}) {\n"
+                "    return this.send('Runtime.evaluate', { expression, awaitPromise });\n"
+                "  }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (root / "safe.py").write_text(
+                "class RuntimeClient:\n"
+                "    def eval(self, expression):\n"
+                "        return expression\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
     def test_ignores_symlinked_code_files_outside_root(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

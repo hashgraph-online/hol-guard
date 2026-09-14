@@ -11,7 +11,13 @@ from ..path_support import resolves_within_root
 CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"}
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache__", ".venv", "venv"}
 
-EVAL_RE = re.compile(r"\beval\s*\(")
+# A direct eval call is dangerous.  The prior word-boundary matcher also
+# classified Puppeteer's $eval/$$eval and arbitrary member calls (client.eval)
+# as dynamic execution, although none invokes the global eval function.
+DIRECT_EVAL_RE = re.compile(r"(?<![\w$.])eval\s*(?:\?\.)?\s*\(")
+EXPLICIT_GLOBAL_EVAL_RE = re.compile(
+    r"\b(?:globalThis|window|global|builtins|__builtins__)\s*(?:\?\.|\.)\s*eval\s*(?:\?\.)?\s*\("
+)
 FUNCTION_RE = re.compile(r"new\s+Function\s*\(")
 INTERPOLATED_TEMPLATE_PATTERN = r"`[^`]*\$\{[^}]+\}[^`]*`"
 TS_TEMPLATE_SUFFIX_PATTERN = r"(?:[ \t]+(?:as|satisfies)[ \t]+[^;\n]+)?"
@@ -79,6 +85,56 @@ def _has_shell_injection_pattern(content: str) -> bool:
     return False
 
 
+def _matching_paren(content: str, opening_paren: int) -> int | None:
+    """Find the matching parenthesis without treating quoted strings as syntax."""
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index in range(opening_paren, len(content)):
+        character = content[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {"'", '"', "`"}:
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _is_eval_declaration(content: str, match: re.Match[str]) -> bool:
+    """Do not classify a method/function declaration named eval as a call."""
+    closing_paren = _matching_paren(content, match.end() - 1)
+    if closing_paren is None:
+        return False
+
+    suffix = content[closing_paren + 1 :].lstrip()
+    # A body immediately after a parameter list is a JavaScript/TypeScript
+    # method declaration.  A direct eval call cannot validly be followed by it.
+    if suffix.startswith("{") or re.match(r":\s*[^={;]+\s*{", suffix):
+        return True
+
+    line_start = content.rfind("\n", 0, match.start()) + 1
+    prefix = content[line_start : match.start()].strip()
+    return bool(re.search(r"(?:^|\s)def$", prefix))
+
+
+def _has_direct_eval_call(content: str) -> bool:
+    for match in DIRECT_EVAL_RE.finditer(content):
+        if not _is_eval_declaration(content, match):
+            return True
+    return bool(EXPLICIT_GLOBAL_EVAL_RE.search(content))
+
+
 def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[str] = []
     for fpath in _find_code_files(plugin_dir, files):
@@ -86,7 +142,7 @@ def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> Ch
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if EVAL_RE.search(content):
+        if _has_direct_eval_call(content):
             findings.append(f"{fpath.relative_to(plugin_dir)}: eval()")
         if FUNCTION_RE.search(content):
             findings.append(f"{fpath.relative_to(plugin_dir)}: new Function()")
