@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.librarybridge",
       "command.mcp-filesystem",
       "command.noodle",
       "command.probe",
