@@ -1037,7 +1037,9 @@ def test_package_protect_rebuilds_every_permitted_final_projection_before_launch
     assert isinstance(action_envelope, dict)
     assert action_envelope["policy_action"] == final_action
 
-    stored_receipts = store.list_receipts(limit=10, harness="guard-cli")
+    receipt_harness = receipt["harness"]
+    assert isinstance(receipt_harness, str)
+    stored_receipts = store.list_receipts(limit=10, harness=receipt_harness)
     assert len(stored_receipts) == 1
     stored_receipt = stored_receipts[0]
     assert stored_receipt["receipt_id"] == receipt["receipt_id"]
@@ -1127,7 +1129,9 @@ def test_package_protect_current_warn_rewrites_every_final_package_projection(
     assert isinstance(receipt, dict)
     assert receipt["policy_decision"] == "warn"
     assert receipt["action_envelope_json"]["policy_action"] == "warn"
-    stored_receipts = store.list_receipts(limit=10, harness="guard-cli")
+    receipt_harness = receipt["harness"]
+    assert isinstance(receipt_harness, str)
+    stored_receipts = store.list_receipts(limit=10, harness=receipt_harness)
     assert len(stored_receipts) == 1
     assert stored_receipts[0]["policy_decision"] == "warn"
     assert stored_receipts[0]["action_envelope_json"]["policy_action"] == "warn"
