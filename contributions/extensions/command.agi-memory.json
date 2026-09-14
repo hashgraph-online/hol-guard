@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.agi-memory",
+  "version": "1.0.0",
+  "name": "agi-memory",
+  "description": "Reviews agi-memory commands that rewrite the memory vault, permanently delete a memory across every synced machine, or change the invariants injected into later sessions.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.agi-memory",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0F766E" },
+  "license": "MIT",
+  "executables": ["agi-memory", "agent-memory"],
+  "ecosystemIds": ["agi-memory"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "agi-memory vault rewrite command",
+    "agi-memory permanent memory deletion command",
+    "agi-memory core memory pin command",
+    "agi-memory core memory unpin command"
+  ],
+  "saferAlternatives": [
+    "Run agi-memory sync status or agi-memory blocks first to see what the destructive command would change.",
+    "Soft-delete instead of --hard: it marks the memory superseded and is reversible."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_agi_memory_extensions"
+  }
+}
