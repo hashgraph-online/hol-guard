@@ -75,7 +75,9 @@ def _canonical_grok_event_name(raw_event: str) -> str:
     return _GROK_EVENT_NAMES.get(normalized, raw_event or "PreToolUse")
 
 
-def _is_observe_only_event(event_name: str | None) -> bool:
+def is_grok_observe_only_event(event_name: str | None) -> bool:
+    """Return whether Guard observes this Grok event without enforcement."""
+
     if not isinstance(event_name, str) or not event_name.strip():
         return False
     return _canonical_grok_event_name(event_name.strip()) in _OBSERVE_ONLY_EVENTS
@@ -192,7 +194,7 @@ def grok_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
-    if _is_observe_only_event(event_name):
+    if is_grok_observe_only_event(event_name):
         # UserPromptSubmit honors only "block". "allow" is logged as an
         # unknown decision and shown as a hook failure. Session and
         # subagent observe events ignore stdout; an empty object is success.
@@ -317,7 +319,7 @@ def _guard_store_from_argv():
 
 
 def grok_hook_should_block(*, policy_action: str, event_name: str | None = None) -> bool:
-    if _recording_only_from_guard_home() or _is_observe_only_event(event_name):
+    if _recording_only_from_guard_home() or is_grok_observe_only_event(event_name):
         return False
     return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
 
@@ -338,5 +340,6 @@ __all__ = [
     "grok_hook_process_exit",
     "grok_hook_response_from_guard",
     "grok_hook_should_block",
+    "is_grok_observe_only_event",
     "prepare_grok_hook_payload",
 ]
