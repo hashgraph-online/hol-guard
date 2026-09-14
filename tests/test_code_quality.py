@@ -99,6 +99,23 @@ class TestCheckNoEval:
             assert result.passed is True
             assert result.points == 5
 
+    @pytest.mark.parametrize(
+        "source",
+        (
+            "await client. /* comment */ eval('document.title');\n",
+            "await client. // comment\n eval('document.title');\n",
+        ),
+    )
+    def test_ignores_member_eval_apis_with_comments(self, source: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "safe.js").write_text(source, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
     def test_does_not_skip_direct_eval_followed_by_standalone_block(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

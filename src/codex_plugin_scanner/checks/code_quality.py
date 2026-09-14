@@ -160,6 +160,11 @@ def _is_member_access_eval(content: str, match: re.Match[str]) -> bool:
                 break
             index = comment_start
             continue
+        line_start = max(content.rfind("\n", 0, index), content.rfind("\r", 0, index)) + 1
+        comment_start = content.rfind("//", line_start, index)
+        if comment_start != -1:
+            index = comment_start
+            continue
         break
     return index > 0 and content[index - 1] == "."
 
