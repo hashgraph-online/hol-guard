@@ -120,7 +120,8 @@ def _run_guard_command_inspection_command(
         if command_command == "setup":
             from ..runtime.command_ecosystem_detection import command_setup_detection_payload
 
-            workspace = Path(str(getattr(args, "workspace", "."))).resolve()
+            workspace_value = getattr(args, "workspace", None)
+            workspace = Path(str(workspace_value or ".")).resolve()
             if not workspace.is_dir():
                 raise ValueError("Command setup workspace must be an existing directory")
             payload = command_setup_detection_payload(workspace)

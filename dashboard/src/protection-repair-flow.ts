@@ -5,7 +5,12 @@ import {
   runHarnessAction,
 } from "./guard-api";
 import type { GuardRuntimeSnapshot } from "./guard-types";
-import { protectionHealthFor, remainingProtectionRepairMessage } from "./protection-health";
+import {
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
+  protectionHealthFor,
+  remainingProtectionRepairMessage,
+} from "./protection-health";
 
 export class ProtectionRepairFlowError extends Error {
   readonly failedHarnesses: string[];
@@ -65,6 +70,13 @@ export async function runAutomaticProtectionRepair(input: {
   const remainingHealth = protectionHealthFor(refreshedSnapshot);
   if (remainingHealth.state === "protected") {
     return "Automatic repairs completed. Guard rechecked every protection layer below.";
+  }
+  if (!hasRepairableProtectionGap(remainingHealth.checks)) {
+    const hasUnsupportedGaps = remainingHealth.checks.some(isUnsupportedPlatformCheck);
+    if (hasUnsupportedGaps) {
+      return "Supported protection repairs completed. Containment remains unavailable on this platform; Guard remains fail-closed.";
+    }
+    return "Automatic repairs completed. Guard rechecked every repairable protection layer below.";
   }
   const remaining = remainingProtectionRepairMessage(remainingHealth, input.displayName);
   throw new ProtectionRepairFlowError(
