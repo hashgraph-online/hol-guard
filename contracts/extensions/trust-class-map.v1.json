@@ -84,7 +84,8 @@
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
-      "command.skill-sunset"
+      "command.skill-sunset",
+      "command.vttforge"
     ]
   }
 }

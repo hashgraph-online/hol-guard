@@ -102,6 +102,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.remote.essh",
         "command.repo2nb",
         "command.skill-sunset",
+        "command.vttforge",
     }
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"
