@@ -115,6 +115,53 @@ AGI_MEMORY_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.agi-memory.unpin",
     ),
     (
+        "agi-memory sync init",
+        "agi-memory vault remote initialisation command",
+        "command.agi-memory.sync-init",
+    ),
+    (
+        "agi-memory sync init git@github.com:me/vault.git",
+        "agi-memory vault remote initialisation command",
+        "command.agi-memory.sync-init",
+    ),
+    (
+        "agi-memory sync init --create-private --repo-name my-vault",
+        "agi-memory vault remote initialisation command",
+        "command.agi-memory.sync-init",
+    ),
+    (
+        "agent-memory sync init",
+        "agi-memory vault remote initialisation command",
+        "command.agi-memory.sync-init",
+    ),
+    (
+        "agi-memory bootstrap",
+        "agi-memory cold-start seeding command",
+        "command.agi-memory.bootstrap",
+    ),
+    (
+        "agi-memory bootstrap --repo . --max-commits 50",
+        "agi-memory cold-start seeding command",
+        "command.agi-memory.bootstrap",
+    ),
+    (
+        "agent-memory bootstrap --project other-app",
+        "agi-memory cold-start seeding command",
+        "command.agi-memory.bootstrap",
+    ),
+    # bootstrap also ships as its own console script; a rule covering only the
+    # subcommand would miss these entirely.
+    (
+        "agi-bootstrap",
+        "agi-memory cold-start seeding command",
+        "command.agi-memory.bootstrap",
+    ),
+    (
+        "agent-bootstrap --repo ../other-repo",
+        "agi-memory cold-start seeding command",
+        "command.agi-memory.bootstrap",
+    ),
+    (
         "agent-memory unpin tls-rule",
         "agi-memory core memory unpin command",
         "command.agi-memory.unpin",
@@ -138,12 +185,23 @@ AGI_MEMORY_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
     ("python -m agi_memory.mcp_server pin k 'v'", "command.agi-memory.pin"),
     ("exec agi-memory unpin k", "command.agi-memory.unpin"),
     ("xargs agent-memory unpin k", "command.agi-memory.unpin"),
+    ("python -m agi_memory.mcp_server sync init", "command.agi-memory.sync-init"),
+    ("exec agi-memory sync init", "command.agi-memory.sync-init"),
+    ("xargs -n 1 agent-memory sync init", "command.agi-memory.sync-init"),
+    ("python -m agi_memory.bootstrap", "command.agi-memory.bootstrap"),
+    ("python3 -m agi_memory.bootstrap --repo .", "command.agi-memory.bootstrap"),
+    ("py -m agi_memory.bootstrap", "command.agi-memory.bootstrap"),
+    ("exec agi-bootstrap", "command.agi-memory.bootstrap"),
+    ("xargs -n 1 agent-bootstrap", "command.agi-memory.bootstrap"),
+    ("exec agi-memory bootstrap", "command.agi-memory.bootstrap"),
 )
 
 AGI_MEMORY_COMPOUND_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
     ("agi-memory sync status && agi-memory sync dedupe", "command.agi-memory.sync-dedupe"),
     ("agi-memory log; agi-memory delete 3 --hard", "command.agi-memory.delete-hard"),
     ("agi-memory blocks | grep tls && agi-memory unpin tls-rule", "command.agi-memory.unpin"),
+    ("agi-memory sync status; agi-memory sync init", "command.agi-memory.sync-init"),
+    ("agi-memory log && agi-bootstrap --repo .", "command.agi-memory.bootstrap"),
 )
 
 
@@ -216,10 +274,13 @@ AGI_MEMORY_SAFE_COMMANDS: tuple[str, ...] = (
     "agi-memory impact src/auth.py",
     "agent-memory log",
     "agent-memory blocks",
-    # sync dispatches on a literal positional: only status/now/dedupe/init reach
-    # the sync module, and only dedupe rewrites the vault.
+    # sync dispatches on a literal positional: status is the read.
     "agi-memory sync status",
     "agent-memory sync status",
+    # Recording how a session ended is additive; it never rewrites a memory.
+    "agi-memory outcome completed",
+    "agi-memory outcome abandoned",
+    "agent-memory outcome blocked",
     # A soft delete marks the observation superseded and is reversible.
     "agi-memory delete 3",
     "agi-memory delete #3",
@@ -229,6 +290,9 @@ AGI_MEMORY_SAFE_COMMANDS: tuple[str, ...] = (
     "agi-memory pin --help",
     "agi-memory unpin --help",
     "agi-memory sync --help",
+    "agi-memory bootstrap --help",
+    "agi-bootstrap --help",
+    "agent-bootstrap --help",
 )
 
 

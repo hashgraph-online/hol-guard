@@ -130,7 +130,7 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
-| `command.agi-memory` | Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, or change the invariants injected into later sessions. Reads such as recall, log, inspect, blocks and sync status stay unreviewed. | 4 | External opt-in |
+| `command.agi-memory` | Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remote that will receive the whole store, bulk-seed it from git history, or change the invariants injected into later sessions. Reads such as recall, log, inspect, blocks and sync status stay unreviewed. | 6 | External opt-in |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |

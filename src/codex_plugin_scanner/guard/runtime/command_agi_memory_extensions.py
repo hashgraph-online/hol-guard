@@ -18,7 +18,7 @@ from .command_rules import (
 # Surface verified against agi-memory 0.5.0 (mcp_server.py dispatch, sync.py
 # argparse, pyproject console_scripts).
 #
-# The four reviewed operations mutate persistent agent memory:
+# The six reviewed operations mutate persistent agent memory:
 # - `sync dedupe` rewrites the canonical append-only JSONL vault in place. It is
 #   the only operation in the tool that rewrites rather than appends, and it has
 #   collapsed distinct observations into one before.
@@ -27,10 +27,15 @@ from .command_rules import (
 #   deletion to every other machine on the next sync.
 # - `pin` writes a core-memory block that is injected into every later session.
 # - `unpin` removes one, silently dropping an invariant later sessions relied on.
+# - `sync init` attaches a remote, after which everything already in the vault is
+#   pushed there; with --create-private it creates a GitHub repository.
+# - `bootstrap` bulk-writes memories parsed from git history into a store that
+#   may not be empty.
 #
 # Reads stay out of scope by design: `sync status`, `log`, `inspect`, `blocks`,
-# `recall`, `timeline` and the code-graph queries are side-effect free, and
-# gating them would put a prompt in front of every lookup.
+# `recall`, `timeline`, `outcome` and the code-graph queries are side-effect
+# free or purely additive, and gating them would put a prompt in front of every
+# lookup.
 #
 # Two properties of this CLI drive the matcher shape:
 #
@@ -43,19 +48,27 @@ from .command_rules import (
 #    matched as an exact positional rather than by prefix.
 _AGI_MEMORY_EXECUTABLES: tuple[str, ...] = ("agi-memory", "agent-memory")
 _AGI_MEMORY_MODULES: tuple[str, ...] = ("agi_memory.mcp_server",)
+# The bootstrap seeder also ships as its own pair of console scripts, so it is
+# reachable either as `agi-memory bootstrap` or as `agi-bootstrap` directly.
+_BOOTSTRAP_EXECUTABLES: tuple[str, ...] = ("agi-bootstrap", "agent-bootstrap")
+_BOOTSTRAP_MODULES: tuple[str, ...] = ("agi_memory.bootstrap",)
 _PYTHON_LAUNCHERS: tuple[str, ...] = ("python", "python3", "py")
 _SHELL_WRAPPERS: tuple[str, ...] = ("exec", "xargs")
 
 
-def _launchers() -> tuple[tuple[str, ...], ...]:
-    """Every argv prefix that reaches the agi-memory CLI."""
-    direct: list[tuple[str, ...]] = [(name,) for name in _AGI_MEMORY_EXECUTABLES]
-    direct += [(interpreter, "-m", module) for interpreter in _PYTHON_LAUNCHERS for module in _AGI_MEMORY_MODULES]
+def _launchers(
+    executables: tuple[str, ...],
+    modules: tuple[str, ...],
+) -> tuple[tuple[str, ...], ...]:
+    """Every argv prefix that reaches the given entry point."""
+    direct: list[tuple[str, ...]] = [(name,) for name in executables]
+    direct += [(interpreter, "-m", module) for interpreter in _PYTHON_LAUNCHERS for module in modules]
     wrapped = [(wrapper, *launcher) for wrapper in _SHELL_WRAPPERS for launcher in direct]
     return (*direct, *wrapped)
 
 
-_AGI_MEMORY_LAUNCHERS: tuple[tuple[str, ...], ...] = _launchers()
+_AGI_MEMORY_LAUNCHERS: tuple[tuple[str, ...], ...] = _launchers(_AGI_MEMORY_EXECUTABLES, _AGI_MEMORY_MODULES)
+_BOOTSTRAP_LAUNCHERS: tuple[tuple[str, ...], ...] = _launchers(_BOOTSTRAP_EXECUTABLES, _BOOTSTRAP_MODULES)
 _WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
 
 # argparse resolves any unambiguous long-option prefix. `delete` declares
@@ -94,6 +107,55 @@ _AGI_MEMORY_DELETE_HARD = AnyMatcher(
         )
         for launcher in _AGI_MEMORY_LAUNCHERS
         for hard_flag in _HARD_FLAGS
+    )
+)
+
+_AGI_MEMORY_SYNC_INIT = AnyMatcher(
+    matchers=tuple(
+        executable_matcher(
+            *launcher,
+            "sync",
+            "init",
+            options_with_values=frozenset({"--repo-name"}),
+            allow_leading_options=launcher[0] in _SHELL_WRAPPERS,
+            leading_options_with_values=(
+                _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in _SHELL_WRAPPERS else frozenset()
+            ),
+            fail_secure_unknown_options=True,
+        )
+        for launcher in _AGI_MEMORY_LAUNCHERS
+    )
+)
+
+# Reachable two ways: as a subcommand of the main CLI, and as its own console
+# script. A rule covering only the subcommand misses `agi-bootstrap` entirely.
+_AGI_MEMORY_BOOTSTRAP = AnyMatcher(
+    matchers=(
+        *(
+            executable_matcher(
+                *launcher,
+                "bootstrap",
+                options_with_values=frozenset({"--repo", "--project", "--max-commits"}),
+                allow_leading_options=launcher[0] in _SHELL_WRAPPERS,
+                leading_options_with_values=(
+                    _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in _SHELL_WRAPPERS else frozenset()
+                ),
+                fail_secure_unknown_options=True,
+            )
+            for launcher in _AGI_MEMORY_LAUNCHERS
+        ),
+        *(
+            executable_matcher(
+                *launcher,
+                options_with_values=frozenset({"--repo", "--project", "--max-commits"}),
+                allow_leading_options=launcher[0] in _SHELL_WRAPPERS,
+                leading_options_with_values=(
+                    _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in _SHELL_WRAPPERS else frozenset()
+                ),
+                fail_secure_unknown_options=True,
+            )
+            for launcher in _BOOTSTRAP_LAUNCHERS
+        ),
     )
 )
 
@@ -269,6 +331,66 @@ AGI_MEMORY_COMMAND_RULES = (
         ),
     ),
     CommandSafetyRule(
+        rule_id="command.agi-memory.sync-init",
+        title="agi-memory vault remote initialisation",
+        description=(
+            "Identifies `agi-memory sync init`, which turns the local memory "
+            "vault into a git repository and attaches a remote. Every memory "
+            "already in the vault is then pushed to that remote on the next "
+            "sync, so pointing it at the wrong repository publishes the whole "
+            "store. With --create-private it also creates a new GitHub "
+            "repository through the gh CLI."
+        ),
+        severity="high",
+        risk_classes=("destructive_shell",),
+        action_classes=("agi-memory vault remote initialisation command",),
+        safer_alternatives=(
+            "Run agi-memory sync status first to see whether a remote is already attached.",
+            "Review what the vault already contains before attaching a remote that will receive all of it.",
+            "Confirm the remote is private, since memories often quote source code and internal decisions.",
+        ),
+        matcher=_AGI_MEMORY_SYNC_INIT,
+        default_mode="review",
+        safe_variants=(
+            safe_flag_variant(
+                _AGI_MEMORY_SYNC_INIT,
+                variant_id="help",
+                title="agi-memory sync init command help",
+                flag="--help",
+            ),
+        ),
+    ),
+    CommandSafetyRule(
+        rule_id="command.agi-memory.bootstrap",
+        title="agi-memory cold-start memory seeding",
+        description=(
+            "Identifies `agi-memory bootstrap` and the standalone "
+            "`agi-bootstrap` script, which parse git history and README.md and "
+            "bulk-write the result into the memory store. Run against a store "
+            "that is not empty, or against the wrong repository, this mixes "
+            "generated memories into curated ones with no marker separating "
+            "them afterwards."
+        ),
+        severity="medium",
+        risk_classes=("destructive_shell",),
+        action_classes=("agi-memory cold-start seeding command",),
+        safer_alternatives=(
+            "Run agi-memory log first to check whether the store already holds memories for this project.",
+            "Pass --repo explicitly so the seeding cannot pick up whichever repository happens to be the cwd.",
+            "Seed with a small --max-commits first and inspect the result before a full run.",
+        ),
+        matcher=_AGI_MEMORY_BOOTSTRAP,
+        default_mode="review",
+        safe_variants=(
+            safe_flag_variant(
+                _AGI_MEMORY_BOOTSTRAP,
+                variant_id="help",
+                title="agi-memory bootstrap command help",
+                flag="--help",
+            ),
+        ),
+    ),
+    CommandSafetyRule(
         rule_id="command.agi-memory.pin",
         title="agi-memory core memory pin",
         description=(
@@ -329,13 +451,17 @@ AGI_MEMORY_COMMAND_EXTENSION_SPECS = (
         name="agi-memory command protection",
         description=(
             "Reviews agi-memory commands that rewrite the canonical memory "
-            "vault, permanently delete a memory across every synced machine, or "
-            "change the invariants injected into later sessions. Reads such as "
-            "recall, log, inspect, blocks and sync status stay unreviewed."
+            "vault, permanently delete a memory across every synced machine, "
+            "attach a remote that will receive the whole store, bulk-seed it "
+            "from git history, or change the invariants injected into later "
+            "sessions. Reads such as recall, log, inspect, blocks and sync "
+            "status stay unreviewed."
         ),
         action_classes=(
             "agi-memory vault rewrite command",
             "agi-memory permanent memory deletion command",
+            "agi-memory vault remote initialisation command",
+            "agi-memory cold-start seeding command",
             "agi-memory core memory pin command",
             "agi-memory core memory unpin command",
         ),
@@ -343,6 +469,7 @@ AGI_MEMORY_COMMAND_EXTENSION_SPECS = (
         safer_alternatives=(
             "Run agi-memory sync status or agi-memory blocks first to see what the destructive command would change.",
             "Soft-delete instead of --hard: it marks the memory superseded and is reversible.",
+            "Check agi-memory log before seeding, so bootstrap does not mix generated memories into curated ones.",
         ),
         reference_urls=("https://github.com/kdbhalala/agi-memory",),
     ),
