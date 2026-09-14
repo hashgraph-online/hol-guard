@@ -44,7 +44,7 @@ def _subcommand_matcher(subcommand: str, options_with_values: frozenset[str]) ->
 # 1. run: opens a metered proxy session and executes the command after `--` through it
 _SHELLROUTE_RUN = _subcommand_matcher("run", _SHELLROUTE_RUN_OPTIONS_WITH_VALUES)
 
-# 2. proxy / proxy stop: starts a persistent local proxy session, or ends every running one
+# 2. proxy / proxy stop: starts a persistent local proxy session, or stops the ones tracked on this machine
 _SHELLROUTE_PROXY = _subcommand_matcher("proxy", _SHELLROUTE_PROXY_OPTIONS_WITH_VALUES)
 
 # 3. reveal-key: prints the stored account API key
@@ -53,7 +53,7 @@ _SHELLROUTE_REVEAL_KEY = _subcommand_matcher("reveal-key", frozenset())
 SHELLROUTE_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "shellroute routed command execution": ("execution", "network_egress"),
     "shellroute proxy lifecycle command": ("destructive_shell", "network_egress"),
-    "shellroute API key reveal": ("local_secret_read",),
+    "shellroute api key reveal": ("local_secret_read",),
 }
 
 SHELLROUTE_COMMAND_RULES = (
@@ -91,7 +91,7 @@ SHELLROUTE_COMMAND_RULES = (
         title="shellroute proxy start and stop",
         description=(
             "Identifies `shellroute proxy`, which starts a persistent metered local proxy session, and "
-            "`shellroute proxy stop`, which ends every running proxy session of the account."
+            "`shellroute proxy stop`, which stops the persistent proxy sessions tracked on this machine."
         ),
         severity="medium",
         risk_classes=("destructive_shell", "network_egress"),
@@ -118,7 +118,7 @@ SHELLROUTE_COMMAND_RULES = (
         description="Identifies `shellroute reveal-key`, which prints the stored account API key to the terminal.",
         severity="high",
         risk_classes=("local_secret_read",),
-        action_classes=("shellroute API key reveal",),
+        action_classes=("shellroute api key reveal",),
         safer_alternatives=(
             "Give automation the key through the platform's secret store as `SHELLROUTE_API_KEY` "
             "instead of printing it in a session.",
@@ -148,7 +148,7 @@ SHELLROUTE_COMMAND_EXTENSION_SPECS = (
         action_classes=(
             "shellroute routed command execution",
             "shellroute proxy lifecycle command",
-            "shellroute API key reveal",
+            "shellroute api key reveal",
         ),
         risk_classes=("destructive_shell", "execution", "local_secret_read", "network_egress"),
         safer_alternatives=(

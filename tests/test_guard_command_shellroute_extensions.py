@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_action_risk_classes import COMMAND_ACTION_RISK_CLASSES
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    risk_classes_for_command_action,
+)
 from codex_plugin_scanner.guard.runtime.command_shellroute_extensions import SHELLROUTE_ACTION_RISK_CLASSES
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
@@ -24,7 +26,7 @@ _RUN_ACTION = "shellroute routed command execution"
 _RUN_RULE = "command.shellroute.run"
 _PROXY_ACTION = "shellroute proxy lifecycle command"
 _PROXY_RULE = "command.shellroute.proxy"
-_REVEAL_ACTION = "shellroute API key reveal"
+_REVEAL_ACTION = "shellroute api key reveal"
 _REVEAL_RULE = "command.shellroute.reveal-key"
 
 SHELLROUTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
@@ -163,4 +165,4 @@ def test_shellroute_extension_publishes_official_reference() -> None:
 
 def test_shellroute_action_classes_publish_risk_classes() -> None:
     for action_class, risk_classes in SHELLROUTE_ACTION_RISK_CLASSES.items():
-        assert COMMAND_ACTION_RISK_CLASSES[action_class] == risk_classes
+        assert risk_classes_for_command_action(action_class) == risk_classes
