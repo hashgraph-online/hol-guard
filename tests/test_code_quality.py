@@ -71,6 +71,8 @@ class TestCheckNoEval:
                 "await page.$eval('#status', node => node.textContent);\n"
                 "await page.$$eval('.item', nodes => nodes.length);\n"
                 "await client.eval('document.title');\n"
+                "await client. eval('document.title');\n"
+                "await client?. eval('document.title');\n"
                 "await this.#eval('document.title');\n"
                 "await client.window.eval('document.title');\n"
                 "class RuntimeClient {\n"
@@ -82,7 +84,7 @@ class TestCheckNoEval:
             )
             (root / "safe.ts").write_text(
                 "class RegexClient { eval(value = /)/) /* note */ {} }\n"
-                "interface TypedClient { eval(source: string): unknown; }\n",
+                "interface TypedClient { eval(source: string): (value: string) => unknown; }\n",
                 encoding="utf-8",
             )
             (root / "safe.py").write_text(

@@ -22,11 +22,11 @@ EXPLICIT_GLOBAL_EVAL_RE = re.compile(
 FUNCTION_RE = re.compile(r"new\s+Function\s*\(")
 DECLARATION_SUFFIX_RE = re.compile(
     r"[ \t]*(?:/\*[^\r\n]*\*/[ \t]*)?"
-    r"(?:\{|:[ \t]*[^={;\r\n]+[ \t]*(?:\{|;))"
+    r"(?:\{|:[ \t]*(?:[^={;\r\n]|=>)+[ \t]*(?:\{|;))"
 )
 SINGLE_LINE_DECLARATION_RE = re.compile(
     r"eval\s*\(.*\)[ \t]*(?:/\*[^\r\n]*\*/[ \t]*)?"
-    r"(?:\{|:[ \t]*[^={;\r\n]+[ \t]*(?:\{|;))"
+    r"(?:\{|:[ \t]*(?:[^={;\r\n]|=>)+[ \t]*(?:\{|;))"
 )
 INTERPOLATED_TEMPLATE_PATTERN = r"`[^`]*\$\{[^}]+\}[^`]*`"
 TS_TEMPLATE_SUFFIX_PATTERN = r"(?:[ \t]+(?:as|satisfies)[ \t]+[^;\n]+)?"
@@ -147,8 +147,27 @@ def _is_eval_declaration(content: str, match: re.Match[str]) -> bool:
     return bool(re.search(r"(?:^|\s)def$", prefix))
 
 
+def _is_member_access_eval(content: str, match: re.Match[str]) -> bool:
+    """Return whether eval is preceded by member-access punctuation."""
+    index = match.start()
+    while index:
+        if content[index - 1].isspace():
+            index -= 1
+            continue
+        if index >= 2 and content[index - 2 : index] == "*/":
+            comment_start = content.rfind("/*", 0, index - 2)
+            if comment_start == -1:
+                break
+            index = comment_start
+            continue
+        break
+    return index > 0 and content[index - 1] == "."
+
+
 def _has_direct_eval_call(content: str) -> bool:
     for match in DIRECT_EVAL_RE.finditer(content):
+        if _is_member_access_eval(content, match):
+            continue
         if not _is_eval_declaration(content, match):
             return True
     return bool(EXPLICIT_GLOBAL_EVAL_RE.search(content))
