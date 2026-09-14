@@ -9,6 +9,9 @@ from codex_plugin_scanner.guard.runtime.harness_attribution import (
     _CLAUDE_CODE_ENV_MARKERS,
     _CODEX_ENV_MARKERS,
     _CURSOR_ENV_MARKERS,
+    _GROK_ENV_MARKERS,
+    _OPENCODE_ENV_MARKERS,
+    ORIGIN_HARNESS_ENV,
 )
 
 HARNESS_ENV_MARKERS = (
@@ -17,6 +20,9 @@ HARNESS_ENV_MARKERS = (
     *_CLAUDE_CODE_ENV_MARKERS,
     *_CODEX_ENV_MARKERS,
     *_CURSOR_ENV_MARKERS,
+    *_GROK_ENV_MARKERS,
+    *_OPENCODE_ENV_MARKERS,
+    ORIGIN_HARNESS_ENV,
 )
 
 

@@ -1,4 +1,4 @@
-import { aI as fetchLocalCliApi, r as reactExports, aJ as fetchExtensionControlApi, j as jsxRuntimeExports, aK as useResolvedApprovalGate, ac as HiMiniLockClosed, N as HiMiniExclamationTriangle, aj as HiMiniArrowPath, v as HiMiniShieldCheck, aL as HiMiniInformationCircle, ai as isApprovalProofSubmitDisabled, B as HiMiniXMark, ak as ApprovalProofFieldInputs, aM as buildApprovalProofCredentials, aN as GenIcon, P as HiMiniBolt, aO as HiMiniGlobeAlt, aP as HiMiniCube, J as HiMiniCloud, aQ as HiMiniServerStack, b as HiMiniCommandLine, aR as HiMiniFolder, aS as FaWindows, aT as FaAws, q as HiMiniCheckCircle, c as HiMiniChevronRight, F as HiMiniChevronDown, aU as approvalProofRecentlySatisfied, aV as HiMiniArrowLeft, aW as HiMiniPlus, a5 as HiMiniClipboardDocumentCheck, a6 as HiMiniClipboard, ae as HiMiniAdjustmentsHorizontal, aX as HiMiniCheck, aD as HiMiniMagnifyingGlass, z as HiMiniSparkles, aY as HiMiniNoSymbol, aZ as startGuardCloudConnect, a_ as HiMiniArrowTopRightOnSquare, aC as WorkspacePageHeader, a$ as guardAwareHref } from "../guard-dashboard.js";
+import { aK as fetchLocalCliApi, r as reactExports, aL as fetchExtensionControlApi, j as jsxRuntimeExports, aM as useResolvedApprovalGate, ae as HiMiniLockClosed, N as HiMiniExclamationTriangle, al as HiMiniArrowPath, v as HiMiniShieldCheck, aN as HiMiniInformationCircle, ak as isApprovalProofSubmitDisabled, B as HiMiniXMark, am as ApprovalProofFieldInputs, aO as buildApprovalProofCredentials, aP as GenIcon, P as HiMiniBolt, aQ as HiMiniGlobeAlt, aR as HiMiniCube, J as HiMiniCloud, aS as HiMiniServerStack, b as HiMiniCommandLine, aT as HiMiniFolder, aU as FaWindows, aV as FaAws, q as HiMiniCheckCircle, c as HiMiniChevronRight, F as HiMiniChevronDown, aW as approvalProofRecentlySatisfied, aX as HiMiniArrowLeft, aY as HiMiniPlus, a7 as HiMiniClipboardDocumentCheck, a8 as HiMiniClipboard, ag as HiMiniAdjustmentsHorizontal, aZ as HiMiniCheck, aF as HiMiniMagnifyingGlass, z as HiMiniSparkles, a_ as HiMiniNoSymbol, a$ as startGuardCloudConnect, b0 as HiMiniArrowTopRightOnSquare, aE as WorkspacePageHeader, b1 as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -874,6 +874,15 @@ function version(value, label) {
   if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
   return candidate;
 }
+function terminalCommands(value) {
+  if (value === void 0) return void 0;
+  const item = record$2(value, "effective.terminal_commands");
+  return {
+    ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
+    enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
+    recover_authority: string$1(item.recover_authority, "effective.terminal_commands.recover_authority")
+  };
+}
 function stringList$1(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
   return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
 }
@@ -1138,6 +1147,7 @@ function normalizeEffectiveExtensionControls(value) {
     controls,
     layers,
     failures,
+    terminal_commands: terminalCommands(root.terminal_commands),
     projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection),
     managed_controls: managedControls
   };
@@ -4244,7 +4254,13 @@ function effectiveStatusKey(effective, options = {}) {
     } : null
   });
 }
-function authorityNoticeView(health, approvalGateReady) {
+const DEFAULT_TERMINAL_COMMANDS = {
+  enroll: "hol-guard command controls enroll",
+  recover_authority: "hol-guard command controls recover-authority"
+};
+function authorityNoticeView(health, approvalGateReady, terminalCommands2) {
+  const commands = terminalCommands2 ?? DEFAULT_TERMINAL_COMMANDS;
+  const terminalName = terminalCommands2?.shell === "powershell" ? "PowerShell" : "your terminal";
   switch (health) {
     case "tampered":
     case "recovery-required":
@@ -4255,10 +4271,10 @@ function authorityNoticeView(health, approvalGateReady) {
         action: { kind: "repair" },
         actionLabel: "Repair protection",
         actionDetail: "Rebuilding the trusted settings needs your approval password. Guard verifies the repair before protection changes unlock again.",
-        command: "hol-guard command controls recover-authority",
+        command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
-        terminalSummary: "Run this in your terminal if the button above cannot reach the approval gate."
+        terminalSummary: `Run this in ${terminalName} if the button above cannot reach the approval gate.`
       };
     case "degraded-unacknowledged":
       return {
@@ -4268,10 +4284,10 @@ function authorityNoticeView(health, approvalGateReady) {
         action: { kind: "acknowledge" },
         actionLabel: "Acknowledge limited state",
         actionDetail: "Acknowledging the limited state needs your approval password. Guard keeps protecting fail-safe afterwards.",
-        command: "hol-guard command controls recover-authority",
+        command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
-        terminalSummary: "A full repair runs from your terminal."
+        terminalSummary: `A full repair runs from ${terminalName}.`
       };
     case "degraded-acknowledged":
       return {
@@ -4281,10 +4297,10 @@ function authorityNoticeView(health, approvalGateReady) {
         action: { kind: "none" },
         actionLabel: null,
         actionDetail: null,
-        command: "hol-guard command controls recover-authority",
+        command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
-        terminalSummary: "Run this in your terminal to rebuild the trusted settings."
+        terminalSummary: `Run this in ${terminalName} to rebuild the trusted settings.`
       };
     default:
       if (approvalGateReady === null) {
@@ -4322,17 +4338,17 @@ function authorityNoticeView(health, approvalGateReady) {
         action: { kind: "none" },
         actionLabel: null,
         actionDetail: null,
-        command: "hol-guard command controls enroll",
+        command: commands.enroll,
         commandLabel: "Enroll from the terminal",
         copyButtonLabel: "Copy setup command",
-        terminalSummary: "Run this in your terminal to create the trusted settings."
+        terminalSummary: `Run this in ${terminalName} to create the trusted settings.`
       };
   }
 }
 function ProtectionAuthorityNotice(props) {
   const health = props.effective.health;
   const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
-  const view = authorityNoticeView(health, approvalGateReady);
+  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
@@ -6355,6 +6371,7 @@ function ReviewModal(props) {
     ] })
   ] }) });
 }
+const DEFAULT_AUTHORITY_RECOVERY_COMMAND = "hol-guard command controls recover-authority";
 function currentExtensionRouteState() {
   return {
     route: parseProtectionRoute(window.location.pathname),
@@ -6364,13 +6381,15 @@ function currentExtensionRouteState() {
 function requiresExtensionRecoveryApproval(error) {
   return error instanceof ExtensionControlApiError && (error.code === "approval_required" || error.code?.startsWith("approval_gate_") === true);
 }
-function authorityActionErrorMessage(error) {
+function authorityActionErrorMessage(error, recoveryCommand, recoveryShell) {
+  const command = recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND;
+  const terminalName = recoveryShell === "powershell" ? "PowerShell" : "your terminal";
   if (error instanceof ExtensionControlApiError) {
     if (error.code === "authority_not_recoverable") {
-      return "Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run `hol-guard command controls recover-authority` in your terminal.";
+      return `Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run \`${command}\` in ${terminalName}.`;
     }
     if (error.code === "authority_recovery_failed" || error.code === "authority_recovery_incomplete") {
-      return "Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+      return `Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run \`${command}\` in ${terminalName}.`;
     }
     if (error.code === "authority_not_degraded") {
       return "The limited state already changed. Guard reloaded the latest status.";
@@ -6379,7 +6398,7 @@ function authorityActionErrorMessage(error) {
       return "Guard needs your approval password to continue. Enter it and try again.";
     }
   }
-  return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message) ? error.message : "Guard could not complete this action. Local protection continues. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+  return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message) ? error.message : `Guard could not complete this action. Local protection continues. Try again, or run \`${command}\` in ${terminalName}.`;
 }
 function randomToken() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -6430,6 +6449,9 @@ function ProtectionCenterWorkspace(props) {
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState(null);
+  const recoveryCommand = state.kind === "ready" ? state.effective.terminal_commands?.recover_authority : void 0;
+  const recoveryShell = state.kind === "ready" ? state.effective.terminal_commands?.shell : void 0;
+  const recoveryTerminal = recoveryShell === "powershell" ? "PowerShell" : "your terminal";
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
@@ -6602,7 +6624,11 @@ function ProtectionCenterWorkspace(props) {
         setRecoveryStatus("The protection state changed during the attempt. This page now shows the latest status.");
       } else {
         setRecoveryStatus(null);
-        setRecoveryError(authorityActionErrorMessage(error));
+        setRecoveryError(authorityActionErrorMessage(
+          error,
+          recoveryCommand,
+          recoveryShell
+        ));
       }
     } finally {
       setRecoveryBusy(false);
@@ -6618,10 +6644,10 @@ function ProtectionCenterWorkspace(props) {
       refreshApprovalGate({ failClosed: true })
     ]);
     if (approvalResult.status === "rejected") {
-      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+      setRecoveryError(`Guard could not load the local approval settings yet. Check the connection and try again, or run \`${recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND}\` in ${recoveryTerminal}.`);
     }
     if (protectionResult.status === "rejected") throw protectionResult.reason;
-  }, [refreshApprovalGate, refreshProtection]);
+  }, [refreshApprovalGate, refreshProtection, recoveryCommand, recoveryTerminal]);
   const handleOpenApprovalSettings = reactExports.useCallback(() => {
     props.onNavigate("/settings?section=approval");
   }, [props.onNavigate]);
@@ -6629,9 +6655,9 @@ function ProtectionCenterWorkspace(props) {
   reactExports.useEffect(() => {
     if (!authorityNeedsAttention) return;
     void resolveApprovalGate({ failClosed: true }).catch(() => {
-      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+      setRecoveryError(`Guard could not load the local approval settings yet. Check the connection and try again, or run \`${recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND}\` in ${recoveryTerminal}.`);
     });
-  }, [authorityNeedsAttention, resolveApprovalGate]);
+  }, [authorityNeedsAttention, recoveryCommand, recoveryTerminal, resolveApprovalGate]);
   const showOverview = state.kind === "ready" && routeState.route.kind === "overview";
   if (showOverview) overviewKeepAlive.current = true;
   const keepOverviewMounted = state.kind === "ready" && (showOverview || overviewKeepAlive.current);

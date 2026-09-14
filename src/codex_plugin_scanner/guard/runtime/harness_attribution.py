@@ -22,7 +22,24 @@ _CURSOR_ENV_MARKERS = frozenset(
 # process that inherits one of them was spawned from that harness. They are
 # read as an attribution signal only; policy scoping never keys off them.
 _CLAUDE_CODE_ENV_MARKERS = frozenset({"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"})
-_CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX"})
+_CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX", "CODEX_THREAD_ID"})
+_GROK_ENV_MARKERS = frozenset({"GROK_AGENT", "GROK_SESSION_ID"})
+_OPENCODE_ENV_MARKERS = frozenset({"OPENCODE_CONFIG_CONTENT"})
+ORIGIN_HARNESS_ENV = "HOL_GUARD_ORIGIN_HARNESS"
+_ORIGIN_HARNESS_VALUES = frozenset(
+    {
+        "claude-code",
+        "codex",
+        "copilot",
+        "cursor",
+        "gemini",
+        "grok",
+        "omp",
+        "opencode",
+        "pi",
+        "zcode",
+    }
+)
 
 _PROCESS_HARNESSES = {
     "codex": "codex",
@@ -36,6 +53,14 @@ _PROCESS_HARNESSES = {
     "omp": "omp",
     "opencode": "opencode",
 }
+_APP_PATH_MARKERS = (
+    ("/codex.app/", "codex"),
+    ("/cursor.app/", "cursor"),
+    ("/grok.app/", "grok"),
+    ("/claude.app/", "claude-code"),
+    ("/opencode.app/", "opencode"),
+    ("/zcode.app/", "zcode"),
+)
 
 
 def resolve_parent_process_harness() -> str | None:
@@ -73,10 +98,33 @@ def resolve_parent_process_harness() -> str | None:
             break
         seen.add(pid)
         pid, executable = parents[pid]
-        harness = _PROCESS_HARNESSES.get(PurePath(executable).name.lower())
+        harness = _harness_from_executable(executable)
         if harness:
             return harness
     return None
+
+
+def _harness_from_executable(path: str) -> str | None:
+    name = PurePath(path).name.lower()
+    if name.endswith(".exe"):
+        name = name[:-4]
+    mapped = _PROCESS_HARNESSES.get(name)
+    if mapped:
+        return mapped
+    posix = path.replace("\\", "/").lower()
+    for marker, harness in _APP_PATH_MARKERS:
+        if marker in posix:
+            return harness
+    return None
+
+
+def origin_harness_env(harness: str) -> dict[str, str]:
+    """Stamp a known harness onto a Guard-spawned child for display attribution."""
+
+    slug = harness.strip().lower().replace("_", "-")
+    if slug not in _ORIGIN_HARNESS_VALUES:
+        return {}
+    return {ORIGIN_HARNESS_ENV: slug}
 
 
 def _zcode_env_markers() -> frozenset[str]:
@@ -108,6 +156,11 @@ def resolve_environment_harness(env: Mapping[str, str] | None = None) -> str | N
     """
 
     source = os.environ if env is None else env
+    origin = source.get(ORIGIN_HARNESS_ENV)
+    if isinstance(origin, str):
+        slug = origin.strip().lower().replace("_", "-")
+        if slug in _ORIGIN_HARNESS_VALUES:
+            return slug
     if _env_marker_present(source, _zcode_env_markers()):
         return "zcode"
     bundle = source.get("__CFBundleIdentifier")
@@ -119,6 +172,10 @@ def resolve_environment_harness(env: Mapping[str, str] | None = None) -> str | N
         return "cursor"
     if _env_marker_present(source, _CODEX_ENV_MARKERS):
         return "codex"
+    if _env_marker_present(source, _GROK_ENV_MARKERS):
+        return "grok"
+    if _env_marker_present(source, _OPENCODE_ENV_MARKERS):
+        return "opencode"
     return None
 
 
@@ -156,8 +213,11 @@ def cursor_hook_query_extras(env: Mapping[str, str] | None = None) -> dict[str, 
 
 
 __all__ = [
+    "ORIGIN_HARNESS_ENV",
     "cursor_hook_query_extras",
     "cursor_runtime_detected",
+    "origin_harness_env",
     "resolve_environment_harness",
+    "resolve_parent_process_harness",
     "resolve_runtime_hook_harness",
 ]
