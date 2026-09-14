@@ -212,9 +212,7 @@ def test_store_initializes_receipt_schema_marker_and_recorded_at_index(tmp_path:
         assert table_row is not None and table_row[0] == 1
         migration_row = connection.execute("select 1 from schema_migrations where version = 26").fetchone()
         assert migration_row is not None and migration_row[0] == 1
-        indexes = {
-            str(row[1]) for row in connection.execute("pragma index_list(native_hook_decision_receipts)")
-        }
+        indexes = {str(row[1]) for row in connection.execute("pragma index_list(native_hook_decision_receipts)")}
     assert "idx_native_hook_decision_receipts_recorded_at" in indexes
 
 

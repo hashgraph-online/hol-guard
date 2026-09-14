@@ -326,9 +326,7 @@ def test_desktop_owned_core_executable_prefers_runtime_owner(monkeypatch, tmp_pa
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows files do not use POSIX execute bits")
-def test_desktop_owned_core_executable_ignores_non_executable_owner(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_desktop_owned_core_executable_ignores_non_executable_owner(monkeypatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.dashboard_launcher import _desktop_owned_core_executable
 
     owner = tmp_path / "hol-guard"

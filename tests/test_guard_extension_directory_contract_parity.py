@@ -114,6 +114,8 @@ def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Pa
         assert entry["trustClass"] == "external"
         assert entry["protectionModel"] == "external-opt-in"
 
-    description = directory_schema()["properties"]["entries"]["items"]["properties"]["maintainerGithubIds"]["description"]
+    description = directory_schema()["properties"]["entries"]["items"]["properties"]["maintainerGithubIds"][
+        "description"
+    ]
     assert "only IDs in this accepted array" in description
     assert "Pull-request authorship is attribution evidence only" in description

@@ -334,8 +334,7 @@ def test_contract_digest_is_deterministic_and_binds_security_fields() -> None:
         "action_envelope_json": {**baseline_envelope, "raw_command_text": "echo changed"},
     }
     assert (
-        request_scope_contract(raw_command_changed).digest
-        != request_scope_contract(baseline_with_raw_command).digest
+        request_scope_contract(raw_command_changed).digest != request_scope_contract(baseline_with_raw_command).digest
     )
 
 
@@ -380,8 +379,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
     assert request_scope_contract(retried).digest == first.digest
     assert request_scope_contract({**request, "source_scope": "session"}).digest != first.digest
     assert (
-        request_scope_contract({**request, "config_path": "/workspace/other/.guard/config.toml"}).digest
-        != first.digest
+        request_scope_contract({**request, "config_path": "/workspace/other/.guard/config.toml"}).digest != first.digest
     )
     assert (
         request_scope_contract(

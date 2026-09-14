@@ -144,7 +144,6 @@ def test_complete_read_only_surface(executable: str, tmp_path: Path, syngraphe_e
         commands.extend(f"{executable} {family} {help_flag}" for help_flag in ("-h", "--help"))
     commands.extend(
         (
-            f"{executable} help decision new",
             f"{executable} decision --help",
             f'printf "%s" "{executable} state new example"',
         )

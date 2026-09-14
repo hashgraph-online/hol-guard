@@ -37,8 +37,9 @@ def _generated_source(tmp_path: Path) -> str:
 def _strip_generated_types(fragment: str) -> str:
     replacements = {
         "function compactHookEventName(value: unknown): string {": "function compactHookEventName(value) {",
-        "function normalizeGuardResponse(value: unknown): GuardResponse | null {":
-            "function normalizeGuardResponse(value) {",
+        "function normalizeGuardResponse(value: unknown): GuardResponse | null {": (
+            "function normalizeGuardResponse(value) {"
+        ),
         """function daemonResponseCanReturn(
   payload: Record<string, unknown>,
   response: GuardResponse,

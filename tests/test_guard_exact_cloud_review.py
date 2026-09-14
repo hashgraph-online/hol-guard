@@ -374,9 +374,12 @@ def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
     assert payload["error"] == "cloud_review_grant_binding_missing"
     assert exact_cloud_review_operations(store) == ()
     with store._connect() as connection:
-        event_types = [row[0] for row in connection.execute(
-            "select event_type from guard_review_outbox_events order by stream_sequence"
-        ).fetchall()]
+        event_types = [
+            row[0]
+            for row in connection.execute(
+                "select event_type from guard_review_outbox_events order by stream_sequence"
+            ).fetchall()
+        ]
     assert event_types == ["review.request.created"]
 
 

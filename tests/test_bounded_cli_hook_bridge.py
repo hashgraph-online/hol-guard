@@ -460,7 +460,8 @@ def test_frozen_fallback_runs_supported_cli_subcommand_without_python_flags(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        "grok", "--json",
+        "grok",
+        "--json",
     ]
 
 
@@ -514,7 +515,8 @@ def test_live_frozen_runtime_ignores_forged_config_mode_and_executable(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok", "--json",
+        "grok",
+        "--json",
     ]
 
 
@@ -567,7 +569,8 @@ def test_frozen_fallback_accepts_equivalent_noncanonical_guard_home(
         "--guard-home",
         str((tmp_path / "guard-home").resolve()),
         "--harness",
-        "grok", "--json",
+        "grok",
+        "--json",
     ]
 
 
@@ -599,7 +602,8 @@ def test_frozen_fallback_accepts_normalized_json_hook_contract(
         "--guard-home",
         str(tmp_path / "guard-home"),
         "--harness",
-        harness, "--json",
+        harness,
+        "--json",
     ]
 
 

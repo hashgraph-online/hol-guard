@@ -83,7 +83,9 @@ def test_cline_outside_path_is_rejected_before_resolving_it(
 
 
 @pytest.mark.parametrize("path_kind", ["home", "guard", "configured", "traversal", "prefix", "parent_target"])
-def test_cline_destination_containment(context: HarnessContext, monkeypatch: pytest.MonkeyPatch, path_kind: str) -> None:
+def test_cline_destination_containment(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch, path_kind: str
+) -> None:
     paths = {
         "home": context.home_dir / "Documents/Cline/Hooks/PreToolUse",
         "guard": context.guard_home / "managed/cline/hook.py",

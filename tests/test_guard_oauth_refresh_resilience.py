@@ -271,7 +271,6 @@ def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path
     assert seen_tokens == ["refresh-token-1", "refresh-token-2"]
 
 
-
 def test_profile_fallback_uses_effective_credentials_after_peer_reload(tmp_path, monkeypatch) -> None:
     """Peer-rotated credentials carrying a newer cloud_user_profile must not be
     overwritten by the resolver's stale local snapshot when the refresh
