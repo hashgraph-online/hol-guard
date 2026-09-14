@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "513de2738db798a2331ed7c6d00414277f48d9e56dc7fa51d930ddb8da2bed96",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
+    "command.agi-memory",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -95,8 +96,12 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 249,
   "permission_examples": {
+    "command.agi-memory.permission.delete-hard": "agi-memory delete --hard",
+    "command.agi-memory.permission.pin": "agi-memory pin",
+    "command.agi-memory.permission.sync-dedupe": "agi-memory sync dedupe",
+    "command.agi-memory.permission.unpin": "agi-memory unpin",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -440,6 +445,10 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.agi-memory.permission.delete-hard",
+    "command.agi-memory.permission.pin",
+    "command.agi-memory.permission.sync-dedupe",
+    "command.agi-memory.permission.unpin",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -696,8 +705,12 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 236,
   "rule_ids": [
+    "command.agi-memory.sync-dedupe",
+    "command.agi-memory.delete-hard",
+    "command.agi-memory.pin",
+    "command.agi-memory.unpin",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",
