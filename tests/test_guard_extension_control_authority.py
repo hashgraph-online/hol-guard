@@ -308,12 +308,19 @@ def _expanded_permission_registry() -> tuple[CommandSafetyExtensionRegistry, str
 def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
     extension = extensions[0]
-    rule = extension.rules[0]
+    # Derived permissions are sorted by permission id while rules keep their
+    # declaration order, so permissions[0] is not necessarily the permission for
+    # rules[0]. Version the rule that owns the permission under test instead of
+    # assuming the two orders line up.
+    permission = extension.permissions[0]
+    rule_index = next(index for index, rule in enumerate(extension.rules) if rule.rule_id in permission.rule_ids)
+    rule = extension.rules[rule_index]
     versioned_rule = replace(rule, rule_version="99.0.0")
-    versioned_extension = replace(extension, rules=(versioned_rule, *extension.rules[1:]))
-    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), extension.permissions[
-        0
-    ].permission_id
+    versioned_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], versioned_rule, *extension.rules[rule_index + 1 :]),
+    )
+    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), permission.permission_id
 
 
 def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
