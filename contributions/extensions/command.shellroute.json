@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.shellroute",
+  "version": "1.0.0",
+  "name": "shellroute",
+  "description": "Reviews shellroute routed command execution, persistent proxy start and stop, and API key reveal while leaving status, balance, and country listings automatic.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.shellroute",
+    "displayName": "Community",
+    "url": "https://github.com/shellroute/shellroute-cli"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F766E" },
+  "homepage": "https://github.com/shellroute/shellroute-cli",
+  "executables": ["shellroute"],
+  "ecosystemIds": ["shellroute"],
+  "riskClasses": ["destructive_shell", "execution", "local_secret_read", "network_egress"],
+  "actionClasses": [
+    "shellroute routed command execution",
+    "shellroute proxy lifecycle command",
+    "shellroute API key reveal"
+  ],
+  "referenceUrls": ["https://github.com/shellroute/shellroute-cli"],
+  "saferAlternatives": ["Check status, balance, and countries before routing traffic, and keep the API key in a secret store."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_shellroute_extensions"
+  }
+}
