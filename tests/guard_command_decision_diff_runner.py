@@ -89,10 +89,10 @@ def _pin_neutral_attribution() -> None:
 
     for marker in HARNESS_ENV_MARKERS:
         os.environ.pop(marker, None)
-    os.environ["__CFBundleIdentifier"] = "com.apple.Terminal"
-    from codex_plugin_scanner.guard.runtime import harness_attribution as attribution
+    os.environ["__CFBundleIdentifier"] = "com.apple.Terminal"  # noqa: SIM112
+    from codex_plugin_scanner.guard.runtime import package_protect_projection
 
-    attribution.resolve_parent_process_harness = lambda: None
+    package_protect_projection.resolve_parent_process_harness = lambda: None
 
 
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
