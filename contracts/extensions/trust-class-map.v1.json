@@ -78,6 +78,7 @@
       "command.storage.minio"
     ],
     "external": [
+      "command.aether-vault",
       "command.blitcp",
       "command.mcp-filesystem",
       "command.noodle",

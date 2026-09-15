@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.aether-vault",
+  "version": "1.0.0",
+  "name": "Aether-Vault",
+  "description": "Reviews Aether-Vault commands that publish, promote, or delete model and dataset state; read-only commands stay quiet.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.leon1706-lol",
+    "displayName": "Community",
+    "url": "https://github.com/leon1706-lol/Aether-Vault"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0F766E" },
+  "homepage": "https://github.com/leon1706-lol/Aether-Vault",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "executables": ["av"],
+  "ecosystemIds": ["aether-vault"],
+  "riskClasses": ["network_egress", "destructive_shell"],
+  "actionClasses": [
+    "Aether-Vault commit command",
+    "Aether-Vault push command",
+    "Aether-Vault garbage collection command",
+    "Aether-Vault forced checkout command",
+    "Aether-Vault promote command",
+    "Aether-Vault stash drop command",
+    "Aether-Vault audit prune command"
+  ],
+  "referenceUrls": ["https://github.com/leon1706-lol/Aether-Vault"],
+  "saferAlternatives": [
+    "Inspect with `av status` / `av diff` before committing or pushing.",
+    "Use `--dry-run` where the command offers it (promote, audit prune).",
+    "Prefer an armed `av policy set` guardrail over `av promote --force`."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_aether_vault_extensions"
+  }
+}
