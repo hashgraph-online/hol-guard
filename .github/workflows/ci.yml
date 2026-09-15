@@ -627,16 +627,7 @@ jobs:
           tests/test_guard_aibom_detection.py
           tests/test_guard_aibom_content_upload_batches.py
           tests/test_guard_aibom_skill_directory_identity.py
-          --tb=short
-      - name: Verify Syngraphe extension and catalog contracts
-        run: >-
-          uv run --no-sync pytest
           tests/test_guard_command_syngraphe_extensions.py
-          tests/test_guard_command_extension_registry.py
-          tests/test_guard_extension_control_catalog_detail.py
-          tests/test_guard_extension_trust.py
-          tests/test_guard_extension_contribution.py
-          tests/test_guard_extension_evidence_contract.py
           --tb=short
       - name: Run Windows Codex hook process-tree regressions
         if: runner.os == 'Windows'

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_extension_matchers import executable_names, safe_flag_variant
+from .command_extension_matchers import executable_names, executable_path_set_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
-from .command_model import CanonicalCommand
+from .command_model import CanonicalCommand, CommandSegment
 from .command_option_parsing import argument_semantics
 from .command_path_set_matcher import ExecutablePathSetMatcher
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 from .command_tokens import executable_name
+from .secret_file_request_services.github_pr_expansion import _shell_token_has_active_expansion
+from .secret_file_request_services.shell_quote_tokens import shell_tokens_preserving_quote_context
 
 # Verified against Syngraphe 0.4.0 src/cli/main.ts and its shared plan/apply
 # commands. --scope takes a value globally; only document creation has --title.
@@ -34,11 +36,11 @@ def _mutation_paths(*paths: tuple[str, ...], creation: bool = False) -> AnyMatch
     return AnyMatcher(
         matchers=(
             *(
-                ExecutablePathSetMatcher(
-                    executables=executable_names(executable),
-                    paths=frozenset(paths),
-                    interspersed_options_with_values=options,
-                    interspersed_flags=_FLAGS,
+                executable_path_set_matcher(
+                    executable,
+                    paths,
+                    global_options_with_values=options,
+                    global_flags=_FLAGS,
                     fail_secure_unknown_options=True,
                 )
                 for executable in _EXECUTABLES
@@ -57,6 +59,22 @@ def _mutation_paths(*paths: tuple[str, ...], creation: bool = False) -> AnyMatch
             ),
         )
     )
+
+
+def _arguments_have_active_shell_expansion(segment: CommandSegment) -> bool:
+    contextual_tokens = shell_tokens_preserving_quote_context(segment.text)
+    plain_tokens = tuple(token.plain for token in contextual_tokens)
+    argument_count = len(segment.arguments)
+    for argument_start in range(1, len(contextual_tokens) - argument_count + 1):
+        if plain_tokens[argument_start - 1] != segment.executable:
+            continue
+        if plain_tokens[argument_start : argument_start + argument_count] != segment.arguments:
+            continue
+        return any(
+            _shell_token_has_active_expansion(token.raw)
+            for token in contextual_tokens[argument_start : argument_start + argument_count]
+        )
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +99,7 @@ class SyngrapheSafeFlagMatcher:
             # Expansion may introduce a value-taking option before the preview
             # flag. xargs replacement can rewrite even a literal flag at launch.
             # Neither is proven side-effect-free by canonical token matching.
-            if any("$" in argument or "`" in argument for argument in segment.arguments):
+            if _arguments_have_active_shell_expansion(segment):
                 continue
             if executable_name(segment.executable) == "xargs" and any(
                 argument.startswith(("-I", "-i", "--replace")) for argument in segment.arguments
