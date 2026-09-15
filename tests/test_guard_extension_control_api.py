@@ -125,7 +125,8 @@ def test_effective_response_projects_frozen_windows_terminal_commands(
         "shell": "powershell",
         "enroll": "& 'C:\\custom install\\hol-guard.exe' command --guard-home 'C:\\custom guard' controls enroll",
         "recover_authority": (
-            "& 'C:\\custom install\\hol-guard.exe' command --guard-home 'C:\\custom guard' controls recover-authority"
+            "& 'C:\\custom install\\hol-guard.exe' command --guard-home '"
+            "C:\\custom guard' controls recover-authority"
         ),
     }
     builder = Mock(return_value=commands)

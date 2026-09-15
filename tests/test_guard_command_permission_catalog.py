@@ -224,7 +224,9 @@ def test_registry_digest_changes_when_nested_matcher_contract_changes() -> None:
     assert changed_rule.to_dict()["matcher_contract_digest"] != rule.to_dict()["matcher_contract_digest"]
     assert changed_registry.catalog_digest != registry.catalog_digest
 
-    family_extension = next(item for item in registry.extensions if any(rule.family is not None for rule in item.rules))
+    family_extension = next(
+        item for item in registry.extensions if any(rule.family is not None for rule in item.rules)
+    )
     family_rule_index = next(index for index, item in enumerate(family_extension.rules) if item.family is not None)
     family_rule = family_extension.rules[family_rule_index]
     assert family_rule.family is not None

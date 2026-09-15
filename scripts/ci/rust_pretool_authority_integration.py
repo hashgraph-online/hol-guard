@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -28,12 +29,7 @@ _COMMANDS: tuple[tuple[str, bool], ...] = (
 )
 
 
-def _run(
-    runtime: Path,
-    argv: tuple[str, ...],
-    payload: bytes,
-    timeout: float = 3.0,
-) -> subprocess.CompletedProcess[bytes]:
+def _run(runtime: Path, argv: tuple[str, ...], payload: bytes, timeout: float = 3.0) -> subprocess.CompletedProcess[bytes]:
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -43,7 +39,8 @@ def _run(
     return subprocess.run(
         (str(runtime), *argv),
         input=payload,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         cwd=runtime.parent,
         env=environment,
         check=False,

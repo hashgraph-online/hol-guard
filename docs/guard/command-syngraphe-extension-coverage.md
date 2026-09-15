@@ -38,9 +38,9 @@ verified safe flag. This extension does not add another shell parser or promise 
 Safe variants require exact parsing and documented flag spellings. Malformed quoting, ambiguous option values,
 flags after the CLI option terminator, and unsupported boolean assignments such as `--dry-run=true` do not prove
 a safe preview. Unknown syntax is handled conservatively by existing Guard parsing/matching conventions.
-Recognized mutations with unresolved shell expansions or `xargs` replacement also stay reviewable: expansion
-can introduce a value-taking option, and replacement can rewrite the preview flag itself. Supply literal
-arguments directly to verify the dry run.
+Recognized mutations with active parameter, command, or pathname expansion or `xargs` replacement stay
+reviewable: expansion can introduce a value-taking option, and replacement can rewrite the preview flag itself.
+Supply literal arguments directly to verify the dry run.
 
 Safety is local to the matching rule and segment. For example, `syg init --dry-run && rm -rf build` retains the
 filesystem rule, and a second Syngraphe mutation still requires review. Other Guard protections and final policy

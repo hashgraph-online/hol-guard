@@ -50,7 +50,7 @@ def _manager_layout(tmp_path: Path, installer_kind: str) -> tuple[Path, Path]:
     marker = "venvs" if installer_kind == "pipx" else "tools"
     prefix = user_root / installer_kind / marker / "hol-guard"
     prefix.mkdir(parents=True)
-    bin_dir = user_root / ".local" / "bin" if os.name == "nt" else user_root / "bin"
+    bin_dir = user_root / "bin"
     bin_dir.mkdir(parents=True)
     return prefix, bin_dir
 
@@ -84,13 +84,7 @@ def _build_manager_context(
     source_url: str | None = None,
 ) -> tuple[TrustedUpdateContext, Path]:
     prefix, manager_bin = _manager_layout(tmp_path, installer_kind)
-    manager_name = f"{installer_kind}.exe" if os.name == "nt" else installer_kind
-    manager_path = manager or _write_executable(manager_bin / manager_name)
-    python_import_paths = update_subprocess_module._trusted_python_import_paths()
-    monkeypatch.setattr(update_subprocess_module, "_trusted_python_import_paths", lambda: python_import_paths)
-    if os.name == "nt":
-        user_root = manager_bin.parents[1]
-        monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: user_root)
+    manager_path = manager or _write_executable(manager_bin / installer_kind)
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
     entries = path_entries or (manager_path.parent, Path(sys.executable).resolve().parent)
     monkeypatch.setenv("PATH", _path_value(*entries))

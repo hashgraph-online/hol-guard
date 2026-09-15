@@ -12,8 +12,11 @@ from .command_option_parsing import argument_semantics
 from .command_path_set_matcher import ExecutablePathSetMatcher
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 from .command_tokens import executable_name
-from .secret_file_request_services.github_pr_expansion import _shell_token_has_active_expansion
-from .secret_file_request_services.shell_quote_tokens import shell_tokens_preserving_quote_context
+from .secret_file_request_services.shell_quote_tokens import (
+    shell_token_has_active_expansion,
+    shell_token_has_active_pathname_expansion,
+    shell_tokens_preserving_quote_context,
+)
 
 # Verified against Syngraphe 0.4.0 src/cli/main.ts and its shared plan/apply
 # commands. --scope takes a value globally; only document creation has --title.
@@ -71,7 +74,7 @@ def _arguments_have_active_shell_expansion(segment: CommandSegment) -> bool:
         if plain_tokens[argument_start : argument_start + argument_count] != segment.arguments:
             continue
         return any(
-            _shell_token_has_active_expansion(token.raw)
+            shell_token_has_active_expansion(token.raw) or shell_token_has_active_pathname_expansion(token.raw)
             for token in contextual_tokens[argument_start : argument_start + argument_count]
         )
     return True

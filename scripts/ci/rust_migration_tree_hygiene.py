@@ -44,7 +44,9 @@ def find_residue(root: Path) -> list[str]:
     github = root / ".github"
     if github.is_dir():
         found.update(
-            _relative(root, path) for path in github.iterdir() if path.name.startswith(RETIRED_GITHUB_PREFIXES)
+            _relative(root, path)
+            for path in github.iterdir()
+            if path.name.startswith(RETIRED_GITHUB_PREFIXES)
         )
 
     workflows = github / "workflows"
@@ -69,7 +71,11 @@ def find_residue(root: Path) -> list[str]:
     scripts = root / "scripts" / "ci"
     if scripts.is_dir():
         for pattern in RETIRED_SCRIPT_GLOBS:
-            found.update(_relative(root, path) for path in scripts.glob(pattern) if path.is_file())
+            found.update(
+                _relative(root, path)
+                for path in scripts.glob(pattern)
+                if path.is_file()
+            )
 
     return sorted(found)
 

@@ -22,6 +22,7 @@ from .shell_quote_parsing import (
     _skip_generic_shell_wrapper_options,
     _skip_gh_pr_options,
 )
+from .shell_quote_tokens import shell_token_has_active_expansion
 from .shell_tokenization import (
     _leading_shell_redirection_tokens_consumed,
     _shell_command_token_without_attached_redirection,
@@ -74,7 +75,7 @@ def _gh_pr_create_has_active_shell_expansion(command_text: str, *, depth: int = 
             if redirect_tokens_consumed > 0:
                 index += redirect_tokens_consumed
                 continue
-            if _shell_token_has_active_expansion(segment[index].raw):
+            if shell_token_has_active_expansion(segment[index].raw):
                 return True
             index += 1
     return False
@@ -90,40 +91,9 @@ def _gh_pr_env_split_string_payloads_with_active_expansion(
     payloads: list[str] = []
     for expansion in parsed.split_expansions:
         source_index = env_index + 1 + expansion.source_index
-        if source_index < len(segment) and _shell_token_has_active_expansion(segment[source_index].raw):
+        if source_index < len(segment) and shell_token_has_active_expansion(segment[source_index].raw):
             payloads.append(expansion.payload.strip())
     return tuple(payload for payload in payloads if payload)
-
-
-def _shell_token_has_active_expansion(raw_token: str) -> bool:
-    index = 0
-    single_quoted = False
-    double_quoted = False
-    parameter_prefixes = frozenset("{(_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*?@#$!-")
-    while index < len(raw_token):
-        character = raw_token[index]
-        if single_quoted:
-            if character == "'":
-                single_quoted = False
-            index += 1
-            continue
-        if character == "\\":
-            index += 2
-            continue
-        if character == "'" and not double_quoted:
-            single_quoted = True
-            index += 1
-            continue
-        if character == '"':
-            double_quoted = not double_quoted
-            index += 1
-            continue
-        if character == "`":
-            return True
-        if character == "$" and index + 1 < len(raw_token) and raw_token[index + 1] in parameter_prefixes:
-            return True
-        index += 1
-    return False
 
 
 def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
@@ -356,7 +326,6 @@ __all__ = [
     "_python_call_imports_pytest",
     "_python_call_resolves_pytest_main",
     "_python_call_runs_pytest_module",
-    "_shell_token_has_active_expansion",
     "_skip_command_builtin_options",
     "_skip_env_wrapper_options",
     "_skip_shell_case_header",

@@ -268,7 +268,6 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
             ("apply", (applied_handle, applied_descriptor, applied_dacl, directory))
         ),
     )
-
     def verify_dacl(verified_handle: object, *, owner_sid: str, directory: bool) -> None:
         events.append(("verify", (verified_handle, owner_sid, directory)))
         if sum(1 for event in events if event[0] == "verify") == 1:
@@ -349,7 +348,6 @@ def test_windows_private_descriptor_deduplicates_system_owner_ace(
 def test_windows_cache_read_rejects_ancestor_reparse_before_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cache_path = Path("C:/Guard/snapshot.json")
     monkeypatch.setattr(snapshot_module.os, "name", "nt")
     monkeypatch.setattr(snapshot_module, "_windows_path_has_reparse_component", lambda _path: True)
     monkeypatch.setattr(
@@ -359,7 +357,7 @@ def test_windows_cache_read_rejects_ancestor_reparse_before_open(
     )
 
     with pytest.raises(snapshot_module.NativePolicySnapshotError, match="cache_invalid"):
-        snapshot_module._read_v3_snapshot_file(cache_path)
+        snapshot_module._read_v3_snapshot_file(Path("C:/Guard/snapshot.json"))
 
 
 def test_windows_directory_binding_fails_closed_on_reparse_parent(

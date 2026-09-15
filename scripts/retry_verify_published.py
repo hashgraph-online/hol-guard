@@ -27,7 +27,9 @@ def wait_for_published(
     runner: Callable[[Sequence[str]], subprocess.CompletedProcess[str]] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> int:
-    run = runner or (lambda command: subprocess.run(command, check=False, capture_output=True, text=True))
+    run = runner or (
+        lambda command: subprocess.run(command, check=False, capture_output=True, text=True)
+    )
     command = [sys.executable, str(VERIFY_SCRIPT), "verify-published", *argv]
     last_error = "Published artifacts were not exact"
     for attempt in range(attempts):

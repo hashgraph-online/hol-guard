@@ -45,7 +45,9 @@ def test_path_set_matcher_normalizes_every_option_contract_field() -> None:
     assert matcher.inverse_flag_pairs == frozenset({("--force", "--no-force")})
     assert matcher.required_option_values == (("--mode", frozenset({"fast"})),)
     assert matcher.match(
-        parse_shell_command("tool.exe --profile prod group --region us-east-1 delete --force --mode FAST")
+        parse_shell_command(
+            "tool.exe --profile prod group --region us-east-1 delete --force --mode FAST"
+        )
     )
 
 
@@ -121,8 +123,6 @@ def test_path_set_matcher_prefers_the_longest_conservative_path() -> None:
         fail_secure_unknown_options=True,
     )
 
-    assert matcher._conservative_path(("--future-option", "value", "resource", "child", "delete")) == (
-        "resource",
-        "child",
-        "delete",
-    )
+    assert matcher._conservative_path(
+        ("--future-option", "value", "resource", "child", "delete")
+    ) == ("resource", "child", "delete")

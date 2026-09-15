@@ -12,6 +12,88 @@ class ShellTokenWithQuoteContext:
     plain: str
 
 
+_SHELL_PARAMETER_PREFIXES = frozenset("{(_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*?@#$!-")
+
+
+def shell_token_has_active_expansion(raw_token: str) -> bool:
+    """Return whether a token contains active parameter or command expansion."""
+
+    return _shell_token_has_active_syntax(raw_token, pathname=False)
+
+
+def shell_token_has_active_pathname_expansion(raw_token: str) -> bool:
+    """Return whether a token contains an active shell glob."""
+
+    return _shell_token_has_active_syntax(raw_token, pathname=True)
+
+
+def _shell_token_has_active_syntax(raw_token: str, *, pathname: bool) -> bool:
+    index = 0
+    single_quoted = False
+    double_quoted = False
+    while index < len(raw_token):
+        character = raw_token[index]
+        if single_quoted:
+            if character == "'":
+                single_quoted = False
+            index += 1
+            continue
+        if character == "\\":
+            index += 2
+            continue
+        if character == "'" and not double_quoted:
+            single_quoted = True
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = not double_quoted
+            index += 1
+            continue
+        if pathname:
+            if not double_quoted and character in {"*", "?"}:
+                return True
+            if not double_quoted and character == "[" and _has_complete_bracket_expression(raw_token, index + 1):
+                return True
+        else:
+            if character == "`":
+                return True
+            if (
+                character == "$"
+                and index + 1 < len(raw_token)
+                and raw_token[index + 1] in _SHELL_PARAMETER_PREFIXES
+            ):
+                return True
+        index += 1
+    return False
+
+
+def _has_complete_bracket_expression(raw_token: str, start: int) -> bool:
+    index = start
+    has_content = False
+    quote: str | None = None
+    while index < len(raw_token):
+        character = raw_token[index]
+        if character == "\\" and quote != "'":
+            has_content = True
+            index += 2
+            continue
+        if quote is not None:
+            if character == quote:
+                quote = None
+            else:
+                has_content = True
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character == "]" and has_content:
+            return True
+        else:
+            has_content = True
+        index += 1
+    return False
+
+
 def shell_tokens_preserving_quote_context(command_text: str) -> list[ShellTokenWithQuoteContext]:
     tokens: list[ShellTokenWithQuoteContext] = []
     index = 0

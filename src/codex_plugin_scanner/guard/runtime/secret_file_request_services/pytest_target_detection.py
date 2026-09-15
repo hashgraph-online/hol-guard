@@ -32,27 +32,6 @@ from .request_artifacts import _normalized_shell_command_name
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
 
 
-def _shell_token_has_active_glob(raw_token: str) -> bool:
-    index = 0
-    quote: str | None = None
-    while index < len(raw_token):
-        character = raw_token[index]
-        if character == "\\":
-            index += 2
-            continue
-        if quote is not None:
-            if character == quote:
-                quote = None
-            index += 1
-            continue
-        if character in {"'", '"'}:
-            quote = character
-        elif character in {"*", "?", "["}:
-            return True
-        index += 1
-    return False
-
-
 def _shell_command_targets_pytest(command_text: str, *, depth: int = 0) -> bool:
     """Return whether shell evaluation can reach pytest outside Guard containment."""
 
@@ -349,5 +328,4 @@ __all__ = [
     "_python_process_call_targets_pytest",
     "_segment_targets_pytest",
     "_shell_command_targets_pytest",
-    "_shell_token_has_active_glob",
 ]

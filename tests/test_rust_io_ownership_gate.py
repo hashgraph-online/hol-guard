@@ -100,7 +100,8 @@ def test_resolver_follows_qualified_repository_module_alias(tmp_path: Path) -> N
     caller_path = _write_guard_fixture(
         tmp_path,
         "qualified_caller",
-        "from . import qualified_helper\n\ndef call() -> str:\n    return qualified_helper.read_source()\n",
+        "from . import qualified_helper\n\n"
+        "def call() -> str:\n    return qualified_helper.read_source()\n",
     )
     records = MODULE._function_map(tmp_path)
     caller = records[(caller_path, "call")][0]
@@ -151,7 +152,8 @@ def test_resolver_fails_closed_for_unknown_symbol_on_repository_module(tmp_path:
     caller_path = _write_guard_fixture(
         tmp_path,
         "unknown_symbol_caller",
-        "from . import known_helper\n\ndef call() -> str:\n    return known_helper.read_source()\n",
+        "from . import known_helper\n\n"
+        "def call() -> str:\n    return known_helper.read_source()\n",
     )
     records = MODULE._function_map(tmp_path)
     caller = records[(caller_path, "call")][0]

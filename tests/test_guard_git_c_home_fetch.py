@@ -71,15 +71,12 @@ def test_home_git_c_fetch_accepts_quoted_or_escaped_tilde_path(
     workspace.mkdir()
     command = f"git -C {repository_operand} fetch origin release/3.0"
 
-    assert (
-        extract_sensitive_tool_action_request(
-            "Bash",
-            {"command": command},
-            cwd=workspace,
-            home_dir=home,
-        )
-        is None
-    )
+    assert extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home,
+    ) is None
 
 
 def test_home_git_c_fetch_accepts_absolute_path_from_sibling_workspace(tmp_path: Path) -> None:
@@ -88,15 +85,12 @@ def test_home_git_c_fetch_accepts_absolute_path_from_sibling_workspace(tmp_path:
     workspace.mkdir()
     command = f"git -C {repository} fetch origin release/3.0"
 
-    assert (
-        extract_sensitive_tool_action_request(
-            "Bash",
-            {"command": command},
-            cwd=workspace,
-            home_dir=home,
-        )
-        is None
-    )
+    assert extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home,
+    ) is None
     assert (
         _hook_runtime_artifact(
             harness="codex",

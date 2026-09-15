@@ -257,7 +257,9 @@ def health_is_ready(daemon_url: str) -> bool:
     return health_probe_status(daemon_url) == "ready"
 
 
-def wait_until_health_ready(daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS) -> None:
+def wait_until_health_ready(
+    daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS
+) -> None:
     """Block until `/healthz` is ready, or raise before warmup."""
 
     deadline = time.monotonic() + timeout_seconds

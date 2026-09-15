@@ -22,7 +22,8 @@ def test_hook_data_plane_ownership_v2_maps_every_supported_route() -> None:
     assert isinstance(harness_routes, dict)
     assert set(harnesses) == set(harness_routes)
     assert all(
-        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"} for route in harness_routes.values()
+        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"}
+        for route in harness_routes.values()
     )
 
     routes = payload["routes"]

@@ -58,11 +58,7 @@ def test_linux_graphical_session_uses_generic_handler_without_chromium_probe(mon
     monkeypatch.setattr(browser_opener.platform, "system", lambda: "Linux")
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    monkeypatch.setattr(
-        browser_opener.subprocess,
-        "run",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Chromium probe should not run")),
-    )
+    monkeypatch.setattr(browser_opener.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Chromium probe should not run")))
     monkeypatch.setattr(browser_opener.subprocess, "Popen", lambda *_args, **_kwargs: CompletedProcess())
 
     assert browser_opener.open_browser_url("http://127.0.0.1:5474") is True

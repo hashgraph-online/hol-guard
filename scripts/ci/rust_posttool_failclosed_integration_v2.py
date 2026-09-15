@@ -25,7 +25,8 @@ def _run(runtime: Path, payload: dict[str, Any] | bytes) -> subprocess.Completed
     return subprocess.run(
         (str(runtime), "hook", "--stdin"),
         input=encoded,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         cwd=runtime.parent,
         env=environment,
         check=False,
@@ -90,7 +91,9 @@ def _decision(value: dict[str, Any]) -> str:
 def _require_native_error(result: subprocess.CompletedProcess[bytes], reason: str) -> None:
     blob = result.stderr.decode("utf-8", "replace") + result.stdout.decode("utf-8", "replace")
     if result.returncode == 0 or reason not in blob:
-        raise SystemExit(f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}")
+        raise SystemExit(
+            f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}"
+        )
 
 
 def main() -> int:
@@ -102,7 +105,8 @@ def main() -> int:
     capabilities = _decode(
         subprocess.run(
             (str(runtime), "capabilities", "--json"),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             check=False,
             timeout=3,
         )

@@ -164,6 +164,12 @@ def test_reordered_options_and_quoted_values(executable: str, tmp_path: Path, sy
             rf"{executable} state new example --title Cost\ \$5 --dry-run",
             f"{executable} state new example --title 'Use `literal`' --dry-run",
             rf"{executable} state new example --title Use\ \`literal\` --dry-run",
+            f'{executable} state new example --title "*.md" --dry-run',
+            f"{executable} state new example --title '*.md' --dry-run",
+            rf"{executable} state new example --title \*.md --dry-run",
+            f'{executable} state new example --title "?" --dry-run',
+            f"{executable} state new example --title '[abc]' --dry-run",
+            rf"{executable} state new example --title \[abc\] --dry-run",
         ),
         tmp_path,
     )
@@ -229,6 +235,9 @@ def test_other_extensions_keep_their_evidence(command: str, tmp_path: Path, syng
         "state new example ${OPTIONS} --dry-run",
         'state new example --title "$TITLE" --dry-run',
         "state new example --title `printf title` --dry-run",
+        "state new example --title *.md --dry-run",
+        "state new example --title ? --dry-run",
+        "state new example --title [abc] --dry-run",
         "state new example --dry-run=false",
         "state new example --dry-run=true",
         "state new example --DRY-RUN",
@@ -240,6 +249,25 @@ def test_uncertain_or_non_flag_previews_still_require_review(
 ) -> None:
     assert_reviewed_command_cases(
         ((f"{executable} {arguments}", "Syngraphe document creation command", f"{_EXTENSION_ID}.document-new"),),
+        tmp_path,
+    )
+
+
+@pytest.mark.parametrize("executable", ("syngraphe", "syg"))
+def test_active_glob_cannot_inject_boolean_dry_run_assignment(
+    executable: str,
+    tmp_path: Path,
+    syngraphe_enabled: None,
+) -> None:
+    (tmp_path / "--dry-run=false").touch()
+    assert_reviewed_command_cases(
+        (
+            (
+                f"{executable} state new example --title * --dry-run",
+                "Syngraphe document creation command",
+                f"{_EXTENSION_ID}.document-new",
+            ),
+        ),
         tmp_path,
     )
 

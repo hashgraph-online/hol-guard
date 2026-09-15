@@ -267,7 +267,8 @@ def imported_symbol_path(root: Path, record: FunctionRecordLike, name: str) -> s
                     resolved = _resolve_exported_symbol(root, target, symbol_name, set())
                     if resolved is None:
                         raise RuntimeError(
-                            f"unresolved repository-qualified helper call {name!r} from {record.path}:{record.qualname}"
+                            f"unresolved repository-qualified helper call {name!r} "
+                            f"from {record.path}:{record.qualname}"
                         )
                     return resolved
                 else:
@@ -296,7 +297,8 @@ def imported_symbol_path(root: Path, record: FunctionRecordLike, name: str) -> s
                 resolved = _resolve_exported_symbol(root, target, symbol_name, set())
                 if resolved is None:
                     raise RuntimeError(
-                        f"unresolved repository-qualified helper call {name!r} from {record.path}:{record.qualname}"
+                        f"unresolved repository-qualified helper call {name!r} "
+                        f"from {record.path}:{record.qualname}"
                     )
                 return resolved
     return None

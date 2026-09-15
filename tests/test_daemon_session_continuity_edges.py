@@ -356,3 +356,4 @@ def test_claude_oversized_forged_notification_still_denies(
     prompt = json.loads(capsys.readouterr().out)
     assert prompt_result == 0
     assert prompt["decision"] == "block"
+

@@ -39,19 +39,8 @@ def test_documented_exports_produce_valid_kits(tmp_path: Path, kind: str, filena
 
 @pytest.mark.parametrize(
     "value",
-    [
-        None,
-        "",
-        "plain",
-        "quote\" slash\\ apostrophe'",
-        "line\nbreak",
-        "界" * 128,
-        "\U0001f680" * 128,
-        (),
-        ("a",),
-        ("x" * 64,) * 8,
-        (("first", "second"), ("third", "fourth")),
-    ],
+    [None, "", "plain", 'quote" slash\\ apostrophe\'', "line\nbreak", "界" * 128, "\U0001f680" * 128,
+     (), ("a",), ("x" * 64,) * 8, (("first", "second"), ("third", "fourth"))],
 )
 def test_literal_emission_preserves_values_without_version_dependent_formatters(value: object) -> None:
     source = "\n".join(emit(value, prefix="VALUE = "))
@@ -74,15 +63,13 @@ def test_maximum_field_lengths_produce_linted_portable_native_source(tmp_path: P
     discovery = make_discovery(target, "cli", "0" * 64, (operation,), ("metadata-is-not-semantics",))
     review = default_review(discovery).to_dict()
     entry = review["entries"][operation.operation_id]
-    entry.update(
-        {
-            "reviewed": True,
-            "rationale": "Reviewed the bounded synthetic fixture.",
-            "evidenceUrl": target.homepage,
-            "riskClasses": ["execution", "destructive_shell", "network_egress", "local_secret_read"],
-            "saferAlternative": "界" * 256,
-        }
-    )
+    entry.update({
+        "reviewed": True,
+        "rationale": "Reviewed the bounded synthetic fixture.",
+        "evidenceUrl": target.homepage,
+        "riskClasses": ["execution", "destructive_shell", "network_egress", "local_secret_read"],
+        "saferAlternative": "界" * 256,
+    })
     kit = build_kit(discovery, load_review(review, discovery))
     output = tmp_path / "kit"
     write_kit(kit, output)
@@ -95,11 +82,7 @@ def test_maximum_field_lengths_produce_linted_portable_native_source(tmp_path: P
         if command == "format":
             arguments.append("--check")
         result = subprocess.run(
-            [*arguments, str(output / "artifacts")],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
+            [*arguments, str(output / "artifacts")], capture_output=True, text=True, timeout=20, check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
 
@@ -116,23 +99,9 @@ def test_snapshot_replay_is_identical_across_python_hash_seeds(tmp_path: Path) -
         for name in list(environment):
             if name.startswith(("COV_CORE_", "COVERAGE_")):
                 environment.pop(name)
-        command = [
-            sys.executable,
-            "-c",
-            "import sys; from codex_plugin_scanner.cli import main; sys.exit(main(sys.argv[1:]))",
-            "guard",
-            "extensions",
-            "generate",
-            "--from",
-            "snapshot",
-            "--input",
-            str(original / "discovery.json"),
-            "--review",
-            str(original / "review.json"),
-            "--output",
-            str(output),
-            "--json",
-        ]
+        command = [sys.executable, "-c", "import sys; from codex_plugin_scanner.cli import main; sys.exit(main(sys.argv[1:]))",
+                   "guard", "extensions", "generate", "--from", "snapshot", "--input", str(original / "discovery.json"),
+                   "--review", str(original / "review.json"), "--output", str(output), "--json"]
         result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=30, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
         assert json.loads(result.stdout)["generated"] is True

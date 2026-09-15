@@ -210,7 +210,9 @@ def load_changes(end_ref: str, start_ref: str | None, cwd: str | None = None) ->
         sha, subject, author = line.split("\x1f", maxsplit=2)
         if subject.startswith("Merge ") and not MERGE_COMMIT_PATTERN.match(subject):
             continue
-        changes.append(Change(sha=sha, subject=subject, author=author, type="internal", description=subject))
+        changes.append(
+            Change(sha=sha, subject=subject, author=author, type="internal", description=subject)
+        )
     for change in changes:
         parsed = parse_subject(change.pr_title or change.subject)
         if parsed:
@@ -336,9 +338,7 @@ def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
     lines = ["## Changes by category", ""]
     lines.extend(f"- **{title}**: {count}" for title, count in counts)
     lines.append("")
-    lines.append(
-        f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha})."
-    )
+    lines.append(f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha}).")
     return "\n".join(lines)
 
 
@@ -381,7 +381,11 @@ def render_notes(
         since = f" since [Guard {previous_version}](https://github.com/{repo}/releases/tag/{previous_tag})"
         lines.append(f"**{' • '.join(heading_stats)}**{since}." if heading_stats else f"Released{since}.")
     elif heading_stats:
-        scope_note = " — the first release on this channel, covering the full history to this point" if changes else ""
+        scope_note = (
+            " — the first release on this channel, covering the full history to this point"
+            if changes
+            else ""
+        )
         lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
@@ -407,7 +411,8 @@ def render_notes(
     lines.append("")
     if previous_tag:
         lines.append(
-            f"**Full changelog**: [{previous_tag}...{tag}](https://github.com/{repo}/compare/{previous_tag}...{tag})"
+            f"**Full changelog**: [{previous_tag}...{tag}]"
+            f"(https://github.com/{repo}/compare/{previous_tag}...{tag})"
         )
         lines.append("")
     if contributors:

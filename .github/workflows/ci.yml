@@ -627,7 +627,6 @@ jobs:
           tests/test_guard_aibom_detection.py
           tests/test_guard_aibom_content_upload_batches.py
           tests/test_guard_aibom_skill_directory_identity.py
-          tests/test_guard_command_syngraphe_extensions.py
           --tb=short
       - name: Run Windows Codex hook process-tree regressions
         if: runner.os == 'Windows'

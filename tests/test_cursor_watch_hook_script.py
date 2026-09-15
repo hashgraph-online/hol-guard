@@ -190,6 +190,8 @@ def test_generated_cursor_hook_write_overrides_conflicting_tool_name(tmp_path: P
     exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
     prepare = script_globals["_prepare_cursor_hook_payload"]
     assert callable(prepare)
-    mapped = prepare({"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"})
+    mapped = prepare(
+        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
+    )
     assert isinstance(mapped, dict)
     assert mapped["tool_name"] == "Write"

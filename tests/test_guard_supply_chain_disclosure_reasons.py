@@ -68,7 +68,9 @@ def test_cloud_fail_closed_policy_config_maps_security_levels(tmp_path: Path) ->
     assert _cloud_fail_closed_decision(store=store, workspace_dir=tmp_path / "workspace") == "ask"
 
 
-def test_strict_mode_timeout_requires_explicit_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_strict_mode_timeout_requires_explicit_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     (store.guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)

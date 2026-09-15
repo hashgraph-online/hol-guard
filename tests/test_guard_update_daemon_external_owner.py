@@ -304,7 +304,6 @@ def test_bundled_linux_core_source_is_available_when_executable_exists(tmp_path:
     source_root.write_text("synthetic Desktop Core", encoding="utf-8")
 
     assert runtime_peer.daemon_desktop_core_source_available(str(source_root)) is True
-    assert (
-        runtime_peer.daemon_desktop_core_source_available(str(source_root.parent.parent / "other-core" / "hol-guard"))
-        is False
-    )
+    assert runtime_peer.daemon_desktop_core_source_available(
+        str(source_root.parent.parent / "other-core" / "hol-guard")
+    ) is False

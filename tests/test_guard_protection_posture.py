@@ -399,7 +399,9 @@ def test_managed_mode_lock_overrides_watch_payload() -> None:
     assert composed["mode"] == "enforce"
 
 
-def test_status_marks_legacy_observe_as_protection_off(tmp_path: Path, capsys: object) -> None:
+def test_status_marks_legacy_observe_as_protection_off(
+    tmp_path: Path, capsys: object
+) -> None:
     import json
 
     from codex_plugin_scanner.cli import main

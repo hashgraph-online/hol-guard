@@ -53,7 +53,9 @@ def test_triggering_version_and_sha_come_from_the_same_immutable_run() -> None:
     read_identity = _step(resolve, "Read the triggering run's exact version")
     dispatch = workflow["jobs"]["dispatch_plugin_sync"]
 
-    assert download["uses"] == ("actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c")
+    assert download["uses"] == (
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    )
     assert download["with"] == {
         "name": "release-toolchain-sbom",
         "path": "triggering-release",
@@ -69,8 +71,12 @@ def test_triggering_version_and_sha_come_from_the_same_immutable_run() -> None:
     assert "exact stable version" in identity_run
     assert "expected_source_sha" in identity_run
 
-    assert dispatch["env"]["HOL_GUARD_VERSION"] == ("${{ needs.resolve_publication.outputs.version }}")
-    assert dispatch["env"]["SOURCE_SHA"] == ("${{ needs.resolve_publication.outputs.source_sha }}")
+    assert dispatch["env"]["HOL_GUARD_VERSION"] == (
+        "${{ needs.resolve_publication.outputs.version }}"
+    )
+    assert dispatch["env"]["SOURCE_SHA"] == (
+        "${{ needs.resolve_publication.outputs.source_sha }}"
+    )
     assert "github.event.workflow_run.head_sha" not in dispatch["env"]["SOURCE_SHA"]
 
 

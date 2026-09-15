@@ -190,7 +190,9 @@ def test_frozen_sidecar_stages_attested_native_runtime() -> None:
     seal = run.index("seal_pyinstaller_native_manifest.py")
     strip_sign = run.index('codesign --remove-signature "$BUILT"')
     repair_headers = run.index("fix_pyinstaller_macos_exe_headers.py")
-    outer_sign = run.index('codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BUILT"')
+    outer_sign = run.index(
+        'codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BUILT"'
+    )
     assert strip_sign < seal < repair_headers < outer_sign < signing_verify < native_verify
 
 

@@ -40,7 +40,9 @@ def test_policy_api_serializes_authenticated_managed_authority_label(tmp_path: P
         source="policy-bundle",
     )
     assert activate_managed_bundle(store, managed_bundle(), decisions=(decision,)) is True
-    status = store.managed_controls_public_status(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    status = store.managed_controls_public_status(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
     assert status is not None
     assert status["control_set_id"] == "managed-git-safety"
     assert status["control_set_name"] == "Managed Git safety"

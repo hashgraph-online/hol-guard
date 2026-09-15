@@ -35,10 +35,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 def sonar(path: str, *, post: bool = False, **parameters: object):
     if path not in {
-        "/api/issues/search",
-        "/api/project_pull_requests/list",
-        "/api/issues/add_comment",
-        "/api/issues/do_transition",
+        "/api/issues/search", "/api/project_pull_requests/list", "/api/issues/add_comment", "/api/issues/do_transition",
     }:
         raise ValueError("unapproved Sonar endpoint")
     encoded = urlencode(parameters).encode()
@@ -62,18 +59,13 @@ def fingerprint(source: str) -> str:
 
 def read_issue() -> dict:
     payload = sonar(
-        "/api/issues/search",
-        componentKeys=PROJECT,
-        issues=ISSUE,
-        pullRequest=PULL_REQUEST,
-        ps=100,
+        "/api/issues/search", componentKeys=PROJECT, issues=ISSUE, pullRequest=PULL_REQUEST, ps=100,
     )
     if payload.get("total") != 1 or len(payload.get("issues", [])) != 1:
         raise ValueError("reviewed issue is missing or ambiguous")
     issue = payload["issues"][0]
     if (
-        issue.get("key") != ISSUE
-        or issue.get("project") != PROJECT
+        issue.get("key") != ISSUE or issue.get("project") != PROJECT
         or issue.get("rule") != "pythonsecurity:S5144"
         or issue.get("component") != PROJECT + ":src/codex_plugin_scanner/guard/cloud_audit_request.py"
         or str(issue.get("pullRequest")) != str(PULL_REQUEST)
@@ -91,8 +83,7 @@ def read_analysis() -> dict:
     sha = analysis.get("commit", {}).get("sha")
     if (
         analysis.get("branch") != "fix/sonar-blocker-control-flow"
-        or not isinstance(sha, str)
-        or re.fullmatch(r"[0-9a-f]{40}", sha) is None
+        or not isinstance(sha, str) or re.fullmatch(r"[0-9a-f]{40}", sha) is None
         or not analysis.get("analysisDate")
     ):
         raise ValueError("reviewed analysis identity is invalid")
@@ -137,14 +128,10 @@ def main(*, apply: bool = False) -> None:
     # Re-read after all source checks so a concurrent analysis cannot silently change the finding.
     current = read_issue()
     if (current.get("hash"), current.get("lastChangeAnalysisUuid")) != (
-        issue.get("hash"),
-        issue.get("lastChangeAnalysisUuid"),
+        issue.get("hash"), issue.get("lastChangeAnalysisUuid"),
     ):
         raise ValueError("Sonar finding changed during verification")
-    if current.get("resolution") in {"FALSE-POSITIVE", "FIXED"} or current.get("issueStatus") in {
-        "FALSE_POSITIVE",
-        "FIXED",
-    }:
+    if current.get("resolution") in {"FALSE-POSITIVE", "FIXED"} or current.get("issueStatus") in {"FALSE_POSITIVE", "FIXED"}:
         print("The source-pinned audit finding is already resolved.")
     elif apply:
         comment = "Reviewed at " + manifest["reviewed_commit"] + ". " + manifest["reason"]
