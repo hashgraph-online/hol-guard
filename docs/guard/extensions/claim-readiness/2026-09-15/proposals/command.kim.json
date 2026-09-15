@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.kim",
+  "tagline": "Reviews kim commands that mutate the local reminder config, daemon state, or notification settings.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "maintainerGithubIds": [
+    "97722446"
+  ]
+}
