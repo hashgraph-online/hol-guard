@@ -61,14 +61,16 @@ def apply_exact_cloud_review(
         raise _reject(store, error.code, now=current) from error
     delegated_admin_mfa = remote_approval_uses_workspace_admin_mfa(envelope)
     raw_capability: dict[str, object] | None = None
+    verified_capability: dict[str, object] | None = None
     if not delegated_admin_mfa:
         try:
             verified_capability = _verified_capability(store, now=current.isoformat())
         except ExactCloudReviewError as error:
             raise _reject(store, error.code, now=current) from error
-        raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
-        if not isinstance(raw_capability, dict):
+        loaded_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+        if not isinstance(loaded_capability, dict):
             raise _reject(store, "cloud_review_capability_missing", now=current)
+        raw_capability = loaded_capability
     try:
         _ = _oauth_state(store)
     except ExactCloudReviewError as error:
@@ -110,6 +112,8 @@ def apply_exact_cloud_review(
             contract_digest=contract.digest,
         ).applied_scope
         if not delegated_admin_mfa:
+            if verified_capability is None:
+                raise _reject(store, "cloud_review_capability_missing", now=current)
             validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
         validate_remote_approval_request_binding(envelope=envelope, request_row=request, oauth=oauth, store=store)
     except IneligibleApprovalScopeError as error:
