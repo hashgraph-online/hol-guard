@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "b6af0990dd6e2c8f809662027daf4d0fb269ca73ac4501b3031cf52a1e11aac6",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -84,6 +84,7 @@
     "command.repo2nb",
     "command.search.elasticsearch",
     "command.shell-mutations",
+    "command.simgit",
     "command.skill-sunset",
     "command.storage.aws-s3",
     "command.storage.azure-blob",
@@ -95,7 +96,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 247,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -305,6 +306,8 @@
     "command.shell-mutations.permission.managed-config-write": "echo \"session = on\" >> ~/.hol-guard/config.toml",
     "command.shell-mutations.permission.process-environment-secret-read": "python3 -c 'import os; print(os.environ)'",
     "command.shell-mutations.permission.sensitive-file-write": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
+    "command.simgit.permission.delete-unmerged": "simgit remove feature-branch --delete-branch --delete-unmerged",
+    "command.simgit.permission.discard-dirty": "simgit remove /path/to/worktree --discard-dirty",
     "command.skill-sunset.permission.audit": "skill-sunset audit",
     "command.storage.aws-s3.permission.access-control": "aws s3api put-bucket-policy",
     "command.storage.aws-s3.permission.bucket-configuration": "aws s3api put-bucket-versioning",
@@ -648,6 +651,8 @@
     "command.shell-mutations.permission.managed-config-write",
     "command.shell-mutations.permission.process-environment-secret-read",
     "command.shell-mutations.permission.sensitive-file-write",
+    "command.simgit.permission.delete-unmerged",
+    "command.simgit.permission.discard-dirty",
     "command.skill-sunset.permission.audit",
     "command.storage.aws-s3.permission.access-control",
     "command.storage.aws-s3.permission.bucket-configuration",
@@ -696,7 +701,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 234,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -893,6 +898,8 @@
     "command.shell-mutations.sensitive-file-write",
     "command.shell-mutations.process-environment-secret-read",
     "command.shell-mutations.github-body-substitution",
+    "command.simgit.discard-dirty",
+    "command.simgit.delete-unmerged",
     "command.skill-sunset.audit",
     "command.storage.aws-s3.deletion",
     "command.storage.aws-s3.cp",
