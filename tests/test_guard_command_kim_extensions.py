@@ -53,6 +53,11 @@ KIM_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     ("kim remove morning", "kim reminder remove command", "command.kim.remove"),
     (
+        "xargs -n1 kim remove morning",
+        "kim reminder remove command",
+        "command.kim.remove",
+    ),
+    (
         "kim remove evening --oneshot",
         "kim reminder remove command",
         "command.kim.remove",
