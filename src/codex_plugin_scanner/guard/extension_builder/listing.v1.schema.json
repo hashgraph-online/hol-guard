@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/guard/contracts/extension-listing.v1.schema.json",
-  "title": "HOL Guard extension listing (presentation only)",
+  "title": "HOL Guard extension publisher listing metadata",
+  "description": "Bounded extension listing metadata. Presentation fields describe the public extension listing; maintainerGithubIds is reviewed claim-authority input for downstream publisher-profile decisions. Validation does not itself grant authority.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -67,7 +68,7 @@
       }
     },
     "maintainerGithubIds": {
-      "description": "Additional reviewed profile claimants only; never runtime or upstream ownership. Omitted or empty means no extra delegates and does not remove introducing-PR author eligibility.",
+      "description": "Reviewed numeric GitHub IDs authorized to manage this extension's publisher profile. Omitted or empty means no automatic claimant. Pull-request authorship is attribution evidence only and never grants publisher authority.",
       "type": "array",
       "maxItems": 8,
       "uniqueItems": true,

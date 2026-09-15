@@ -7,8 +7,8 @@ on:
     paths:
       - .github/workflows/finish-extension-authority-stability.yml
 
-permissions:
-  contents: write
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
 
 concurrency:
   group: finish-extension-authority-stability
@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   finish:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:

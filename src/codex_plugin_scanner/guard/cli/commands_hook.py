@@ -52,7 +52,21 @@ from .commands_hook_compat_loader import (
 from .commands_hook_native_authority import try_native_or_source_ref_hook
 from .commands_hook_payload_preparation import prepare_compatibility_hook_state
 from .commands_parser_helpers import *
+from .commands_support_claude_approval import _persist_claude_guard_question_decision
+from .commands_support_connect import _synced_policy_payload
+from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
 from .commands_support_interaction import _emit
+from .commands_support_permission_store import _discard_claude_pending_permissions
+from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
+from .commands_support_runtime_policy import _runtime_action_data_flow_signals
+from .commands_support_runtime_resolution import (
+    _canonical_harness_name,
+    _copilot_hook_stage,
+    _copilot_runtime_tool_call,
+    _is_copilot_permission_request,
+    _managed_install_for,
+    _resolve_copilot_workspace_root,
+)
 from .commands_support_workspace import _workspace_from_hook_payload
 
 

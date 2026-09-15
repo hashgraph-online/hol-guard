@@ -86,6 +86,7 @@ def test_serve_base_exception_is_contained_when_stop_races_serve_loop(
     stop_errors: list[BaseException] = []
 
     def failing_serve_forever() -> None:
+        daemon._serve_loop_started.set()
         serve_entered.set()
         assert release_serve.wait(timeout=10)
         raise KeyboardInterrupt()
@@ -116,12 +117,54 @@ def test_serve_base_exception_is_contained_when_stop_races_serve_loop(
 
         assert not server_thread.is_alive()
         assert not stopper.is_alive()
-        assert len(serve_errors) == 1
-        assert isinstance(serve_errors[0], KeyboardInterrupt)
         assert stop_errors == []
+        assert all(
+            isinstance(error, KeyboardInterrupt) or str(error) == "Guard daemon stopped during startup"
+            for error in serve_errors
+        )
         assert daemon._thread is None
         assert daemon._owner_lock is None
         assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve.set()
         daemon.stop()
+
+
+def test_failed_start_retains_ownership_when_serve_join_returns_a_live_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    leftover = threading.Thread(target=lambda: None, name="leftover-serve")
+    finish_calls: list[int] = []
+    original_finish = daemon._finish_service
+
+    def boom(generation: int | None = None, **kwargs: object) -> None:
+        del generation, kwargs
+        daemon._thread = leftover
+        raise RuntimeError("startup boom")
+
+    monkeypatch.setattr(daemon, "_begin_owned_service", boom)
+    monkeypatch.setattr(
+        daemon,
+        "_join_service_thread",
+        lambda thread, deadline: thread,
+    )
+    monkeypatch.setattr(
+        daemon,
+        "_finish_service",
+        lambda: finish_calls.append(1) or True,
+    )
+    with pytest.raises(RuntimeError, match="startup boom") as caught:
+        daemon.start()
+    notes = getattr(caught.value, "__notes__", [])
+    assert any("serve thread did not exit" in note for note in notes)
+    assert finish_calls == []
+    assert daemon._owner_lock is not None
+    daemon._finish_service = original_finish
+    daemon.stop()

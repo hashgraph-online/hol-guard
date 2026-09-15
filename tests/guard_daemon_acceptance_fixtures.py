@@ -121,8 +121,9 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         dict[str, object],
         json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
     )
+    target = max(1, int(daemon._server.hook_process_runner.stats()["target"]))
     if not daemon._server.hook_process_runner.wait_for_capacity(
-        minimum_workers=1,
+        minimum_workers=target,
         timeout_seconds=15,
     ):
         raise RuntimeError("production hook workers did not become ready")

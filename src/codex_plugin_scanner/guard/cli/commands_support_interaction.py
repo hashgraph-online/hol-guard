@@ -316,6 +316,8 @@ def _should_emit_native_hook_json_response(
     output_stream: TextIO | None,
 ) -> bool:
     harness = _canonical_harness_name(args.harness)
+    if harness == "grok" and getattr(args, "json", False):
+        return True
     if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
         return True
     return (

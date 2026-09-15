@@ -135,6 +135,16 @@ test("authenticated extension recovery shows progress and reaches protected stat
   await expect(runtimeErrors).toEqual([]);
 });
 
+test("authenticator Enter submits the repair approval dialog", async ({ page }) => {
+  await mountRecoveryFixture(page);
+  await page.goto(`/extensions?${DAEMON}`);
+  await page.getByRole("button", { name: "Repair protection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Repair protection" });
+  await dialog.getByLabel("Authenticator code").fill("123456");
+  await dialog.getByLabel("Authenticator code").press("Enter");
+  await expect(page.getByText("Local protection repaired and verified.")).toBeVisible();
+});
+
 test("failed extension recovery keeps the repair banner and explains the failure", async ({ page }) => {
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));

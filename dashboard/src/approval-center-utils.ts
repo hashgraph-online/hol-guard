@@ -22,8 +22,6 @@ export { resolveDecisionV2Detail, resolveEnvelopeDisplayText, resolveSecondaryRi
 
 export const EMPTY_QUEUE_TITLE = "Review queue is clear";
 export const STALE_REQUEST_COPY = "This request was already decided.";
-export const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-export const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 
 export type DataFlowEvidenceSummary = {
   signalTitle: string;
@@ -527,6 +525,9 @@ export function harnessDisplayName(harness: string): string {
       return "Oh My Pi";
     case "zcode":
       return "ZCode";
+    case "guard-cli":
+    case "hol-guard":
+      return "Guard CLI";
     default:
       return capitalizeHarness(normalized);
   }
@@ -623,14 +624,26 @@ export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | nu
   return guardAwareHref(absolute);
 }
 
+export function isBrowserToolReview(item: GuardApprovalRequest): boolean {
+  const name = item.artifact_name ?? "";
+  if (name.startsWith("chrome-devtools:")) {
+    return true;
+  }
+  return item.changed_fields.some((field) => field.toLowerCase().includes("browser"));
+}
+
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
+  if (item.artifact_type === "tool_call" && item.changed_fields.includes("runtime_tool_call")) {
+    return isBrowserToolReview(item) ? "Browser tool" : "MCP tool";
+  }
   const actionType = envelope?.action_type;
   if (actionType === "shell_command") return "Command";
   if (actionType === "prompt") return "Prompt excerpt";
   if (actionType === "file_read" || actionType === "file_write") return "File path";
   if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "browser_action") return "Browser tool";
   if (actionType === "package_script") return "Package";
   if (actionType === "network_request") return "Network destination";
 

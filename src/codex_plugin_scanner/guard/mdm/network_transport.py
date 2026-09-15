@@ -20,7 +20,7 @@ from urllib3.poolmanager import ProxyManager
 from ...no_redirect import RejectRedirects
 from .contracts import ManagedNetworkPolicy
 from .network_credentials import read_proxy_credential_record
-from .network_trust import ManagedTrustError, build_managed_ssl_context
+from .network_trust import ManagedTrustError, build_default_ssl_context, build_managed_ssl_context
 from .network_urlopen import ManagedOpener, ManagedResponse, ManagedUrlOpener
 from .policy import load_managed_policy
 
@@ -303,9 +303,12 @@ def managed_urlopen(
         and resolved.ca_bundle_path is None
         and resolved.allow_public_registries
     ):
+        context = build_default_ssl_context()
         if reject_redirects:
-            return urllib.request.build_opener(RejectRedirects()).open(request, timeout=timeout)
-        return urllib.request.urlopen(request, timeout=timeout)
+            return urllib.request.build_opener(RejectRedirects(), urllib.request.HTTPSHandler(context=context)).open(
+                request, timeout=timeout
+            )
+        return urllib.request.urlopen(request, timeout=timeout, context=context)
     return managed_opener(
         resolved,
         redirect_handler=RejectRedirects() if reject_redirects else None,

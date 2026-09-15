@@ -167,6 +167,12 @@ export type EffectivePermissionProjectionItem = {
   reason_codes: string[];
 };
 
+export type ExtensionControlTerminalCommands = {
+  shell?: "powershell";
+  enroll: string;
+  recover_authority: string;
+};
+
 export type EffectiveExtensionControlProjection = {
   schema_version: "guard.daemon.extension-control-projection.v1";
   revision: number;
@@ -205,6 +211,7 @@ export type EffectiveExtensionControls = {
   }>;
   layers: ExtensionControlLayer[];
   failures: Array<{ code: string; detail?: string; layer_kind?: string }>;
+  terminal_commands?: ExtensionControlTerminalCommands;
   projection?: EffectiveExtensionControlProjection;
   managed_controls?: ManagedControlsStatus;
 };

@@ -172,6 +172,17 @@ assert.equal(droppedLaunch.extensions[0]?.mcp_launch, undefined);
 assert.equal(droppedLaunch.extensions[0]?.mcp_tools, undefined);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
+const terminalCommands = normalizeEffectiveExtensionControls({
+  ...effective(),
+  terminal_commands: {
+    shell: "powershell",
+    enroll: "& 'C:\\custom install\\hol-guard.exe' command controls enroll",
+    recover_authority: "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+  },
+});
+assert.equal(terminalCommands.terminal_commands?.enroll, "& 'C:\\custom install\\hol-guard.exe' command controls enroll");
+assert.equal(terminalCommands.terminal_commands?.recover_authority, "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority");
+assert.equal(terminalCommands.terminal_commands?.shell, "powershell");
 const managedEffective = normalizeEffectiveExtensionControls({
   ...effective(),
   managed_controls: {

@@ -114,19 +114,32 @@ def list_registry_versions(
     *,
     project_name: str = DEFAULT_PROJECT_NAME,
     fetcher: Fetcher = stdlib_fetch,
+    retry_attempts: int = release_registry_retry.REGISTRY_RETRY_ATTEMPTS,
+    retry_initial_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
+    retry_max_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_MAX_DELAY_SECONDS,
+    sleep: release_registry_retry.Sleeper | None = None,
 ) -> tuple[str, ...]:
-    payload = release_registry_retry._fetch_payload(_project_url(registry, project_name), fetcher=fetcher)
-    if payload is None:
-        raise RegistryVerificationError("Registry project response was unexpectedly absent")
-    document = _decode_object(payload, label="Registry project response")
-    releases = document.get("releases")
-    if not isinstance(releases, dict):
-        raise RegistryVerificationError("Registry project response is missing the releases object")
+    def list_once() -> tuple[str, ...]:
+        payload = release_registry_retry._fetch_payload(_project_url(registry, project_name), fetcher=fetcher)
+        if payload is None:
+            raise RegistryVerificationError("Registry project response was unexpectedly absent")
+        document = _decode_object(payload, label="Registry project response")
+        releases = document.get("releases")
+        if not isinstance(releases, dict):
+            raise RegistryVerificationError("Registry project response is missing the releases object")
 
-    versions: list[Version] = []
-    for version_text in releases:
-        versions.append(_canonical_public_version(version_text, label="Registry version"))
-    return tuple(str(version) for version in sorted(versions))
+        versions: list[Version] = []
+        for version_text in releases:
+            versions.append(_canonical_public_version(version_text, label="Registry version"))
+        return tuple(str(version) for version in sorted(versions))
+
+    return release_registry_retry._retry_registry_operation(
+        list_once,
+        retry_attempts=retry_attempts,
+        retry_initial_delay_seconds=retry_initial_delay_seconds,
+        retry_max_delay_seconds=retry_max_delay_seconds,
+        sleep=sleep,
+    )
 
 
 def _distribution_identity(filename: str) -> tuple[str, Version]:
@@ -464,7 +477,12 @@ def main(
     try:
         if command == "list-versions":
             registry = Registry(args.registry)
-            output: object = list_registry_versions(registry, project_name=args.project, fetcher=fetcher)
+            output: object = list_registry_versions(
+                registry,
+                project_name=args.project,
+                fetcher=fetcher,
+                sleep=sleep,
+            )
         elif command == "inspect-release":
             registry = Registry(args.registry)
             version = _canonical_public_version(args.version, label="Requested version")

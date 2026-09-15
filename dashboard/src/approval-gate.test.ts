@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
-import { applyApprovalGateDraft, hasUnsavedChanges } from "./settings-workspace";
+import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -73,6 +73,17 @@ function testApprovalGateCooldownLabels(): void {
   assert(approvalGateCooldownLabel(3600) === "1 hour", "3600 should be '1 hour'");
   assert(approvalGateCooldownLabel(60) === "60 seconds", "60 should be '60 seconds'");
   assert(approvalGateCooldownLabel(1800) === "1800 seconds", "1800 should be '1800 seconds'");
+}
+
+function testApprovalGateCooldownIsUnavailableWithTotp(): void {
+  assert(
+    effectiveApprovalGateCooldownSeconds(900, true) === 0,
+    "authenticator-enabled gates must expose every approval as the effective cooldown",
+  );
+  assert(
+    effectiveApprovalGateCooldownSeconds(900, false) === 900,
+    "password gates must retain the configured cooldown",
+  );
 }
 
 function testApprovalPasswordPromptVisibility(): void {
@@ -332,6 +343,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
   ["testApprovalGateCooldownLabels", testApprovalGateCooldownLabels],
+  ["testApprovalGateCooldownIsUnavailableWithTotp", testApprovalGateCooldownIsUnavailableWithTotp],
   ["testApprovalPasswordPromptVisibility", testApprovalPasswordPromptVisibility],
   ["testApprovalGatePasswordFieldsNotPersisted", testApprovalGatePasswordFieldsNotPersisted],
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],

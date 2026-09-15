@@ -67,6 +67,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._last_error: str | None = None
         self._published_config_digest: str | None = None
         self._published_policy_fingerprint: tuple[str, str] | None = None
+        self._observed_policy_fingerprint: tuple[str, str] | None = None
         self._renewal_due_monotonic: float | None = None
         self._renewal_after_generation: int | None = None
         self._retry_not_before_monotonic: float | None = None
@@ -417,7 +418,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     resident_directory_fingerprint,
                 )
                 if resident_fingerprint_confirmed is None:
-                    return
+                    self._acked = False
+                    raise NativePolicySnapshotError("native_policy_snapshot_resident_changed")
                 # The first client request may create the resident generation
                 # state files. Treat those files as the state of this ACK,
                 # otherwise the observer loop immediately mistakes its own
@@ -433,6 +435,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     cast(str, snapshot["config_digest"]),
                     cast(str, snapshot["mode"]),
                 )
+                self._observed_policy_fingerprint = self._published_policy_fingerprint
                 self._acked = True
                 self._last_error = None
                 self._renewal_after_generation = None

@@ -284,6 +284,7 @@ from .service_lifecycle import (
     contain_failed_service_start,
     enable_full_capacity_for_generation,
     start_serve_thread,
+    startup_generation_is_current,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -2321,6 +2322,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = maybe_auto_revert_watch(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
+        if parsed.path == "/v1/cloud-review":
+            from .cloud_review_settings import cloud_review_settings_status
+
+            self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            return
         if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
@@ -2774,6 +2780,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/command-queue/worker/refresh":
             self._handle_command_queue_worker_refresh()
+            return
+        if parsed.path == "/v1/cloud-review":
+            self._handle_cloud_review_settings(payload)
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
@@ -5552,6 +5561,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ),
         )
 
+    def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:
+        from .cloud_review_settings_route import handle_cloud_review_settings
+
+        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
+        handle_cloud_review_settings(
+            self.server.store,
+            payload,
+            refresh_workers=lifecycle.refresh_command_queue_worker if lifecycle is not None else None,
+            write_json=self._write_json,
+            write_approval_gate_error=self._write_approval_gate_error,
+        )
+
     def _handle_command_queue_worker_refresh(self) -> None:
         lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
         if lifecycle is None:
@@ -6077,9 +6098,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             queued=scheduler_stats["queued"],
         )
         if review.payload is not None and time.monotonic() < process_deadline:
+            receipt_accepted = False
             if review.receipt is not None:
                 with suppress(Exception):
-                    _ = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(review.receipt)
+                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
+                        review.receipt
+                    )
+            with suppress(Exception):
+                activity_action = review.payload.get("policy_action")
+                event = payload.get("hook_event_name", payload.get("hookEventName"))
+                if (
+                    isinstance(event, str)
+                    and event.replace("_", "").lower() == "pretooluse"
+                    and _native_mode_requires_rust()
+                    and isinstance(activity_action, str)
+                ):
+                    _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
+                        harness=harness,
+                        event="PreToolUse",
+                        payload=payload,
+                        succeeded=True,
+                        policy_action=activity_action,
+                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id"))
+                        if receipt_accepted
+                        else None,
+                        prompted=review.payload.get("prompted") is True,
+                        approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
+                        or "not-applicable",
+                    )
             self._write_json(review.payload)
             return
         reason_code = (
@@ -6644,6 +6690,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/capabilities",
             "/v1/sessions",
             "/v1/runtime",
@@ -7586,6 +7633,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _requires_header_token(path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/clients/attach",
             "/v1/clients/heartbeat",
             "/v1/sessions/start",
@@ -7852,6 +7900,8 @@ class GuardDaemonServer:
         self._active_start_generation: int | None = None
         self._finish_service_lock = threading.Lock()
         self._finish_service_completed = False
+        self._owned_service_ready = False
+        self._serve_thread_error: BaseException | None = None
         self._owner_lock: BinaryIO | None = None
         try:
             self._server = _GuardDaemonHttpServer(
@@ -7923,16 +7973,38 @@ class GuardDaemonServer:
             raise
 
     def serve(self) -> None:
-        self._begin_service()
+        self._serve_thread_error = None
+        try:
+            self._begin_service(publish_before_workers=True)
+        except RuntimeError as error:
+            if str(error) == "Guard daemon stopped during startup":
+                return
+            raise
         generation = self._active_start_generation
+        serve_thread = self._thread
         try:
             enable_full_capacity_for_generation(self, generation)
-            self._serve_forever()
+            if serve_thread is None:
+                self._serve_forever()
+                return
+            serve_thread.join()
+            serve_error = self._serve_thread_error
+            if serve_error is not None:
+                raise serve_error
+        except RuntimeError as error:
+            if str(error) == "Guard daemon stopped during startup":
+                return
+            contain_failed_service_start(
+                self,
+                error,
+                serve_thread_started=serve_thread is not None,
+            )
+            raise
         except BaseException as error:
             contain_failed_service_start(
                 self,
                 error,
-                serve_thread_started=False,
+                serve_thread_started=serve_thread is not None,
             )
             raise
 
@@ -7954,24 +8026,10 @@ class GuardDaemonServer:
         ):
             self._thread = None
 
-    def _begin_service(self) -> None:
-        begin_service(self)
+    def _begin_service(self, *, publish_before_workers: bool = False) -> None:
+        begin_service(self, publish_before_workers=publish_before_workers)
 
-    def _begin_owned_service(self, generation: int | None = None) -> None:
-        generation = generation if generation is not None else self._active_start_generation
-        with self._lifecycle_lock:
-            if generation != self._lifecycle_generation or self._shutdown_started.is_set():
-                raise RuntimeError("Guard daemon stopped during startup")
-        if self._aibom_refresh_thread is not None:
-            if self._aibom_refresh_thread.is_alive():
-                raise RuntimeError("AIBOM inventory refresh is still stopping")
-            self._aibom_refresh_thread = None
-        self._require_command_activity_maintenance_stopped()
-        self._server.hook_process_runner.start(defer_backfill=True)
-        self._server.hook_process_runner.require_initial_capacity()
-        self._reconcile_runtime_artifacts_best_effort()
-        self._maintain_command_activity_best_effort()
-        self._persist_aibom_inventory_context()
+    def _publish_listen_state(self) -> None:
         self._server.last_activity_monotonic = time.monotonic()
         self._server.publish_trust_state()
         self._server.store.upsert_runtime_state(
@@ -7981,41 +8039,120 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
-        self._server.start_unclassified_watchdog()
-        self._server.runtime_heartbeat.start()
-        approval_attention = getattr(self._server, "approval_attention", None)
-        if approval_attention is not None:
-            approval_attention.start()
-        self._start_watchdog()
-        self._start_headless_cloud_sync()
-        self._start_supply_chain_bundle_refresh()
-        self._start_aibom_inventory_refresh()
-        self._start_extension_control_refresh()
-        self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
-        self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
-            self._server.store,
-            self._cloud_review_sync_worker,
-        )
-        self._start_command_activity_maintenance()
-        self._record_lifecycle("ready")
-        self._diagnostics.record("daemon_ready")
+
+    def _begin_owned_service(
+        self,
+        generation: int | None = None,
+        *,
+        publish_before_workers: bool = False,
+        continue_after_listen: bool = True,
+    ) -> None:
+        generation = generation if generation is not None else self._active_start_generation
+        with self._lifecycle_lock:
+            if generation != self._lifecycle_generation or self._shutdown_started.is_set():
+                raise RuntimeError("Guard daemon stopped during startup")
+        if self._aibom_refresh_thread is not None:
+            if self._aibom_refresh_thread.is_alive():
+                raise RuntimeError("AIBOM inventory refresh is still stopping")
+            self._aibom_refresh_thread = None
+        self._require_command_activity_maintenance_stopped()
+        self._server.hook_process_runner.start(defer_backfill=publish_before_workers)
+        if publish_before_workers:
+            # Desktop `desktop bootstrap --json` waits for the daemon state
+            # file, not for hook workers or artifact reconciliation. Accept
+            # HTTP and publish that file before the 60s+ cold-home work.
+            start_serve_thread(self, already_locked=True)
+            if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
+                raise RuntimeError("Guard daemon serve thread did not become ready")
+            self._publish_listen_state()
+            self._diagnostics.record("daemon_listen_ready")
+            if not continue_after_listen:
+                return
+        self._complete_owned_service_after_listen(generation, already_locked=True)
+
+    def _complete_owned_service_after_listen(
+        self,
+        generation: int | None,
+        *,
+        already_locked: bool = False,
+    ) -> None:
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._server.hook_process_runner.require_initial_capacity()
+        self._reconcile_runtime_artifacts_best_effort()
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._maintain_command_activity_best_effort()
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._persist_aibom_inventory_context()
+
+        def start_post_listen_workers() -> None:
+            if generation is not None and not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
+            self._publish_listen_state()
+            self._server.start_unclassified_watchdog()
+            self._server.runtime_heartbeat.start()
+            approval_attention = getattr(self._server, "approval_attention", None)
+            if approval_attention is not None:
+                approval_attention.start()
+            self._start_watchdog()
+            self._start_headless_cloud_sync()
+            self._start_supply_chain_bundle_refresh()
+            self._start_aibom_inventory_refresh()
+            self._start_extension_control_refresh()
+            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+            self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
+                self._server.store,
+                self._cloud_review_sync_worker,
+            )
+            self._start_command_activity_maintenance()
+            self._record_lifecycle("ready")
+            self._owned_service_ready = True
+            self._diagnostics.record("daemon_ready")
+
+        if already_locked:
+            start_post_listen_workers()
+            return
+        with self._finish_service_lock:
+            start_post_listen_workers()
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
-        """Apply a changed local Cloud Review capability without a daemon restart."""
+        """Apply changed Cloud connectivity and consent without a daemon restart."""
 
-        with self._finish_service_lock:
+        if not self._finish_service_lock.acquire(blocking=False):
+            return {
+                "operation": "guard.review.resolveExact",
+                "running": False,
+                "sync_running": False,
+            }
+        try:
+            if not self._owned_service_ready or self._shutdown_started.is_set():
+                return {
+                    "operation": "guard.review.resolveExact",
+                    "running": False,
+                    "sync_running": False,
+                }
             self._command_queue_worker, running = refresh_command_queue_worker(
                 self._server.store,
                 self._command_queue_worker,
                 shutting_down=self._shutdown_started.is_set(),
             )
+            from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
+
+            self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
+                self._server.store, self._cloud_review_sync_worker, shutting_down=self._shutdown_started.is_set()
+            )
+        finally:
+            self._finish_service_lock.release()
         return {
             "operation": "guard.review.resolveExact",
             "running": running,
+            "sync_running": sync_running,
         }
 
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
-        """Align existing Guard-owned artifacts before publishing readiness."""
+        """Align existing Guard-owned artifacts before reporting daemon_ready."""
         try:
             result = reconcile_runtime_artifacts(
                 self._server.store,
@@ -8135,8 +8272,9 @@ class GuardDaemonServer:
         except KeyboardInterrupt:
             self._shutdown_started.set()
             stop_reason = "requested_shutdown"
-        except BaseException:
+        except BaseException as error:
             stop_reason = "serve_loop_failed"
+            self._serve_thread_error = error
             self._record_lifecycle("serve_failed", reason="unexpected_exception")
             self._diagnostics.record_exception("daemon_serve_failed")
             raise
@@ -8175,6 +8313,7 @@ class GuardDaemonServer:
             return contained
 
     def _finish_service_locked(self) -> bool:
+        self._owned_service_ready = False
         self._shutdown_started.set()
         contained = True
         stop_request_executors = getattr(self._server, "_stop_request_executors", None)

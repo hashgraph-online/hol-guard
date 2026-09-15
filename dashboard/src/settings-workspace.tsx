@@ -77,6 +77,7 @@ import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
+import { CloudReviewSettings } from "./settings/cloud-review-settings";
 export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
@@ -178,6 +179,13 @@ export function hasApprovalGateSettingsChanged(
     || cooldownSeconds !== gateConfig.cooldown_seconds
     || strictAllDecisions !== gateConfig.strict_all_decisions
   );
+}
+
+export function effectiveApprovalGateCooldownSeconds(
+  cooldownSeconds: number,
+  totpEnabled: boolean,
+): number {
+  return totpEnabled ? 0 : cooldownSeconds;
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -1511,6 +1519,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   checked={draft.sync}
                   onChange={handleSyncToggle}
                 />
+                <CloudReviewSettings />
                 <SettingsSelectRow
                   label="Cloud receipt privacy"
                   description="Choose how much command detail Guard includes when syncing receipts. Secrets are always removed."
@@ -2143,6 +2152,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
   const failClosed = props.gateConfig?.fail_closed === true;
+  const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt
     ? new Date(cooldownExpiresAt).toLocaleTimeString()
     : null;
@@ -2191,14 +2201,22 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               <label className="block">
                 <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
                 <select
-                  value={String(props.cooldownSeconds)}
+                  id="settings-approval-gate-cooldown"
+                  value={String(effectiveCooldownSeconds)}
                   onChange={props.onCooldownChange}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  disabled={totpEnabled}
+                  aria-describedby={totpEnabled ? "settings-approval-gate-cooldown-help" : undefined}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   {cooldownOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+                {totpEnabled ? (
+                  <span id="settings-approval-gate-cooldown-help" className="mt-1 block text-xs leading-5 text-slate-500">
+                    Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off.
+                  </span>
+                ) : null}
               </label>
             </div>
           </div>

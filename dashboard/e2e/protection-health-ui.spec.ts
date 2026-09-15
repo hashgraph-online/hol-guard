@@ -159,6 +159,35 @@ async function mountProtectionFixture(
   });
 }
 
+for (const width of [390, 1440]) {
+  test(`cloud TLS failure preserves usable actions at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await mountProtectionFixture(page, { ...snapshotForState("protected"), cloud_state: "local_only" });
+    await page.route("**/v1/cloud/connect", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ connect_required: true, connect_flow: {
+          state: "failed", detail: "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)>",
+          connect_url: "http://localhost:3017/connect", authorize_url: null,
+        } }),
+      });
+    });
+    await page.goto(`/protect?${DAEMON}`);
+    const hero = page.getByRole("region", { name: "Protection status" });
+    await hero.getByRole("button", { name: "Connect this machine" }).click();
+    await expect(hero.getByText(/Guard could not verify the secure connection/)).toBeVisible();
+    await expect(hero.getByText(/CERTIFICATE_VERIFY_FAILED/)).toHaveCount(0);
+    await expect(hero.getByRole("button", { name: "Retry connection" })).toBeVisible();
+    const home = hero.getByRole("button", { name: "Open Home" });
+    await expect(home).toBeVisible();
+    const box = await home.boundingBox();
+    expect(box?.height).toBeLessThan(65);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`cloud-tls-${width}.png`), fullPage: true });
+  });
+}
+
 test("startup proving snapshot shows checking instead of degraded", async ({ page }, testInfo) => {
   await mountProtectionFixture(page, provingSnapshot);
   await page.goto(`/?${DAEMON}`);

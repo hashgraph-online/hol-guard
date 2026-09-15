@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
+from pathlib import Path
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
@@ -19,6 +21,31 @@ def test_commands_facade_exports_legacy_symbols() -> None:
         "_runtime_detector_perf_payload",
     ):
         assert getattr(guard_commands_module, name) is not None
+
+
+def test_guard_package_lazily_resolves_legacy_command_export_in_fresh_process() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+    probe = """
+import importlib
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "src"))
+guard = importlib.import_module("codex_plugin_scanner.guard")
+assert "codex_plugin_scanner.guard.cli.commands" not in sys.modules
+assert guard.__all__ == ["run_guard_command"]
+assert "run_guard_command" in dir(guard)
+from codex_plugin_scanner.guard import run_guard_command
+from codex_plugin_scanner.guard.cli.commands import run_guard_command as cli_run_guard_command
+assert run_guard_command is cli_run_guard_command
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(repository_root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_commands_facade_wrapped_helpers_report_facade_module() -> None:

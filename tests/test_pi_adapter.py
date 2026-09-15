@@ -12,7 +12,10 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from codex_plugin_scanner.guard.adapters.pi_extension_source import (
+    legacy_managed_extension_source,
+    managed_extension_source,
+)
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
@@ -293,7 +296,8 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "    return undefined;\n  });\n}" in text
+        assert "    if (originalOutputProof) return undefined;\n" in text
+        assert "return blockedToolResult(modelVisibleBlockedReason(reason), event.details);" in text
         assert "const GUARD_CLI_WRAPPER_COMMAND =" in text
         assert "const GUARD_CLI_WRAPPER_ARGS =" in text
         assert "const GUARD_HOME =" in text
@@ -352,7 +356,8 @@ class TestPiInstall:
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert not omp_extension_path.exists()
         assert "guardPayload.tool_response = event.content" in text
-        assert "stdout: toolOutput" in text
+        assert "stdout: toolOutput" not in text
+        assert "tool_response: toolOutput" in text
         assert "contentText(event.content)" not in text
         assert "options?.enforceSizeCap === true" in text
         assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
@@ -370,6 +375,8 @@ class TestPiInstall:
         assert "reviewed_output_sha256" in text
         assert 'response.model_output_action === "allow_original"' in text
         assert "response.reviewed_output_sha256 === digest.sha256" in text
+        assert "function daemonResponseCanReturn(" in text
+        assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
         assert "observe_mode?: boolean;" in text
         assert "if (response.observe_mode === true) return undefined;" in text
         assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
@@ -412,6 +419,32 @@ class TestPiInstall:
         assert "errorCode === 'ETIMEDOUT'" in text
         assert "could not complete fallback review before the Pi deadline" in text
         assert "HOL Guard Pi hook failed before completing review" in text
+
+    def test_managed_extension_fails_safe_on_ambiguous_success_payloads(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+
+        manifest = get_adapter("pi").install(ctx)
+        text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
+
+        assert 'if (!raw) return { response: null, recoveryKind: "transport-failure" };' in text
+        assert "function normalizeGuardResponse(" in text
+        assert "const normalized = normalizeGuardResponse(parsed);" in text
+        assert 'parsed.reason !== undefined && parsed.reason !== null && typeof parsed.reason !== "string"' in text
+        assert 'if (parsed.decision === "block")' in text
+        assert "Array.isArray(value)" in text
+        assert "function fallbackGuardResponse(" in text
+        assert '"guard_cli_invalid_response"' in text
+        assert 'normalized !== null && (result.status === 0 || normalized.decision === "deny")' in text
+        assert "if (result.status !== 0)" in text
+        assert 'hook_event_name: "PreToolUse"' in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
         self,
@@ -480,7 +513,8 @@ class TestPiInstall:
         assert "function reviewedToolResult(" in text
         assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
         assert "guardPayload.tool_response = event.content" in text
-        assert "stdout: toolOutput" in text
+        assert "stdout: toolOutput" not in text
+        assert "tool_response: toolOutput" in text
         assert "contentText(event.content)" not in text
         assert "options?.enforceSizeCap === true" in text
         assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
@@ -494,6 +528,8 @@ class TestPiInstall:
         assert "reviewed_output_sha256" in text
         assert 'response.model_output_action === "allow_original"' in text
         assert "response.reviewed_output_sha256 === digest.sha256" in text
+        assert "function daemonResponseCanReturn(" in text
+        assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} — otherwise structured source reads never match
         assert "record.type === 'text'" in text
@@ -594,6 +630,65 @@ class TestPiInstall:
 
         assert not omp_extension_path.exists()
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+
+    def test_uninstall_removes_pre_response_contract_legacy_omp_extension(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text(
+            legacy_managed_extension_source(
+                guard_home=ctx.guard_home,
+                home_dir=ctx.home_dir,
+                settings_path=omp_settings_path,
+                harness="pi",
+            ),
+            encoding="utf-8",
+        )
+        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
+
+        get_adapter("pi").uninstall(ctx)
+
+        assert not omp_extension_path.exists()
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+
+    def test_uninstall_preserves_modified_pre_response_contract_legacy_omp_extension(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        modified_source = (
+            legacy_managed_extension_source(
+                guard_home=ctx.guard_home,
+                home_dir=ctx.home_dir,
+                settings_path=omp_settings_path,
+                harness="pi",
+            )
+            + "\n// user edit\n"
+        )
+        omp_extension_path.write_text(modified_source, encoding="utf-8")
+        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
+
+        get_adapter("pi").uninstall(ctx)
+
+        assert omp_extension_path.read_text(encoding="utf-8") == modified_source
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
 
 
 class TestPiRuntime:

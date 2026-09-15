@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Protocol
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import record_python_semantic_hook_route
-from ..native_runtime import NativeRuntimeStatus
+from ..native_runtime import NativeRuntimeStatus, native_output_sha256
+from ..runtime.hook_output_text import extract_payload_output
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_availability_policy import (
     availability_harness_response,
@@ -35,13 +36,60 @@ def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, obj
     return rewritten
 
 
-def _watch_native_post_tool_result(native: Mapping[str, object]) -> dict[str, object]:
+def _canonical_output_sha256(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 64:
+        return None
+    if any(character not in "0123456789abcdef" for character in value):
+        return None
+    return value
+
+
+def _recording_only_output_sha256(payload: Mapping[str, object]) -> str | None:
+    source_ref = payload.get("guard_source_ref")
+    if isinstance(source_ref, Mapping):
+        digest = _canonical_output_sha256(source_ref.get("output_sha256"))
+        if digest is not None:
+            return digest
+
+    summary = payload.get("tool_response_summary")
+    if isinstance(summary, Mapping):
+        digest = _canonical_output_sha256(summary.get("output_sha256"))
+        if digest is not None:
+            return digest
+        # A summary can contain only a bounded excerpt. Never treat it as the
+        # complete output when its canonical full-output proof is absent. If a
+        # complete inline payload is also present, fall through and prove it.
+
+    # Pi's legacy inline payload carries the complete output under
+    # ``tool_response``. Keep the extraction isolated from other fields such
+    # as stdout, which may be a bounded rendering of the same output.
+    if "tool_response" not in payload:
+        return None
+    extracted = extract_payload_output({"tool_response": payload["tool_response"]})
+    if extracted.truncated:
+        return None
+    return native_output_sha256(extracted.text)
+
+
+def _watch_native_post_tool_result(
+    native: Mapping[str, object],
+    payload: Mapping[str, object],
+) -> dict[str, object]:
+    digest = _recording_only_output_sha256(payload)
     rewritten = dict(native)
     if rewritten.get("decision") == "allow" and rewritten.get("model_output_action") == "allow_original":
+        if digest is not None:
+            rewritten["reviewed_output_sha256"] = digest
+        else:
+            rewritten.pop("reviewed_output_sha256", None)
         return rewritten
     rewritten["decision"] = "allow"
     rewritten["model_output_action"] = "allow_original"
     rewritten["policy_action"] = "warn"
+    if digest is not None:
+        rewritten["reviewed_output_sha256"] = digest
+    else:
+        rewritten.pop("reviewed_output_sha256", None)
     return rewritten
 
 
@@ -78,7 +126,30 @@ class _HookWorkerNativeHost(Protocol):
     _native_runtime_status: Callable[[], NativeRuntimeStatus]
     _review_raw_hook_native: Callable[..., dict[str, object] | None]
     _record_post_tool_activity: Callable[..., None]
-    _record_native_decision_receipt: Callable[[object], None]
+    _record_native_decision_receipt: Callable[[object], Mapping[str, object] | None]
+
+
+def _record_native_pre_activity(
+    host: _HookWorkerNativeHost,
+    harness: str,
+    payload: Mapping[str, object],
+    response: dict[str, object],
+    receipt: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    submit = getattr(host.activity_writer, "submit_command_activity", None)
+    if callable(submit):
+        with suppress(Exception):
+            submit(
+                harness=harness,
+                event="PreToolUse",
+                payload=payload,
+                succeeded=True,
+                policy_action=response.get("policy_action"),
+                receipt_id=receipt.get("decision_id") if receipt is not None else None,
+                prompted=response.get("prompted") is True,
+                approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
+            )
+    return response
 
 
 def _record_unavailable_native(
@@ -116,6 +187,7 @@ def _record_unavailable_native(
                     event=event_name,
                     payload=payload,
                     succeeded=str(response.get("policy_action") or "") != "block",
+                    policy_action=response.get("policy_action"),
                 )
     return response
 
@@ -187,17 +259,20 @@ class HookWorkerNativeMixin:
                 action = str(native.get("minimum_action") or "")
                 if action != "allow" or native.get("decision") != "allow":
                     native = _watch_native_pre_tool_result(native)
-                    return recording_only_pre_tool_response(
+                    response = recording_only_pre_tool_response(
                         harness,
                         reason_code=str(native.get("reason_code") or "watch_recording_only"),
                         reason=str(native.get("reason") or "Watch recorded this action without stopping it."),
                     )
+                    return _record_native_pre_activity(self, harness, payload, response)
             else:
                 action = str(native.get("minimum_action") or "")
                 if action == "review":
                     record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
-            return harness_json_from_native_pre_tool(harness, native)
+            return _record_native_pre_activity(
+                self, harness, payload, harness_json_from_native_pre_tool(harness, native)
+            )
         if recording_only:
             return _record_unavailable_native(
                 self,
@@ -291,21 +366,22 @@ class HookWorkerNativeMixin:
                 guard_home=guard_home,
                 recording_only=recording_only,
             )
-        self._record_native_decision_receipt(edge.get("receipt"))
+        accepted_receipt = self._record_native_decision_receipt(edge.get("receipt"))
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     native_result = _watch_native_pre_tool_result(native_result)
-                    return recording_only_pre_tool_response(
+                    response = recording_only_pre_tool_response(
                         native_harness,
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
+                    return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
             action = str(native_result.get("minimum_action") or "")
             if action == "review":
-                return pause_native_pre_tool_for_approval(
+                response = pause_native_pre_tool_for_approval(
                     self.store,
                     harness=native_harness,
                     payload=payload,
@@ -313,9 +389,16 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                 )
-            return harness_json_from_native_pre_tool(native_harness, native_result)
+                return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
+            return _record_native_pre_activity(
+                self,
+                native_harness,
+                payload,
+                harness_json_from_native_pre_tool(native_harness, native_result),
+                accepted_receipt,
+            )
         if recording_only:
-            native_result = _watch_native_post_tool_result(native_result)
+            native_result = _watch_native_post_tool_result(native_result, payload)
         self._record_post_tool_activity(
             harness=native_harness,
             payload=payload,
@@ -323,14 +406,15 @@ class HookWorkerNativeMixin:
         )
         return harness_json_from_native_post_tool(native_harness, native_result)
 
-    def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> None:
+    def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
         """Hand Rust evidence to the non-authoritative writer without waiting."""
 
-        if isinstance(receipt, Mapping):
-            self._last_native_decision_receipt = dict(receipt)
+        self._last_native_decision_receipt = dict(receipt) if isinstance(receipt, Mapping) else None
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
         if not callable(submit) or not isinstance(receipt, Mapping):
-            return
+            return None
         with suppress(Exception):
-            _ = submit(receipt=receipt)
+            if submit(receipt=receipt) is True:
+                return receipt
+        return None

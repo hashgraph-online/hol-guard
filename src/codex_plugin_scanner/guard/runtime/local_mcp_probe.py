@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -100,6 +100,7 @@ def probe_stdio_mcp_server(
     home_dir: Path | None,
     runner: McpToolsRunner | None = None,
     timeout: float | None = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> McpProbeResult | None:
     """Launch a stdio MCP server and list tools, or return None when it is not MCP."""
 
@@ -116,7 +117,9 @@ def probe_stdio_mcp_server(
     if argv is None:
         return None
     resolved_timeout = _timeout_for(tokens, timeout)
-    raw_tools = runner(argv) if runner is not None else run_mcp_tools_list(argv, timeout=resolved_timeout)
+    raw_tools = (
+        runner(argv) if runner is not None else run_mcp_tools_list(argv, timeout=resolved_timeout, extra_env=extra_env)
+    )
     if raw_tools is None:
         return None
     tools = _tools_from_payload(raw_tools, server_name=_display_name(server_identity, tokens))

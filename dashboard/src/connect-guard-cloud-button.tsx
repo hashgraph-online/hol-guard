@@ -25,6 +25,13 @@ export type GuardCloudConnectUiState =
 const SIGN_IN_PENDING_MESSAGE =
   "Sign-in is still pending. Complete it in the opened window, or open sign-in again.";
 
+function cloudConnectErrorMessage(message: string): string {
+  if (/CERTIFICATE_VERIFY_FAILED|certificate verify failed/i.test(message)) {
+    return "Guard could not verify the secure connection to Guard Cloud. Check your network or proxy certificate settings and make sure Guard is up to date, then retry. Your local protection settings have not changed.";
+  }
+  return message;
+}
+
 function cloudConnectPendingMessage(opened: boolean): string {
   return opened
     ? "Complete sign-in in the opened window. This page will update automatically."
@@ -187,6 +194,8 @@ export function ConnectGuardCloudButton({
     buttonLabel = workingLabel;
   } else if (state.status === "connected") {
     buttonLabel = connectedLabel;
+  } else if (state.status === "error") {
+    buttonLabel = "Retry connection";
   }
 
   let statusLine: ReactNode = null;
@@ -194,11 +203,11 @@ export function ConnectGuardCloudButton({
     statusLine = (
       <span
         role="status"
-        className={`flex flex-wrap items-center justify-end gap-1.5 text-xs leading-relaxed ${
+        className={`flex flex-wrap items-center gap-1.5 text-sm leading-relaxed ${
           state.status === "error" ? "text-red-600" : "text-slate-500"
         }`}
       >
-        <span>{state.message}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">{cloudConnectErrorMessage(state.message)}</span>
         {state.manualUrl ? (
           <a
             href={state.manualUrl}
@@ -214,7 +223,7 @@ export function ConnectGuardCloudButton({
   }
 
   return (
-    <span className="inline-flex flex-col items-end gap-1">
+    <span className="inline-flex min-w-0 max-w-full flex-col items-start gap-2 sm:max-w-sm">
       <ActionButton
         variant={variant}
         onClick={startConnect}

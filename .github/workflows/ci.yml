@@ -226,8 +226,10 @@ jobs:
         run: |
           shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
+          # This process-pool timing contract is owned by scheduling-sensitive, which runs it untraced.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
             uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
+            --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
         if: always()
@@ -397,6 +399,7 @@ jobs:
           tests/test_guard_sandbox.py
           tests/test_guard_js_lockfile_resolution_phase11.py
           tests/test_guard_runtime_hook_scheduler.py
+          tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial
           tests/test_guard_continuation_contract.py
           --tb=short
 
@@ -632,6 +635,39 @@ jobs:
           tests/test_codex_hook_fallback_isolation.py
           -k "isolated_process_timeout_kills_descendants or isolated_process_closes_descendant_held_pipes_after_parent_exit"
           --tb=short
+      - name: Build and exercise packaged Windows Core daemon gate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $dist = Join-Path $env:RUNNER_TEMP "hol-guard-frozen"
+          $work = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-work"
+          $spec = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-spec"
+          $versionFile = Join-Path $env:RUNNER_TEMP "hol-guard-version-info.txt"
+          New-Item -ItemType Directory -Force -Path $dist, $work, $spec | Out-Null
+          uv sync --frozen --extra dev --extra mdm-build --python ${{ matrix.python-version }}
+          $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          uv run --no-sync python scripts/mdm/windows/write-version-info.py `
+            --version $version --output $versionFile
+          uv run --no-sync python -I scripts/release/stage_guard_cloud_review_artifacts.py `
+            --source-root (Get-Location).Path
+          if ($LASTEXITCODE -ne 0) {
+            throw "Staging Guard cloud review artifacts failed with exit code $LASTEXITCODE"
+          }
+          uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
+            --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
+            --version-file $versionFile `
+            --distpath $dist --workpath $work --specpath $spec `
+            scripts/mdm/hol-guard-entry.py
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller failed with exit code $LASTEXITCODE"
+          }
+          $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE = Join-Path $dist "hol-guard/hol-guard.exe"
+          if (-not (Test-Path -LiteralPath $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE -PathType Leaf)) {
+            throw "Frozen hol-guard executable was not produced"
+          }
+          uv run --no-sync pytest tests/test_frozen_windows_daemon_bootstrap.py --tb=short
 
   windows-updater:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

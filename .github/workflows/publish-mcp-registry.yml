@@ -6,17 +6,15 @@ on:
     types: [completed]
     branches: [main, release/3.0]
 
-permissions:
-  contents: read
-  id-token: write
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
 
 concurrency:
   group: hol-guard-mcp-registry-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish verified MCP metadata
+  verify:
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -25,21 +23,43 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
       !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-mcp-release-source.yml
+
+  publish:
+    needs: verify
+    permissions:
+      contents: read
+      id-token: write
+    name: Publish verified MCP metadata
+    if: >-
+      needs.verify.outputs.sha != '' &&
+      needs.verify.outputs.branch != '' &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
+      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
-      - name: Check out immutable release source
+      - name: Check out verified immutable release source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
       - name: Wait for the canonical release tag
+        timeout-minutes: 35
         id: release
         env:
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-          SOURCE_REF: refs/heads/${{ github.event.workflow_run.head_branch }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
         run: |
           set -euo pipefail
           tag=""
@@ -77,6 +97,7 @@ jobs:
           echo "Resolved MCP Registry version $version from $tag"
 
       - name: Wait for the exact PyPI package
+        timeout-minutes: 15
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -141,7 +162,17 @@ jobs:
           ./mcp-publisher --help >/dev/null
 
       - name: Authenticate with GitHub OIDC
+        if: >-
+          !contains(steps.release.outputs.version, 'a') &&
+          !contains(steps.release.outputs.version, 'b') &&
+          !contains(steps.release.outputs.version, 'rc') &&
+          !contains(steps.release.outputs.version, 'dev')
         run: ./mcp-publisher login github-oidc
 
-      - name: Publish immutable MCP server metadata
+      - name: Publish to MCP registry
+        if: >-
+          !contains(steps.release.outputs.version, 'a') &&
+          !contains(steps.release.outputs.version, 'b') &&
+          !contains(steps.release.outputs.version, 'rc') &&
+          !contains(steps.release.outputs.version, 'dev')
         run: ./mcp-publisher publish

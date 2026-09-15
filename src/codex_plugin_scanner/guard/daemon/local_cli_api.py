@@ -12,6 +12,7 @@ from ..adapters.harness_mcp_discovery import (
     apply_source_labels,
     discover_harness_mcp_servers,
     discovered_server_for_observation,
+    extra_env_for_mcp_launch,
     persist_discovered_harness_mcp_servers,
 )
 from ..approval_gate import (
@@ -43,7 +44,6 @@ from ..runtime.local_cli_identity import (
     recognize_operator_cli,
 )
 from ..runtime.local_mcp_probe import (
-    is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
@@ -131,12 +131,13 @@ class LocalCliApiService:
             recognize_summary=_recognize_mcp_summary,
         )
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if stored_id is not None:
+        if stored_id is not None or (
+            tokens is not None and looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir)
+        ):
             _ = self._observe_harness_mcp_servers()
-            live_command = self._live_mcp_launch_command(payload)
-        elif tokens is not None and is_package_mcp_launcher(tokens):
-            _ = self._observe_harness_mcp_servers()
-        mcp_item = self._recognize_mcp(live_command or command, home_dir)
+            if stored_id is not None:
+                live_command = self._live_mcp_launch_command(payload)
+        mcp_item = self._recognize_mcp(live_command or command, home_dir, cli_id=stored_id)
         if mcp_item is not None:
             return mcp_item
         if stored_mcp is not None:
@@ -184,13 +185,20 @@ class LocalCliApiService:
             _recognize_summary(identity.name, help_status, len(commands)),
         )
 
-    def _recognize_mcp(self, command: str, home_dir: Path) -> dict[str, object] | None:
+    def _recognize_mcp(
+        self,
+        command: str,
+        home_dir: Path,
+        *,
+        cli_id: str | None = None,
+    ) -> dict[str, object] | None:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
         if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
             return None
+        extra_env = extra_env_for_mcp_launch(self._discovered_servers(), command=command, cli_id=cli_id)
         try:
-            probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
-        except (OSError, RuntimeError, TimeoutError):
+            probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir, extra_env=extra_env)
+        except (OSError, RuntimeError, TimeoutError, ValueError):
             probed = None
         if probed is None:
             stored = stored_mcp_recognition(

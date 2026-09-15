@@ -1,0 +1,32 @@
+name: MCPB pull request validation
+
+on:
+  pull_request:
+    branches: [main, release/3.0]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate one-click MCP bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out pull request merge source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Validate Python wrapper
+        run: python -m compileall -q distributions/mcpb/server
+      - name: Validate and pack with pinned MCPB CLI
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
+          "$MCPB_CLI" validate distributions/mcpb
+          "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
+          "$MCPB_CLI" info "$RUNNER_TEMP/hol-guard.mcpb"
+          test -s "$RUNNER_TEMP/hol-guard.mcpb"

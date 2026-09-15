@@ -17,6 +17,7 @@ class HarnessContextLike(Protocol):
 
 
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
+PACKAGE_SHIM_STATUS_FD_ENV_VAR = "HOL_GUARD_PACKAGE_SHIM_STATUS_FD"
 _MAX_RECOVERABLE_SHIM_BYTES = 512 * 1024
 _PACKAGE_SHIM_SOURCE_MARKERS = (
     "--package-shim-ui",

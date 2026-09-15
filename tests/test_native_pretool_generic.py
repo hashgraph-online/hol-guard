@@ -15,7 +15,10 @@ from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_a
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import hook_process_entrypoint
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool
+from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
+    harness_json_from_native_pre_tool,
+    harness_json_from_native_pre_tool_review,
+)
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.native_pretool import _decode_pre_tool
@@ -136,6 +139,57 @@ def test_generic_result_decoder_rejects_raw_or_conflicting_content() -> None:
     assert _decode_edge(malformed_type) is None
 
 
+def test_generic_allow_result_renders_grok_decision_json() -> None:
+    edge = _edge("grok", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(
+        {
+            "decision": "allow",
+            "policy_action": "allow",
+            "minimum_action": "allow",
+            "reason_code": "native_pre_tool_allow",
+            "reason": "",
+            "explicitly_benign": True,
+        }
+    )
+    _sync_receipt(edge)
+    rendered = harness_json_from_native_pre_tool("grok", result)
+    assert rendered["decision"] == "allow"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "allow"
+
+
+def test_generic_review_result_renders_grok_deny_decision() -> None:
+    edge = _edge("grok", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    rendered = harness_json_from_native_pre_tool("grok", result)
+    assert rendered["decision"] == "deny"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "deny"
+
+
+def test_generic_review_result_renders_grok_review_decision_with_approval() -> None:
+    edge = _edge("grok", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    rendered = harness_json_from_native_pre_tool_review(
+        "grok",
+        result,
+        approval={"request_id": "req-1", "approval_url": "http://127.0.0.1/pending/req-1"},
+    )
+    assert rendered["decision"] == "deny"
+    assert rendered["policy_action"] == "review"
+    assert rendered["approval_request_id"] == "req-1"
+    assert "http://127.0.0.1/pending/req-1" in str(rendered.get("reason"))
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "deny"
+
+
 def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically() -> None:
     edge = _edge("codex", "PreToolUse")
     result = edge["result"]
@@ -205,6 +259,10 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         lambda *_args, **_kwargs: edge,
     )
     store = GuardStore(tmp_path / "guard-home")
+    token_path = tmp_path / "guard-home" / "daemon-auth-token"
+    (tmp_path / "guard-home").chmod(0o700)
+    token_path.write_text("secret-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",
@@ -228,6 +286,11 @@ def test_native_review_queues_approval_without_escaping_to_cli(
     assert response["policy_action"] == "review"
     assert isinstance(response.get("approval_request_id"), str)
     assert str(response.get("approval_url", "")).startswith("http://127.0.0.1:4781/requests/")
+    assert "guard-token=" not in str(response.get("approval_url"))
+    assert str(response.get("approval_url")) in str(response.get("reason"))
+    assert "guard-token=" in str(response.get("reason"))
+    assert "secret-daemon-token" not in str(response.get("reason"))
+    assert response.get("approval_center_url") == "http://127.0.0.1:4781"
     pending = store.list_approval_requests(status="pending")
     assert len(pending) == 1
     assert pending[0]["request_id"] == response["approval_request_id"]

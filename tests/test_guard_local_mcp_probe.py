@@ -336,7 +336,7 @@ def test_probe_timeout_returns_none(tmp_path: Path) -> None:
 def test_package_launcher_uses_longer_probe_timeout(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, float] = {}
 
-    def fake_run(_argv: list[str], *, timeout: float) -> list[dict[str, object]]:
+    def fake_run(_argv: list[str], *, timeout: float, **_kwargs: object) -> list[dict[str, object]]:
         captured["timeout"] = timeout
         return [{"name": "list_pages", "description": "List pages"}]
 

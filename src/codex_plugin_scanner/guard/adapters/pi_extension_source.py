@@ -96,7 +96,7 @@ def managed_extension_source(
         "]);\n"
         "\n"
         "type GuardResponse = {\n"
-        "  decision?: string;\n"
+        '  decision: "allow" | "deny";\n'
         "  reason?: string;\n"
         "  approval_request_id?: string;\n"
         "  approval_url?: string;\n"
@@ -105,7 +105,9 @@ def managed_extension_source(
         '  model_output_action?: "allow_original" | "replace_with_reviewed_excerpt" | "block" | "not_applicable";\n'
         "  reviewed_output_sha256?: string;\n"
         "  observed_policy_action?: string;\n"
+        "  observed_review_failure?: boolean;\n"
         "  observe_mode?: boolean;\n"
+        "  policy_action?: string;\n"
         '  notice?: "none" | "excerpt" | "warning";\n'
         "  reason_code?: string;\n"
         "};\n"
@@ -116,6 +118,40 @@ def managed_extension_source(
         "  response: GuardResponse | null;\n"
         "  recoveryKind: GuardDaemonRecoveryKind | null;\n"
         "};\n"
+        "\n"
+        "function normalizeGuardResponse(value: unknown): GuardResponse | null {\n"
+        '  if (!value || typeof value !== "object" || Array.isArray(value)) return null;\n'
+        "  const parsed = value as Record<string, unknown>;\n"
+        "  if (parsed.reason !== undefined && parsed.reason !== null && "
+        'typeof parsed.reason !== "string") return null;\n'
+        '  if (parsed.decision === "allow" || parsed.decision === "deny") {\n'
+        "    return parsed as GuardResponse;\n"
+        "  }\n"
+        '  if (parsed.decision === "block") {\n'
+        '    return { ...parsed, decision: "deny" } as GuardResponse;\n'
+        "  }\n"
+        "  return null;\n"
+        "}\n"
+        "\n"
+        "function fallbackGuardResponse(\n"
+        "  reasonCode: string,\n"
+        "  reason: string,\n"
+        "): GuardResponse {\n"
+        '  return { decision: "deny", reason, reason_code: reasonCode };\n'
+        "}\n"
+        "\n"
+        "function daemonResponseCanReturn(\n"
+        "  payload: Record<string, unknown>,\n"
+        "  response: GuardResponse,\n"
+        "): boolean {\n"
+        '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
+        '  if (response.decision !== "allow") return true;\n'
+        "  if (response.observe_mode === true) return true;\n"
+        '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
+        '  if (response.model_output_action !== "allow_original") return false;\n'
+        '  return typeof response.reviewed_output_sha256 === "string" &&\n'
+        "    response.reviewed_output_sha256.length > 0;\n"
+        "}\n"
         "\n"
         "function loadGuardDaemonConnection(): GuardDaemonConnection | null {\n"
         "  let port = 0;\n"
@@ -197,12 +233,14 @@ def managed_extension_source(
         "      };\n"
         "    }\n"
         "    const raw = (await response.text()).trim();\n"
-        "    if (!raw) return { response: {}, recoveryKind: null };\n"
+        '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
         "    try {\n"
-        "      const parsed = JSON.parse(raw) as GuardResponse;\n"
-        "      if (parsed && typeof parsed === 'object') {\n"
-        "        return { response: parsed, recoveryKind: null };\n"
+        "      const parsed = JSON.parse(raw) as unknown;\n"
+        "      const normalized = normalizeGuardResponse(parsed);\n"
+        "      if (normalized !== null) {\n"
+        "        return { response: normalized, recoveryKind: null };\n"
         "      }\n"
+        '      return { response: null, recoveryKind: "transport-failure" };\n'
         "    } catch {}\n"
         "    return {\n"
         "      response: {\n"
@@ -279,9 +317,15 @@ def managed_extension_source(
         "  let daemonAttempt = await daemonGuardResponse(\n"
         "    serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt,\n"
         "  );\n"
-        "  if (daemonAttempt.response) {\n"
+        "  if (\n"
+        "    daemonAttempt.response &&\n"
+        "    daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+        "  ) {\n"
         "    cleanupPayloadReference();\n"
         "    return daemonAttempt.response;\n"
+        "  }\n"
+        "  if (daemonAttempt.response) {\n"
+        '    daemonAttempt = { response: null, recoveryKind: "transport-failure" };\n'
         "  }\n"
         "  if (daemonAttempt.recoveryKind !== null) {\n"
         "    const recoveryTimeoutMs = Math.min(\n"
@@ -295,7 +339,10 @@ def managed_extension_source(
         "        Math.min(GUARD_DAEMON_RETRY_TIMEOUT_MS, Math.max(deadlineAt - Date.now(), 1)),\n"
         "        deadlineAt,\n"
         "      );\n"
-        "      if (daemonAttempt.response) {\n"
+        "      if (\n"
+        "        daemonAttempt.response &&\n"
+        "        daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+        "      ) {\n"
         "        cleanupPayloadReference();\n"
         "        return daemonAttempt.response;\n"
         "      }\n"
@@ -362,17 +409,23 @@ def managed_extension_source(
         "  const lastLine = lines.length > 0 ? lines[lines.length - 1] : null;\n"
         "  if (lastLine) {\n"
         "    try {\n"
-        "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
-        '      if (parsed && typeof parsed === "object") return parsed;\n'
+        "      const parsed = JSON.parse(lastLine) as unknown;\n"
+        "      const normalized = normalizeGuardResponse(parsed);\n"
+        '      if (normalized !== null && (result.status === 0 || normalized.decision === "deny")) {\n'
+        "        return normalized;\n"
+        "      }\n"
         "    } catch {}\n"
         "  }\n"
-        "  if ((result.status ?? 0) !== 0) {\n"
+        "  if (result.status !== 0) {\n"
         "    return {\n"
         '      decision: "deny",\n'
         '      reason: (result.stderr ?? "").trim() || "Blocked by HOL Guard.",\n'
         "    };\n"
         "  }\n"
-        '  return { decision: "allow" };\n'
+        "  return fallbackGuardResponse(\n"
+        '    "guard_cli_invalid_response",\n'
+        '    "HOL Guard fallback did not return a valid decision. Retry the action.",\n'
+        "  );\n"
         "}\n"
         "\n"
         "function modelVisibleBlockedReason(reason: string): string {\n"
@@ -519,7 +572,7 @@ def managed_extension_source(
         "        tool_call_id: event.toolCallId,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        stdout: toolOutput,\n"
+        "        tool_response: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "    };\n"
         "    if (sourceRef) {\n"
@@ -549,12 +602,13 @@ def managed_extension_source(
         "      return blockedToolResult(modelReason, event.details);\n"
         "    }\n"
         "    if (response.observe_mode === true) return undefined;\n"
+        "    const originalOutputProof =\n"
+        '      response.decision === "allow" &&\n'
+        '      response.model_output_action === "allow_original" &&\n'
+        "      typeof response.reviewed_output_sha256 === 'string' &&\n"
+        "      response.reviewed_output_sha256 === digest.sha256;\n"
+        "    if (originalOutputProof) return undefined;\n"
         "    if (outputTruncated) {\n"
-        '      if (response.model_output_action === "allow_original" &&\n'
-        "          typeof response.reviewed_output_sha256 === 'string' &&\n"
-        "          response.reviewed_output_sha256 === digest.sha256) {\n"
-        "        return undefined;\n"
-        "      }\n"
         "      const notice = response.reason ||\n"
         '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
         ' within local limits.";\n'
@@ -564,8 +618,224 @@ def managed_extension_source(
         "      }\n"
         "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
         "    }\n"
-        "    return undefined;\n"
+        "    const reason = response.reason ||\n"
+        '      "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '    ctx.ui.notify(reason, "warning");\n'
+        "    return blockedToolResult(modelVisibleBlockedReason(reason), event.details);\n"
         "  });\n"
         "}\n"
     )
+    return source
+
+
+def legacy_managed_extension_source(
+    *,
+    guard_home: Path,
+    home_dir: Path,
+    settings_path: Path,
+    harness: str = "pi",
+    display_name: str = "Pi",
+) -> str:
+    """Reconstruct the exact pre-response-contract extension for migration only."""
+
+    source = managed_extension_source(
+        guard_home=guard_home,
+        home_dir=home_dir,
+        settings_path=settings_path,
+        harness=harness,
+        display_name=display_name,
+    )
+    replacements = (
+        ('  decision: "allow" | "deny";\n', "  decision?: string;\n"),
+        ("  observed_review_failure?: boolean;\n", ""),
+        ("  policy_action?: string;\n", ""),
+        (
+            "    chars += Array.from(text).length;\n",
+            "    chars += text.length;\n",
+        ),
+        (
+            "function normalizeGuardResponse(value: unknown): GuardResponse | null {\n"
+            '  if (!value || typeof value !== "object" || Array.isArray(value)) return null;\n'
+            "  const parsed = value as Record<string, unknown>;\n"
+            "  if (parsed.reason !== undefined && parsed.reason !== null && "
+            'typeof parsed.reason !== "string") return null;\n'
+            '  if (parsed.decision === "allow" || parsed.decision === "deny") {\n'
+            "    return parsed as GuardResponse;\n"
+            "  }\n"
+            '  if (parsed.decision === "block") {\n'
+            '    return { ...parsed, decision: "deny" } as GuardResponse;\n'
+            "  }\n"
+            "  return null;\n"
+            "}\n\n"
+            "function fallbackGuardResponse(\n"
+            "  reasonCode: string,\n"
+            "  reason: string,\n"
+            "): GuardResponse {\n"
+            '  return { decision: "deny", reason, reason_code: reasonCode };\n'
+            "}\n\n",
+            "",
+        ),
+        (
+            "function daemonResponseCanReturn(\n"
+            "  payload: Record<string, unknown>,\n"
+            "  response: GuardResponse,\n"
+            "): boolean {\n"
+            '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
+            '  if (response.decision !== "allow") return true;\n'
+            "  if (response.observe_mode === true) return true;\n"
+            '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
+            '  if (response.model_output_action !== "allow_original") return false;\n'
+            '  return typeof response.reviewed_output_sha256 === "string" &&\n'
+            "    response.reviewed_output_sha256.length > 0;\n"
+            "}\n\n",
+            "",
+        ),
+        (
+            '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
+            "    try {\n"
+            "      const parsed = JSON.parse(raw) as unknown;\n"
+            "      const normalized = normalizeGuardResponse(parsed);\n"
+            "      if (normalized !== null) {\n"
+            "        return { response: normalized, recoveryKind: null };\n"
+            "      }\n"
+            '      return { response: null, recoveryKind: "transport-failure" };\n'
+            "    } catch {}\n",
+            "    if (!raw) return { response: {}, recoveryKind: null };\n"
+            "    try {\n"
+            "      const parsed = JSON.parse(raw) as GuardResponse;\n"
+            "      if (parsed && typeof parsed === 'object') {\n"
+            "        return { response: parsed, recoveryKind: null };\n"
+            "      }\n"
+            "    } catch {}\n",
+        ),
+        (
+            "      const parsed = JSON.parse(lastLine) as unknown;\n"
+            "      const normalized = normalizeGuardResponse(parsed);\n"
+            '      if (normalized !== null && (result.status === 0 || normalized.decision === "deny")) {\n'
+            "        return normalized;\n"
+            "      }\n"
+            "    } catch {}\n"
+            "  }\n"
+            "  if (result.status !== 0) {\n",
+            "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
+            '      if (parsed && typeof parsed === "object") return parsed;\n'
+            "    } catch {}\n"
+            "  }\n"
+            "  if ((result.status ?? 0) !== 0) {\n",
+        ),
+        (
+            "  return fallbackGuardResponse(\n"
+            '    "guard_cli_invalid_response",\n'
+            '    "HOL Guard fallback did not return a valid decision. Retry the action.",\n'
+            "  );\n",
+            '  return { decision: "allow" };\n',
+        ),
+        (
+            "  if (\n"
+            "    daemonAttempt.response &&\n"
+            "    daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+            "  ) {\n"
+            "    cleanupPayloadReference();\n"
+            "    return daemonAttempt.response;\n"
+            "  }\n"
+            "  if (daemonAttempt.response) {\n"
+            '    daemonAttempt = { response: null, recoveryKind: "transport-failure" };\n'
+            "  }\n",
+            "  if (daemonAttempt.response) {\n"
+            "    cleanupPayloadReference();\n"
+            "    return daemonAttempt.response;\n"
+            "  }\n",
+        ),
+        (
+            "      if (\n"
+            "        daemonAttempt.response &&\n"
+            "        daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+            "      ) {\n"
+            "        cleanupPayloadReference();\n"
+            "        return daemonAttempt.response;\n"
+            "      }\n",
+            "      if (daemonAttempt.response) {\n"
+            "        cleanupPayloadReference();\n"
+            "        return daemonAttempt.response;\n"
+            "      }\n",
+        ),
+        (
+            "        tool_response: toolOutput,\n",
+            "        stdout: toolOutput,\n",
+        ),
+        (
+            "    if (sourceRef) {\n"
+            "      guardPayload.guard_source_ref = sourceRef;\n"
+            "      guardPayload.tool_response_summary = {\n"
+            "        kind: 'text',\n"
+            "        text_excerpt: toolOutput,\n"
+            "        excerpt_chars: toolOutput.length,\n"
+            "        output_chars: digest.chars,\n"
+            "        output_sha256: digest.sha256,\n"
+            "        excerpt_truncated: outputTruncated,\n"
+            "      };\n"
+            "    } else {\n"
+            "      guardPayload.tool_response = event.content;\n"
+            "    }\n"
+            "    const response = await runGuard(\n",
+            "    if (sourceRef) {\n"
+            "      guardPayload.guard_source_ref = sourceRef;\n"
+            "      guardPayload.tool_response_summary = {\n"
+            "        kind: 'text',\n"
+            "        text_excerpt: toolOutput,\n"
+            "        excerpt_chars: toolOutput.length,\n"
+            "        output_chars: digest.chars,\n"
+            "        output_sha256: digest.sha256,\n"
+            "        excerpt_truncated: outputTruncated,\n"
+            "      };\n"
+            "    } else {\n"
+            "      guardPayload.tool_response = event.content;\n"
+            "    }\n"
+            "    const response = await runGuard(\n",
+        ),
+        (
+            "    if (response.observe_mode === true) return undefined;\n"
+            "    const originalOutputProof =\n"
+            '      response.decision === "allow" &&\n'
+            '      response.model_output_action === "allow_original" &&\n'
+            "      typeof response.reviewed_output_sha256 === 'string' &&\n"
+            "      response.reviewed_output_sha256 === digest.sha256;\n"
+            "    if (originalOutputProof) return undefined;\n"
+            "    if (outputTruncated) {\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      if (response.notice === "excerpt"'
+            ' || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            '        ctx.ui.notify(notice, "info");\n'
+            "      }\n"
+            "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
+            "    }\n"
+            "    const reason = response.reason ||\n"
+            '      "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '    ctx.ui.notify(reason, "warning");\n'
+            "    return blockedToolResult(modelVisibleBlockedReason(reason), event.details);\n",
+            "    if (response.observe_mode === true) return undefined;\n"
+            "    if (outputTruncated) {\n"
+            '      if (response.model_output_action === "allow_original" &&\n'
+            "          typeof response.reviewed_output_sha256 === 'string' &&\n"
+            "          response.reviewed_output_sha256 === digest.sha256) {\n"
+            "        return undefined;\n"
+            "      }\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      if (response.notice === "excerpt"'
+            ' || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            '        ctx.ui.notify(notice, "info");\n'
+            "      }\n"
+            "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
+            "    }\n"
+            "    return undefined;\n",
+        ),
+    )
+    for current, legacy in replacements:
+        if source.count(current) != 1:
+            raise RuntimeError("managed Pi extension legacy source contract drifted")
+        source = source.replace(current, legacy, 1)
     return source

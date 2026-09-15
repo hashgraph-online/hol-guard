@@ -44,7 +44,9 @@ def test_incomplete_repair_payload_keeps_generic_retry_copy_for_hook_failures() 
         hook_failures=("codex",),
         hook_repair_unknown=False,
     )
-    assert payload["message"] == ("Repair paused before every protection layer could be confirmed. Retry repair here.")
+    assert payload["message"] == (
+        "Repair paused before every supported protection layer could be confirmed. Retry repair here."
+    )
 
 
 def test_protection_repair_all_retries_a_transient_containment_probe_failure(
@@ -115,6 +117,90 @@ def test_protection_repair_all_retries_a_transient_containment_probe_failure(
 
     assert payload["repaired"] is True
     assert containment_probes == [True, True]
+
+
+def test_containment_repair_ignores_unsupported_platform_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probes: list[bool] = []
+    monkeypatch.setattr(
+        protection_repair_retry,
+        "containment_health_signals",
+        lambda _value, **_kwargs: {
+            check_id: SimpleNamespace(status=ProtectionCheckStatus.FAIL, reason_code="unsupported_platform")
+            for check_id in (
+                "decision_plane_compatibility",
+                "containment_compatibility",
+                "sandbox",
+            )
+        },
+    )
+
+    repaired, failed = protection_repair_retry.confirmed_containment_repair_signals(
+        lambda: probes.append(True) or {},
+    )
+
+    assert repaired == []
+    assert failed == []
+    assert probes == [True]
+
+
+def test_protection_repair_all_completes_supported_work_with_unsupported_containment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    monkeypatch.setattr(GuardStore, "setup_policy_integrity", lambda self, **_kwargs: {"mode": "protected"})
+    monkeypatch.setattr(
+        daemon_server_module._GuardDaemonHandler,
+        "_containment_health_payload",
+        lambda self, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        protection_repair_retry,
+        "containment_health_signals",
+        lambda _value, **_kwargs: {
+            check_id: SimpleNamespace(status=ProtectionCheckStatus.FAIL, reason_code="unsupported_platform")
+            for check_id in (
+                "decision_plane_compatibility",
+                "containment_compatibility",
+                "sandbox",
+            )
+        },
+    )
+    monkeypatch.setattr(GuardStore, "maintain_command_activity", lambda self, **_kwargs: None)
+    monkeypatch.setattr(
+        GuardStore,
+        "get_command_activity_persistence_health",
+        lambda self: SimpleNamespace(active_error_count=0),
+    )
+    monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+    monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+    monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+        data=json.dumps({"check_id": "all"}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        daemon.stop()
+
+    assert payload["repaired"] is True
+    assert "failed_check_ids" not in payload
+    assert payload["check_ids"] == [
+        "policy_engine",
+        "rule_packs",
+        "tamper_checks",
+        "harness_hooks",
+        "decision_stream",
+    ]
+    assert payload["message"] == "Integrity protection restored."
 
 
 def test_protection_repair_all_requires_a_connected_app(

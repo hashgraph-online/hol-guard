@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
+from codex_plugin_scanner.guard.runtime.extension_directory_operations import public_operations
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
@@ -120,6 +121,7 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
                 "ruleCount": len(native.rules),
                 "permissionCount": len(native.permissions),
                 "toolStates": payload.get("tools", []),
+                "operations": public_operations(native),
             }
         )
         seen.add(extension_id)
