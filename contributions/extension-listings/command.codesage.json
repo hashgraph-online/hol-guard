@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.codesage",
+  "tagline": "CodeSage setup rules for the Python reference evaluator; production native integration is pending.",
+  "category": "other",
+  "limitations": [
+    "These rules are evaluated by the Python reference evaluator. Production native hooks do not consume them, and enabling the extension does not change native decisions.",
+    "Automatic doctor, status, and search inspection is not implemented in the native runtime; existing native review and block decisions still apply.",
+    "The listed operations and help variants describe Python reference matching only. Literal exec and xargs wrappers are covered; arbitrary inner executable paths are not."
+  ],
+  "documentationUrl": "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/native-hook-data-plane-ownership.md"
+}
