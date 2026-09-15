@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.kim",
       "command.mcp-filesystem",
       "command.noodle",
       "command.probe",
