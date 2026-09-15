@@ -80,15 +80,40 @@ def _feeds_affirmative_input(segment_executable: str | None, arguments: tuple[st
     return all(operand.strip().strip("'\"").lower() in _AFFIRMATIVE_VALUES for operand in operands)
 
 
+def _reads_affirmative_here_string(arguments: tuple[str, ...]) -> bool:
+    """Report whether a here-string answers this segment's prompt with consent.
+
+    ``ctc --all <<< y`` reaches the same one-line prompt as ``yes | ctc --all``
+    and is just as unattended. The parser keeps a here-string in the segment
+    arguments rather than in ``redirects``, either split (``<<<``, ``y``) or
+    joined (``<<<y``), and an explicit descriptor may prefix the operator.
+    A file redirect (``< consent.txt``) and a heredoc body are not read here:
+    their content is unknown at parse time, the same reason ``cat notes |`` is
+    not treated as a feed.
+    """
+
+    for index, argument in enumerate(arguments):
+        operator = argument.lstrip("0123456789")
+        if not operator.startswith("<<<"):
+            continue
+        value = operator[3:]
+        if not value and index + 1 < len(arguments):
+            value = arguments[index + 1]
+        if value.strip().strip("'\"").lower() in _AFFIRMATIVE_VALUES:
+            return True
+    return False
+
+
 @final
 @dataclass(frozen=True, slots=True)
 class ConfirmationFedMatcher:
-    """Match a segment whose confirmation prompt is answered by an earlier pipe.
+    """Match a segment whose confirmation prompt is answered without a person.
 
     The declared matcher decides what the fed segment must look like. This adds
-    the one structural condition the flag matchers cannot express: the previous
+    the structural conditions the flag matchers cannot express: the previous
     stage of the *same* pipeline supplies the consent the prompt asks for,
-    including forwarding through bare cat stages.
+    including forwarding through bare cat stages, or the segment carries a
+    here-string holding that consent.
     Segments joined by ``&&`` or ``;`` run in their own execution context and
     share no standard input, so they are not a feed.
     """
@@ -101,7 +126,10 @@ class ConfirmationFedMatcher:
             for segment in command.segments
             if _feeds_affirmative_input(segment.executable, segment.arguments)
         }
-        if not fed_contexts:
+        here_string_segments = {
+            index for index, segment in enumerate(command.segments) if _reads_affirmative_here_string(segment.arguments)
+        }
+        if not fed_contexts and not here_string_segments:
             return ()
         # Bare cat forwards stdin unchanged. File operands and transforming
         # commands cannot establish that the earlier consent reaches the prompt.
@@ -116,7 +144,8 @@ class ConfirmationFedMatcher:
         evidence = tuple(
             item
             for item in self.matcher.match(command)
-            if any(
+            if item.segment_index in here_string_segments
+            or any(
                 context == command.segments[item.segment_index].execution_context
                 and index + 1 == command.segments[item.segment_index].pipeline_index
                 for context, index in fed_contexts
@@ -159,8 +188,8 @@ CLAUDE_TMUX_COMMAND_RULES = (
         title="Claude tmux unattended session teardown",
         description=(
             "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the "
-            "confirmation prompt by hand — either --force, or a pipeline feeding the prompt its "
-            "consent. Every pane in a selected session is terminated, ending the agent teams "
+            "confirmation prompt by hand — --force, a pipeline feeding the prompt its consent, or "
+            "a here-string holding it. Every pane in a selected session is terminated, ending the agent teams "
             "running in them and discarding the unsaved terminal state they hold. With no "
             "target and no selection flag the run sweeps every session on the host."
         ),

@@ -59,6 +59,16 @@ CLAUDE_TMUX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "claude tmux process prune command",
         "command.claude-tmux.process-prune",
     ),
+    (
+        "ctc --all <<< y",
+        "claude tmux session teardown command",
+        "command.claude-tmux.session-teardown",
+    ),
+    (
+        "ctc --all --prune <<< y",
+        "claude tmux process prune command",
+        "command.claude-tmux.process-prune",
+    ),
 )
 
 
@@ -229,6 +239,28 @@ def test_a_piped_yes_answers_the_prompt_the_same_way_force_does(tmp_path: Path) 
     assert _CTC_SESSION_TEARDOWN.match(parsed("yes ; ctc --all")) == ()
     # The feed has to come before the cleanup, not after it.
     assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all | yes")) == ()
+
+
+def test_a_here_string_answers_the_prompt_the_same_way_a_pipe_does(tmp_path: Path) -> None:
+    """`ctc <<< y` reaches the same prompt unattended, with no feeding stage at all."""
+
+    def parsed(command: str):
+        return parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all <<< y"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all <<<y"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed('ctc --all <<< "yes"'))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc <<< y"))
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all 0<<< y"))
+    assert _CTC_PROCESS_PRUNE.match(parsed("ctc --all --prune <<< y"))
+    # A refusal is not consent, and help still exits before the prompt.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all <<< n")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all <<< maybe")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --help <<< y")) == ()
+    # A file redirect carries content this matcher cannot read, for the same
+    # reason `cat notes |` is not a feed.
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all < consent.txt")) == ()
+    assert _CTC_SESSION_TEARDOWN.match(parsed("ctc --all < /dev/null")) == ()
 
 
 def test_process_prune_is_matched_independently_of_session_selection(tmp_path: Path) -> None:
