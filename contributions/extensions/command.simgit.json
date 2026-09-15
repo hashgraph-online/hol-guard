@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.simgit",
+  "version": "1.0.0",
+  "name": "simgit",
+  "description": "Reviews the two simgit flags that destroy work Git cannot return: discarding a dirty worktree and deleting an unmerged branch.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.abendrothj",
+    "displayName": "Community"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F766E"
+  },
+  "homepage": "https://github.com/abendrothj/simgit",
+  "license": "Apache-2.0",
+  "executables": [
+    "simgit",
+    "sg"
+  ],
+  "ecosystemIds": [
+    "simgit"
+  ],
+  "riskClasses": [
+    "destructive_shell"
+  ],
+  "actionClasses": [
+    "simgit uncommitted worktree discard command",
+    "simgit unmerged branch deletion command"
+  ],
+  "referenceUrls": [
+    "https://github.com/abendrothj/simgit"
+  ],
+  "saferAlternatives": [
+    "Run the command without --discard-dirty or --delete-unmerged and read what it refuses to touch.",
+    "Commit the worktree's changes with `simgit remove --commit` instead of discarding them."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_simgit_extensions"
+  }
+}
