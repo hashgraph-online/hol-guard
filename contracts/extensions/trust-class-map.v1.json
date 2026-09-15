@@ -78,6 +78,7 @@
       "command.storage.minio"
     ],
     "external": [
+      "command.blaizio",
       "command.blitcp",
       "command.mcp-filesystem",
       "command.noodle",

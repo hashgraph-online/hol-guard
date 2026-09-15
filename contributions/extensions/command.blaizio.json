@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.blaizio",
+  "version": "1.0.0",
+  "name": "Blaizio",
+  "description": "Reviews Blaizio CLI commands that rewrite project files (add, update, remove, uninstall) while dry runs, upstream diffs and item views stay unreviewed.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "blaizio",
+    "displayName": "Blaizio",
+    "url": "https://github.com/blaizio/blaizio"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F766E"
+  },
+  "homepage": "https://blaiz.io",
+  "license": "MIT",
+  "executables": [
+    "blaizio"
+  ],
+  "ecosystemIds": [
+    "blaizio"
+  ],
+  "riskClasses": [
+    "destructive_shell",
+    "network_egress"
+  ],
+  "actionClasses": [
+    "Blaizio component install command",
+    "Blaizio component update command",
+    "Blaizio component remove command",
+    "Blaizio uninstall command"
+  ],
+  "referenceUrls": [
+    "https://github.com/blaizio/blaizio",
+    "https://blaiz.io"
+  ],
+  "saferAlternatives": [
+    "Preview any add, update, remove or uninstall with --dry-run; it runs the conflict scan without writing.",
+    "Compare installed components against upstream with blaizio add --diff before updating."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_blaizio_extensions"
+  }
+}
