@@ -102,6 +102,65 @@ def test_review_sync_keys_reject_unanchored_key_material(tmp_path: Path) -> None
         )
 
 
+def test_workspace_admin_mfa_review_applies_without_local_cloud_review_enablement(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("admin-mfa-target")
+    _add_request(store, request)
+
+    resolution = apply_exact_cloud_review(
+        store,
+        remote_approval=_remote_approval(
+            store,
+            request.request_id,
+            receipt_id="admin-mfa-receipt",
+            authority="workspace_admin_mfa",
+            step_up_challenge_id="step-up-1",
+        ),
+        expected_harness="codex",
+    )
+
+    row = store.get_approval_request(request.request_id)
+    assert resolution.request_id == request.request_id
+    assert row is not None and row["status"] == "resolved"
+    assert row["reason"] == "Guard Cloud signed team-admin review"
+
+
+def test_workspace_admin_mfa_review_requires_cloud_step_up(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("admin-mfa-missing-step-up")
+    _add_request(store, request)
+
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_step_up_required"):
+        apply_exact_cloud_review(
+            store,
+            remote_approval=_remote_approval(
+                store,
+                request.request_id,
+                receipt_id="admin-mfa-no-step-up",
+                authority="workspace_admin_mfa",
+            ),
+        )
+
+
+def test_workspace_admin_mfa_review_rejects_operator_role(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("admin-mfa-operator")
+    _add_request(store, request)
+
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_reviewer_not_authorized"):
+        apply_exact_cloud_review(
+            store,
+            remote_approval=_remote_approval(
+                store,
+                request.request_id,
+                receipt_id="admin-mfa-operator-receipt",
+                authority="workspace_admin_mfa",
+                reviewer_role="operator",
+                step_up_challenge_id="step-up-1",
+            ),
+        )
+
+
 def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     target = _request("exact-target")
