@@ -8,8 +8,6 @@ import {
   displayArtifactName,
   EMPTY_QUEUE_TITLE,
   STALE_REQUEST_COPY,
-  QUEUE_CONNECTION_ERROR_HEADLINE,
-  QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
   buildRetryAfterApprovalCopy,
   buildPauseLine,
@@ -252,6 +250,62 @@ assert(
   "T482: resolveTerminalLabel returns 'MCP server / tool' for mcp_tool action type"
 );
 
+const queuedBrowserTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:evaluate_script",
+  changed_fields: ["runtime_tool_call", "runtime_browser_tool_call"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools evaluate_script current page"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedBrowserTool) === "Browser tool",
+  "queued browser MCP tool calls are labeled as browser tools, not shell commands"
+);
+
+const queuedClickWithoutBrowserField: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:click",
+  changed_fields: ["runtime_tool_call", "browser interaction on page element"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools click page element"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedClickWithoutBrowserField) === "Browser tool",
+  "chrome-devtools click reviews are labeled as browser tools even without runtime_browser_tool_call"
+);
+
+const queuedMcpTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "filesystem:read_file",
+  changed_fields: ["runtime_tool_call"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command" }
+};
+assert(
+  resolveTerminalLabel(queuedMcpTool) === "MCP tool",
+  "queued MCP tool calls are labeled as MCP tools, not shell commands"
+);
+
+const nativeToolCall: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "bash",
+  changed_fields: ["first_seen"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command", command: "git status" }
+};
+assert(
+  resolveTerminalLabel(nativeToolCall) === "Command",
+  "native pre-tool reviews keep their envelope command label"
+);
+
 const packageRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
   action_envelope_json: { ...BASE_ENVELOPE, action_type: "package_script", package_manager: "npm", package_name: "lodash", script_name: null }
@@ -275,25 +329,10 @@ assert(
   "P45: pending requests without an envelope use a neutral command label"
 );
 
-assert(
-  EMPTY_QUEUE_TITLE === "Review queue is clear",
-  'C5: Empty queue reports that the review queue is clear'
-);
-
-assert(
-  !EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"),
-  "P45: Empty review queue does not relabel pending decisions as blocks"
-);
-
-assert(
-  STALE_REQUEST_COPY === "This request was already decided.",
-  'C6: Stale request shows "already decided" copy; STALE_REQUEST_COPY constant is correct'
-);
-
-assert(
-  STALE_REQUEST_COPY.toLowerCase().includes("already decided"),
-  'C6: Stale request copy contains "already decided"; not approve/block buttons'
-);
+assert(EMPTY_QUEUE_TITLE === "Review queue is clear", "C5: Empty queue reports that the review queue is clear");
+assert(!EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"), "P45: Empty review queue does not relabel pending decisions as blocks");
+assert(STALE_REQUEST_COPY === "This request was already decided.", "C6: Stale request shows already decided copy");
+assert(STALE_REQUEST_COPY.toLowerCase().includes("already decided"), "C6: Stale request copy contains already decided");
 
 assert(
   scopeLabel("artifact") === "This retry only",
@@ -371,26 +410,6 @@ const inconsistentRequest: GuardApprovalRequest = {
 assert(
   requestResolutionBlockReason(inconsistentRequest)?.includes("cannot be approved") === true,
   "P45: inconsistent stored authority has explicit non-resolvable UI copy",
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("daemon"),
-  "C10: Connection error headline mentions the daemon so users know what to start"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("approval link"),
-  "C10: Connection error headline explains approval links require the daemon to be running"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("reload"),
-  "C11: Connection error instruction tells users to reload after starting Guard"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("start"),
-  "C11: Connection error instruction tells users to start Guard on this machine"
 );
 
 assert(

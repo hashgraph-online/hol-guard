@@ -495,7 +495,7 @@ class TestGuardSurfaceServer:
         ]
         assert payload["failed_harnesses"] == []
         assert payload["message"] == (
-            "Repair paused before every protection layer could be confirmed. Retry repair here."
+            "Repair paused before every supported protection layer could be confirmed. Retry repair here."
         )
 
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:

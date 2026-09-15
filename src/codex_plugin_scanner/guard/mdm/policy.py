@@ -129,6 +129,8 @@ def _parse_integrity_trust(value: object) -> ManagedIntegrityTrust:
     thumbprints = tuple(sorted({item.replace(" ", "").upper() for item in thumbprints_raw}))
     if any(len(item) != 40 or any(character not in "0123456789ABCDEF" for character in item) for item in thumbprints):
         raise ManagedPolicyError("Windows signer thumbprints must be SHA-1 certificate thumbprints")
+    # MDM machine-install pins only. Do not store Azure Artifact Signing leaves;
+    # those certificates rotate and are used by HOL Guard Desktop, not HOLGuardMachine.
     return ManagedIntegrityTrust(
         release_public_keys=release_keys,
         macos_team_id=_optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId"),

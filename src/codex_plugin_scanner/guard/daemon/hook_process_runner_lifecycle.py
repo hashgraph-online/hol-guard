@@ -140,9 +140,16 @@ class HookProcessRunnerLifecycleMixin:
             elif metric == "restarts":
                 self._restarts += 1
 
-    def _record_response_metrics(self, response: Mapping[str, object]) -> None:
+    def _record_response_metrics(
+        self,
+        response: Mapping[str, object],
+        *,
+        envelope_reason_code: object = None,
+    ) -> None:
         decision = response.get("decision")
         reason_code = response.get("reason_code")
+        if not (isinstance(reason_code, str) and reason_code.strip()):
+            reason_code = envelope_reason_code
         if not self._metrics_lock.acquire(blocking=False):
             return
         try:

@@ -75,7 +75,9 @@ def _canonical_grok_event_name(raw_event: str) -> str:
     return _GROK_EVENT_NAMES.get(normalized, raw_event or "PreToolUse")
 
 
-def _is_observe_only_event(event_name: str | None) -> bool:
+def is_grok_observe_only_event(event_name: str | None) -> bool:
+    """Return whether Guard observes this Grok event without enforcement."""
+
     if not isinstance(event_name, str) or not event_name.strip():
         return False
     return _canonical_grok_event_name(event_name.strip()) in _OBSERVE_ONLY_EVENTS
@@ -192,7 +194,12 @@ def grok_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
-    if recording_only or _is_observe_only_event(event_name):
+    if is_grok_observe_only_event(event_name):
+        # UserPromptSubmit honors only "block". "allow" is logged as an
+        # unknown decision and shown as a hook failure. Session and
+        # subagent observe events ignore stdout; an empty object is success.
+        return {}
+    if recording_only:
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
@@ -245,7 +252,7 @@ def emit_grok_hook_response(
         approval_payload=live_payload,
         recording_only=recording_only,
     )
-    _last_grok_policy_action = "allow" if payload.get("decision") == "allow" else live_action
+    _last_grok_policy_action = "allow" if payload.get("decision") not in {"deny", "block"} else live_action
     stream = output_stream if output_stream is not None else sys.stdout
     stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
     stream.flush()
@@ -312,7 +319,7 @@ def _guard_store_from_argv():
 
 
 def grok_hook_should_block(*, policy_action: str, event_name: str | None = None) -> bool:
-    if _recording_only_from_guard_home() or _is_observe_only_event(event_name):
+    if _recording_only_from_guard_home() or is_grok_observe_only_event(event_name):
         return False
     return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
 
@@ -333,5 +340,6 @@ __all__ = [
     "grok_hook_process_exit",
     "grok_hook_response_from_guard",
     "grok_hook_should_block",
+    "is_grok_observe_only_event",
     "prepare_grok_hook_payload",
 ]

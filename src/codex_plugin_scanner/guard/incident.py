@@ -17,6 +17,8 @@ _HARNESS_LABELS = {
     "pi": "Pi",
     "omp": "Oh My Pi",
     "zcode": "ZCode",
+    "grok": "Grok",
+    "guard-cli": "Guard CLI",
 }
 
 _ARTIFACT_LABELS = {
@@ -76,11 +78,18 @@ def build_incident_context(
             f"{harness_label} tool call."
         )
     elif artifact_type == "package_request":
-        source_label = f"{harness_label} runtime tool call"
-        trigger_summary = (
-            f"HOL Guard {action_verb} the package request `{artifact_name or artifact_id}` from an active "
-            f"{harness_label} tool call."
-        )
+        if harness == "guard-cli":
+            source_label = "Local package command"
+            trigger_summary = (
+                f"HOL Guard {action_verb} the package request `{artifact_name or artifact_id}` "
+                "from a local package command."
+            )
+        else:
+            source_label = f"{harness_label} command"
+            trigger_summary = (
+                f"HOL Guard {action_verb} the package request `{artifact_name or artifact_id}` from an active "
+                f"{harness_label} command."
+            )
     else:
         short_config_path = _short_config_path(config_path)
         source_label = f"{normalized_scope} {harness_label} config"

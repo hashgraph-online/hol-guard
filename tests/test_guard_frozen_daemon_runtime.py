@@ -385,3 +385,90 @@ def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.
 
     assert manager._guard_daemon_process_inventory_for_guard_home is inventory
     assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
+
+
+def test_spawned_launch_accepts_the_pyinstaller_onefile_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
+
+    assert manager._guard_daemon_pid_is_spawned_launch(4242, 4242) is True
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is True
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 9999) is False
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 0) is False
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda _pid: False)
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is False
+
+
+def test_guard_daemon_parent_pid_parses_posix_ps_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager.os, "name", "posix")
+    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: " 4242\n")
+    assert manager._guard_daemon_parent_pid(4243) == 4242
+
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "not-a-pid")
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "0")
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: None)
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: None)
+    assert manager._guard_daemon_parent_pid(4243) is None
+    assert manager._guard_daemon_parent_pid(0) is None
+    monkeypatch.setattr(manager.os, "name", "nt")
+    assert manager._guard_daemon_parent_pid(4243) is None
+
+
+def test_live_identity_accepts_expected_pid_as_the_frozen_bootloader_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        manager,
+        "_load_authenticated_daemon_identity",
+        lambda _home: (
+            {
+                "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "port": 4781,
+                "pid": 4243,
+            },
+            "token",
+        ),
+    )
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
+    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
+    monkeypatch.setattr(manager, "_guard_daemon_state_matches_current_runtime", lambda _payload: True)
+
+    class _Response:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"compatibility_version":%d}' % manager.GUARD_DAEMON_COMPATIBILITY_VERSION
+
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(manager.urllib.request, "urlopen", lambda *_args, **_kwargs: _Response())
+    monkeypatch.setattr(manager, "_guard_daemon_pid_matches_command", lambda *_args, **_kwargs: True)
+
+    identity = manager._live_guard_daemon_identity(
+        tmp_path,
+        require_current_runtime=False,
+        expected_pid=4242,
+    )
+    assert identity is not None
+    assert identity[0] == "http://127.0.0.1:4781"
+    assert (
+        manager._live_guard_daemon_identity(
+            tmp_path,
+            require_current_runtime=False,
+            expected_pid=9999,
+        )
+        is None
+    )

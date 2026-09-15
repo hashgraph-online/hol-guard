@@ -21,8 +21,10 @@ class NativePolicySnapshotPublisherInputs:
 
     guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
+    _acked: bool  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    _observed_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def _current_input_fingerprint(
         self,
@@ -200,18 +202,22 @@ class NativePolicySnapshotPublisherInputs:
     def _policy_input_changed(self, changed_paths: set[str] | None = None) -> bool:
         """Compare effective policy in the publisher thread, never in hooks."""
 
+        force_republish = False
         if changed_paths:
-            config_path = str(self.guard_home / "config.toml")
             database_paths = {
                 str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
             }
             database_only_change = all(path in database_paths for path in changed_paths)
-            if not database_only_change and any(path != config_path for path in changed_paths):
-                # Workspace overrides, MDM policy files, and verifier state
-                # are all effective-input boundaries. Republish before the
+            if not database_only_change:
+                # Guard config, workspace overrides, MDM policy files, and
+                # verifier state are effective-input boundaries. Republish before the
                 # resident is used even when this Python projection cannot
                 # yet express a workspace-specific native policy.
-                return True
+                force_republish = True
+                # Revoke the old snapshot before potentially slow compilation.
+                with self._condition:
+                    self._acked = False
+                    self._condition.notify_all()
         try:
             effective_policy = self._compiled_effective_policy()
             # ``_compiled_effective_policy`` carries the raw mode beside the
@@ -227,8 +233,16 @@ class NativePolicySnapshotPublisherInputs:
                 cast(str, effective_policy["mode"]),
             )
         except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
-            return True
-        return self._published_policy_fingerprint != current_fingerprint
+            current_fingerprint = ("unavailable", "")
+        # Observation is independent of acknowledgment: unchanged inputs must
+        # not reset a failed publication's retry backoff on every database write.
+        previous_fingerprint = (
+            self._observed_policy_fingerprint
+            if self._observed_policy_fingerprint is not None
+            else self._published_policy_fingerprint
+        )
+        self._observed_policy_fingerprint = current_fingerprint
+        return force_republish or previous_fingerprint != current_fingerprint
 
     @staticmethod
     def _resolved_workspace(workspace: Path) -> Path:

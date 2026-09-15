@@ -4,6 +4,7 @@ import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, em
 async function fixture(page: Page, held = 0) {
   let enabled = false;
   let reject = false;
+  let lastSyncedAt: string | null = null;
   const writes: Record<string, unknown>[] = [];
   const gate = {
     enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false,
@@ -35,13 +36,20 @@ async function fixture(page: Page, held = 0) {
         enabled, connected: true, reason: enabled ? null : "cloud_review_capability_missing",
         workspace_id: "workspace-1", source: "default", pending_uploads: 0, held_events: held, isolated_events: held,
         expires_at: enabled ? "2099-01-01T00:00:00Z" : null,
-        delivery_state: "healthy", last_synced_at: null, approval_gate: gate,
+        delivery_state: "healthy", last_synced_at: lastSyncedAt, approval_gate: gate,
       };
     }
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto("/settings?guardDaemon=http://127.0.0.1:4175");
-  return { writes, reject: () => { reject = true; } };
+  return {
+    writes,
+    reject: () => { reject = true; },
+    updateDevice: (authorized: boolean, deliveredAt: string | null) => {
+      enabled = authorized;
+      lastSyncedAt = deliveredAt;
+    },
+  };
 }
 
 for (const viewport of [{ width: 1365, height: 900 }, { width: 390, height: 844 }]) {
@@ -82,4 +90,44 @@ test("rejected MFA keeps recovery inline and does not claim success", async ({ p
   await expect(dialog.getByLabel("Authenticator code")).toHaveValue("");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("button", { name: "Enable Cloud Review" })).toBeVisible();
+});
+
+test("device authorization and delivery refresh without a reload or settings write", async ({ page }) => {
+  const state = await fixture(page);
+  const section = page.getByRole("region", { name: "Cloud Review", exact: true });
+  await expect(section).toContainText("Confirmation needed");
+  await expect(section).toContainText("Not recorded yet");
+  state.updateDevice(true, "2026-09-12T15:00:00Z");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(section).toContainText("Cloud Review is enabled for this device");
+  await expect(section).not.toContainText("Not recorded yet");
+  state.updateDevice(false, "2026-09-12T15:00:00Z");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(section).toContainText("Confirmation needed");
+  expect(state.writes).toEqual([]);
+});
+
+test("an older background failure cannot dismiss an open authorization dialog", async ({ page }) => {
+  const state = await fixture(page);
+  const section = page.getByRole("region", { name: "Cloud Review", exact: true });
+  await expect(section.getByRole("button", { name: "Enable Cloud Review" })).toBeVisible();
+  let release = () => {};
+  const paused = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/v1/cloud-review", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await paused;
+    await route.fulfill({ status: 503, json: { message: "Temporarily unavailable" } });
+  });
+  const reading = page.waitForRequest((request) => request.url().endsWith("/v1/cloud-review"));
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await reading;
+  await section.getByRole("button", { name: "Enable Cloud Review" }).click();
+  const dialog = page.getByRole("dialog", { name: "Authorize Cloud Review" });
+  await dialog.getByLabel("Authenticator code").fill("123456");
+  const finished = page.waitForResponse((response) => response.status() === 503);
+  release();
+  await finished;
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Authenticator code")).toHaveValue("123456");
+  expect(state.writes).toEqual([]);
 });

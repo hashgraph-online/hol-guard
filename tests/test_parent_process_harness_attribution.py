@@ -9,7 +9,15 @@ from codex_plugin_scanner.guard.runtime import harness_attribution as attributio
 
 @pytest.mark.parametrize(
     "executable,harness",
-    [("codex", "codex"), ("pi", "pi"), ("omp", "omp"), ("zcode", "zcode"), ("zcode-cli", "zcode"), ("grok", "grok")],
+    [
+        ("codex", "codex"),
+        ("Codex", "codex"),
+        ("pi", "pi"),
+        ("omp", "omp"),
+        ("zcode", "zcode"),
+        ("zcode-cli", "zcode"),
+        ("grok", "grok"),
+    ],
 )
 def test_nearest_harness_ancestor_without_reading_arguments(monkeypatch, executable, harness):
     monkeypatch.setattr(attribution.os, "name", "posix")

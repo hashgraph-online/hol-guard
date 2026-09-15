@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import sys
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
-from urllib.parse import urlparse
 
-from ..action_lattice import is_guard_action
 from ..codex_hook_launch_runtime import (
     isolated_guard_cli_command,
     isolated_hook_environment,
     run_isolated_hook_process,
 )
-from ..daemon.hook_availability_policy import hook_reason_continues_session
-from ..private_file_io import read_private_regular_text
 from ..stable_guard_cli import prune_safe_cli_executable
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
 from .desktop_hook_proxy import (
@@ -31,38 +24,9 @@ from .desktop_hook_proxy import (
 )
 
 _MAX_HOOK_INPUT_BYTES = 1_000_000
-_MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-_DAEMON_TIMEOUT_BUDGET_SECONDS = 5.0
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
-
-
-def _assert_loopback_http_url(url: str) -> None:
-    """Reject non-loopback daemon URLs."""
-    parsed = urlparse(url)
-    if parsed.scheme != "http":
-        raise ValueError(f"daemon URL must use http, not {parsed.scheme!r}")
-    if parsed.hostname not in _LOOPBACK_HOSTS:
-        raise ValueError(f"daemon URL must target loopback, not {parsed.hostname!r}")
-
-
-def _build_loopback_opener() -> urllib.request.OpenerDirector:
-    """Build an opener that blocks proxies and off-loopback redirects.
-
-    Mirrors _build_loopback_opener from claude_daemon_hook_bridge.
-    """
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
-        _LoopbackOnlyRedirectHandler(),
-    )
-
-
-class _LoopbackOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
-        _assert_loopback_http_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def bounded_cli_hook_command(
@@ -276,225 +240,22 @@ def _emit_failure(
     return returncode
 
 
-def _read_daemon_auth_token(guard_home: Path) -> str | None:
-    token = read_private_regular_text(
-        guard_home / "daemon-auth-token",
-        max_bytes=4096,
-        require_private_parent=True,
-    )
-    return token or None
-
-
 def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
-    """Return the loopback hook URL from authenticated daemon state, or None."""
+    from .bounded_cli_hook_daemon import _daemon_hook_endpoint as implementation
 
-    raw_state = read_private_regular_text(
-        guard_home / "daemon-state.json",
-        max_bytes=64 * 1024,
-        require_private_parent=True,
-    )
-    if raw_state is None:
-        return None
-    try:
-        state = json.loads(raw_state)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(state, dict):
-        return None
-    host = state.get("host")
-    port = state.get("port")
-    if (
-        not isinstance(host, str)
-        or host not in _LOOPBACK_HOSTS
-        or not isinstance(port, int)
-        or isinstance(port, bool)
-        or not 1 <= port <= 65535
-    ):
-        return None
-    return f"http://{host}:{port}/v1/hooks/{harness}"
+    return implementation(guard_home, harness)
 
 
-def _native_hook_permission_decision(policy_action: str) -> str | None:
-    """Map policy action to harness permission decision.
+def _read_daemon_auth_token(guard_home: Path) -> str | None:
+    from .bounded_cli_hook_daemon import _read_daemon_auth_token as implementation
 
-    Mirrors _native_hook_permission_decision from commands_support_hook_payload.
-    """
-    if policy_action in {"allow", "warn"}:
-        return "allow"
-    if policy_action in {"review", "require-reapproval", "sandbox-required"}:
-        return "ask"
-    if policy_action == "block":
-        return "deny"
-    return None
+    return implementation(guard_home)
 
 
-def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
-    reason_code = str(daemon_response.get("reason_code") or "")
-    if hook_reason_continues_session(reason_code):
-        return "warn"
-    raw_policy_action = daemon_response.get("policy_action")
-    if isinstance(raw_policy_action, str) and is_guard_action(raw_policy_action.strip()):
-        return raw_policy_action.strip()
-    return "block"
+def _build_loopback_opener():  # type: ignore[no-untyped-def]
+    from .bounded_cli_hook_daemon import _build_loopback_opener as implementation
 
-
-def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
-    """Mirror _should_emit_native_hook_exit_block."""
-    canonical = harness.strip().lower().replace("_", "-")
-    compact = event_name.replace("_", "").replace("-", "").lower()
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and compact in {
-        "pretooluse",
-        "userpromptsubmit",
-        "pretoolcall",
-    }:
-        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return False
-
-
-def _daemon_response_to_native(
-    daemon_response: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
-) -> tuple[str, str, int]:
-    """Transform daemon policy response into harness-native hook JSON + stderr + exit code.
-
-    The daemon returns raw policy data (policy_action, approval_reuse, etc.).
-    The bridge transforms this into the harness-native format that the CLI
-    hook handler would emit.
-
-    Returns (stdout_json, stderr_text, exit_code).
-    """
-    canonical = harness.strip().lower().replace("_", "-")
-
-    # Defensive: if the daemon already returned harness-native JSON, pass it through.
-    # This handles the case where the daemon's hook_process_runner is running and
-    # returns harness-native JSON via capture_hook_command.
-    if "hookSpecificOutput" in daemon_response or "decision" in daemon_response:
-        stdout = json.dumps(daemon_response, ensure_ascii=True, separators=(",", ":"))
-        hook_specific = daemon_response.get("hookSpecificOutput")
-        permission_decision = None
-        if isinstance(hook_specific, dict):
-            pd = hook_specific.get("permissionDecision")
-            if isinstance(pd, str):
-                permission_decision = pd
-        if permission_decision is None:
-            decision = daemon_response.get("decision")
-            if isinstance(decision, str) and decision in {"block", "deny"}:
-                permission_decision = "deny"
-        # Map permission decision to policy action for exit code calculation
-        policy_action_for_exit = {
-            "allow": "allow",
-            "deny": "block",
-            "ask": "review",
-        }.get(permission_decision or "allow", "allow")
-        exit_code = 2 if _should_exit_block(harness, event_name, policy_action_for_exit) else 0
-        stderr = ""
-        if exit_code == 2 and canonical == "kimi":
-            # Extract reason from harness-native response
-            reason = daemon_response.get("reason")
-            if (not isinstance(reason, str) or not reason) and isinstance(hook_specific, dict):
-                reason = hook_specific.get("permissionDecisionReason")
-            if isinstance(reason, str) and reason:
-                stderr = reason
-        return stdout, stderr, exit_code
-
-    policy_action = _policy_action_from_daemon(daemon_response)
-    reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
-
-    # Build harness-native response
-    payload: dict[str, object] = {}
-
-    if event_name == "UserPromptSubmit":
-        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-            payload["decision"] = "block"
-            payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
-            if canonical == "codex":
-                payload["continue"] = False
-                payload["stopReason"] = payload["reason"]
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": payload["reason"],
-                }
-        elif canonical in {"claude-code", "codex"}:
-            payload["hookSpecificOutput"] = {"hookEventName": event_name}
-    else:
-        # PreToolUse, PostToolUse, etc.
-        permission_decision = _native_hook_permission_decision(policy_action)
-        if canonical == "codex" and event_name == "PreToolUse" and permission_decision is None:
-            # Codex PreToolUse with no permission decision: emit nothing
-            return "", "", 0
-        hook_specific_output: dict[str, object] = {"hookEventName": event_name}
-        if permission_decision is not None:
-            hook_specific_output["permissionDecision"] = permission_decision
-            if permission_decision != "allow" or "unreachable" in reason.lower():
-                hook_specific_output["permissionDecisionReason"] = reason or f"HOL Guard {policy_action} this action"
-        payload["hookSpecificOutput"] = hook_specific_output
-        if canonical in {"grok", "openclaw"} and permission_decision is not None:
-            payload["decision"] = "allow" if permission_decision == "allow" else "deny"
-            payload["policy_action"] = policy_action
-            if permission_decision != "allow" and reason:
-                payload["reason"] = reason
-            for key in (
-                "reason_code",
-                "approval_url",
-                "approval_request_id",
-                "primary_approval_request_id",
-                "primary_approval_url",
-                "guardApprovalRequestId",
-                "guardApprovalUrl",
-                "approval_requests",
-            ):
-                value = daemon_response.get(key)
-                if value is not None:
-                    payload[key] = value
-
-    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
-    stderr = reason if exit_code == 2 and canonical == "kimi" else ""
-    return stdout, stderr, exit_code
-
-
-def _apply_grok_bridge_approval_wait(
-    *,
-    guard_home: Path,
-    harness: str,
-    input_text: str,
-    stdout: str,
-    stderr: str,
-    exit_code: int,
-    timeout_seconds: float | None = None,
-) -> tuple[str, str, int]:
-    """Wait for Grok review after a fast daemon decision, inside the hook budget."""
-
-    if harness.strip().lower() != "grok" or _event_name(input_text) != "PreToolUse":
-        return stdout, stderr, exit_code
-    payload = _json_object(stdout)
-    if payload is None:
-        return stdout, stderr, exit_code
-    if str(payload.get("policy_action") or "") not in {"review", "require-reapproval"}:
-        return stdout, stderr, exit_code
-    try:
-        from ..config import load_guard_config
-        from ..store import GuardStore
-        from .grok_approval_resume import apply_grok_pretool_approval_wait
-
-        configured = load_guard_config(guard_home).approval_wait_timeout_seconds
-        wait_seconds = configured
-        if timeout_seconds is not None:
-            wait_seconds = min(configured, max(0, int(timeout_seconds)))
-        updated = apply_grok_pretool_approval_wait(
-            payload,
-            event_name="PreToolUse",
-            store=GuardStore(guard_home),
-            timeout_seconds=wait_seconds,
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
-        return stdout, stderr, exit_code
-    rewritten = json.dumps(updated, ensure_ascii=True, separators=(",", ":")) + "\n"
-    if updated.get("decision") == "allow":
-        return rewritten, stderr, 0
-    return rewritten, stderr, exit_code
+    return implementation()
 
 
 def _try_daemon_hook(
@@ -504,66 +265,35 @@ def _try_daemon_hook(
     input_text: str,
     timeout_seconds: float,
 ) -> tuple[str, str, int] | None:
-    """POST the hook payload to the running daemon; return native stdout or None."""
-    endpoint = _daemon_hook_endpoint(guard_home, harness)
-    if endpoint is None:
-        return None
-    try:
-        _assert_loopback_http_url(endpoint)
-    except ValueError:
-        return None
-    token = _read_daemon_auth_token(guard_home)
-    if token is None:
-        return None
-    # Reserve at least 50% of the budget for the subprocess fallback.
-    # If the daemon stalls, we still have room to spawn the isolated CLI.
-    daemon_budget = min(float(timeout_seconds) * 0.5, _DAEMON_TIMEOUT_BUDGET_SECONDS)
-    timeout = daemon_budget
-    request = urllib.request.Request(
-        endpoint,
-        data=input_text.encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "X-Guard-Token": token,
-        },
-        method="POST",
-    )
-    try:
-        opener = _build_loopback_opener()
-        with opener.open(request, timeout=timeout) as response:
-            final_url = response.geturl()
-            if final_url:
-                _assert_loopback_http_url(final_url)
-            if response.status != 200:
-                return None
-            body = response.read(_MAX_HOOK_RESPONSE_BYTES + 1)
-    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
-        return None
-    if len(body) > _MAX_HOOK_RESPONSE_BYTES:
-        return None
-    try:
-        text = body.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    candidate = text.strip()
-    if not candidate:
-        return None
-    try:
-        parsed = json.loads(candidate)
-    except ValueError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    event_name = _event_name(input_text)
-    if harness.strip().lower().replace("_", "-") == "hermes":
-        from .hermes_runtime_hooks import hermes_bridge_response as _hermes_native
+    """Retain legacy private patch points for established direct callers."""
+    from . import bounded_cli_hook_daemon as daemon
 
-        return _hermes_native(parsed, event_name=event_name)
-    return _daemon_response_to_native(parsed, harness=harness, event_name=event_name)
+    return daemon.try_daemon_hook(
+        guard_home=guard_home,
+        harness=harness,
+        input_text=input_text,
+        timeout_seconds=timeout_seconds,
+        _endpoint_loader=_daemon_hook_endpoint,
+        _token_loader=_read_daemon_auth_token,
+        _opener_builder=_build_loopback_opener,
+    )
+
+
+def _daemon_response_to_native(
+    daemon_response: dict[str, object],
+    *,
+    harness: str,
+    event_name: str,
+) -> tuple[str, str, int]:
+    from .bounded_cli_hook_daemon import _daemon_response_to_native as implementation
+
+    return implementation(daemon_response, harness=harness, event_name=event_name)
 
 
 def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> int:
     """Run one isolated CLI hook and preserve its native stdout contract."""
+
+    from .bounded_cli_hook_daemon import _apply_grok_bridge_approval_wait, try_daemon_hook
 
     python_executable = config.get("python_executable")
     package_root_value = config.get("package_root")
@@ -608,7 +338,7 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             _cli_args_with_json(cli_args),
         )
     deadline = time.monotonic() + float(timeout_seconds)
-    daemon_result = _try_daemon_hook(
+    daemon_result = try_daemon_hook(
         guard_home=guard_home,
         harness=harness,
         input_text=input_text,

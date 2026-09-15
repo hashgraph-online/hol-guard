@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Protocol
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import record_python_semantic_hook_route
-from ..native_runtime import NativeRuntimeStatus
+from ..native_runtime import NativeRuntimeStatus, native_output_sha256
+from ..runtime.hook_output_text import extract_payload_output
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_availability_policy import (
     availability_harness_response,
@@ -35,13 +36,60 @@ def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, obj
     return rewritten
 
 
-def _watch_native_post_tool_result(native: Mapping[str, object]) -> dict[str, object]:
+def _canonical_output_sha256(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 64:
+        return None
+    if any(character not in "0123456789abcdef" for character in value):
+        return None
+    return value
+
+
+def _recording_only_output_sha256(payload: Mapping[str, object]) -> str | None:
+    source_ref = payload.get("guard_source_ref")
+    if isinstance(source_ref, Mapping):
+        digest = _canonical_output_sha256(source_ref.get("output_sha256"))
+        if digest is not None:
+            return digest
+
+    summary = payload.get("tool_response_summary")
+    if isinstance(summary, Mapping):
+        digest = _canonical_output_sha256(summary.get("output_sha256"))
+        if digest is not None:
+            return digest
+        # A summary can contain only a bounded excerpt. Never treat it as the
+        # complete output when its canonical full-output proof is absent. If a
+        # complete inline payload is also present, fall through and prove it.
+
+    # Pi's legacy inline payload carries the complete output under
+    # ``tool_response``. Keep the extraction isolated from other fields such
+    # as stdout, which may be a bounded rendering of the same output.
+    if "tool_response" not in payload:
+        return None
+    extracted = extract_payload_output({"tool_response": payload["tool_response"]})
+    if extracted.truncated:
+        return None
+    return native_output_sha256(extracted.text)
+
+
+def _watch_native_post_tool_result(
+    native: Mapping[str, object],
+    payload: Mapping[str, object],
+) -> dict[str, object]:
+    digest = _recording_only_output_sha256(payload)
     rewritten = dict(native)
     if rewritten.get("decision") == "allow" and rewritten.get("model_output_action") == "allow_original":
+        if digest is not None:
+            rewritten["reviewed_output_sha256"] = digest
+        else:
+            rewritten.pop("reviewed_output_sha256", None)
         return rewritten
     rewritten["decision"] = "allow"
     rewritten["model_output_action"] = "allow_original"
     rewritten["policy_action"] = "warn"
+    if digest is not None:
+        rewritten["reviewed_output_sha256"] = digest
+    else:
+        rewritten.pop("reviewed_output_sha256", None)
     return rewritten
 
 
@@ -350,7 +398,7 @@ class HookWorkerNativeMixin:
                 accepted_receipt,
             )
         if recording_only:
-            native_result = _watch_native_post_tool_result(native_result)
+            native_result = _watch_native_post_tool_result(native_result, payload)
         self._record_post_tool_activity(
             harness=native_harness,
             payload=payload,

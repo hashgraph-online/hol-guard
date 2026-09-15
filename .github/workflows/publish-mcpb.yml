@@ -1,8 +1,6 @@
 name: MCPB Distribution
 
 on:
-  pull_request:
-    branches: [main, release/3.0]
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
@@ -12,24 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
+      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-mcp-release-source.yml
+
   validate:
+    needs: verify
     name: Validate one-click MCP bundle
     if: >-
-      github.event_name == 'pull_request' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
-       github.event.workflow_run.run_attempt == 1 &&
-       github.event.workflow_run.head_repository.full_name == github.repository &&
-       contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
-       !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]'))
+      needs.verify.outputs.sha != '' &&
+      needs.verify.outputs.branch != '' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
+      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out immutable source
+      - name: Check out verified immutable source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ needs.verify.outputs.sha }}
       - name: Validate Python wrapper
         run: python -m compileall -q distributions/mcpb/server
       - name: Validate and pack with pinned MCPB CLI
@@ -47,6 +60,8 @@ jobs:
   publish:
     name: Attach versioned MCPB to release
     if: >-
+      needs.verify.outputs.sha != '' &&
+      needs.verify.outputs.branch != '' &&
       github.event_name == 'workflow_run' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -55,24 +70,24 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
       !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
-    needs: validate
+    needs: [verify, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: write
     steps:
-      - name: Check out exact release source
+      - name: Check out verified exact release source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.verify.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Wait for canonical release tag
         id: release
         env:
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-          SOURCE_REF: refs/heads/${{ github.event.workflow_run.head_branch }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
         run: |
           set -euo pipefail
           tag=""

@@ -22,6 +22,9 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -89,6 +92,7 @@ jobs:
           unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
           unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
       - name: Measure installed adapter-to-decision SLOs
         env:
           NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
@@ -152,6 +156,7 @@ jobs:
           path: |
             native-dist/*.whl
             native-default-auto.json
+            installed-pi-output.json
             native-installed-slo.json
             native-soak.json
             native-artifact-evidence.json
@@ -177,6 +182,9 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -239,6 +247,7 @@ jobs:
           unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
           unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
       - name: Measure installed adapter-to-decision SLOs
         env:
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
@@ -285,6 +294,7 @@ jobs:
           path: |
             native-dist/*.whl
             native-default-auto.json
+            installed-pi-output.json
             native-installed-slo.json
             native-artifact-evidence.json
             native-stop-diagnostic.json

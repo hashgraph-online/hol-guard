@@ -143,6 +143,7 @@ const displayNames = [
   { harness: "kimi", expected: "Kimi" },
   { harness: "grok", expected: "Grok" },
   { harness: "omp", expected: "Oh My Pi" },
+  { harness: "guard-cli", expected: "Guard CLI" },
 ];
 
 for (const { harness, expected } of displayNames) {
