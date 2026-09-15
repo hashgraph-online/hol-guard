@@ -21,55 +21,9 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 # they are not reviewed on their own.
 #
 # The tool has no subcommands: the whole surface is argparse flags on the bare
-# executable, so each rule is a required-flag constraint.
-
-# Every value-taking option, so a reviewed flag spelled inside another option's
-# value cannot be mistaken for the option itself. The four options that take an
-# optional argument (--docs, --cost, --rank, --changed) are deliberately absent:
-# treating one as value-taking would let it swallow a following reviewed flag.
-_OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
-    {
-        "--affected",
-        "--affected-depth",
-        "--affected-format",
-        "--affected-out",
-        "--agent-file",
-        "--also",
-        "--ask",
-        "--at",
-        "--callees",
-        "--callers",
-        "--context",
-        "--corpus",
-        "--defines",
-        "--export",
-        "--files",
-        "--for",
-        "--impact",
-        "--impact-depth",
-        "--install-hook",
-        "--limit",
-        "--max-lines",
-        "--more",
-        "--only",
-        "--out",
-        "--path",
-        "--path-depth",
-        "--product",
-        "--range",
-        "--reaches",
-        "--repo",
-        "--rules",
-        "--runs-api",
-        "--skip",
-        "--spec-cmd",
-        "--spec-depth",
-        "--spec-limit",
-        "--spec-source",
-        "--specs",
-        "--watch",
-    }
-)
+# executable, so each rule is a required-flag constraint. --docs is the one
+# exception, because its class belongs to the flag while its effect belongs to
+# its optional argument: it is a required flag carrying a required value.
 
 # argparse resolves any unambiguous long-option prefix, so every prefix below is
 # the flag itself, the way command.repo2nb enumerates the prefixes of --force.
@@ -127,6 +81,75 @@ REPOSITORY_WRITE_FLAGS: tuple[str, ...] = (
 INSTALL_HOOK_FLAGS: tuple[str, ...] = _INSTALL_HOOK_FLAGS
 TRACKER_FETCH_FLAGS: tuple[str, ...] = _SPECS_FLAGS + _SPEC_CMD_FLAGS + _SPEC_SOURCE_FLAGS + _RUNS_API_FLAGS
 
+# The value-taking options that carry no reviewed class of their own. They are
+# declared so a reviewed flag spelled inside another option's value cannot be
+# mistaken for the option itself.
+_READ_OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
+    {
+        "--affected",
+        "--affected-depth",
+        "--affected-format",
+        "--also",
+        "--ask",
+        "--at",
+        "--callees",
+        "--callers",
+        "--context",
+        "--corpus",
+        "--defines",
+        "--files",
+        "--for",
+        "--impact",
+        "--impact-depth",
+        "--limit",
+        "--max-lines",
+        "--more",
+        "--only",
+        "--out",
+        "--path",
+        "--path-depth",
+        "--product",
+        "--range",
+        "--reaches",
+        "--repo",
+        "--rules",
+        "--skip",
+        "--spec-depth",
+        "--spec-limit",
+        "--watch",
+    }
+)
+
+# Every accepted spelling of a reviewed option that takes a value, abbreviations
+# included. A spelling missing here parses as a boolean flag, so an assignment
+# such as --ag=AGENTS.md or --install=git reads as a non-truthy boolean, drops
+# out of the parsed flag set, and the write, the hook installation or the fetch
+# it names escapes review.
+_REVIEWED_OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
+    _AGENT_FILE_FLAGS
+    + _EXPORT_FLAGS
+    + _AFFECTED_OUT_FLAGS
+    + _INSTALL_HOOK_FLAGS
+    + _SPECS_FLAGS
+    + _SPEC_CMD_FLAGS
+    + _SPEC_SOURCE_FLAGS
+    + _RUNS_API_FLAGS
+)
+
+# --init takes no value, and the four options that take an OPTIONAL argument
+# (--docs, --cost, --rank, --changed) are deliberately absent: declaring one
+# value-taking for every rule would let it swallow a following reviewed flag,
+# so `--docs --agent-file AGENTS.md` would stop matching the agent-file rule.
+# --docs is declared value-taking only inside its own matcher below, where
+# swallowing the next token is what proves the token is not `write`.
+_OPTIONS_WITH_VALUES: frozenset[str] = _READ_OPTIONS_WITH_VALUES | _REVIEWED_OPTIONS_WITH_VALUES
+
+# `--docs` alone lists the documentation a repository lacks and writes nothing;
+# `--docs write` creates the files. The manifest carries the class on the flag,
+# so the rule table keeps every docs spelling at writes-repo and the matcher
+# requires the argument that makes the write happen.
+_DOCS_WRITE_VALUES: frozenset[str] = frozenset({"write"})
+
 # --effects is resolved before anything else in the tool's main() and exits, and
 # --dry-run returns from the answer path and the build path before any write,
 # printing the paths it would have written. Both are documented, side-effect
@@ -157,6 +180,23 @@ def _flag_matcher(flags: tuple[str, ...]) -> AnyMatcher:
     )
 
 
+def _docs_write_matcher() -> AnyMatcher:
+    """Match the documentation flags only where they carry the write argument."""
+
+    return AnyMatcher(
+        matchers=tuple(
+            executable_matcher(
+                "where-are-we",
+                required_flags=frozenset({flag}),
+                options_with_values=_OPTIONS_WITH_VALUES | {flag},
+                required_option_values=((flag, _DOCS_WRITE_VALUES),),
+                fail_secure_unknown_options=True,
+            )
+            for flag in _DOCS_FLAGS
+        )
+    )
+
+
 def _safe_variants(matcher: AnyMatcher, title: str) -> tuple[CommandSafeVariant, ...]:
     """Build the side-effect-free variants shared by every where-are-we rule."""
 
@@ -165,7 +205,12 @@ def _safe_variants(matcher: AnyMatcher, title: str) -> tuple[CommandSafeVariant,
     )
 
 
-_WHERE_ARE_WE_REPOSITORY_WRITE = _flag_matcher(REPOSITORY_WRITE_FLAGS)
+_WHERE_ARE_WE_REPOSITORY_WRITE = AnyMatcher(
+    matchers=(
+        *_flag_matcher(_AGENT_FILE_FLAGS + _INIT_FLAGS + _EXPORT_FLAGS + _AFFECTED_OUT_FLAGS).matchers,
+        *_docs_write_matcher().matchers,
+    )
+)
 _WHERE_ARE_WE_INSTALL_HOOK = _flag_matcher(INSTALL_HOOK_FLAGS)
 _WHERE_ARE_WE_TRACKER_FETCH = _flag_matcher(TRACKER_FETCH_FLAGS)
 
@@ -182,7 +227,7 @@ WHERE_ARE_WE_COMMAND_RULES = (
             "wherever the caller named."
         ),
         severity="medium",
-        risk_classes=("local_secret_read",),
+        risk_classes=("destructive_shell",),
         action_classes=("where-are-we repository file write command",),
         safer_alternatives=(
             "Run the same command line with --dry-run first and read the paths it prints.",
@@ -258,7 +303,7 @@ WHERE_ARE_WE_COMMAND_EXTENSION_SPECS = (
             "where-are-we agent hook installation command",
             "where-are-we tracker fetch command",
         ),
-        risk_classes=("local_secret_read", "destructive_shell", "network_egress", "execution"),
+        risk_classes=("destructive_shell", "network_egress", "execution"),
         safer_alternatives=(
             "Run the same command line with --dry-run first and read the paths it prints.",
             "Ask the tool what a command line does before running it: `where-are-we --effects -- <command line>`.",

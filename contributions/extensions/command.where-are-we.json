@@ -16,7 +16,7 @@
   "license": "MIT",
   "executables": ["where-are-we"],
   "ecosystemIds": ["where-are-we"],
-  "riskClasses": ["local_secret_read", "destructive_shell", "network_egress", "execution"],
+  "riskClasses": ["destructive_shell", "network_egress", "execution"],
   "actionClasses": [
     "where-are-we repository file write command",
     "where-are-we agent hook installation command",

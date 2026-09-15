@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_where_are_we_extensions import (
     INSTALL_HOOK_FLAGS,
@@ -122,10 +121,22 @@ WHERE_ARE_WE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("where-are-we --agent-file=CLAUDE.md --repo .", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --repo . --init", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --repo . --docs write", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
-    ("where-are-we --repo . --docs", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --repo . --docs=write", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --ag AGENTS.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --ini", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --do write", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --do=write", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    # An accepted abbreviation written as an assignment. Every one of these
+    # parsed as a bare boolean before the option table carried the
+    # abbreviations, which dropped the flag and let the write escape review.
+    ("where-are-we --ag=AGENTS.md --repo .", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --agent-f=CLAUDE.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --ex=map-export.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    ("where-are-we --affected-o=selection.txt", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
+    # A bare --docs writes nothing and must not shield a reviewed flag behind
+    # it: the docs matcher reads the next token as the argument it is not,
+    # while the agent-file rule still sees its own flag.
+    ("where-are-we --docs --agent-file AGENTS.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --repo . --export map-export.md", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     ("where-are-we --export=map-export.md --repo .", _REPOSITORY_WRITE_ACTION, _REPOSITORY_WRITE_RULE),
     # `--export -` writes to stdout, but the tool's own classifier still calls
@@ -155,6 +166,8 @@ WHERE_ARE_WE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("where-are-we --repo . --out /tmp/map --install-hook git", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
     ("where-are-we --install-hook claude", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
     ("where-are-we --install-hook=codex", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
+    ("where-are-we --install=git", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
+    ("where-are-we --ins=gemini", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
     ("where-are-we --install git", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
     ("where-are-we --ins gemini", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
     ("where-are-we --install-hook cursor --repo .", _INSTALL_HOOK_ACTION, _INSTALL_HOOK_RULE),
@@ -170,9 +183,14 @@ WHERE_ARE_WE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("where-are-we --spec-s github --specs ABC-1", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
     ("where-are-we --repo . --runs-api https://runs.example/api", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
     ("where-are-we --run https://runs.example/api", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
+    ("where-are-we --run=https://runs.example/api", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
+    ("where-are-we --spec-c='tracker show {key}' --specs ABC-1", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
+    ("where-are-we --spec-s=github --specs ABC-1", _TRACKER_FETCH_ACTION, _TRACKER_FETCH_RULE),
 )
 
-WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
+# Commands carrying no reviewed flag at all. The extension must not even
+# observe these: a coding agent runs them on nearly every turn.
+WHERE_ARE_WE_READ_ONLY_COMMANDS: tuple[str, ...] = (
     'where-are-we --repo . --ask "where is the retry policy"',
     "where-are-we --repo . --callers build_map",
     "where-are-we --repo . --callees build_map",
@@ -211,12 +229,28 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --for coder --only Layers --skip Steps --max-lines 400",
     "where-are-we --repo . --spec-depth 3 --spec-limit 40 --ask x",
     "where-are-we --repo . --sections | grep steps",
+    # `--docs` without an argument lists the documentation the repository lacks
+    # and writes nothing. Only `--docs write` creates the files, so the bare
+    # form carries no reviewed effect in any of its accepted spellings.
+    "where-are-we --repo . --docs",
+    "where-are-we --docs",
+    "where-are-we --repo . --doc",
+    "where-are-we --repo . --do",
+    "where-are-we --repo . --docs --json",
+    "where-are-we --repo . --docs report",
     "where-are-we --help",
     "where-are-we -h",
     "where-are-we --version",
     "where-are-we --effects",
     "where-are-we --effects --json",
     "where-are-we --effects -- where-are-we --repo . --install-hook git",
+    "grep 'where-are-we --repo . --install-hook git' docs",
+    "echo where-are-we --init",
+)
+
+# Commands that do carry a reviewed flag and are cancelled by a documented
+# side-effect-free variant. The extension may observe these; it must not match.
+WHERE_ARE_WE_PREVIEW_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --install-hook git --dry-run",
     "where-are-we --repo . --install-hook git --help",
     "where-are-we --repo . --install-hook git -h",
@@ -224,6 +258,7 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --agent-file AGENTS.md --dry-run",
     "where-are-we --dry-run --repo . --init",
     "where-are-we --repo . --docs write --dry-run",
+    "where-are-we --repo . --docs=write --dry-run",
     "where-are-we --repo . --export map-export.md --dry-run",
     "where-are-we --repo . --export - --dry-run",
     "where-are-we --repo . --export map-export.md --help",
@@ -231,9 +266,9 @@ WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = (
     "where-are-we --repo . --affected src/a.py --affected-out selection.txt --dry-run",
     "where-are-we --repo . --affected-out selection.txt --help",
     "where-are-we --repo . --specs ABC-1 --spec-source github --dry-run",
-    "grep 'where-are-we --repo . --install-hook git' docs",
-    "echo where-are-we --init",
 )
+
+WHERE_ARE_WE_SAFE_COMMANDS: tuple[str, ...] = WHERE_ARE_WE_READ_ONLY_COMMANDS + WHERE_ARE_WE_PREVIEW_COMMANDS
 
 
 def _control_layer(state: ControlState) -> ExtensionControlLayer:
@@ -303,6 +338,32 @@ def test_where_are_we_safe_surface_stays_non_reviewable_once_enabled(command: st
 
     assert all(item.extension.extension_id != _EXTENSION_ID for item in enabled.matches)
     assert enabled.controlling_rule_id is None
+    assert enabled.minimum_action == "allow"
+    assert not [
+        observation
+        for observation in enabled.extension_observations
+        if observation.extension.extension_id == _EXTENSION_ID and observation.effective_evidence
+    ]
+
+
+@pytest.mark.parametrize("command", WHERE_ARE_WE_READ_ONLY_COMMANDS)
+def test_where_are_we_read_only_surface_creates_no_observation_once_enabled(command: str, tmp_path: Path) -> None:
+    """Prove the read surface never reaches the extension, not merely that it is allowed.
+
+    A safe variant cancels evidence after the rule has already matched, so
+    `controlling_rule_id is None` cannot tell a read apart from a write the
+    variant happened to excuse. Only the absence of an observation can.
+    """
+    enabled = evaluate_command(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        extension_control_layers=(_control_layer(ControlState.ENABLED),),
+    )
+
+    assert all(item.extension.extension_id != _EXTENSION_ID for item in enabled.extension_observations)
+    assert all(item.extension.extension_id != _EXTENSION_ID for item in enabled.matches)
+    assert enabled.controlling_rule_id is None
 
 
 @pytest.mark.parametrize(
@@ -353,12 +414,26 @@ def test_where_are_we_unparsable_input_produces_uncertainty_not_safety(tmp_path:
     ),
 )
 def test_where_are_we_extension_does_not_own_launchers_or_sibling_entry_points(command: str, tmp_path: Path) -> None:
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-    extension_ids = {extension["extension_id"] for extension in payload["extensions"]}
-    rule_ids = {rule["rule_id"] for rule in payload["rules"]}
+    """Prove ownership while the extension is enabled.
+
+    `inspect_command` evaluates with no control layer, so an opt-in extension is
+    inert there and every ownership assertion passes whether or not the matcher
+    would have claimed the command. The enabled layer is what makes the claim.
+    """
+    enabled = evaluate_command(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        extension_control_layers=(_control_layer(ControlState.ENABLED),),
+    )
+    extension_ids = {item.extension.extension_id for item in enabled.extension_observations} | {
+        item.extension.extension_id for item in enabled.matches
+    }
+    rule_ids = {item.match.rule.rule_id for item in enabled.matches}
 
     assert _EXTENSION_ID not in extension_ids
     assert not any(rule_id.startswith(f"{_EXTENSION_ID}.") for rule_id in rule_ids)
+    assert enabled.controlling_rule_id is None
 
 
 def test_where_are_we_extension_publishes_canonical_reference_and_rules() -> None:
@@ -381,7 +456,7 @@ def test_where_are_we_extension_publishes_canonical_reference_and_rules() -> Non
 
 
 def test_where_are_we_actions_publish_runtime_risk_classes() -> None:
-    assert risk_classes_for_command_action(_REPOSITORY_WRITE_ACTION) == ("local_secret_read",)
+    assert risk_classes_for_command_action(_REPOSITORY_WRITE_ACTION) == ("destructive_shell",)
     assert risk_classes_for_command_action(_INSTALL_HOOK_ACTION) == ("destructive_shell",)
     assert risk_classes_for_command_action(_TRACKER_FETCH_ACTION) == ("network_egress", "execution")
 
