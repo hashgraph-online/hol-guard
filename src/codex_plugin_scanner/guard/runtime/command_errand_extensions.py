@@ -28,7 +28,8 @@ from .command_tokens import executable_name
 #   prove a job or an apply absent
 
 _ERRAND_EXECUTABLES = executable_names("errand")
-_WRAPPER_EXECUTABLES: frozenset[str] = executable_names("exec") | executable_names("xargs")
+_XARGS_EXECUTABLES = executable_names("xargs")
+_WRAPPER_EXECUTABLES: frozenset[str] = executable_names("exec") | _XARGS_EXECUTABLES
 # Only wrapper options with append-only argv semantics are consumed. Replacement
 # options (-I, -i, -J, --replace) and unknown options leave the launcher uncertain.
 _WRAPPER_OPTIONS_WITH_VALUES: frozenset[str] = frozenset(
@@ -159,6 +160,8 @@ class ErrandCommandMatcher:
     Known subcommands and help never match. A bare operand before the job
     separator, an unresolved expansion, or an unknown Errand or wrapper option
     cannot prove the protected operation absent, so those match conservatively.
+    xargs appends stdin after the fixed argv, so an xargs launch whose fixed
+    argv has not reached an operand or job separator is uncertain as well.
     """
 
     operation: Literal["run", "fetch-apply"]
@@ -176,13 +179,17 @@ class ErrandCommandMatcher:
         for index, segment in enumerate(command.segments):
             if segment.executable is None:
                 continue
+            appendable = False
             if _segment_matches_executable(segment, _ERRAND_EXECUTABLES):
                 arguments: tuple[str, ...] | None = segment.arguments
             elif _segment_matches_executable(segment, _WRAPPER_EXECUTABLES):
-                arguments = self._wrapped_errand_arguments(segment.arguments)
+                launches_errand, arguments = self._wrapped_errand_arguments(segment.arguments)
+                if not launches_errand:
+                    continue
+                appendable = _segment_matches_executable(segment, _XARGS_EXECUTABLES)
             else:
                 continue
-            if arguments is None or self._requires_review(arguments):
+            if arguments is None or self._requires_review(arguments, appendable=appendable):
                 evidence.append(
                     MatcherEvidence(
                         segment_index=index,
@@ -192,9 +199,10 @@ class ErrandCommandMatcher:
                 )
         return tuple(evidence)
 
-    def _wrapped_errand_arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...] | None:
-        """Return Errand's argv after known wrapper options; None when uncertain.
+    def _wrapped_errand_arguments(self, arguments: tuple[str, ...]) -> tuple[bool, tuple[str, ...] | None]:
+        """Return (launches Errand, Errand's argv after known wrapper options).
 
+        The argv is None when an unresolved wrapper option makes it uncertain.
         Uncertainty is only reported when a token names Errand, so wrappers
         launching other tools stay unmatched.
         """
@@ -209,27 +217,27 @@ class ErrandCommandMatcher:
             if not token.startswith("-") or token == "-":
                 break
             if _may_expand(token):
-                return None if names_errand else ()
+                return names_errand, None
             advance = known_option_advance(
                 token, options_with_values=self.wrapper_options_with_values, known_flags=self.wrapper_flags
             )
             if advance is None or index + advance > len(arguments):
-                return None if names_errand else ()
+                return names_errand, None
             index += advance
         if index >= len(arguments) or executable_name(arguments[index]) not in _ERRAND_EXECUTABLES:
-            return ()
-        return arguments[index + 1 :]
+            return False, ()
+        return True, arguments[index + 1 :]
 
-    def _requires_review(self, arguments: tuple[str, ...]) -> bool:
+    def _requires_review(self, arguments: tuple[str, ...], *, appendable: bool = False) -> bool:
         if not arguments:
-            return False
+            return appendable  # stdin may supply the dispatch and its arguments
         if _may_expand(arguments[0]):
             return True  # the dispatch itself is unresolved
         if self.operation == "fetch-apply":
-            return arguments[0] == "fetch" and self._applies_fetch(arguments[1:])
-        return arguments[0] not in self.subcommands and self._executes_job(arguments)
+            return arguments[0] == "fetch" and self._applies_fetch(arguments[1:], appendable=appendable)
+        return arguments[0] not in self.subcommands and self._executes_job(arguments, appendable=appendable)
 
-    def _executes_job(self, arguments: tuple[str, ...]) -> bool:
+    def _executes_job(self, arguments: tuple[str, ...], *, appendable: bool = False) -> bool:
         index = 0
         while index < len(arguments):
             token = arguments[index]
@@ -246,16 +254,16 @@ class ErrandCommandMatcher:
             if name in self.run_options_with_values:
                 if not has_value:
                     if index + 1 >= len(arguments):
-                        return False  # Go reports a missing value and exits
+                        return appendable  # Go reports a missing value unless stdin supplies it
                     index += 1
                     if _may_expand(arguments[index]):
                         return True  # word splitting may turn the value into options
             elif name not in self.run_flags:
                 return True  # unknown option cannot prove a job absent
             index += 1
-        return False
+        return appendable  # stdin may still supply the job separator and command
 
-    def _applies_fetch(self, arguments: tuple[str, ...]) -> bool:
+    def _applies_fetch(self, arguments: tuple[str, ...], *, appendable: bool = False) -> bool:
         apply = False
         index = 0
         while index < len(arguments):
@@ -271,7 +279,7 @@ class ErrandCommandMatcher:
             if name in self.fetch_options_with_values:
                 if not has_value:
                     if index + 1 >= len(arguments):
-                        return apply
+                        return apply or appendable
                     index += 1
                     if _may_expand(arguments[index]):
                         return True  # word splitting may turn the value into options
@@ -285,7 +293,7 @@ class ErrandCommandMatcher:
             elif name not in self.fetch_flags:
                 return True  # unknown option cannot prove an apply absent
             index += 1
-        return apply
+        return apply or appendable  # stdin may still supply --apply before the handle
 
 
 ERRAND_COMMAND_RULES = (

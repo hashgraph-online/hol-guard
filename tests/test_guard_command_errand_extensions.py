@@ -49,6 +49,10 @@ ERRAND_RUN_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "xargs -0 -r errand -- make test",
         "errand --unknown -- make test",
         "errand --on $OPTIONS --help",
+        # xargs appends stdin after the fixed argv, which may supply `-- COMMAND`.
+        "xargs errand",
+        "xargs -n 1 errand --on linux",
+        "printf '%s\\n' -- make test | xargs errand",
     )
 )
 ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
@@ -75,6 +79,10 @@ ERRAND_APPLY_CASES: tuple[tuple[str, str, str], ...] = tuple(
         "xargs -E STOP errand fetch --apply linux/job",
         "xargs.cmd errand fetch --apply linux/job",
         "xargs.exe errand fetch --apply linux/job",
+        # xargs appends stdin after the fixed argv, which may supply `--apply HANDLE`.
+        "xargs errand fetch",
+        "xargs errand fetch --on linux",
+        "printf '%s\\n' --apply linux/job | xargs errand fetch",
     )
 )
 ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
@@ -97,6 +105,9 @@ ERRAND_SAFE_COMMANDS: tuple[str, ...] = (
     "errand fetch --apply --help linux/job",
     "xargs errand ps",
     "xargs -E STOP errand ps",
+    "xargs errand --help",
+    "xargs errand fetch linux/job",  # stdin lands after the handle, where Go stops parsing flags
+    "exec errand",
     "exec errand doctor",
     "errand.exe ps",
     "errand.cmd doctor",
