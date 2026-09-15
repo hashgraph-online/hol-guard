@@ -96,6 +96,8 @@ SIMGIT_UNMATCHED_COMMANDS: tuple[str, ...] = (
 
 
 def _effective_rule_ids(command: str, tmp_path: Path) -> set[str]:
+    """Return the simgit rule IDs whose evidence survives safe-variant suppression."""
+
     observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
         parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
     )
@@ -142,6 +144,8 @@ def test_simgit_safe_counterparts_and_previews_stay_unmatched(tmp_path: Path) ->
 
 
 def test_simgit_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
+    """External opt-in coverage stays inert in evaluation until it is enabled."""
+
     for command, _action_class, rule_id in SIMGIT_REVIEW_CASES:
         evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
         assert evaluation.controlling_rule_id != rule_id
@@ -149,10 +153,14 @@ def test_simgit_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
 
 
 def test_simgit_nondestructive_commands_remain_safe(tmp_path: Path) -> None:
+    """Non-destructive simgit commands stay non-reviewable through inspection."""
+
     assert_safe_command_cases(SIMGIT_UNMATCHED_COMMANDS, tmp_path)
 
 
 def test_simgit_extension_publishes_official_reference() -> None:
+    """The extension cites an authoritative HTTPS reference for the covered tool."""
+
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_EXTENSION_ID)
     assert extension is not None
     assert extension.reference_urls

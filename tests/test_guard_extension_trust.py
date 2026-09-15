@@ -92,6 +92,8 @@ def _disable_layer(extension_id: str) -> ExtensionControlLayer:
 
 
 def test_trust_map_covers_every_builtin_extension() -> None:
+    """Every registered extension has exactly one reviewed trust class."""
+
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
