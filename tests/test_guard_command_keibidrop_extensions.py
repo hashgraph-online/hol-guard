@@ -160,6 +160,31 @@ def test_keibidrop_read_only_verbs_produce_no_observation(tmp_path: Path) -> Non
         assert _matched_rules(command, tmp_path) == set(), command
 
 
+# kd reads its verb at argv[1] and nowhere else, so an option in that position
+# means a different command ran. `kd --help pull` prints help and
+# `kd --timeout 30 pull x` fails on an unknown verb; neither pulls anything.
+KEIBIDROP_OPTION_BEFORE_VERB_COMMANDS: tuple[str, ...] = (
+    "kd --timeout 30 pull report.mov",
+    "kd --timeout=30 pull report.mov",
+    "kd --help pull",
+    "kd -h pull",
+    "kd --help add ./notes.txt",
+    "kd --timeout 30 register " + _PEER_CODE,
+)
+
+
+def test_keibidrop_an_option_before_the_verb_is_not_that_verb(tmp_path: Path) -> None:
+    for command in KEIBIDROP_OPTION_BEFORE_VERB_COMMANDS:
+        assert _matched_rules(command, tmp_path) == set(), command
+    assert_safe_command_cases(KEIBIDROP_OPTION_BEFORE_VERB_COMMANDS, tmp_path)
+
+
+def test_keibidrop_wrappers_keep_conservative_option_parsing(tmp_path: Path) -> None:
+    """An unknown wrapper option still cannot hide the verb behind it."""
+
+    assert _matched_rules("xargs -X kd pull report.mov", tmp_path) == {"command.keibidrop.pull-file"}
+
+
 def test_keibidrop_read_only_commands_remain_safe(tmp_path: Path) -> None:
     assert_safe_command_cases(KEIBIDROP_READ_ONLY_COMMANDS, tmp_path)
 

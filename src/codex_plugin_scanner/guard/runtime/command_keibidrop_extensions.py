@@ -18,12 +18,15 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 # variant belongs on these rules. Help is `kd help`, `kd --help` and `kd -h`,
 # which carry no verb and never reach a matcher here.
 #
-# Conservative matching covers:
-# - Direct invocation, including an absolute path and an env-var prefix, both of
-#   which the parser already reduces to the kd basename
-# - Shell wrappers: exec kd ..., xargs kd ...
-# - Fail-secure option parsing: an unknown option cannot move the verb out of
-#   matching position
+# Matching covers direct invocation, including an absolute path and an env-var
+# prefix, both of which the parser already reduces to the kd basename, and the
+# exec and xargs wrappers.
+#
+# Only the wrappers parse options conservatively, because their own option
+# surface decides where the nested command starts. A direct kd takes its verb
+# at argv[1] and nowhere else, so an option there means some other command ran:
+# `kd --help pull` prints help and `kd --timeout 30 pull x` fails on an unknown
+# verb. Neither pulls anything, so neither is reviewed.
 
 _KEIBIDROP_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("kd",),
@@ -48,7 +51,7 @@ def _kd_verb_matcher(*verbs: str) -> AnyMatcher:
                 leading_options_with_values=(
                     _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in _WRAPPERS else frozenset()
                 ),
-                fail_secure_unknown_options=True,
+                fail_secure_unknown_options=launcher[0] in _WRAPPERS,
             )
             for launcher in _KEIBIDROP_LAUNCHERS
             for verb in verbs
