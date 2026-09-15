@@ -62,7 +62,7 @@ def _review_request(
     return payload
 
 
-@pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
+@pytest.mark.parametrize("endpoint", ("pi", "omp", "claude-code"))
 def test_observe_mode_does_not_block_failed_local_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -91,7 +91,7 @@ def test_observe_mode_does_not_block_failed_local_review(
     finally:
         daemon.stop()
 
-    if endpoint == "pi":
+    if endpoint in {"pi", "omp"}:
         assert payload["decision"] == "allow"
         return
     hook_output = payload["hookSpecificOutput"]
