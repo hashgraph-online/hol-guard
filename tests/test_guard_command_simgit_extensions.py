@@ -52,6 +52,13 @@ SIMGIT_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
     ("xargs -n 1 sg remove agent/1234 --delete-branch --delete-unmerged", _DELETE_UNMERGED),
     ("simgit list --json && simgit gc --discard-dirty", _DISCARD_DIRTY),
     ("simgit list --json | simgit gc --delete-branches --delete-unmerged", _DELETE_UNMERGED),
+    # Forms the parser normalizes before the registry observes them.
+    ("env simgit remove /tmp/agent-work --discard-dirty", _DISCARD_DIRTY),
+    ("env SIMGIT_WORKTREE_ROOT=/tmp/roots simgit gc --discard-dirty", _DISCARD_DIRTY),
+    ("command sg remove /tmp/agent-work --discard-dirty", _DISCARD_DIRTY),
+    ("command simgit gc --delete-branches --delete-unmerged", _DELETE_UNMERGED),
+    ('bash -c "simgit gc --delete-branches --delete-unmerged"', _DELETE_UNMERGED),
+    ("sh -c 'simgit remove /tmp/agent-work --discard-dirty'", _DISCARD_DIRTY),
 )
 
 SIMGIT_UNMATCHED_COMMANDS: tuple[str, ...] = (
@@ -81,6 +88,10 @@ SIMGIT_UNMATCHED_COMMANDS: tuple[str, ...] = (
     "simgit remove --help",
     "simgit gc --help",
     "simgit remove /tmp/agent-work --discard-dirty --help",
+    # The same normalized wrappers carrying a safe command stay unmatched.
+    "env simgit gc --discard-dirty --dry-run",
+    "command sg remove /tmp/agent-work",
+    'bash -c "simgit remove --help"',
 )
 
 
