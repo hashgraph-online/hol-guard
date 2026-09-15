@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.claude-tmux",
+  "version": "1.0.0",
+  "name": "Claude tmux cleanup",
+  "description": "Reviews claude-tmux-cleanup runs that kill agent-team sessions or Claude Code processes.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.s403o",
+    "displayName": "Community",
+    "url": "https://github.com/s403o/claude-code-tmux"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#3B0764" },
+  "homepage": "https://github.com/s403o/claude-code-tmux",
+  "license": "MIT",
+  "executables": ["claude-tmux-cleanup", "ctc"],
+  "ecosystemIds": ["claude-tmux"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "claude tmux session teardown command",
+    "claude tmux process prune command"
+  ],
+  "referenceUrls": ["https://github.com/s403o/claude-code-tmux"],
+  "saferAlternatives": ["Use --dry-run to list the sessions and pids before killing anything."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_claude_tmux_extensions"
+  }
+}
