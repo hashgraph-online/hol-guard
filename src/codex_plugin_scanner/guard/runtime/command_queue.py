@@ -122,9 +122,9 @@ def command_queue_enabled(store: GuardStore | None = None, environ: dict[str, st
 def command_queue_should_poll(store: GuardStore | None = None, environ: dict[str, str] | None = None) -> bool:
     """Poll when generic commands or Cloud Review receive jobs are available."""
 
-    if store is None:
+    if store is None or not command_environment_allows_queue(environ):
         return False
-    return command_queue_enabled(store, environ) or bool(lease_ready_operations(store))
+    return command_queue_enabled(store) or bool(lease_ready_operations(store))
 
 
 def command_queue_status(store: GuardStore) -> dict[str, object]:
