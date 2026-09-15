@@ -119,7 +119,11 @@ _SENSITIVE_INLINE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
         r'dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?)"?\s*[:=]\s*',
     ),
 )
-_SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
+_SENSITIVE_TEXT_PATTERN = re.compile(
+    r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|password|passwd|credential(?:s)?|authorization|"
+    r"access[_-]?key|api[_-]?key)(?:\s*[:=]\s*|\s+)(?:bearer\s+|basic\s+)?"
+    r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;]+))"
+)
 _POSIX_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)"
 )

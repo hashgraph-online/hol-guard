@@ -52,7 +52,9 @@ _PROTECTED_WORD_PAIRS: Final = frozenset({("api", "key"), ("private", "key"), ("
 _SSH_PRIVATE_KEY_NAMES: Final = frozenset({"id_dsa", "id_ecdsa", "id_ed25519", "id_rsa"})
 
 
-def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[ContainmentInput, ...]]:
+def complete_workspace_snapshot(
+    workspace: Path, *, exclude_protected: bool = False
+) -> tuple[str, tuple[ContainmentInput, ...]]:
     """Capture every eligible workspace file or reject the command for review."""
 
     canonical_workspace = _canonical_directory(workspace)
@@ -72,6 +74,9 @@ def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[Containment
                 exclusions.append((relative.as_posix(), "protected-state"))
                 continue
             if _is_protected(relative):
+                if exclude_protected:
+                    exclusions.append((relative.as_posix(), "protected-content"))
+                    continue
                 raise ValueError("protected workspace content requires Guard review")
             if entry.is_dir(follow_symlinks=False) and entry.name == ".bin" and "node_modules" in lowered_parts:
                 exclusions.append((relative.as_posix(), "package-bin-links"))
@@ -197,19 +202,26 @@ def _snapshot_file_digest(path: Path, expected: os.stat_result) -> str:
 
 
 def _is_protected(relative: Path) -> bool:
-    return classify_secret_path(relative.as_posix()) is not None or any(
-        _is_protected_part(part) for part in relative.parts
-    )
+    if classify_secret_path(relative.as_posix()) is not None:
+        return True
+    in_node_modules = False
+    for part in relative.parts:
+        if part.lower() == "node_modules":
+            in_node_modules = True
+            continue
+        if _is_protected_part(part, include_generic_words=not in_node_modules):
+            return True
+    return False
 
 
-def _is_protected_part(part: str) -> bool:
+def _is_protected_part(part: str, *, include_generic_words: bool = True) -> bool:
     lowered = part.lower()
     return (
         lowered in _PROTECTED_NAMES
         or lowered in _SSH_PRIVATE_KEY_NAMES
         or lowered.startswith(".env")
         or lowered.endswith(_PROTECTED_SUFFIXES)
-        or _has_protected_words(part)
+        or (include_generic_words and _has_protected_words(part))
     )
 
 
