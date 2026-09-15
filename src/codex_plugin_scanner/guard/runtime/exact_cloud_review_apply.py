@@ -121,11 +121,7 @@ def apply_exact_cloud_review(
         receipt_id=receipt_id,
         resolution_action=action,
         resolution_scope=scope,
-        reason=(
-            "Guard Cloud signed team-admin review"
-            if delegated_admin_mfa
-            else "Guard Cloud signed exact review"
-        ),
+        reason=("Guard Cloud signed team-admin review" if delegated_admin_mfa else "Guard Cloud signed exact review"),
         expected_capability=raw_capability,
         skip_exact_capability=delegated_admin_mfa,
         expected_oauth_binding={

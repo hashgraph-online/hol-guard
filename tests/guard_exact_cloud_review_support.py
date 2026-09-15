@@ -171,8 +171,7 @@ def exact_review_job(
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
-    assert isinstance(capability, dict)
-    device_id = capability.get("deviceId")
+    device_id = capability.get("deviceId") if isinstance(capability, dict) else credentials.get("device_id")
     assert isinstance(device_id, str) and device_id
     return {
         "id": "exact-job-1",

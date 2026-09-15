@@ -231,12 +231,12 @@ class StoreExactCloudReviewMixin:
             if oauth_binding != expected_oauth_binding:
                 return _exact_error("remote_exact_oauth_changed", now=resolved_at)
             current = parse_utc_timestamp(resolved_at)
+            if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
+                return _exact_error("cloud_review_capability_revoked", now=resolved_at)
             if not skip_exact_capability:
                 capability = StoreExactCloudReviewMixin._load_exact_state(connection, _CAPABILITY_KEY)
                 if capability != expected_capability:
                     return _exact_error("remote_exact_capability_changed", now=resolved_at)
-                if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
-                    return _exact_error("cloud_review_capability_revoked", now=resolved_at)
                 if not _capability_matches_oauth_binding(capability, oauth_binding):
                     return _exact_error("cloud_review_capability_binding_mismatch", now=resolved_at)
                 capability_expires_at = (
