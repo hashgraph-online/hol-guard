@@ -21,6 +21,7 @@ _TOKEN = re.compile(r"^[A-Za-z0-9._:-]{1,160}\Z")
 _SIGNING_IDENTITY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._():,+-]{0,159}\Z")
 _MAX_BINARY_BYTES = 512 * 1024 * 1024
 _MAX_SIDECAR_BYTES = 64 * 1024
+_LINUX_SIDECAR_TARGET = "x86_64-unknown-linux-gnu"
 
 
 class DesktopAttestationError(ValueError):
@@ -129,15 +130,32 @@ def verify(
     for key, expected in expected_marker.items():
         if marker_payload.get(key) != expected:
             raise DesktopAttestationError(f"Desktop Core attestation mismatch for {key}")
-    _require_signing_identity(marker_payload.get("appleSigningIdentity"), label="attestation appleSigningIdentity")
-    for key in ("appleTeamId", "workflowRun", "attestedAt"):
-        _require_token(marker_payload.get(key), label=f"attestation {key}")
-    _require_token(expected_team_id, label="expected Apple team ID")
-    if marker_payload["appleTeamId"] != expected_team_id:
-        raise DesktopAttestationError("Desktop Core attestation team identity mismatch")
+    linux_sidecar = target == _LINUX_SIDECAR_TARGET
+    if linux_sidecar:
+        if expected_team_id:
+            raise DesktopAttestationError("Linux Desktop Core attestation must not include an Apple team ID")
+        for key in ("appleSigningIdentity", "appleTeamId"):
+            value = marker_payload.get(key)
+            if value not in ("", None):
+                raise DesktopAttestationError(f"Linux Desktop Core attestation must leave {key} empty")
+        for key in ("workflowRun", "attestedAt"):
+            _require_token(marker_payload.get(key), label=f"attestation {key}")
+        native_team_id = None
+        recorded_team_id = ""
+    else:
+        _require_signing_identity(marker_payload.get("appleSigningIdentity"), label="attestation appleSigningIdentity")
+        for key in ("appleTeamId", "workflowRun", "attestedAt"):
+            _require_token(marker_payload.get(key), label=f"attestation {key}")
+        _require_token(expected_team_id, label="expected Apple team ID")
+        if marker_payload["appleTeamId"] != expected_team_id:
+            raise DesktopAttestationError("Desktop Core attestation team identity mismatch")
+        native_team_id = expected_team_id
+        recorded_team_id = marker_payload["appleTeamId"]
+        if not isinstance(recorded_team_id, str):
+            raise DesktopAttestationError("attestation appleTeamId is not a string")
     verifier = _native_verifier()
     try:
-        verifier.verify(binary, expected_team_id=expected_team_id)
+        verifier.verify(binary, expected_team_id=native_team_id)
     except (OSError, ValueError, SystemExit) as error:
         raise DesktopAttestationError("post-sign native sidecar verification failed") from error
     return {
@@ -148,7 +166,7 @@ def verify(
         "target": target,
         "binary": {"name": binary.name, "sha256": expected_marker["binarySha256"], "size": binary.stat().st_size},
         "manifest": {"name": manifest.name, "sha256": expected_marker["manifestSha256"]},
-        "attestation": {"name": marker.name, "sha256": sha256_file(marker), "team_id": marker_payload["appleTeamId"]},
+        "attestation": {"name": marker.name, "sha256": sha256_file(marker), "team_id": recorded_team_id},
         "post_sign_verified": True,
     }
 
