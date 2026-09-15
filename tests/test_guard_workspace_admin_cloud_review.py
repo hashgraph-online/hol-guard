@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.command_queue import command_queue_enabled, command_queue_should_poll
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     ExactCloudReviewError,
@@ -52,6 +53,8 @@ def test_workspace_admin_mfa_review_applies_without_local_cloud_review_enablemen
     assert row is not None and row["status"] == "resolved"
     assert row["reason"] == "Guard Cloud signed team-admin review"
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert command_queue_enabled(store) is False
+    assert command_queue_should_poll(store) is True
 
 
 def test_workspace_admin_mfa_review_requires_cloud_step_up(tmp_path: Path) -> None:
