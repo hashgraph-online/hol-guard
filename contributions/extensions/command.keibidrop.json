@@ -7,7 +7,7 @@
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
-    "id": "community.marius-cristian",
+    "id": "community.keibisoft",
     "displayName": "Community",
     "url": "https://github.com/KeibiSoft/KeibiDrop"
   },
