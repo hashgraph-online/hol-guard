@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "af0766948b8eda543ad4cc43193ff921f675cc1b71e04544a64b8ebb102d1b05",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -55,6 +55,7 @@
     "command.github",
     "command.guard-self-protection",
     "command.infrastructure-as-code",
+    "command.keibidrop",
     "command.kubernetes-operations",
     "command.kubernetes-secrets",
     "command.load-balancer",
@@ -95,7 +96,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 248,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -231,6 +232,9 @@
     "command.github.permission.unknown": "gh extension run custom-tool",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
+    "command.keibidrop.permission.pull-file": "kd pull",
+    "command.keibidrop.permission.register-peer": "kd register",
+    "command.keibidrop.permission.share-file": "kd add",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
     "command.kubernetes-operations.permission.apply-resources": "kubectl apply -f deployment.yaml",
     "command.kubernetes-operations.permission.autoscale-resources": "kubectl autoscale deployment api --min=2 --max=10 --cpu-percent=80",
@@ -574,6 +578,9 @@
     "command.github.permission.unknown",
     "command.guard-self-protection.permission.self-authorization",
     "command.infrastructure-as-code.permission.destroy",
+    "command.keibidrop.permission.pull-file",
+    "command.keibidrop.permission.register-peer",
+    "command.keibidrop.permission.share-file",
     "command.kubernetes-operations.permission.annotate-resources",
     "command.kubernetes-operations.permission.apply-resources",
     "command.kubernetes-operations.permission.autoscale-resources",
@@ -696,7 +703,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -828,6 +835,9 @@
     "command.github.unknown",
     "command.guard-self-protection.self-authorization",
     "command.infrastructure-as-code.destroy",
+    "command.keibidrop.share-file",
+    "command.keibidrop.pull-file",
+    "command.keibidrop.register-peer",
     "command.kubernetes-operations.delete-resources",
     "command.kubernetes-operations.drain-node",
     "command.kubernetes-operations.helm-uninstall",
