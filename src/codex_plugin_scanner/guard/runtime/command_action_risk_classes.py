@@ -66,6 +66,13 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    "aether-vault commit command": ("network_egress",),
+    "aether-vault push command": ("network_egress",),
+    "aether-vault garbage collection command": ("destructive_shell",),
+    "aether-vault forced checkout command": ("destructive_shell",),
+    "aether-vault promote command": ("destructive_shell",),
+    "aether-vault stash drop command": ("destructive_shell",),
+    "aether-vault audit prune command": ("destructive_shell",),
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
 }
