@@ -316,6 +316,8 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
         return (EXACT_CLOUD_REVIEW_OPERATION,)
     except (AttributeError, ExactCloudReviewError):
         pass
+    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+        return ()
     try:
         _oauth_metadata(store)
     except (AttributeError, ExactCloudReviewError):
