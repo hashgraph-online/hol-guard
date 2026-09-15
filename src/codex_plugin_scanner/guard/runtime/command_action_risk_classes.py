@@ -66,6 +66,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    "synapsectrl profile switch command": ("destructive_shell",),
+    "synapsectrl hook mutation command": ("destructive_shell",),
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
 }
