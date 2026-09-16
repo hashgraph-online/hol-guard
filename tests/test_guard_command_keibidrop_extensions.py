@@ -200,6 +200,97 @@ def test_keibidrop_wrappers_keep_conservative_option_parsing(tmp_path: Path) -> 
     assert _matched_rules("xargs -X kd pull report.mov", tmp_path) == {"command.keibidrop.pull-file"}
 
 
+# ExecutableMatcher lowercases the options it is given and the arguments it
+# reads, so declaring a value-taking option also claims its opposite-case twin.
+# Where that twin is a flag or takes an attached value, the parser then eats the
+# token after it, which is kd, and the rule is skipped. Every xargs and exec
+# option whose case twin differs is listed here.
+KEIBIDROP_CASE_TWIN_LAUNCHERS: tuple[str, ...] = (
+    "xargs -p kd pull report.mov",  # -p interactive, twin of -P max-procs
+    "xargs -i kd pull report.mov",  # -i[replstr], twin of -I replstr
+    "xargs -l kd pull report.mov",  # -l[max-lines], twin of -L max-lines
+    "xargs -r kd pull report.mov",  # -r no-run-if-empty, twin of -R replacements
+    "xargs -e kd pull report.mov",  # -e[eofstr], twin of -E eofstr
+    "exec -l kd pull report.mov",  # exec -l, which is not xargs -L
+    # GNU gives three long options an optional value, with the same effect.
+    "xargs --eof kd pull report.mov",
+    "xargs --replace kd pull report.mov",
+    "xargs --max-lines kd pull report.mov",
+    # Clusters of those flags keep the verb reachable too.
+    "xargs -pt kd pull report.mov",
+    "xargs -rt kd add ./notes.txt",
+    "exec -lc kd add-as ./notes.txt readme.txt",
+)
+
+
+def test_keibidrop_case_twin_wrapper_options_do_not_hide_the_verb(tmp_path: Path) -> None:
+    """A mis-cased twin of a declared option must not consume kd."""
+
+    for command in KEIBIDROP_CASE_TWIN_LAUNCHERS:
+        assert _matched_rules(command, tmp_path), command
+
+
+# The options whose value slot the wrapper really does consume. Both spellings
+# of each, so the declaration is exercised attached and detached.
+KEIBIDROP_WRAPPER_VALUE_OPTIONS: tuple[str, ...] = (
+    "xargs -J % kd pull report.mov",
+    "xargs -J% kd pull report.mov",
+    "xargs -R 5 kd pull report.mov",
+    "xargs -R5 kd pull report.mov",
+    "xargs -S 4096 kd pull report.mov",
+    "xargs -E EOF kd pull report.mov",
+    "xargs -a list.txt kd pull report.mov",
+    "xargs -d , kd pull report.mov",
+    "xargs --arg-file=list.txt kd pull report.mov",
+    "xargs --arg-file list.txt kd pull report.mov",
+    "xargs --delimiter , kd pull report.mov",
+    "xargs --max-args 1 kd pull report.mov",
+    "xargs --max-chars 4096 kd pull report.mov",
+    "xargs --max-procs 4 kd pull report.mov",
+    "xargs --process-slot-var=V kd pull report.mov",
+    "xargs -J % -n 1 kd pull report.mov",
+    "xargs -J % -- kd pull report.mov",
+    "exec -a name kd pull report.mov",
+    # kd.exe and kd.cmd sit behind the same options.
+    "xargs -J % kd.exe pull report.mov",
+    "xargs -R 5 kd.cmd register " + _PEER_CODE,
+    "exec -a name kd.exe add ./notes.txt",
+)
+
+
+def test_keibidrop_wrapper_value_options_still_reach_the_verb(tmp_path: Path) -> None:
+    for command in KEIBIDROP_WRAPPER_VALUE_OPTIONS:
+        assert _matched_rules(command, tmp_path), command
+
+
+# The other half of declaring an option: kd sits in the value slot, so the
+# utility is the token after it and no kd command runs. Observing these would
+# report a share or a pull that never happened.
+KEIBIDROP_KD_AS_AN_OPTION_VALUE: tuple[str, ...] = (
+    "xargs -n kd pull report.mov",
+    "xargs -s kd pull report.mov",
+    "xargs -J kd pull report.mov",
+    "xargs -a kd add ./notes.txt",
+    "xargs -d kd pull report.mov",
+    "xargs --arg-file kd pull report.mov",
+    "xargs --delimiter kd pull report.mov",
+    "xargs --max-args kd pull report.mov",
+    "xargs --max-chars kd add ./notes.txt",
+    "xargs --max-procs kd pull report.mov",
+    "xargs --process-slot-var kd register " + _PEER_CODE,
+    "exec -a kd pull report.mov",
+)
+
+
+def test_keibidrop_kd_in_an_option_value_slot_is_not_a_kd_command(tmp_path: Path) -> None:
+    for command in KEIBIDROP_KD_AS_AN_OPTION_VALUE:
+        assert _matched_rules(command, tmp_path) == set(), command
+
+
+def test_keibidrop_kd_in_an_option_value_slot_stays_safe(tmp_path: Path) -> None:
+    assert_safe_command_cases(KEIBIDROP_KD_AS_AN_OPTION_VALUE, tmp_path)
+
+
 def test_keibidrop_read_only_commands_remain_safe(tmp_path: Path) -> None:
     assert_safe_command_cases(KEIBIDROP_READ_ONLY_COMMANDS, tmp_path)
 

@@ -23,8 +23,10 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 # exec and xargs wrappers over kd, kd.exe and kd.cmd.
 #
 # Only the wrappers parse options conservatively, because their own option
-# surface decides where the nested command starts. A direct kd takes its verb
-# at argv[1] and nowhere else, so an option there means some other command ran:
+# surface decides where the nested command starts, and each wrapper carries its
+# own option set: exec and xargs share no options at all. A direct kd takes its
+# verb at argv[1] and nowhere else, so an option there means some other command
+# ran:
 # `kd --help pull` prints help and `kd --timeout 30 pull x` fails on an unknown
 # verb. Neither pulls anything, so neither is reviewed.
 
@@ -39,7 +41,61 @@ _KEIBIDROP_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     *(("xargs", name) for name in _KD_NAMES),
 )
 _WRAPPERS: frozenset[str] = frozenset({"exec", "xargs"})
-_WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
+
+# ExecutableMatcher lowercases leading_options_with_values (command_rules.py
+# __post_init__) and lowercases the arguments it parses, so a declared option
+# also claims its opposite-case twin. xargs is full of such pairs, and each one
+# where the twin does NOT take a value turns the parser confidently wrong: it
+# eats the next token, which is kd itself, and the rule is skipped.
+#
+# So an option is declared only when its twin either does not exist or also
+# takes a value. Anything else is left undeclared on purpose. An undeclared
+# option makes the parse uncertain rather than wrong, and uncertain is handled
+# by fail_secure_unknown_options, which walks both the value and the flag
+# reading and observes the command if either one reaches the verb.
+#
+#   -n   no -N                             declared
+#   -s   -S is BSD replsize, also a value  declared
+#   -J   no -j                             declared
+#   -a   no -A                             declared, GNU --arg-file short form
+#   -d   no -D                             declared, GNU --delimiter short form
+#   -P   -p is interactive, a flag         NOT declared
+#   -I   -i takes an attached value        NOT declared
+#   -L   -l takes an attached value        NOT declared
+#   -R   -r is no-run-if-empty, a flag     NOT declared
+#   -E   -e takes an attached value        NOT declared
+#
+# Long options have no case twin, but GNU gives three of them an OPTIONAL
+# value: --eof[=str], --replace[=str] and --max-lines[=n]. Declaring those has
+# the same effect as a mis-cased short option, since the bare form then eats kd.
+# They are left undeclared for the same reason. The =value spelling of any long
+# option is one token, so it is read correctly either way.
+_XARGS_LEADING_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "-n",
+        "-s",
+        "-J",
+        "-a",
+        "-d",
+        "--arg-file",
+        "--delimiter",
+        "--max-args",
+        "--max-chars",
+        "--max-procs",
+        "--process-slot-var",
+    }
+)
+
+# exec is the shell builtin: exec [-cl] [-a name] command. Only -a carries a
+# value, and there is no -A. Giving exec the xargs option set, as this file did
+# before, made `exec -l kd pull x` skip the rule, because -l read as -L.
+_EXEC_LEADING_OPTIONS_WITH_VALUES = frozenset({"-a"})
+
+_LEADING_OPTIONS_WITH_VALUES: dict[str, frozenset[str]] = {
+    "xargs": _XARGS_LEADING_OPTIONS_WITH_VALUES,
+    "exec": _EXEC_LEADING_OPTIONS_WITH_VALUES,
+}
+
 _KD_OPTIONS_WITH_VALUES = frozenset({"--timeout"})
 
 
@@ -53,9 +109,7 @@ def _kd_verb_matcher(*verbs: str) -> AnyMatcher:
                 verb,
                 options_with_values=_KD_OPTIONS_WITH_VALUES,
                 allow_leading_options=launcher[0] in _WRAPPERS,
-                leading_options_with_values=(
-                    _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in _WRAPPERS else frozenset()
-                ),
+                leading_options_with_values=_LEADING_OPTIONS_WITH_VALUES.get(launcher[0], frozenset()),
                 fail_secure_unknown_options=launcher[0] in _WRAPPERS,
             )
             for launcher in _KEIBIDROP_LAUNCHERS
