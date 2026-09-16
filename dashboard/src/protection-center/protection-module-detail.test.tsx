@@ -127,6 +127,37 @@ assert.match(mcpDetail, /write_file/);
 assert.match(mcpDetail, />Block</);
 assert.match(mcpDetail, /This community MCP server stays off until you turn it on/);
 assert.match(mcpDetail, /MCP tools available/);
+const hostedMcp = protectionModuleFixture({
+  extension_id: "command.mcp-instapods",
+  name: "InstaPods MCP",
+  description: "Reviews sensitive hosted InstaPods MCP actions.",
+  enabled: false,
+  trust_class: "external",
+  activation: "opt-in",
+  executables: [],
+  surface: "mcp",
+  mcp_launch: {
+    kind: "remote-http",
+    url: "https://app.instapods.com/api/mcp",
+    serverNames: ["instapods"],
+  },
+  mcp_tools: [
+    { name: "delete_pod", state: "review" },
+    { name: "manage_pod", state: "inherit" },
+  ],
+});
+const hostedMcpDetail = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: hostedMcp,
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+  onRequestExtensionChange: () => undefined,
+}));
+assert.match(hostedMcpDetail, /https:\/\/app\.instapods\.com\/api\/mcp/);
+assert.match(hostedMcpDetail, />instapods</);
+assert.match(hostedMcpDetail, /delete_pod/);
+assert.match(hostedMcpDetail, />Review</);
 
 const partial = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,

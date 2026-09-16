@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.instapods",
+  "version": "1.0.0",
+  "name": "InstaPods MCP",
+  "description": "Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "instapods.com",
+    "displayName": "InstaPods",
+    "url": "https://instapods.com"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#111827" },
+  "homepage": "https://docs.instapods.com/mcp/overview",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://app.instapods.com/api/mcp",
+    "serverNames": ["instapods", "instapods-mcp"]
+  },
+  "riskClasses": ["external-pod-destruction", "external-billing-change", "external-command-execution", "external-file-write"],
+  "tools": [
+    { "name": "delete_pod", "state": "review" },
+    { "name": "change_plan", "state": "review" },
+    { "name": "exec_command", "state": "review" },
+    { "name": "write_file", "state": "review" },
+    { "name": "manage_pod", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://docs.instapods.com/mcp/overview",
+    "https://docs.instapods.com/mcp/tools",
+    "https://github.com/InstaPods/sdk"
+  ],
+  "saferAlternatives": [
+    "Use read-only pod, deployment, and file inspection tools when a state change is not required."
+  ]
+}

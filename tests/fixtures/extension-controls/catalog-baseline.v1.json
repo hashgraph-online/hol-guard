@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "65463c0aeb1723258aed0c42b6645999907ee225b84f7ed91c62253b9fac1452",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -59,6 +59,7 @@
     "command.kubernetes-secrets",
     "command.load-balancer",
     "command.mcp-filesystem",
+    "command.mcp-instapods",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -95,7 +96,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 246,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -341,7 +342,8 @@
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
     "command.system.permission.disk-or-power-mutation": "halt",
-    "command.windows.permission.destructive-storage": "clear-disk"
+    "command.windows.permission.destructive-storage": "clear-disk",
+    "command.mcp-instapods.permission.mcp-instapods-tool": "https://app.instapods.com/api/mcp"
   },
   "permission_families": {
     "command.dns.aws.permission.dnssec-disable": "aws-route53",
@@ -605,6 +607,7 @@
     "command.kubernetes-secrets.permission.secret-read",
     "command.load-balancer.permission.delete",
     "command.mcp-filesystem.permission.mcp-filesystem-tool",
+    "command.mcp-instapods.permission.mcp-instapods-tool",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",
