@@ -117,6 +117,7 @@ def test_workspace_admin_mfa_review_honors_local_cloud_review_revocation(tmp_pat
     enable_exact_cloud_review(store)
     disable_exact_cloud_review(store)
     assert exact_cloud_review_operations(store) == ()
+    assert command_queue_should_poll(store) is False
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,
