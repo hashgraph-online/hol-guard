@@ -152,3 +152,16 @@ def test_input_decode_error_emits_json_deny(monkeypatch, capsys) -> None:
         "decision": "deny",
         "reason": "HOL_GUARD_INVALID_HOOK_INPUT",
     }
+
+
+def test_input_io_error_emits_json_deny(monkeypatch, capsys) -> None:
+    def fake_load(_stream: object) -> object:
+        raise OSError("stdin failed")
+
+    monkeypatch.setattr(MODULE.json, "load", fake_load)
+
+    assert MODULE.main() == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "decision": "deny",
+        "reason": "HOL_GUARD_INVALID_HOOK_INPUT",
+    }
