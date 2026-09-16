@@ -46,7 +46,7 @@ def evaluate_tool_call(
             timeout=10,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
         return _deny("HOL_GUARD_INSPECTION_FAILED")
 
     if completed.returncode != 0:
@@ -54,7 +54,7 @@ def evaluate_tool_call(
 
     try:
         verdict = json.loads(completed.stdout)
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, UnicodeError):
         return _deny("HOL_GUARD_INVALID_JSON")
 
     classification = verdict.get("classification") if isinstance(verdict, dict) else None
@@ -69,7 +69,7 @@ def evaluate_tool_call(
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, UnicodeError):
         result = _deny("HOL_GUARD_INVALID_HOOK_INPUT")
     else:
         result = evaluate_tool_call(payload)
