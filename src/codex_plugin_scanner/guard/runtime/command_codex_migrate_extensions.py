@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
-from .command_rules import AnyMatcher, CommandSafetyRule, _after_leading_options, _segment_matches_executable
+from .command_rules import (
+    AnyMatcher,
+    CommandSafetyRule,
+    CommandSafeVariant,
+    _after_leading_options,
+    _segment_matches_executable,
+)
 
 # Surface verified against Codex Migrate 1.0.0. Destination-changing authority
 # is explicit: export applies component repairs, while serve enables transfer,
@@ -127,6 +133,8 @@ _MAX_BRACE_EXPANSION_RESULTS = 64
 
 
 def _wrapper_options(launcher: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Return value-taking options and flags for a supported wrapper."""
+
     if launcher == "exec":
         return _EXEC_OPTIONS_WITH_VALUES, _EXEC_FLAGS
     if launcher == "xargs":
@@ -135,6 +143,8 @@ def _wrapper_options(launcher: str) -> tuple[frozenset[str], frozenset[str]]:
 
 
 def _apply_matchers() -> tuple[object, ...]:
+    """Build concrete matchers for every accepted launcher and apply form."""
+
     return tuple(
         executable_matcher(
             *launcher,
@@ -161,6 +171,8 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
     launchers: tuple[tuple[str, ...], ...] = _LAUNCHERS
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        """Emit evidence when a flag-position expansion can enable apply mode."""
+
         evidence: list[MatcherEvidence] = []
         for index, segment in enumerate(command.segments):
             if segment.executable is None:
@@ -182,8 +194,6 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                     continue
                 subcommand = arguments[0]
                 remaining = arguments[1:]
-                if any(argument in _SUBCOMMAND_HELP_FORMS[subcommand] for argument in remaining):
-                    continue
                 argument_index = 0
                 while argument_index < len(remaining):
                     argument = remaining[argument_index]
@@ -278,9 +288,10 @@ def _expansion_literal_fragments(candidate: str) -> tuple[str, ...] | None:
 
 
 def _expansion_end(candidate: str, index: int) -> int | None:
+    """Return the exclusive end of a complete shell expansion at ``index``."""
+
     if candidate.startswith("${", index):
-        closing = candidate.find("}", index + 2)
-        return closing + 1 if closing >= 0 else None
+        return _parameter_expansion_end(candidate, index)
     if candidate.startswith("$(", index):
         frames: list[tuple[str | None, int]] = [(None, 0)]
         cursor = index + 2
@@ -344,6 +355,50 @@ def _expansion_end(candidate: str, index: int) -> int | None:
     return cursor
 
 
+def _parameter_expansion_end(candidate: str, index: int) -> int | None:
+    """Return the end of a balanced parameter expansion, including nested forms."""
+
+    depth = 1
+    quote: str | None = None
+    cursor = index + 2
+    while cursor < len(candidate):
+        character = candidate[cursor]
+        if quote == "'":
+            if character == "'":
+                quote = None
+            cursor += 1
+            continue
+        if quote == '"':
+            if character == "\\":
+                cursor += 2
+                continue
+            if candidate.startswith("${", cursor):
+                depth += 1
+                cursor += 2
+                continue
+            if character == '"':
+                quote = None
+            cursor += 1
+            continue
+        if character == "\\":
+            cursor += 2
+            continue
+        if character in {"'", '"'}:
+            quote = character
+            cursor += 1
+            continue
+        if candidate.startswith("${", cursor):
+            depth += 1
+            cursor += 2
+            continue
+        if character == "}":
+            depth -= 1
+            if depth == 0:
+                return cursor + 1
+        cursor += 1
+    return None
+
+
 def _brace_expansion_candidates(candidate: str) -> tuple[str, ...] | None:
     """Expand bounded comma-list braces without executing shell input."""
 
@@ -351,6 +406,8 @@ def _brace_expansion_candidates(candidate: str) -> tuple[str, ...] | None:
 
 
 def _expand_braces(candidate: str, *, depth: int) -> tuple[str, ...] | None:
+    """Recursively expand braces within strict depth and result bounds."""
+
     group = _first_brace_group(candidate)
     if group is None:
         return (candidate,)
@@ -444,6 +501,22 @@ _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS = AnyMatcher(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class CodexMigrateHelpOverrideMatcher:
+    """Match expansion-aware apply evidence only on segments with a help override."""
+
+    flag: str
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        """Keep apply evidence only for segments containing this help form."""
+
+        return tuple(
+            item
+            for item in _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS.match(command)
+            if self.flag in tuple(argument.lower() for argument in command.segments[item.segment_index].arguments)
+        )
+
+
 CODEX_MIGRATE_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.codex-migrate.apply",
@@ -464,13 +537,12 @@ CODEX_MIGRATE_COMMAND_RULES = (
         default_mode="review",
         safe_variants=(
             *(
-                safe_flag_variant(
-                    _CODEX_MIGRATE_APPLY,
-                    variant_id=f"help-{index}",
+                CommandSafeVariant(
+                    variant_id=flag,
                     title="Codex Migrate command help",
-                    flag=flag,
+                    matcher=CodexMigrateHelpOverrideMatcher(flag=flag),
                 )
-                for index, flag in enumerate(sorted(set.union(*map(set, _SUBCOMMAND_HELP_FORMS.values()))))
+                for flag in sorted(set.union(*map(set, _SUBCOMMAND_HELP_FORMS.values())))
             ),
         ),
     ),
