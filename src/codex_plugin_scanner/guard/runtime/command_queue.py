@@ -102,15 +102,29 @@ def lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
     return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
 
 
+def _generic_command_queue_operations(store: GuardStore) -> tuple[str, ...]:
+    return tuple(
+        operation for operation in command_capability_operations(store) if operation != EXACT_CLOUD_REVIEW_OPERATION
+    )
+
+
 def command_queue_enabled(store: GuardStore | None = None, environ: dict[str, str] | None = None) -> bool:
     return command_queue_is_enabled(
         store,
         environ,
         enabled_env=COMMAND_QUEUE_ENABLED_ENV,
         environment_allows_queue=command_environment_allows_queue,
-        operations=command_queue_operations,
+        operations=_generic_command_queue_operations,
         logger=_LOGGER,
     )
+
+
+def command_queue_should_poll(store: GuardStore | None = None, environ: dict[str, str] | None = None) -> bool:
+    """Poll when generic commands or Cloud Review receive jobs are available."""
+
+    if store is None or not command_environment_allows_queue(environ):
+        return False
+    return command_queue_enabled(store) or bool(lease_ready_operations(store))
 
 
 def command_queue_status(store: GuardStore) -> dict[str, object]:
@@ -306,7 +320,7 @@ def _lease_job_with_401_retry(
 
 
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
-    if not command_queue_enabled(store):
+    if not command_queue_should_poll(store):
         state = _load_state(store)
         state.update(
             {
@@ -485,7 +499,7 @@ def command_queue_loop(
         store,
         context,
         stop_event=stop_event,
-        enabled=command_queue_enabled,
+        enabled=command_queue_should_poll,
         poll_once=poll_command_queue_once,
         load_state=_load_state,
         save_state=_save_state,
