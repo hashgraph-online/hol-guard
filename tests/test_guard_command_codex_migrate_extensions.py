@@ -81,6 +81,7 @@ CODEX_MIGRATE_REVIEW_COMMANDS = (
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user `printf -- --`apply",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{y,}",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{a..z}",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{1..999999999}",
     "codex-migrate inventory --json; codex-migrate serve --target user@new-mac.local --target-home /Users/user --apply",
 )
 

@@ -429,10 +429,14 @@ def _brace_sequence_alternatives(content: str) -> tuple[str, ...] | None:
         return None
     step = abs(step) * direction
     stop = end_value + direction
-    values = tuple(render(value) for value in range(start_value, stop, step))
+    values: list[str] = []
+    for value in range(start_value, stop, step):
+        values.append(render(value))
+        if len(values) > _MAX_BRACE_EXPANSION_RESULTS:
+            break
     if not values:
         return None
-    return values[: _MAX_BRACE_EXPANSION_RESULTS + 1]
+    return tuple(values)
 
 
 _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS = AnyMatcher(
