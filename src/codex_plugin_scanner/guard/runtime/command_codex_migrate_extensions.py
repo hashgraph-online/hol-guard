@@ -122,6 +122,8 @@ _XARGS_FLAGS = frozenset(
         "-x",
     }
 )
+_MAX_BRACE_EXPANSION_DEPTH = 4
+_MAX_BRACE_EXPANSION_RESULTS = 64
 
 
 def _wrapper_options(launcher: str) -> tuple[frozenset[str], frozenset[str]]:
@@ -211,10 +213,16 @@ def _expansion_can_equal_apply(arguments: tuple[str, ...], index: int) -> bool:
     candidate = arguments[index]
     if "$(" in candidate or "`" in candidate:
         candidate = _command_expansion_word(arguments, index)
-    literals = _expansion_literal_fragments(candidate)
-    if literals is None:
-        return False
-    return any(_literal_fragments_can_equal(literals, target) for target in _APPLY_FLAG_FORMS)
+    brace_candidates = _brace_expansion_candidates(candidate)
+    if brace_candidates is None:
+        return True
+    for brace_candidate in brace_candidates:
+        if brace_candidate in _APPLY_FLAG_FORMS:
+            return True
+        literals = _expansion_literal_fragments(brace_candidate)
+        if literals is not None and any(_literal_fragments_can_equal(literals, target) for target in _APPLY_FLAG_FORMS):
+            return True
+    return False
 
 
 def _literal_fragments_can_equal(literals: tuple[str, ...], target: str) -> bool:
@@ -274,16 +282,49 @@ def _expansion_end(candidate: str, index: int) -> int | None:
         closing = candidate.find("}", index + 2)
         return closing + 1 if closing >= 0 else None
     if candidate.startswith("$(", index):
-        depth = 1
+        frames: list[tuple[str | None, int]] = [(None, 0)]
         cursor = index + 2
         while cursor < len(candidate):
-            if candidate.startswith("$(", cursor):
-                depth += 1
+            quote, plain_parentheses = frames[-1]
+            character = candidate[cursor]
+            if quote == "'":
+                if character == "'":
+                    frames[-1] = (None, plain_parentheses)
+                cursor += 1
+                continue
+            if quote == '"':
+                if character == "\\":
+                    cursor += 2
+                    continue
+                if candidate.startswith("$(", cursor):
+                    frames.append((None, 0))
+                    cursor += 2
+                    continue
+                if character == '"':
+                    frames[-1] = (None, plain_parentheses)
+                cursor += 1
+                continue
+            if character == "\\":
                 cursor += 2
                 continue
-            if candidate[cursor] == ")":
-                depth -= 1
-                if depth == 0:
+            if character in {"'", '"'}:
+                frames[-1] = (character, plain_parentheses)
+                cursor += 1
+                continue
+            if candidate.startswith("$(", cursor):
+                frames.append((None, 0))
+                cursor += 2
+                continue
+            if character == "(":
+                frames[-1] = (None, plain_parentheses + 1)
+                cursor += 1
+                continue
+            if character == ")":
+                if plain_parentheses:
+                    frames[-1] = (None, plain_parentheses - 1)
+                else:
+                    frames.pop()
+                if not frames:
                     return cursor + 1
             cursor += 1
         return None
@@ -301,6 +342,97 @@ def _expansion_end(candidate: str, index: int) -> int | None:
     while cursor < len(candidate) and (candidate[cursor].isalnum() or candidate[cursor] == "_"):
         cursor += 1
     return cursor
+
+
+def _brace_expansion_candidates(candidate: str) -> tuple[str, ...] | None:
+    """Expand bounded comma-list braces without executing shell input."""
+
+    return _expand_braces(candidate, depth=0)
+
+
+def _expand_braces(candidate: str, *, depth: int) -> tuple[str, ...] | None:
+    group = _first_brace_group(candidate)
+    if group is None:
+        return (candidate,)
+    if depth >= _MAX_BRACE_EXPANSION_DEPTH:
+        return None
+    start, end, alternatives = group
+    expanded: list[str] = []
+    for alternative in alternatives:
+        values = _expand_braces(candidate[:start] + alternative + candidate[end + 1 :], depth=depth + 1)
+        if values is None:
+            return None
+        expanded.extend(values)
+        if len(expanded) > _MAX_BRACE_EXPANSION_RESULTS:
+            return None
+    return tuple(dict.fromkeys(expanded))
+
+
+def _first_brace_group(candidate: str) -> tuple[int, int, tuple[str, ...]] | None:
+    """Return the first balanced brace group containing top-level alternatives."""
+
+    start = 0
+    while start < len(candidate):
+        if candidate[start] == "\\":
+            start += 2
+            continue
+        if candidate[start] != "{":
+            start += 1
+            continue
+        depth = 1
+        cursor = start + 1
+        alternative_start = cursor
+        alternatives: list[str] = []
+        while cursor < len(candidate):
+            if candidate[cursor] == "\\":
+                cursor += 2
+                continue
+            if candidate[cursor] == "{":
+                depth += 1
+            elif candidate[cursor] == "}":
+                depth -= 1
+                if depth == 0:
+                    if alternatives:
+                        alternatives.append(candidate[alternative_start:cursor])
+                        return start, cursor, tuple(alternatives)
+                    sequence = _brace_sequence_alternatives(candidate[alternative_start:cursor])
+                    if sequence is not None:
+                        return start, cursor, sequence
+                    break
+            elif candidate[cursor] == "," and depth == 1:
+                alternatives.append(candidate[alternative_start:cursor])
+                alternative_start = cursor + 1
+            cursor += 1
+        start = cursor + 1
+    return None
+
+
+def _brace_sequence_alternatives(content: str) -> tuple[str, ...] | None:
+    """Return bounded Bash-style character or integer sequence alternatives."""
+
+    parts = content.split("..")
+    if len(parts) not in {2, 3} or not parts[0] or not parts[1]:
+        return None
+    start, end = parts[:2]
+    step_text = parts[2] if len(parts) == 3 else None
+    if len(start) == len(end) == 1:
+        start_value, end_value = ord(start), ord(end)
+        render = chr
+    elif start.lstrip("-").isdigit() and end.lstrip("-").isdigit():
+        start_value, end_value = int(start), int(end)
+        render = str
+    else:
+        return None
+    direction = 1 if end_value >= start_value else -1
+    step = direction if step_text is None else int(step_text) if step_text.lstrip("-").isdigit() else 0
+    if step == 0:
+        return None
+    step = abs(step) * direction
+    stop = end_value + direction
+    values = tuple(render(value) for value in range(start_value, stop, step))
+    if not values:
+        return None
+    return values[: _MAX_BRACE_EXPANSION_RESULTS + 1]
 
 
 _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS = AnyMatcher(

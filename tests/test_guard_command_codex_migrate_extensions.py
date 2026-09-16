@@ -75,8 +75,12 @@ CODEX_MIGRATE_REVIEW_COMMANDS = (
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --${MODE}p",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user --$MODE",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --apply)",
+    "codex-migrate serve \"$(true ')' ; printf -- --apply)\"",
+    'codex-migrate serve "$(true \\"\\)\\" ; printf -- --apply)"',
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --)apply",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user `printf -- --`apply",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{y,}",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{a..z}",
     "codex-migrate inventory --json; codex-migrate serve --target user@new-mac.local --target-home /Users/user --apply",
 )
 
@@ -135,6 +139,8 @@ CODEX_MIGRATE_SAFE_COMMANDS = (
     "codex-migrate export --target user@new-mac.local --target-h $TARGET_HOME $APPLY_FLAG",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user backup-$HOME",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user ${PORT_SUFFIX}-backup",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user backup-{one,two}",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{a..x}",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --help $APPLY_FLAG",
     "codex-migrate inspect --target user@new-mac.local --target-home /Users/user -- --apply",
     "printf '%s' 'codex-migrate export --apply'",
