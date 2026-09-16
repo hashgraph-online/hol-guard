@@ -11,12 +11,24 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
+_LIBRARYBRIDGE_SOURCE = "contributions/extensions/command.librarybridge.json"
+_LIBRARYBRIDGE_STAGED = "extensions/contributions/command.librarybridge.json"
+
 
 def _write_artifacts(root: Path) -> None:
     for source_name in MODULE._ARTIFACTS:
         source = root / source_name
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(source_name, encoding="utf-8")
+
+
+def test_librarybridge_contribution_is_mapped_to_frozen_package_data() -> None:
+    assert MODULE._ARTIFACTS[_LIBRARYBRIDGE_SOURCE] == _LIBRARYBRIDGE_STAGED
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    assert (
+        '"contributions/extensions/command.librarybridge.json" = '
+        '"codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.librarybridge.json"'
+    ) in pyproject
 
 
 def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None:

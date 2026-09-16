@@ -391,6 +391,7 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json",
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json",
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md",
+        "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.librarybridge.json",
     }
     with zipfile.ZipFile(wheel_path) as archive:
         assert resource_names <= set(archive.namelist())
@@ -405,6 +406,8 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
             "    return Path(entry or '.').resolve() in checkout_import_roots",
             "sys.path[:] = [str(unpacked), *(entry for entry in sys.path if not is_checkout_import_path(entry))]",
             "from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract",
+            "from codex_plugin_scanner.guard.runtime.extension_contribution import contribution_catalog_overlay",
+            "from codex_plugin_scanner.guard.runtime.extension_trust import catalog_trust_fields",
             (
                 "resources = (contract.CONTRACT_PATH, contract.COMMAND_RESULT_CONTRACT_PATH, "
                 "contract.FIXTURES_PATH, contract.PUBLIC_DOCUMENTATION_PATH)"
@@ -416,6 +419,19 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
                 "== contract.COMMAND_RESULT_CONTRACT_VERSION"
             ),
             "assert contract.validate_generated_artifacts() == contract.expected_artifact_digests()",
+            "overlay = contribution_catalog_overlay('command.librarybridge')",
+            (
+                "expected_overlay = {"
+                "'publisher': {"
+                "'id': 'community.amcdev7', 'displayName': 'Community', "
+                "'url': 'https://github.com/amcdev7/LibraryBridge'}, "
+                "'icon': {'kind': 'react-icon', 'name': 'HiMiniCommandLine', "
+                "'background': '#2563EB'}}"
+            ),
+            "assert overlay == expected_overlay",
+            "expected_catalog = {'enabled': False, 'trust_class': 'external', 'activation': 'opt-in'}",
+            "expected_catalog.update(overlay)",
+            "assert catalog_trust_fields('command.librarybridge', required=False) == expected_catalog",
         )
     )
     _ = subprocess.run(
