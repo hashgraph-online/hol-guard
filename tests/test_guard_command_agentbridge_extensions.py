@@ -87,6 +87,14 @@ AGENTBRIDGE_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
         "command.agentbridge.scaffold-plugin-force",
     ),
     (
+        "exec agentbridge.exe scaffold-plugin plugins/agentbridge-demo --backend demo --force",
+        "command.agentbridge.scaffold-plugin-force",
+    ),
+    (
+        "xargs -n 1 agentbridge.cmd scaffold-plugin plugins/agentbridge-demo --backend demo --force",
+        "command.agentbridge.scaffold-plugin-force",
+    ),
+    (
         "exec agentbridge run --manifest examples/refund_agent.yaml --tool-registry my_app.tools:registry",
         "command.agentbridge.run-tool-registry",
     ),
@@ -100,6 +108,14 @@ AGENTBRIDGE_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
     ),
     (
         "exec -l agentbridge run --tool-registry my_app.tools:registry",
+        "command.agentbridge.run-tool-registry",
+    ),
+    (
+        "exec agentbridge.cmd run --tool-registry my_app.tools:registry",
+        "command.agentbridge.run-tool-registry",
+    ),
+    (
+        "xargs -n 1 agentbridge.exe run --tool-registry my_app.tools:registry",
         "command.agentbridge.run-tool-registry",
     ),
 )

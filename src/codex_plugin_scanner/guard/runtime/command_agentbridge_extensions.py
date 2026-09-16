@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule
 
+_AGENTBRIDGE_EXECUTABLE_NAMES = executable_names("agentbridge")
 _AGENTBRIDGE_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("agentbridge",),
-    ("exec", "agentbridge"),
-    ("xargs", "agentbridge"),
+    *(("exec", executable) for executable in sorted(_AGENTBRIDGE_EXECUTABLE_NAMES)),
+    *(("xargs", executable) for executable in sorted(_AGENTBRIDGE_EXECUTABLE_NAMES)),
 )
 _EXEC_LEADING_OPTIONS_WITH_VALUES = frozenset({"-a"})
 _EXEC_LEADING_FLAGS = frozenset({"-c", "-l"})
