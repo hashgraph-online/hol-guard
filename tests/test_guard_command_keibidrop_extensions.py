@@ -111,6 +111,16 @@ KEIBIDROP_LAUNCHER_CASES: tuple[tuple[str, str], ...] = (
     ("kd list && kd pull report.mov", "command.keibidrop.pull-file"),
     ("kd status; kd add ./notes.txt", "command.keibidrop.share-file"),
     ('kd add "/Users/me/Documents/tax return.pdf"', "command.keibidrop.share-file"),
+    # A wrapper names kd as an argument, so the portable names have to be
+    # matched there too. Until they were, these went unobserved on Windows.
+    ("exec kd.exe pull report.mov", "command.keibidrop.pull-file"),
+    ("exec kd.cmd add ./notes.txt", "command.keibidrop.share-file"),
+    ("xargs kd.exe pull report.mov", "command.keibidrop.pull-file"),
+    ("xargs -n 1 kd.cmd pull report.mov", "command.keibidrop.pull-file"),
+    (f"exec kd.exe register {_PEER_CODE}", "command.keibidrop.register-peer"),
+    (f"xargs kd.cmd register {_PEER_CODE}", "command.keibidrop.register-peer"),
+    ("exec kd.exe add-as ./notes.txt readme.txt", "command.keibidrop.share-file"),
+    ("xargs kd.exe bench-pull report.mov", "command.keibidrop.pull-file"),
 )
 
 
@@ -149,6 +159,11 @@ KEIBIDROP_READ_ONLY_COMMANDS: tuple[str, ...] = (
     "kd disconnect",
     # kd.exe is also the Microsoft kernel debugger, which takes no verb here.
     "kd.exe -k net:port=50000",
+    # The portable names under a wrapper stay read-only too.
+    "exec kd.exe list",
+    "exec kd.cmd status",
+    "xargs kd.exe contacts",
+    "xargs kd.cmd show fingerprint",
 )
 
 

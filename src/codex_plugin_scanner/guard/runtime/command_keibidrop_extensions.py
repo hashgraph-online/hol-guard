@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher
+from .command_extension_matchers import executable_matcher, executable_names
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule
 
@@ -20,7 +20,7 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 #
 # Matching covers direct invocation, including an absolute path and an env-var
 # prefix, both of which the parser already reduces to the kd basename, and the
-# exec and xargs wrappers.
+# exec and xargs wrappers over kd, kd.exe and kd.cmd.
 #
 # Only the wrappers parse options conservatively, because their own option
 # surface decides where the nested command starts. A direct kd takes its verb
@@ -28,10 +28,15 @@ from .command_rules import AnyMatcher, CommandSafetyRule
 # `kd --help pull` prints help and `kd --timeout 30 pull x` fails on an unknown
 # verb. Neither pulls anything, so neither is reviewed.
 
+# A wrapper names kd as an argument, which executable_names never reaches, so
+# the portable names are spelled out for those forms too. Sorted, because the
+# catalog digest has to come out the same on every run.
+_KD_NAMES: tuple[str, ...] = tuple(sorted(executable_names("kd")))
+
 _KEIBIDROP_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("kd",),
-    ("exec", "kd"),
-    ("xargs", "kd"),
+    *(("exec", name) for name in _KD_NAMES),
+    *(("xargs", name) for name in _KD_NAMES),
 )
 _WRAPPERS: frozenset[str] = frozenset({"exec", "xargs"})
 _WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
