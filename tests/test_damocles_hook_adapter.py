@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -90,6 +91,19 @@ def test_timeout_denies() -> None:
     assert result == {"decision": "deny", "reason": "HOL_GUARD_INSPECTION_FAILED"}
 
 
+def test_subprocess_decode_error_denies() -> None:
+    def fake_run(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    result = MODULE.evaluate_tool_call(
+        _payload(),
+        which=lambda _: "/usr/local/bin/hol-guard",
+        run=fake_run,
+    )
+
+    assert result == {"decision": "deny", "reason": "HOL_GUARD_INSPECTION_FAILED"}
+
+
 def test_empty_command_denies() -> None:
     assert MODULE.evaluate_tool_call(_payload("")) == {
         "decision": "deny",
@@ -125,3 +139,16 @@ def test_windows_uses_resolved_executable_without_shell() -> None:
         "--json",
     ]
     assert "shell" not in seen["kwargs"]
+
+
+def test_input_decode_error_emits_json_deny(monkeypatch, capsys) -> None:
+    def fake_load(_stream: object) -> object:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(MODULE.json, "load", fake_load)
+
+    assert MODULE.main() == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "decision": "deny",
+        "reason": "HOL_GUARD_INVALID_HOOK_INPUT",
+    }
