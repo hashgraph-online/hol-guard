@@ -443,6 +443,12 @@ def main(
     command = getattr(args, "command", None)
     try:
         if command == "list-versions":
+            if __package__:
+                from .release_registry_list import list_registry_versions
+            else:
+                from release_registry_list import (  # pyright: ignore[reportImplicitRelativeImport]
+                    list_registry_versions,
+                )
             registry = Registry(args.registry)
             output: object = list_registry_versions(
                 registry,
@@ -504,12 +510,16 @@ def main(
     return 0
 
 
-if __package__:
-    from .release_registry_list import list_registry_versions as list_registry_versions
-else:
-    from release_registry_list import (
-        list_registry_versions as list_registry_versions,  # pyright: ignore[reportImplicitRelativeImport]
-    )
+def __getattr__(name: str) -> object:
+    if name == "list_registry_versions":
+        if __package__:
+            from .release_registry_list import list_registry_versions as list_versions
+        else:
+            from release_registry_list import (  # pyright: ignore[reportImplicitRelativeImport]
+                list_registry_versions as list_versions,
+            )
+        return list_versions
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if __name__ == "__main__":

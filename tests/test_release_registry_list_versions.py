@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +16,8 @@ from tests.test_verify_release_registry import (
     _http_error,
     _project_url,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_lists_sorted_canonical_registry_versions() -> None:
@@ -151,3 +156,14 @@ def test_listing_registry_versions_fails_fast_on_permanent_http_error() -> None:
         )
     assert fetcher.calls == [url]
     assert delays == []
+
+
+def test_verify_release_registry_script_help_avoids_circular_import() -> None:
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "verify_release_registry.py"), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "list-versions" in result.stdout
