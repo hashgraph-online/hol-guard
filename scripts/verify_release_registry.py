@@ -120,9 +120,13 @@ def list_registry_versions(
     sleep: release_registry_retry.Sleeper | None = None,
 ) -> tuple[str, ...]:
     def list_once() -> tuple[str, ...]:
-        payload = release_registry_retry._fetch_payload(_project_url(registry, project_name), fetcher=fetcher)
+        payload = release_registry_retry._fetch_payload(
+            _project_url(registry, project_name),
+            fetcher=fetcher,
+            allow_not_found=True,
+        )
         if payload is None:
-            raise RegistryVerificationError("Registry project response was unexpectedly absent")
+            return ()
         document = _decode_object(payload, label="Registry project response")
         releases = document.get("releases")
         if not isinstance(releases, dict):

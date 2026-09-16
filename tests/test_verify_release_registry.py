@@ -230,6 +230,36 @@ def test_listing_registry_versions_fails_closed_on_network_error() -> None:
         list_registry_versions(Registry.PYPI, fetcher=fetcher, retry_attempts=1)
 
 
+@pytest.mark.parametrize("registry", [Registry.PYPI, Registry.TESTPYPI])
+def test_listing_registry_versions_treats_missing_project_as_empty(registry: Registry) -> None:
+    url = _project_url(registry)
+    fetcher = FakeFetcher({url: _http_error(url, 404)})
+    delays: list[float] = []
+
+    assert (
+        list_registry_versions(
+            registry,
+            fetcher=fetcher,
+            retry_attempts=2,
+            retry_initial_delay_seconds=0,
+            retry_max_delay_seconds=0,
+            sleep=delays.append,
+        )
+        == ()
+    )
+    assert fetcher.calls == [url]
+    assert delays == []
+
+
+def test_list_versions_cli_reports_empty_for_unregistered_project(capsys: pytest.CaptureFixture[str]) -> None:
+    url = _project_url(Registry.TESTPYPI)
+    fetcher = FakeFetcher({url: _http_error(url, 404)})
+
+    assert main(["list-versions", "--registry", "testpypi"], fetcher=fetcher) == 0
+    assert json.loads(capsys.readouterr().out) == []
+    assert fetcher.calls == [url]
+
+
 @pytest.mark.parametrize(
     "transient_error",
     [
