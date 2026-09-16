@@ -513,8 +513,22 @@ class CodexMigrateHelpOverrideMatcher:
         return tuple(
             item
             for item in _CODEX_MIGRATE_APPLY_WITH_EXPANSIONS.match(command)
-            if self.flag in tuple(argument.lower() for argument in command.segments[item.segment_index].arguments)
+            if _option_precedes_terminator(
+                command.segments[item.segment_index].arguments,
+                self.flag,
+            )
         )
+
+
+def _option_precedes_terminator(arguments: tuple[str, ...], option: str) -> bool:
+    """Return whether ``option`` appears before the first end-of-options marker."""
+
+    for argument in arguments:
+        if argument == "--":
+            return False
+        if argument.lower() == option:
+            return True
+    return False
 
 
 CODEX_MIGRATE_COMMAND_RULES = (

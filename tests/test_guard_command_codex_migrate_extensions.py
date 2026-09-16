@@ -83,6 +83,7 @@ CODEX_MIGRATE_REVIEW_COMMANDS = (
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{y,}",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{a..z}",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --appl{1..999999999}",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --apply -- --help",
     "codex-migrate inventory --json; codex-migrate serve --target user@new-mac.local --target-home /Users/user --apply",
 )
 
@@ -116,6 +117,18 @@ def test_codex_migrate_apply_rule_controls_command_when_enabled(tmp_path: Path) 
     )
 
     assert any(item.extension.extension_id == "command.codex-migrate" for item in evaluation.extension_observations)
+    assert evaluation.controlling_action_class == _ACTION_CLASS
+    assert evaluation.controlling_rule_id == _RULE_ID
+
+
+def test_codex_migrate_positional_help_does_not_override_apply_rule(tmp_path: Path) -> None:
+    evaluation = evaluate_command(
+        "codex-migrate export --target host --target-home /Users/user --apply -- --help",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        extension_control_layers=(_enabled_control_layer(),),
+    )
+
     assert evaluation.controlling_action_class == _ACTION_CLASS
     assert evaluation.controlling_rule_id == _RULE_ID
 
