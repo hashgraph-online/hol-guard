@@ -69,7 +69,7 @@ def evaluate_tool_call(
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, TypeError, UnicodeError):
+    except (json.JSONDecodeError, TypeError, UnicodeError, OSError):
         result = _deny("HOL_GUARD_INVALID_HOOK_INPUT")
     else:
         result = evaluate_tool_call(payload)
