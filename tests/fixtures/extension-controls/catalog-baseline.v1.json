@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "f4cfacd5bb01024f1c5ba9f338a9bb22d1878c43b372f8e84b39e7cb0e9de482",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
+    "command.aether-vault",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -95,8 +96,15 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 252,
   "permission_examples": {
+    "command.aether-vault.permission.audit-prune": "av audit prune --before-days 30",
+    "command.aether-vault.permission.checkout-force": "av checkout main --force",
+    "command.aether-vault.permission.commit": "av commit -m \"epoch 12\"",
+    "command.aether-vault.permission.gc": "av gc",
+    "command.aether-vault.permission.promote": "av promote candidate-1 --into main",
+    "command.aether-vault.permission.push": "av push",
+    "command.aether-vault.permission.stash-drop": "av stash drop",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -440,6 +448,13 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.aether-vault.permission.audit-prune",
+    "command.aether-vault.permission.checkout-force",
+    "command.aether-vault.permission.commit",
+    "command.aether-vault.permission.gc",
+    "command.aether-vault.permission.promote",
+    "command.aether-vault.permission.push",
+    "command.aether-vault.permission.stash-drop",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -696,8 +711,15 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 239,
   "rule_ids": [
+    "command.aether-vault.commit",
+    "command.aether-vault.push",
+    "command.aether-vault.gc",
+    "command.aether-vault.checkout-force",
+    "command.aether-vault.promote",
+    "command.aether-vault.stash-drop",
+    "command.aether-vault.audit-prune",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",

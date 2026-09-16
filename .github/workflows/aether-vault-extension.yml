@@ -1,0 +1,92 @@
+name: Aether-Vault command extension
+
+on:
+  pull_request:
+    paths:
+      - src/codex_plugin_scanner/guard/runtime/command_aether_vault_extensions.py
+      - src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py
+      - src/codex_plugin_scanner/guard/runtime/command_action_risk_classes.py
+      - contracts/extensions/trust-class-map.v1.json
+      - contributions/extensions/command.aether-vault.json
+      - tests/test_guard_command_aether_vault_extensions.py
+      - .github/workflows/aether-vault-extension.yml
+  push:
+    branches:
+      - main
+    paths:
+      - src/codex_plugin_scanner/guard/runtime/command_aether_vault_extensions.py
+      - src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py
+      - src/codex_plugin_scanner/guard/runtime/command_action_risk_classes.py
+      - contracts/extensions/trust-class-map.v1.json
+      - contributions/extensions/command.aether-vault.json
+      - tests/test_guard_command_aether_vault_extensions.py
+      - .github/workflows/aether-vault-extension.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aether-vault-extension-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  aether-vault-extension:
+    name: aether-vault extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Check aether-vault source quality
+        run: |
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/runtime/command_aether_vault_extensions.py \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_action_risk_classes.py \
+            tests/test_guard_command_aether_vault_extensions.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/runtime/command_aether_vault_extensions.py \
+            src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py \
+            src/codex_plugin_scanner/guard/runtime/command_action_risk_classes.py \
+            tests/test_guard_command_aether_vault_extensions.py
+      - name: Run aether-vault extension and registry contract tests
+        # test_guard_command_extensions.py is targeted by specific node IDs, not the whole
+        # file: it also carries test_github_pr_create_body_file_honors_proposal_permission_toggle,
+        # a pre-existing failure unrelated to this extension (reproduces on a clean upstream
+        # checkout too) that would otherwise make this job red for someone else's bug.
+        run: |
+          uv run --no-sync pytest \
+            tests/test_guard_command_aether_vault_extensions.py \
+            tests/test_guard_extension_contribution.py \
+            tests/test_guard_extension_trust.py \
+            "tests/test_guard_command_extensions.py::test_command_extension_registry_is_deterministic_and_complete" \
+            "tests/test_guard_command_extensions.py::test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional" \
+            "tests/test_guard_command_extensions.py::test_command_extension_registry_rejects_duplicate_action_ownership" \
+            "tests/test_guard_command_extensions.py::test_every_extension_declares_its_actions_runtime_risk_classes" \
+            tests/test_guard_command_extension_registry.py \
+            tests/test_guard_command_extension_directory.py \
+            tests/test_guard_extension_control_catalog_detail.py \
+            tests/test_policy_bundle_delivery_runtime.py \
+            --tb=short
+      - name: Verify generated extension directory and catalog projections
+        run: |
+          uv run --no-sync python scripts/render_command_extension_directory.py --check
+          uv run --no-sync python scripts/export_extension_directory.py --check
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
