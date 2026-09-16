@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c0b23f157bc4921d1c51c692c4cb039da560bc176ce13a416f8d122c25db2a41",
+  "catalog_digest": "c09d1c49c4cd750395ad0166fc82549b1ec37ccb2bafa5d449811607a237f0d9",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 69,
+  "extension_count": 70,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -89,13 +89,14 @@
     "command.storage.azure-blob",
     "command.storage.google-cloud",
     "command.storage.minio",
+    "command.syngraphe",
     "command.system",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 245,
+  "permission_count": 248,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -306,6 +307,9 @@
     "command.shell-mutations.permission.process-environment-secret-read": "python3 -c 'import os; print(os.environ)'",
     "command.shell-mutations.permission.sensitive-file-write": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
     "command.skill-sunset.permission.audit": "skill-sunset audit",
+    "command.syngraphe.permission.document-new": "syngraphe truth new domain-model",
+    "command.syngraphe.permission.init": "syngraphe init",
+    "command.syngraphe.permission.state-archive": "syngraphe state archive phase-one",
     "command.storage.aws-s3.permission.access-control": "aws s3api put-bucket-policy",
     "command.storage.aws-s3.permission.bucket-configuration": "aws s3api put-bucket-versioning",
     "command.storage.aws-s3.permission.cp": "aws s3 cp",
@@ -683,6 +687,9 @@
     "command.storage.minio.permission.mb",
     "command.storage.minio.permission.mirror",
     "command.storage.minio.permission.mv",
+    "command.syngraphe.permission.document-new",
+    "command.syngraphe.permission.init",
+    "command.syngraphe.permission.state-archive",
     "command.system.permission.disk-or-power-mutation",
     "command.windows.permission.destructive-storage"
   ],
@@ -696,7 +703,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 232,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -928,6 +935,9 @@
     "command.storage.minio.mv",
     "command.storage.minio.cat",
     "command.storage.minio.mirror",
+    "command.syngraphe.init",
+    "command.syngraphe.document-new",
+    "command.syngraphe.state-archive",
     "command.system.disk-or-power-mutation",
     "command.windows.destructive-storage"
   ],

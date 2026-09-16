@@ -9,10 +9,9 @@ from ..github_pr_body_file import github_pr_body_file_is_safe, static_markdown_p
 from .constants_core import _FIND_EXEC_ACTION_FLAGS, _FIND_EXEC_PLACEHOLDER_TARGET, _FIND_EXEC_TERMINATOR_TOKENS
 from .constants_patterns import _FIND_PATH_VALUE_PREDICATES, _HEREDOC_PATTERN, _SHELL_LOCAL_READ_COMMANDS
 from .developer_inspection import _find_exec_sed_args_are_read_only
-from .github_pr_expansion import _gh_pr_create_body_args_start_index, _shell_token_has_active_expansion
+from .github_pr_expansion import _gh_pr_create_body_args_start_index
 from .github_shell_capabilities import _shell_command_substitution_payloads, _ShellTokenWithQuoteContext
 from .local_read_operands import _shell_segment_file_operand_tokens
-from .pytest_target_detection import _shell_token_has_active_glob
 from .request_models import (
     _SECRET_EXFILTRATION_DESTINATION_PATTERN,
     _SECRET_EXFILTRATION_NETWORK_PATTERN,
@@ -20,6 +19,7 @@ from .request_models import (
     classify_sensitive_path,
 )
 from .shell_quote_parsing import _shell_token_segments, _shell_tokens_preserving_quote_context
+from .shell_quote_tokens import shell_token_has_active_expansion, shell_token_has_active_pathname_expansion
 from .shell_tokenization import _shell_command_token_without_attached_redirection, _shell_segment_primary_command
 
 
@@ -65,8 +65,8 @@ def _gh_pr_create_segment_with_bounded_output(
     if producer and producer[-1].plain == "2>&1":
         producer = producer[:-1]
     if any(
-        _shell_token_has_active_expansion(token.raw)
-        or _shell_token_has_active_glob(token.raw)
+        shell_token_has_active_expansion(token.raw)
+        or shell_token_has_active_pathname_expansion(token.raw)
         or "<" in token.raw
         or ">" in token.raw
         for token in producer
@@ -105,7 +105,7 @@ def _gh_pr_edit_uses_safe_static_body_file(
         len(segment) < 4
         or tuple(token.raw for token in segment[:3]) != ("gh", "pr", "edit")
         or tuple(token.plain for token in segment[:3]) != ("gh", "pr", "edit")
-        or any(_shell_token_has_active_expansion(token.raw) for token in segment)
+        or any(shell_token_has_active_expansion(token.raw) for token in segment)
     ):
         return False
     args_start_index = 3

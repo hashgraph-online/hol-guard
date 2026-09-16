@@ -7,10 +7,10 @@ import re
 from ..github_command_capabilities import static_markdown_pr_body_file_operand
 from ..secret_sensitivity import classify_secret_content
 from ..shell_structure import extract_command_substitution_spans, extract_heredocs, mask_complete_heredocs
-from .github_pr_expansion import _shell_token_has_active_expansion
 from .github_shell_capabilities import github_argument_token_has_untrusted_expansion
 from .shell_quote_tokens import (
     ShellTokenWithQuoteContext,
+    shell_token_has_active_expansion,
     shell_token_segments,
     shell_tokens_preserving_quote_context,
 )
@@ -112,7 +112,7 @@ def _body_grep_is_safe(segment: list[ShellTokenWithQuoteContext], *, variable: s
         and segment[3].raw.startswith("'")
         and _is_one_fully_quoted_word(segment[3].raw)
         and not segment[3].plain.startswith("-")
-        and not _shell_token_has_active_expansion(segment[3].raw)
+        and not shell_token_has_active_expansion(segment[3].raw)
         and segment[4].raw == f'"${variable}"'
     )
 
@@ -131,7 +131,7 @@ def _echo_is_safe(segment: list[ShellTokenWithQuoteContext], *, variable: str) -
 
 
 def _static_shell_argument(raw: str, *, allow_unquoted: bool = True) -> bool:
-    if not raw or _shell_token_has_active_expansion(raw) or "<(" in raw or ">(" in raw:
+    if not raw or shell_token_has_active_expansion(raw) or "<(" in raw or ">(" in raw:
         return False
     if _is_one_fully_quoted_word(raw):
         return True
