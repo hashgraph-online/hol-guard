@@ -390,6 +390,62 @@ def test_where_are_we_unknown_options_cannot_buy_a_safe_exemption(
     assert enabled.minimum_action == "review"
 
 
+@pytest.mark.parametrize(
+    ("command", "rule_ids"),
+    (
+        # A value-taking option consumes the next token even when that token is
+        # itself an option, so a reviewed flag written straight after one is not
+        # seen by its own rule. That is deliberate and must stay: the shared
+        # parser refuses to read an option's VALUE as a flag, which is what stops
+        # `rsync --exclude --dry-run src dst` from forging a safe variant out of
+        # a value (test_rsync_option_values_cannot_forge_dry_run). Reading the
+        # token as a flag instead would let a value buy a review exemption.
+        #
+        # The command still reaches review here, under the rule whose flag was
+        # seen; what it loses is the second rule's action class. argparse rejects
+        # these lines anyway ("expected one argument"), so the missed rule names
+        # a command line the tool will not run.
+        (
+            "where-are-we --agent-file --install-hook git",
+            {_REPOSITORY_WRITE_RULE},
+        ),
+        (
+            "where-are-we --ag --install-hook git",
+            {_REPOSITORY_WRITE_RULE},
+        ),
+        (
+            "where-are-we --export --specs ABC-1",
+            {_REPOSITORY_WRITE_RULE},
+        ),
+        # Spelled the way the tool actually accepts them, both rules are seen.
+        (
+            "where-are-we --agent-file AGENTS.md --install-hook git",
+            {_REPOSITORY_WRITE_RULE, _INSTALL_HOOK_RULE},
+        ),
+        (
+            "where-are-we --export map.md --specs ABC-1",
+            {_REPOSITORY_WRITE_RULE, _TRACKER_FETCH_RULE},
+        ),
+        # A lone "-" is a value, not an option: `--export -` writes to stdout.
+        ("where-are-we --repo . --export -", {_REPOSITORY_WRITE_RULE}),
+    ),
+)
+def test_where_are_we_option_values_never_buy_a_review_exemption(
+    command: str,
+    rule_ids: set[str],
+    tmp_path: Path,
+) -> None:
+    enabled = evaluate_command(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        extension_control_layers=(_control_layer(ControlState.ENABLED),),
+    )
+
+    assert {item.match.rule.rule_id for item in enabled.matches} == rule_ids
+    assert enabled.minimum_action == "review"
+
+
 def test_where_are_we_unparsable_input_produces_uncertainty_not_safety(tmp_path: Path) -> None:
     evaluation = evaluate_command(
         "where-are-we --repo . --install-hook 'git",
