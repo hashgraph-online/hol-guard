@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
@@ -44,7 +44,8 @@ def _unambiguous_long_forms(options: frozenset[str], all_options: frozenset[str]
         option[:length]
         for option in options
         for length in range(3, len(option) + 1)
-        if sum(candidate.startswith(option[:length]) for candidate in all_options) == 1
+        if option[:length] in all_options
+        or sum(candidate.startswith(option[:length]) for candidate in all_options) == 1
     )
 
 
@@ -70,10 +71,11 @@ _APPLY_FLAG_FORMS = tuple(
         key=lambda value: (len(value), value),
     )
 )
+_CODEX_MIGRATE_EXECUTABLES = executable_names("codex-migrate")
 _LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("codex-migrate",),
-    ("exec", "codex-migrate"),
-    ("xargs", "codex-migrate"),
+    *(("exec", executable) for executable in sorted(_CODEX_MIGRATE_EXECUTABLES)),
+    *(("xargs", executable) for executable in sorted(_CODEX_MIGRATE_EXECUTABLES)),
 )
 _EXEC_OPTIONS_WITH_VALUES = frozenset({"-a"})
 _EXEC_FLAGS = frozenset({"-c", "-l"})
@@ -86,6 +88,7 @@ _XARGS_OPTIONS_WITH_VALUES = frozenset(
         "--max-chars",
         "--max-lines",
         "--max-procs",
+        "--process-slot-var",
         "--replace",
         "-E",
         "-I",
@@ -162,7 +165,8 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
             for launcher in self.launchers:
-                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
+                launcher_executables = _CODEX_MIGRATE_EXECUTABLES if len(launcher) == 1 else frozenset({launcher[0]})
+                if not _segment_matches_executable(segment, launcher_executables):
                     continue
                 arguments = lowered_arguments
                 if launcher[0] in ("exec", "xargs"):
@@ -191,7 +195,7 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
                         evidence.append(
                             MatcherEvidence(
                                 segment_index=index,
-                                executable=segment.executable,
+                                executable=launcher[0],
                                 detail="Matched a Codex Migrate flag-position expansion that may enable apply mode.",
                             )
                         )
@@ -202,7 +206,7 @@ class CodexMigrateUnresolvedFlagExpansionMatcher:
 
 
 def _expansion_can_equal_apply(arguments: tuple[str, ...], index: int) -> bool:
-    """Return whether expansions in one shell word can produce ``--apply``."""
+    """Return whether expansions in one shell word can produce an accepted apply flag."""
 
     candidate = arguments[index]
     if "$(" in candidate or "`" in candidate:
@@ -210,7 +214,12 @@ def _expansion_can_equal_apply(arguments: tuple[str, ...], index: int) -> bool:
     literals = _expansion_literal_fragments(candidate)
     if literals is None:
         return False
-    target = "--apply"
+    return any(_literal_fragments_can_equal(literals, target) for target in _APPLY_FLAG_FORMS)
+
+
+def _literal_fragments_can_equal(literals: tuple[str, ...], target: str) -> bool:
+    """Return whether variable gaps between fixed fragments can produce ``target``."""
+
     prefix, *middle, suffix = literals
     if not target.startswith(prefix) or not target.endswith(suffix):
         return False

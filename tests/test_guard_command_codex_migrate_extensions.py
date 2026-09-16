@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.command_codex_migrate_extensions import (
+    CodexMigrateUnresolvedFlagExpansionMatcher,
+)
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -50,16 +53,26 @@ CODEX_MIGRATE_REVIEW_COMMANDS = (
     "codex-migrate export --appl --target user@new-mac.local --target-home /Users/user",
     "codex-migrate serve --target user@new-mac.local --target-home '/Users/New User' --app",
     "exec codex-migrate serve --target user@new-mac.local --target-home /Users/user --apply",
+    "exec codex-migrate.exe serve --target user@new-mac.local --target-home /Users/user --apply",
     "xargs -n 1 codex-migrate export --target user@new-mac.local --target-home /Users/user --apply",
+    "xargs codex-migrate.cmd export --target user@new-mac.local --target-home /Users/user --apply",
     "exec -a migrate codex-migrate export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "exec -amigrate codex-migrate serve --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "xargs --max-args 1 codex-migrate serve --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "xargs --max-args=1 codex-migrate export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "xargs -n1 codex-migrate serve --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
+    "xargs --process-slot-var NAME codex-migrate export --target user@new-mac.local "
+    "--target-home /Users/user $APPLY_FLAG",
+    "exec codex-migrate.exe export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
+    "xargs codex-migrate.cmd serve --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
+    "codex-migrate.exe export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
+    "codex-migrate.cmd serve --target user@new-mac.local --target-home /Users/user ${DASHES}a",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user $APPLY_FLAG",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user ${MODE_FLAG}",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user $DASHES$APPLY",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user ${DASHES}apply",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user ${DASHES}a",
+    "codex-migrate export --target user@new-mac.local --target-home /Users/user --${MODE}p",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user --$MODE",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --apply)",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user $(printf -- --)apply",
@@ -115,6 +128,7 @@ CODEX_MIGRATE_SAFE_COMMANDS = (
     "codex-migrate recovery --target user@new-mac.local --target-home /Users/user --apply",
     "codex-migrate inspect --target '$TARGET' --target-home /Users/user --json",
     "codex-migrate export --target user@new-mac.local --target-home '$TARGET_HOME' --json",
+    "codex-migrate export --target $TARGET --target-home /Users/user --json",
     "codex-migrate export --target user@new-mac.local --target-home /Users/user --apply --help",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user -h --apply",
     "codex-migrate serve --target user@new-mac.local --target-home /Users/user --hel --apply",
@@ -141,6 +155,20 @@ def test_codex_migrate_expansion_as_known_option_value_remains_safe(tmp_path: Pa
 
     assert payload["status"] == "no_match"
     assert all(extension["extension_id"] != "command.codex-migrate" for extension in payload["extensions"])
+
+
+def test_codex_migrate_expansion_evidence_uses_stable_executable_name(tmp_path: Path) -> None:
+    command = parse_shell_command(
+        "/Users/alice/bin/codex-migrate export --target host --target-home /Users/user $APPLY_FLAG",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    evidence = CodexMigrateUnresolvedFlagExpansionMatcher().match(command)
+
+    assert len(evidence) == 1
+    assert evidence[0].executable == "codex-migrate"
+    assert "alice" not in evidence[0].executable
 
 
 def test_codex_migrate_extension_publishes_reference_and_action_risks() -> None:
