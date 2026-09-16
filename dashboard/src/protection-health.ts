@@ -40,11 +40,33 @@ function copyForState(state: GuardProtectionState): { label: string; detail: str
   return { label: "Degraded", detail: "One or more required protection checks failed or remain unproven." };
 }
 
+const UNSUPPORTED_PLATFORM_CHECK_IDS = new Set<string>([
+  "policy_engine",
+  "decision_plane_compatibility",
+  "containment_compatibility",
+  "sandbox",
+]);
+
+function isUnsupportedPlatformExemption(check: GuardProtectionCheck | undefined): boolean {
+  return (
+    check != null
+    && UNSUPPORTED_PLATFORM_CHECK_IDS.has(check.check_id)
+    && check.status === "fail"
+    && check.reason_code === "unsupported_platform"
+  );
+}
+
+function checkSatisfiesCore(check: GuardProtectionCheck | undefined): boolean {
+  return check?.status === "pass" || isUnsupportedPlatformExemption(check);
+}
+
 function deriveState(checks: GuardProtectionCheck[]): GuardProtectionState {
-  const byId = new Map(checks.map((check) => [check.check_id, check.status]));
-  if (checks.some((check) => check.status === "fail")) return "degraded";
-  if (!CORE_CHECK_IDS.every((checkId) => byId.get(checkId) === "pass")) return "degraded";
-  return byId.get("decision_stream") === "pass" ? "protected" : "partial";
+  const byId = new Map(checks.map((check) => [check.check_id, check]));
+  if (checks.some((check) => check.status === "fail" && !isUnsupportedPlatformExemption(check))) {
+    return "degraded";
+  }
+  if (!CORE_CHECK_IDS.every((checkId) => checkSatisfiesCore(byId.get(checkId)))) return "degraded";
+  return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 
 function normalizeCheck(value: unknown): GuardProtectionCheck | null {
@@ -232,7 +254,7 @@ export function protectionHealthFor(
 }
 
 export function isUnsupportedPlatformCheck(check: GuardProtectionCheck): boolean {
-  return check.reason_code === "unsupported_platform";
+  return isUnsupportedPlatformExemption(check);
 }
 
 export function repairableProtectionGaps(checks: GuardProtectionCheck[]): GuardProtectionCheck[] {

@@ -68,9 +68,29 @@ for (const checkId of ["decision_plane_compatibility", "containment_compatibilit
 }
 const unsupportedContainmentHealth = normalizeProtectionHealth(payload(unsupportedContainment));
 assert(isUnsupportedPlatformCheck(unsupportedContainment[6]), "unsupported platform gaps use a stable reason code");
+assert.equal(
+  unsupportedContainmentHealth.state,
+  "protected",
+  "unsupported OS containment does not degrade hook-based protection",
+);
 assert(
   !hasRepairableProtectionGap(unsupportedContainmentHealth.checks),
   "unsupported-only containment gaps do not offer a futile aggregate repair",
+);
+const spoofedHookFailure = checks();
+spoofedHookFailure[PROTECTION_CHECK_IDS.indexOf("harness_hooks")] = {
+  check_id: "harness_hooks",
+  status: "fail",
+  reason_code: "unsupported_platform",
+};
+assert.equal(
+  normalizeProtectionHealth(payload(spoofedHookFailure)).state,
+  "degraded",
+  "unsupported_platform does not mask non-containment failures",
+);
+assert(
+  hasRepairableProtectionGap(normalizeProtectionHealth(payload(spoofedHookFailure)).checks),
+  "non-containment failures remain repairable even if they reuse unsupported_platform",
 );
 const mixedContainment = unsupportedContainment.map((check) => (
   check.check_id === "harness_hooks"

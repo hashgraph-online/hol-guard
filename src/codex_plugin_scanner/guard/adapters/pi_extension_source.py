@@ -104,6 +104,7 @@ def managed_extension_source(
         "  resume_poll_path?: string;\n"
         '  model_output_action?: "allow_original" | "replace_with_reviewed_excerpt" | "block" | "not_applicable";\n'
         "  reviewed_output_sha256?: string;\n"
+        "  reviewed_excerpt?: string;\n"
         "  observed_policy_action?: string;\n"
         "  observed_review_failure?: boolean;\n"
         "  observe_mode?: boolean;\n"
@@ -145,12 +146,14 @@ def managed_extension_source(
         "  response: GuardResponse,\n"
         "): boolean {\n"
         '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
-        '  if (response.decision !== "allow") return true;\n'
         "  if (response.observe_mode === true) return true;\n"
         '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
-        '  if (response.model_output_action !== "allow_original") return false;\n'
-        '  return typeof response.reviewed_output_sha256 === "string" &&\n'
-        "    response.reviewed_output_sha256.length > 0;\n"
+        '  if (response.model_output_action === "allow_original") {\n'
+        '    return typeof response.reviewed_output_sha256 === "string" &&\n'
+        "      response.reviewed_output_sha256.length > 0;\n"
+        "  }\n"
+        '  if (response.decision === "allow" || response.decision === "deny") return true;\n'
+        "  return false;\n"
         "}\n"
         "\n"
         "function loadGuardDaemonConnection(): GuardDaemonConnection | null {\n"
@@ -428,7 +431,15 @@ def managed_extension_source(
         "  );\n"
         "}\n"
         "\n"
-        "function modelVisibleBlockedReason(reason: string): string {\n"
+        "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string {\n"
+        "  if (\n"
+        '    reasonCode === "guard_cli_recovery_timeout" ||\n'
+        '    reasonCode === "daemon_hook_deadline_exhausted" ||\n'
+        '    reasonCode === "daemon_hook_process_deadline_exhausted"\n'
+        "  ) {\n"
+        f'    return "HOL Guard did not finish reviewing this output before the {display_name} '
+        'deadline. Retry the action.";\n'
+        "  }\n"
         f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
         "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
         "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
@@ -595,7 +606,7 @@ def managed_extension_source(
         "    );\n"
         '    if (response.decision === "deny") {\n'
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
-        "      const modelReason = modelVisibleBlockedReason(reason);\n"
+        "      const modelReason = modelVisibleBlockedReason(reason, response.reason_code);\n"
         "      const toolCallId = toolCallIdKey(event.toolCallId);\n"
         "      if (toolCallId) blockedToolResults.set(toolCallId, modelReason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
@@ -608,6 +619,28 @@ def managed_extension_source(
         "      typeof response.reviewed_output_sha256 === 'string' &&\n"
         "      response.reviewed_output_sha256 === digest.sha256;\n"
         "    if (originalOutputProof) return undefined;\n"
+        '    if (response.model_output_action === "allow_original") {\n'
+        "      const reason = response.reason ||\n"
+        '        "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+        "    }\n"
+        '    if (response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+        "      const excerptText = typeof response.reviewed_excerpt === 'string' ? response.reviewed_excerpt : '';\n"
+        "      if (excerptText.length === 0) {\n"
+        "        const reason = response.reason ||\n"
+        '          "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '        ctx.ui.notify(reason, "warning");\n'
+        "        return blockedToolResult("
+        "modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+        "      }\n"
+        "      const notice = response.reason ||\n"
+        '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+        ' within local limits.";\n'
+        '      ctx.ui.notify(notice, "info");\n'
+        "      return reviewedToolResult([{ type: 'text', text: excerptText }], "
+        "event.details, event.isError === true);\n"
+        "    }\n"
         "    if (outputTruncated) {\n"
         "      const notice = response.reason ||\n"
         '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
@@ -618,10 +651,11 @@ def managed_extension_source(
         "      }\n"
         "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
         "    }\n"
+        '    if (response.decision === "allow") return undefined;\n'
         "    const reason = response.reason ||\n"
         '      "HOL Guard could not prove this tool output safe to preserve.";\n'
         '    ctx.ui.notify(reason, "warning");\n'
-        "    return blockedToolResult(modelVisibleBlockedReason(reason), event.details);\n"
+        "    return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
         "  });\n"
         "}\n"
     )
@@ -649,6 +683,31 @@ def legacy_managed_extension_source(
         ('  decision: "allow" | "deny";\n', "  decision?: string;\n"),
         ("  observed_review_failure?: boolean;\n", ""),
         ("  policy_action?: string;\n", ""),
+        ("  reviewed_excerpt?: string;\n", ""),
+        (
+            "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string {\n"
+            "  if (\n"
+            '    reasonCode === "guard_cli_recovery_timeout" ||\n'
+            '    reasonCode === "daemon_hook_deadline_exhausted" ||\n'
+            '    reasonCode === "daemon_hook_process_deadline_exhausted"\n'
+            "  ) {\n"
+            f'    return "HOL Guard did not finish reviewing this output before the {display_name} '
+            'deadline. Retry the action.";\n'
+            "  }\n"
+            f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
+            "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+            "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+            "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+            "approve or change the task.`;\n"
+            "}\n",
+            "function modelVisibleBlockedReason(reason: string): string {\n"
+            f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
+            "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+            "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+            "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+            "approve or change the task.`;\n"
+            "}\n",
+        ),
         (
             "    chars += Array.from(text).length;\n",
             "    chars += text.length;\n",
@@ -681,12 +740,14 @@ def legacy_managed_extension_source(
             "  response: GuardResponse,\n"
             "): boolean {\n"
             '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
-            '  if (response.decision !== "allow") return true;\n'
             "  if (response.observe_mode === true) return true;\n"
             '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
-            '  if (response.model_output_action !== "allow_original") return false;\n'
-            '  return typeof response.reviewed_output_sha256 === "string" &&\n'
-            "    response.reviewed_output_sha256.length > 0;\n"
+            '  if (response.model_output_action === "allow_original") {\n'
+            '    return typeof response.reviewed_output_sha256 === "string" &&\n'
+            "      response.reviewed_output_sha256.length > 0;\n"
+            "  }\n"
+            '  if (response.decision === "allow" || response.decision === "deny") return true;\n'
+            "  return false;\n"
             "}\n\n",
             "",
         ),
@@ -801,6 +862,29 @@ def legacy_managed_extension_source(
             "      typeof response.reviewed_output_sha256 === 'string' &&\n"
             "      response.reviewed_output_sha256 === digest.sha256;\n"
             "    if (originalOutputProof) return undefined;\n"
+            '    if (response.model_output_action === "allow_original") {\n'
+            "      const reason = response.reason ||\n"
+            '        "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '      ctx.ui.notify(reason, "warning");\n'
+            "      return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+            "    }\n"
+            '    if (response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            "      const excerptText = typeof response.reviewed_excerpt === 'string' "
+            "? response.reviewed_excerpt : '';\n"
+            "      if (excerptText.length === 0) {\n"
+            "        const reason = response.reason ||\n"
+            '          "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '        ctx.ui.notify(reason, "warning");\n'
+            "        return blockedToolResult("
+            "modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+            "      }\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      ctx.ui.notify(notice, "info");\n'
+            "      return reviewedToolResult([{ type: 'text', text: excerptText }], "
+            "event.details, event.isError === true);\n"
+            "    }\n"
             "    if (outputTruncated) {\n"
             "      const notice = response.reason ||\n"
             '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
@@ -811,10 +895,11 @@ def legacy_managed_extension_source(
             "      }\n"
             "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
             "    }\n"
+            '    if (response.decision === "allow") return undefined;\n'
             "    const reason = response.reason ||\n"
             '      "HOL Guard could not prove this tool output safe to preserve.";\n'
             '    ctx.ui.notify(reason, "warning");\n'
-            "    return blockedToolResult(modelVisibleBlockedReason(reason), event.details);\n",
+            "    return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n",
             "    if (response.observe_mode === true) return undefined;\n"
             "    if (outputTruncated) {\n"
             '      if (response.model_output_action === "allow_original" &&\n'
@@ -832,6 +917,10 @@ def legacy_managed_extension_source(
             "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
             "    }\n"
             "    return undefined;\n",
+        ),
+        (
+            "modelVisibleBlockedReason(reason, response.reason_code)",
+            "modelVisibleBlockedReason(reason)",
         ),
     )
     for current, legacy in replacements:

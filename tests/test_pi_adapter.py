@@ -297,7 +297,8 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert "    if (originalOutputProof) return undefined;\n" in text
-        assert "return blockedToolResult(modelVisibleBlockedReason(reason), event.details);" in text
+        assert "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
+        assert '    if (response.decision === "allow") return undefined;\n' in text
         assert "const GUARD_CLI_WRAPPER_COMMAND =" in text
         assert "const GUARD_CLI_WRAPPER_ARGS =" in text
         assert "const GUARD_HOME =" in text
@@ -377,6 +378,7 @@ class TestPiInstall:
         assert "response.reviewed_output_sha256 === digest.sha256" in text
         assert "function daemonResponseCanReturn(" in text
         assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
+        assert 'if (response.decision === "allow" || response.decision === "deny") return true;' in text
         assert "observe_mode?: boolean;" in text
         assert "if (response.observe_mode === true) return undefined;" in text
         assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
@@ -495,9 +497,11 @@ class TestPiInstall:
         assert "const blockedToolResults = new Map<string, string>();" in text
         assert 'pi.on("message_end"' in text
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
-        assert "function modelVisibleBlockedReason(reason: string): string" in text
+        assert "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string" in text
         assert "Do not retry the same tool call automatically" in text
-        assert "const modelReason = modelVisibleBlockedReason(reason);" in text
+        assert 'reasonCode === "guard_cli_recovery_timeout"' in text
+        assert 'reasonCode === "daemon_hook_deadline_exhausted"' in text
+        assert "const modelReason = modelVisibleBlockedReason(reason, response.reason_code);" in text
         assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
         assert "return blockedToolResult(modelReason, event.details);" in text
         assert "return blockedToolResult(reason, event.details);" not in text
@@ -530,6 +534,7 @@ class TestPiInstall:
         assert "response.reviewed_output_sha256 === digest.sha256" in text
         assert "function daemonResponseCanReturn(" in text
         assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
+        assert 'if (response.decision === "allow" || response.decision === "deny") return true;' in text
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} — otherwise structured source reads never match
         assert "record.type === 'text'" in text
