@@ -11,7 +11,68 @@ _AGENTBRIDGE_LAUNCHERS: tuple[tuple[str, ...], ...] = (
     ("exec", "agentbridge"),
     ("xargs", "agentbridge"),
 )
-_WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
+_EXEC_LEADING_OPTIONS_WITH_VALUES = frozenset({"-a"})
+_EXEC_LEADING_FLAGS = frozenset({"-c", "-l"})
+_XARGS_LEADING_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--arg-file",
+        "--delimiter",
+        "--eof",
+        "--max-args",
+        "--max-chars",
+        "--max-lines",
+        "--max-procs",
+        "--process-slot-var",
+        "--replace",
+        "-a",
+        "-d",
+        "-E",
+        "-I",
+        "-J",
+        "-L",
+        "-n",
+        "-P",
+        "-R",
+        "-S",
+        "-s",
+    }
+)
+_XARGS_LEADING_FLAGS = frozenset(
+    {
+        "--exit",
+        "--help",
+        "--interactive",
+        "--no-run-if-empty",
+        "--null",
+        "--open-tty",
+        "--show-limits",
+        "--verbose",
+        "--version",
+        "-0",
+        "-o",
+        "-p",
+        "-r",
+        "-t",
+        "-x",
+    }
+)
+
+
+def _leading_options_with_values(launcher: tuple[str, ...]) -> frozenset[str]:
+    if launcher[0] == "exec":
+        return _EXEC_LEADING_OPTIONS_WITH_VALUES
+    if launcher[0] == "xargs":
+        return _XARGS_LEADING_OPTIONS_WITH_VALUES
+    return frozenset()
+
+
+def _leading_flags(launcher: tuple[str, ...]) -> frozenset[str]:
+    if launcher[0] == "exec":
+        return _EXEC_LEADING_FLAGS
+    if launcher[0] == "xargs":
+        return _XARGS_LEADING_FLAGS
+    return frozenset()
+
 
 _AGENTBRIDGE_SCAFFOLD_FORCE = AnyMatcher(
     matchers=tuple(
@@ -21,9 +82,8 @@ _AGENTBRIDGE_SCAFFOLD_FORCE = AnyMatcher(
             required_flags=frozenset({"--force"}),
             options_with_values=frozenset({"--backend", "--package-name", "--distribution-name"}),
             allow_leading_options=launcher[0] in ("exec", "xargs"),
-            leading_options_with_values=(
-                _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in ("exec", "xargs") else frozenset()
-            ),
+            leading_options_with_values=_leading_options_with_values(launcher),
+            global_flags=_leading_flags(launcher),
             fail_secure_unknown_options=True,
         )
         for launcher in _AGENTBRIDGE_LAUNCHERS
@@ -47,9 +107,8 @@ _AGENTBRIDGE_RUN_TOOL_REGISTRY = AnyMatcher(
                 }
             ),
             allow_leading_options=launcher[0] in ("exec", "xargs"),
-            leading_options_with_values=(
-                _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in ("exec", "xargs") else frozenset()
-            ),
+            leading_options_with_values=_leading_options_with_values(launcher),
+            global_flags=_leading_flags(launcher),
             fail_secure_unknown_options=True,
         )
         for launcher in _AGENTBRIDGE_LAUNCHERS
