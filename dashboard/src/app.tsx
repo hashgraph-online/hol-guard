@@ -32,6 +32,7 @@ import { lazyWorkspace } from "./lazy-workspace";
 import { runAutomaticProtectionRepair } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
+import { commitDashboardLocation, subscribeDashboardLocation } from "./dashboard-location";
 
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
@@ -112,18 +113,13 @@ type InventoryState =
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
 
-  useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
 
   return pathname;
 }
 
 function navigate(pathname: string): void {
-  window.history.pushState({}, "", guardAwareHref(pathname));
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  commitDashboardLocation(guardAwareHref(pathname));
 }
 
 function focusVisibleDashboardSearch(): boolean {
@@ -248,7 +244,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
           return { kind: "mcp-policy", requestId };
         }
       } catch {
-        // Swallow â€” the original 404 is the source of truth here.
+        // Swallow — the original 404 is the source of truth here.
       }
       return { kind: "stale" };
     }
