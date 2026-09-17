@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.ollama",
+  "version": "1.0.0",
+  "name": "Ollama",
+  "description": "Reviews Ollama commands that publish models to a registry or remove local model data.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.kantorcodes",
+    "displayName": "Michael Kantor",
+    "url": "https://github.com/kantorcodes"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#1D4ED8" },
+  "homepage": "https://github.com/ollama/ollama",
+  "license": "MIT",
+  "executables": ["ollama"],
+  "ecosystemIds": ["ollama"],
+  "riskClasses": ["network_egress", "destructive_shell"],
+  "actionClasses": [
+    "Ollama model publication command",
+    "Ollama model removal command"
+  ],
+  "referenceUrls": [
+    "https://github.com/ollama/ollama/blob/main/cmd/cmd.go",
+    "https://docs.ollama.com/cli"
+  ],
+  "saferAlternatives": [
+    "Confirm the model name, owner prefix, registry destination, and intended publication scope before pushing.",
+    "Run ollama list first and confirm the exact local models before removing them."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_ollama_extensions"
+  }
+}

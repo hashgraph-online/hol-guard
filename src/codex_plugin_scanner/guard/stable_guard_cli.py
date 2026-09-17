@@ -32,6 +32,42 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
     return unix
 
 
+def durable_desktop_current_hol_guard(home_dir: Path | None = None) -> Path | None:
+    """Return Desktop's user-data ``current-hol-guard`` launcher when it exists.
+
+    Managed Core lives under the Desktop app data directory. That path survives
+    AppImage unmount and must outrank a PATH ``hol-guard`` installed by pipx.
+    """
+
+    home = (home_dir or Path.home()).expanduser()
+    roots: list[Path] = []
+    data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+    if data_home:
+        roots.append(Path(data_home).expanduser())
+    if sys.platform == "darwin":
+        roots.append(home / "Library" / "Application Support")
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "").strip()
+        if appdata:
+            roots.append(Path(appdata).expanduser())
+        else:
+            roots.append(home / "AppData" / "Roaming")
+    roots.append(home / ".local" / "share")
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            key = root.resolve()
+        except OSError:
+            key = root
+        if key in seen:
+            continue
+        seen.add(key)
+        shim = root / "org.hol.guard.desktop" / "core" / CURRENT_HOL_GUARD_SHIM
+        if frozen_cli_path_is_runnable(shim):
+            return shim
+    return None
+
+
 def _desktop_core_root(executable: Path) -> Path | None:
     executable_name = executable.name.lower()
     if executable_name not in {"hol-guard", "hol-guard.exe"}:
@@ -160,6 +196,7 @@ __all__ = [
     "MACOS_BUNDLED_HOL_GUARD",
     "argv0_is_ephemeral_desktop_cli",
     "desktop_core_shim_for_executable",
+    "durable_desktop_current_hol_guard",
     "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
     "prune_safe_cli_executable",

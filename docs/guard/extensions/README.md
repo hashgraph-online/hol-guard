@@ -134,6 +134,7 @@ Protection model meanings:
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
 | `command.keibidrop` | Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts. | 3 | External opt-in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
+| `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 

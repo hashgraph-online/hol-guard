@@ -658,6 +658,7 @@ def test_trust_backend_check_reports_missing_result_with_exit_code(
     result = run_trust_backend_check(
         _protected_trust_result,
         timeout_seconds=1.0,
+        startup_timeout_seconds=10.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {"mode": "degraded", "error": str(error)},
     )

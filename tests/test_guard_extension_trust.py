@@ -38,27 +38,12 @@ from codex_plugin_scanner.guard.runtime.extension_trust import (
     trust_class_for,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.command_extension_contracts import enable_local_admin_extension_layer
 
 _NOODLE = "noodle request run users/get --collection ./my-api --env staging"
 _ESSH = "essh hosts remove web-1"
 _AWS = "aws --profile prod --region us-east-1 ec2 terminate-instances --instance-ids i-123"
 _GIT = "git push --force origin main"
-
-
-def _enable_layer(*extension_ids: str) -> ExtensionControlLayer:
-    return ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=False,
-        controls=tuple(
-            ExtensionControl(
-                target=ControlTarget(ControlTargetKind.EXTENSION, extension_id),
-                state=ControlState.ENABLED,
-            )
-            for extension_id in extension_ids
-        ),
-    )
 
 
 def _layer(kind: ControlLayerKind, extension_id: str, state: ControlState) -> ExtensionControlLayer:
@@ -99,6 +84,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.keibidrop",
         "command.mcp-filesystem",
         "command.noodle",
+        "command.ollama",
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",
@@ -149,7 +135,7 @@ def test_noodle_stays_inert_until_explicitly_enabled(tmp_path: Path) -> None:
         _NOODLE,
         cwd=tmp_path,
         home_dir=tmp_path,
-        extension_control_layers=(_enable_layer("command.noodle"),),
+        extension_control_layers=(enable_local_admin_extension_layer("command.noodle"),),
     )
     assert any(item.extension.extension_id == "command.noodle" for item in enabled.extension_observations)
     assert enabled.controlling_rule_id == "command.noodle.run"
@@ -238,7 +224,7 @@ def test_essh_runtime_extraction_stays_inert_until_local_admin_enable(tmp_path: 
             AuthorityHealth.PROTECTED,
             1,
             BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (_enable_layer("command.remote.essh"),),
+            (enable_local_admin_extension_layer("command.remote.essh"),),
         )
     )
     with use_extension_control_snapshot(enabled_snapshot):
@@ -268,7 +254,7 @@ def test_essh_runtime_extraction_stays_inert_until_local_admin_enable(tmp_path: 
         cwd=tmp_path,
         home_dir=tmp_path,
         compatibility_action_class=runtime_match.action_class,
-        extension_control_layers=(_enable_layer("command.remote.essh"),),
+        extension_control_layers=(enable_local_admin_extension_layer("command.remote.essh"),),
     )
     assert any(item.extension.extension_id == "command.remote.essh" for item in enabled.extension_observations)
     assert enabled.controlling_action_class == runtime_match.action_class
@@ -309,7 +295,7 @@ def test_projection_marks_inert_external_blocked_until_local_enable() -> None:
             AuthorityHealth.PROTECTED,
             2,
             BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (_enable_layer("command.noodle", "command.remote.essh"),),
+            (enable_local_admin_extension_layer("command.noodle", "command.remote.essh"),),
         )
     )
     active = build_effective_extension_control_projection(BUILT_IN_COMMAND_EXTENSION_REGISTRY, enabled)
