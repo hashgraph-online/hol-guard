@@ -237,7 +237,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
           return { kind: "mcp-policy", requestId };
         }
       } catch {
-        // Swallow  the original 404 is the source of truth here.
+        // Swallow the MCP probe error; the original 404 is the source of truth here.
       }
       return { kind: "stale" };
     }
