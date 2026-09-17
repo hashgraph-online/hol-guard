@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export const DASHBOARD_LOCATION_EVENT = "guard-dashboard-location";
 
 export function commitDashboardLocation(href: string): void {
@@ -14,4 +16,10 @@ export function subscribeDashboardLocation(listener: () => void): () => void {
     window.removeEventListener("popstate", listener);
     window.removeEventListener(DASHBOARD_LOCATION_EVENT, listener);
   };
+}
+
+export function useDashboardPathname(): string {
+  const [pathname, setPathname] = useState(window.location.pathname);
+  useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
+  return pathname;
 }

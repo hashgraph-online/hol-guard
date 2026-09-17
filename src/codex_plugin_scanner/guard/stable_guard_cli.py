@@ -39,12 +39,20 @@ def durable_desktop_current_hol_guard(home_dir: Path | None = None) -> Path | No
     AppImage unmount and must outrank a PATH ``hol-guard`` installed by pipx.
     """
 
+    home = (home_dir or Path.home()).expanduser()
     roots: list[Path] = []
     data_home = os.environ.get("XDG_DATA_HOME", "").strip()
     if data_home:
         roots.append(Path(data_home).expanduser())
-    if home_dir is not None:
-        roots.append(home_dir / ".local" / "share")
+    if sys.platform == "darwin":
+        roots.append(home / "Library" / "Application Support")
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "").strip()
+        if appdata:
+            roots.append(Path(appdata).expanduser())
+        else:
+            roots.append(home / "AppData" / "Roaming")
+    roots.append(home / ".local" / "share")
     seen: set[Path] = set()
     for root in roots:
         try:

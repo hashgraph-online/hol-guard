@@ -16115,6 +16115,27 @@ async function fetchGuardDaemonCandidateJson(input, init) {
     window.clearTimeout(timeoutId);
   }
 }
+async function probeGuardDaemonCandidatePortsInBatches(ports, probe) {
+  for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
+    const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (port) => {
+        const origin = `http://127.0.0.1:${port}`;
+        const ok = await probe(port, origin);
+        return { port, origin, ok };
+      })
+    );
+    const active = results.find((result) => result.ok);
+    if (active) {
+      return active.origin;
+    }
+  }
+  return null;
+}
+async function discoverGuardDaemonOrigin(preferredPort = preferredGuardDaemonPort()) {
+  const ports = buildGuardDaemonCandidatePorts(preferredPort);
+  return probeGuardDaemonCandidatePortsInBatches(ports, async (_port, origin) => probeGuardDaemonHealth(origin));
+}
 function updateReconnectSucceeded(status, options) {
   if (!options.expectedPreviousVersion) {
     return true;
@@ -16376,6 +16397,23 @@ async function initializeGuardDashboardSessionAtOrigin(origin, guardToken) {
   } catch {
     return null;
   }
+}
+async function ensureGuardDashboardSession() {
+  const origin = establishedGuardDaemonOriginForReconnect() ?? await discoverGuardDaemonOrigin();
+  if (!origin) {
+    return false;
+  }
+  const existing = readGuardToken();
+  let token = await initializeGuardDashboardSessionAtOrigin(origin, existing);
+  if (!token && existing) {
+    token = await initializeGuardDashboardSessionAtOrigin(origin, null);
+  }
+  if (!token) {
+    return false;
+  }
+  saveGuardToken(token);
+  saveGuardDaemonOrigin(origin);
+  return true;
 }
 async function fetchGuardUpdateStatusAtOrigin(origin, guardToken) {
   const candidateOrigin = localGuardDaemonOrigin(origin);
@@ -25829,6 +25867,11 @@ function subscribeDashboardLocation(listener) {
     window.removeEventListener(DASHBOARD_LOCATION_EVENT, listener);
   };
 }
+function useDashboardPathname() {
+  const [pathname, setPathname] = reactExports.useState(window.location.pathname);
+  reactExports.useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
+  return pathname;
+}
 const DECISION_LABELS = {
   allow: "Allowed",
   warn: "Allowed with warning",
@@ -31472,11 +31515,6 @@ const AboutWorkspace = lazyWorkspace(
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
-function usePathname() {
-  const [pathname, setPathname] = reactExports.useState(window.location.pathname);
-  reactExports.useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
-  return pathname;
-}
 function navigate(pathname) {
   commitDashboardLocation(guardAwareHref(pathname));
 }
@@ -31607,7 +31645,7 @@ function shouldFetchArtifactDiff(artifactType) {
   return (/* @__PURE__ */ new Set(["mcp_server", "skill", "skill_file"])).has(artifactType);
 }
 function App() {
-  const pathname = usePathname();
+  const pathname = useDashboardPathname();
   const view = resolveView(pathname);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
@@ -31906,6 +31944,18 @@ function App() {
   const refreshStateWithoutResult = reactExports.useCallback(async () => {
     await refreshStateAfterAction();
   }, [refreshStateAfterAction]);
+  const handleReconnectSession = reactExports.useCallback(async () => {
+    setRuntime({ kind: "loading" });
+    setRequests({ kind: "loading" });
+    const reminted = await ensureGuardDashboardSession();
+    if (!reminted) {
+      const message = "unauthorized (401)";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
+      return;
+    }
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction]);
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);
@@ -32188,6 +32238,7 @@ function App() {
             onRefreshRuntime: async () => {
               await refreshStateAfterAction();
             },
+            onReconnectSession: handleReconnectSession,
             onOpenSupplyChain: handleOpenSupplyChain,
             onClearPolicies: handleClearPolicies,
             onOpenAppDetail: handleOpenAppDetail,
@@ -32462,14 +32513,14 @@ export {
   EmptyState as n,
   EvidenceInsightsShareModal as o,
   protectionHealthFor as p,
-  HiMiniCheckCircle as q,
+  queueErrorIsUnauthorizedSession as q,
   reactExports as r,
-  GuardHero as s,
-  formatNumber as t,
+  HiMiniCheckCircle as s,
+  GuardHero as t,
   useReceiptAnalytics as u,
-  HiMiniShieldCheck as v,
-  guardActionDisposition as w,
-  formatRelativeTime as x,
-  queueErrorIsUnauthorizedSession as y,
+  formatNumber as v,
+  HiMiniShieldCheck as w,
+  guardActionDisposition as x,
+  formatRelativeTime as y,
   guardActionActivityCopy as z
 };
