@@ -65,6 +65,7 @@ def _request(
     command: str = "pwd",
     default_action: str = "allow",
     deadline_budget_ms: int = 1_000,
+    risk_actions: dict[str, str] | None = None,
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
@@ -80,7 +81,7 @@ def _request(
             "changed_hash_action": "require-reapproval",
             "new_network_domain_action": "warn",
             "subprocess_action": "allow",
-            "risk_actions": {},
+            "risk_actions": dict(risk_actions or {}),
             "harness_risk_actions": {},
             "harness_actions": {},
             "publisher_actions": {},
