@@ -4060,6 +4060,11 @@ clearer UX and an implementation plan with technical references.
                 "policy_document_versions": [
                     "guard.hashgraphonline.com/v1alpha1",
                 ],
+                "selected_enforcement_lane": "legacy",
+                "advertised_canonical_capabilities": [],
+                "effective_canonical_capabilities": [],
+                "canonical_policy_enforcement_enabled": False,
+                "canonical_rollout_percentage": 0,
                 "yaml_import": False,
             }
             return {

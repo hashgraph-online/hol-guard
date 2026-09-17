@@ -272,7 +272,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_refresh_cloud_review_worker",
-        lambda _guard_home: {"status": "refreshed"},
+        lambda _guard_home: {"status": "refreshed", "running": True, "sync_running": True},
     )
     base_payload: dict[str, object] = {"status": "connected"}
 
@@ -312,7 +312,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     assert cloud_review["enabled"] is True
     assert cloud_review["pending_requests_requeued"] == 0
     assert cloud_review["pending_request_requeue_status"] == "requeued"
-    assert cloud_review["worker"] == {"status": "refreshed"}
+    assert cloud_review["worker"] == {"status": "refreshed", "running": True, "sync_running": True}
     assert isinstance(cloud_review["capability"], dict)
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
@@ -328,7 +328,7 @@ def test_cloud_review_enable_requeues_existing_pending_requests(
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_refresh_cloud_review_worker",
-        lambda _guard_home: {"status": "refreshed"},
+        lambda _guard_home: {"status": "refreshed", "running": True, "sync_running": True},
     )
 
     exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
@@ -345,7 +345,7 @@ def test_cloud_review_enable_requeues_existing_pending_requests(
     assert exit_code == 0
     assert payload["pending_requests_requeued"] == 1
     assert payload["pending_request_requeue_status"] == "requeued"
-    assert payload["worker"] == {"status": "refreshed"}
+    assert payload["worker"] == {"status": "refreshed", "running": True, "sync_running": True}
 
 
 def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
@@ -420,7 +420,7 @@ def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_refresh_cloud_review_worker",
-        lambda _guard_home: {"status": "refreshed"},
+        lambda _guard_home: {"status": "refreshed", "running": True, "sync_running": True},
     )
 
     connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
@@ -460,7 +460,7 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_refresh_cloud_review_worker",
-        lambda _guard_home: {"status": "refreshed"},
+        lambda _guard_home: {"status": "refreshed", "running": True, "sync_running": True},
     )
 
     exit_code = cloud_review_dispatch._run_guard_cloud_review_command(

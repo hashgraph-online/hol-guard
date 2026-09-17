@@ -31,6 +31,7 @@ from .policy_bundle_trusted_keys import (
 )
 from .project_identity import resolve_portable_project_identity
 from .review_exact_capability_advertisement import attach_exact_review_capability
+from .review_memory_targets import validate_memory_rule_target_exact as _validate_memory_rule_target_exact
 from .review_oauth_binding import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -570,10 +571,4 @@ def validate_decision_memory_bundle_target(
         target = rule.get("target")
         if not isinstance(target, dict):
             raise GuardReviewContractError("decision_memory_target_invalid")
-        machine_ids = target.get("machineIds")
-        if (
-            isinstance(machine_ids, list)
-            and machine_ids
-            and oauth.installation_id not in {str(item) for item in machine_ids}
-        ):
-            raise GuardReviewContractError("decision_memory_machine_mismatch")
+        _validate_memory_rule_target_exact(target, oauth=oauth, rule=rule)

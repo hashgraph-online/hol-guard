@@ -367,3 +367,65 @@ def test_privileged_export_preserves_imported_rule_identity_and_semantics(tmp_pa
         )
 
     assert [semantic_row(row) for row in round_trip_rows] == [semantic_row(row) for row in original_rows]
+
+
+def _portable_rules(*effects: str) -> list[dict[str, object]]:
+    return [
+        {
+            "id": f"rule-{effect}-{index}",
+            "enabled": True,
+            "match": {"artifacts": [f"skill:hol/{effect}-{index}"]},
+            "effect": effect,
+            "lifetime": {"mode": "permanent"},
+            "provenance": {"source": "cli-import", "createdAt": "2026-07-16T12:00:00Z"},
+            "x-hol-local": {"harness": "codex", "scope": "artifact"},
+        }
+        for index, effect in enumerate(effects)
+    ]
+
+
+def test_compile_projects_review_and_inert_ignore_without_dropping_valid_rules() -> None:
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "mixed-effects", "name": "Effects", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": _portable_rules("allow", "ignore", "review", "block"),
+            },
+        }
+    )
+
+    compiled = compile_policy_document(document)
+
+    assert [row.decision.action for row in compiled] == ["allow", "review", "block"]
+    assert "allow" in {row.decision.action for row in compiled}
+    assert all(row.decision.action != "allow" or row.rule_id == "rule-allow-0" for row in compiled)
+
+
+def test_compile_rejects_device_selectors_before_publication() -> None:
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "device-policy", "name": "Devices", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": [
+                    {
+                        "id": "device-only",
+                        "enabled": True,
+                        "match": {"artifacts": ["skill:hol/x"], "devices": ["other-device"]},
+                        "effect": "allow",
+                        "lifetime": {"mode": "permanent"},
+                        "provenance": {"source": "cli-import", "createdAt": "2026-07-16T12:00:00Z"},
+                    }
+                ],
+            },
+        }
+    )
+
+    with pytest.raises(Exception) as error:
+        compile_policy_document(document)
+    assert getattr(error.value, "code", None) == "unsupported_policy_device_selector"

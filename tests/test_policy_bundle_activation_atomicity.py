@@ -160,8 +160,9 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
     def replace_rows_and_arm_failure(
         connection: sqlite3.Connection,
         rows: Sequence[tuple[object, ...]],
+        **kwargs: object,
     ) -> None:
-        original_replace(connection, rows)
+        original_replace(connection, rows, **kwargs)
         # Fail only after apply_policy_bundle_authority has updated every
         # authority-bearing state key above. The last-good write is deliberately
         # ordered last when update_last_good=True, making this a mid-transaction

@@ -81,10 +81,16 @@ from ..policy_bundle_trusted_keys import (
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
     validate_policy_bundle_v2_transition,
-    validated_policy_bundle_v2_acknowledgement,
+)
+from ..policy_canonical_rollout import (
+    canonical_policy_enforcement_enabled as _canonical_policy_enforcement_enabled,
+)
+from ..policy_canonical_rollout import (
+    canonical_runtime_posture,
 )
 from ..policy_document import GuardPolicyDocument
 from ..policy_document_io import PolicyCompilationError, compile_policy_document
+from ..policy_sync_outcomes import policy_sync_outcomes
 from ..redaction import redact_sensitive_text
 from ..review_contracts import validated_review_verification_keys_from_sync
 from ..shims import package_shim_cloud_coverage
@@ -135,6 +141,8 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
+from .policy_runtime_posture import cloud_policy_runtime_posture, local_policy_runtime_posture
+from .policy_sync_acknowledgement import validated_upload_policy_acknowledgement
 from .prompt_injection import detect_prompt_injection_requests
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
@@ -150,7 +158,6 @@ _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
 _POLICY_CONTRACTS = ("guard-policy-bundle/v1", "guard-policy-bundle/v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
-_POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
 
 
 def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
@@ -179,34 +186,6 @@ def _hol_guard_runtime_package_identity() -> tuple[str | None, str] | None:
 
 
 _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY = _hol_guard_runtime_package_identity()
-
-
-def _canonical_policy_rollout_percentage() -> int:
-    raw = os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV, "").strip().lower()
-    if raw in {"", "0", "false", "off", "legacy"}:
-        return 0
-    if raw in {"1", "true", "on", "canonical"}:
-        return 100
-    try:
-        percentage = int(raw)
-    except ValueError:
-        return 0
-    return percentage if 1 <= percentage <= 100 else 0
-
-
-def _canonical_policy_enforcement_enabled(
-    *,
-    device_id: str,
-    workspace_id: str | None,
-) -> bool:
-    percentage = _canonical_policy_rollout_percentage()
-    if percentage in {0, 100}:
-        return percentage == 100
-    cohort_key = f"{workspace_id or 'local'}:{device_id}".encode()
-    # This is an in-memory rollout bucket for opaque installation IDs, not a password verifier.
-    # codeql[py/weak-sensitive-data-hashing]
-    cohort = int.from_bytes(hashlib.sha256(cohort_key).digest()[:8], "big") % 100
-    return cohort < percentage
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -3053,6 +3032,7 @@ def sync_receipts(
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
+    policy_application_committed = False
     if effective_policy_bundle is not None:
         activation_keyring = store.get_sync_payload("policy_bundle_keyring")
         if effective_policy_bundle is validated_policy_bundle and trusted_policy_bundle_keys:
@@ -3136,6 +3116,7 @@ def sync_receipts(
             validated_delivery=validated_policy_bundle_delivery,
             stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
             synced_at=now,
+            applied=canonical_enforcement,
         )
         cloud_exception_items = _policy_bundle_cloud_exception_items(
             store,
@@ -3179,6 +3160,7 @@ def sync_receipts(
                 persist_activation_rejection(store, activation_last_error, now)
             else:
                 remote_policies_stored = len(remote_decisions)
+                policy_application_committed = True
                 if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
                     canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
                     if isinstance(canonical_last_good, dict) and canonical_last_good.get(
@@ -3261,6 +3243,15 @@ def sync_receipts(
     summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
+        **policy_sync_outcomes(
+            candidate=validated_policy_bundle,
+            resident=validated_synced_policy_bundle(store),
+            acknowledgement=store.get_sync_payload("policy_bundle_ack"),
+            committed=policy_application_committed,
+            provided=policy_bundle_field_provided,
+            canonical_enforcement=canonical_enforcement,
+            rejection=activation_last_error,
+        ),
         "advisories_stored": advisories_stored,
         "exceptions_stored": len(deduped_exceptions),
         "cloud_exceptions_stored": len(cloud_exception_items),
@@ -3907,6 +3898,7 @@ def _local_guard_runtime_session(
     *,
     device_id: str = "local-machine",
     workspace_id: str | None = None,
+    store: GuardStore | None = None,
 ) -> dict[str, object]:
     session: dict[str, object] = {
         "harness": "hol-guard",
@@ -3922,11 +3914,11 @@ def _local_guard_runtime_session(
         "policy_contracts": list(_POLICY_CONTRACTS),
         "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
-    if _canonical_policy_enforcement_enabled(
-        device_id=device_id,
-        workspace_id=workspace_id,
-    ):
-        session["canonical_policy_enforcement"] = True
+    session.update(
+        local_policy_runtime_posture(store, device_id=device_id)
+        if store is not None
+        else canonical_runtime_posture(device_id=device_id, workspace_id=workspace_id)
+    )
     return session
 
 
@@ -3953,6 +3945,7 @@ def sync_local_guard_cloud_proof(
             session=_local_guard_runtime_session(
                 device_id=device_id,
                 workspace_id=workspace_id,
+                store=store,
             ),
             auth_context=resolved_auth_context,
         )
@@ -5857,34 +5850,9 @@ def _validated_policy_bundle_acknowledgement(
     device_id: str,
     device_name: str,
 ) -> dict[str, object] | None:
-    acknowledgement = store.get_sync_payload("policy_bundle_ack")
-    if not isinstance(acknowledgement, dict):
-        return None
-    if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
-        return validated
-
-    policy_bundle = validated_synced_policy_bundle(store)
-    if policy_bundle is None:
-        return None
-
-    bundle_hash = non_empty_string(policy_bundle.get("bundleHash"))
-    bundle_version = non_empty_string(policy_bundle.get("bundleVersion"))
-    if bundle_hash is None or bundle_version is None:
-        return None
-    if acknowledgement.get("bundleHash") != bundle_hash:
-        return None
-    if acknowledgement.get("bundleVersion") != bundle_version:
-        return None
-    if acknowledgement.get("deviceId") != device_id:
-        return None
-    if acknowledgement.get("deviceName") != device_name:
-        return None
-    if acknowledgement.get("status") != "synced":
-        return None
-    if _normalized_timestamp_string(acknowledgement.get("appliedAt")) is None:
-        return None
-    return acknowledgement
+    return validated_upload_policy_acknowledgement(
+        store, device_id=device_id, device_name=device_name, normalize_timestamp=_normalized_timestamp_string
+    )
 
 
 def _receipt_sync_context(
@@ -6254,6 +6222,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     payload["yamlImport"] = yaml_import
     if canonical_policy_enforcement:
         payload["canonicalPolicyEnforcement"] = True
+    payload.update(cloud_policy_runtime_posture(store, device_id=device_id))
     payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
 

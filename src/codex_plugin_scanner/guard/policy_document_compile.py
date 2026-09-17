@@ -116,7 +116,9 @@ def _rule_from_policy_row(row: Mapping[str, object], *, include_provenance: bool
     if workspace is not None and not include_provenance:
         raise PolicyCompilationError("sensitive_local_policy_requires_provenance", rule_id)
     action = row.get("action")
-    if action not in {"allow", "block"}:
+    if action == "ignore":
+        raise PolicyCompilationError("inert_ignore_has_no_local_row", rule_id)
+    if action not in {"allow", "block", "review"}:
         raise PolicyCompilationError("unsupported_local_policy_action", rule_id)
     expires_at = _normalized_expiry(
         row.get("expires_at"),
@@ -289,7 +291,9 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
         if not enabled:
             continue
         effect = raw_rule.get("effect")
-        if effect not in {"allow", "block"}:
+        if effect == "ignore":
+            continue
+        if effect not in {"allow", "block", "review"}:
             raise PolicyCompilationError("unsupported_policy_effect", rule_id)
         lifetime = raw_rule.get("lifetime")
         if not isinstance(lifetime, Mapping) or lifetime.get("mode") not in {"permanent", "until"}:
@@ -299,6 +303,8 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
             raise PolicyCompilationError("unsupported_policy_match", rule_id)
         if isinstance(match.get("commands"), Mapping):
             raise PolicyCompilationError("command_expression_requires_guard_3_1_runtime", rule_id)
+        if isinstance(match.get("devices"), list) and match.get("devices"):
+            raise PolicyCompilationError("unsupported_policy_device_selector", rule_id)
         unsupported = {
             key
             for key, value in match.items()

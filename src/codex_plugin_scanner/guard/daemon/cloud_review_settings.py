@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
+from ..runtime.cloud_review_consent import reuse_or_issue_cloud_review_consent
+from ..runtime.cloud_review_worker_readiness import cloud_review_workers_ready
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
@@ -74,6 +76,8 @@ def change_cloud_review_settings(
         raise CloudReviewSettingsError("confirmation_required", "Confirm this Cloud Review change.")
     if type(payload.get("include_held_requests", False)) is not bool:
         raise CloudReviewSettingsError("invalid_recovery_scope", "Choose whether to include held requests.")
+    if type(payload.get("renew_consent", False)) is not bool:
+        raise CloudReviewSettingsError("invalid_consent_renewal", "Choose whether to renew Cloud Review consent.")
     _ = require_high_risk(
         store.guard_home,
         purpose="protection_lifecycle",
@@ -97,7 +101,11 @@ def change_cloud_review_settings(
                 raise CloudReviewSettingsError(
                     "connection_changed", "The connected workspace changed. Refresh before confirming."
                 )
-            _ = enable_exact_cloud_review(store, issuer="local-dashboard")
+            _ = reuse_or_issue_cloud_review_consent(
+                store,
+                issue=lambda: enable_exact_cloud_review(store, issuer="local-dashboard"),
+                renew=payload.get("renew_consent") is True,
+            )
             store.set_sync_payload(
                 _RECOVERY_KEY,
                 {"binding": binding, "error": "pending_request_requeue_failed"},
@@ -124,7 +132,7 @@ def change_cloud_review_settings(
         )
         try:
             worker = refresh_workers()
-            if action == "enable" and (worker.get("running") is not True or worker.get("sync_running") is not True):
+            if action == "enable" and not cloud_review_workers_ready(worker):
                 activation_error = activation_error or "worker_refresh_failed"
         except (OSError, RuntimeError, ValueError):
             worker = {"running": False, "sync_running": False}
