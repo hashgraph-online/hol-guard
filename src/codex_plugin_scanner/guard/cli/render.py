@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
-from .policy_sync_status import sync_output_rows
+from .render_sync import render_sync_summary
 from .render_uninstall import render_self_uninstall
 
 try:
@@ -1693,10 +1693,7 @@ def _render_dashboard(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_sync(console: Console, payload: dict[str, object]) -> None:
-    body = Table.grid(padding=(0, 1))
-    for label, value in sync_output_rows(payload):
-        body.add_row(label, value)
-    console.print(Panel(body, title="Guard sync complete", border_style="green"))
+    render_sync_summary(console, payload)
     ecosystem_support = _coerce_dict_list(payload.get("ecosystem_support"))
     if ecosystem_support:
         console.print(_build_ecosystem_support_table(ecosystem_support))

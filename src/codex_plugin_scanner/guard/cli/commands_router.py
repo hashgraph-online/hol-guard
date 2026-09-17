@@ -155,7 +155,12 @@ def run_guard_command(
         )
 
     home_override = getattr(args, "home", None)
-    guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+    if args.guard_command == "cloud-review" and getattr(args, "cloud_review_command", None) == "status":
+        from .cloud_review_status_command import resolve_cloud_review_status_home
+
+        guard_home = resolve_cloud_review_status_home(args)
+    else:
+        guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = _resolve_guard_workspace(args, guard_home=guard_home)
     executable_overrides: dict[str, str] = {}
     grok_executable = getattr(args, "grok_executable", None)
@@ -189,6 +194,13 @@ def run_guard_command(
             context=context,
             input_text=input_text,
             output_stream=output_stream,
+        )
+
+    if args.guard_command == "cloud-review" and getattr(args, "cloud_review_command", None) == "status":
+        from .cloud_review_status_command import run_cloud_review_status_command
+
+        return run_cloud_review_status_command(
+            args, guard_home=guard_home, allow_system_keyring=_should_allow_system_keyring(args)
         )
 
     source = getattr(args, "source", "default")

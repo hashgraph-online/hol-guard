@@ -8,16 +8,16 @@ from datetime import datetime, timezone
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
 from ..runtime.cloud_review_consent import reuse_or_issue_cloud_review_consent
+from ..runtime.cloud_review_status import CLOUD_REVIEW_RECOVERY_KEY, cloud_review_status, review_connection_binding_id
 from ..runtime.cloud_review_worker_readiness import cloud_review_workers_ready
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
-    exact_cloud_review_status,
 )
 from ..store import GuardStore
 
-_RECOVERY_KEY = "guard_cloud_review_settings_recovery"
+_RECOVERY_KEY = CLOUD_REVIEW_RECOVERY_KEY
 
 
 class CloudReviewSettingsError(ValueError):
@@ -26,39 +26,9 @@ class CloudReviewSettingsError(ValueError):
         self.code: str = code
 
 
-def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
-    status = exact_cloud_review_status(store)
-    binding = store.get_review_event_oauth_binding()
-    profile = store.get_cloud_sync_profile()
-    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
-    outbox = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(delivery_binding or {}),
-    )
-    sync_key = "guard_cloud_review_sync_state"
-    if store.guard_source != "default":
-        sync_key += f":{store.guard_source}"
-    sync = store.get_sync_payload(sync_key)
-    sync = sync if isinstance(sync, dict) else {}
-    recovery = store.get_sync_payload(_RECOVERY_KEY)
-    recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+def cloud_review_settings_status(store: GuardStore, *, worker_observation: object = None) -> dict[str, object]:
     return {
-        "enabled": status.get("enabled") is True,
-        "connected": profile is not None and binding is not None,
-        "reason": status.get("reason"),
-        "expires_at": status.get("expires_at"),
-        "workspace_id": binding["workspace_id"] if binding else None,
-        "source": binding["oauth_source"] if binding else None,
-        "pending_uploads": outbox.get("depth", 0) if binding else 0,
-        "held_events": store.count_recoverable_unbound_review_events(),
-        "isolated_events": outbox.get("quarantined_depth", 0),
-        "activation_error": recovery.get("error"),
-        "last_synced_at": (
-            sync.get("last_delivery_at")
-            if delivery_binding is not None and sync.get("last_delivery_binding") == delivery_binding
-            else None
-        ),
-        "delivery_state": sync.get("state", "idle"),
+        **cloud_review_status(store, worker_observation=worker_observation),
         "approval_gate": public_config(store.guard_home).to_dict(),
     }
 
@@ -141,7 +111,15 @@ def change_cloud_review_settings(
             _RECOVERY_KEY, {"binding": binding, "error": activation_error}, datetime.now(timezone.utc).isoformat()
         )
     return {
-        **cloud_review_settings_status(store),
+        **cloud_review_settings_status(
+            store,
+            worker_observation={
+                **worker,
+                "source": store.guard_source,
+                "connection_binding_id": review_connection_binding_id(binding),
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        ),
         "pending_requests_requeued": requeued,
         "held_events_recovered": adopted,
         "activation_error": activation_error,

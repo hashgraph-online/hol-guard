@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import TextIO
 
 from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
+from ..daemon.cloud_review_status_reader import read_cloud_review_worker_observation
 from ..runtime.cloud_review_consent import reuse_or_issue_cloud_review_consent
+from ..runtime.cloud_review_status import cloud_review_status
 from ..runtime.cloud_review_worker_readiness import cloud_review_workers_ready
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
@@ -118,7 +120,12 @@ def _run_guard_cloud_review_command(
     previously_enabled = False
     capability: dict[str, object] | None = None
     if command == "status":
-        _emit("cloud-review", exact_cloud_review_status(store), bool(getattr(args, "json", False)))
+        worker_observation = read_cloud_review_worker_observation(guard_home)
+        _emit(
+            "cloud-review",
+            cloud_review_status(store, worker_observation=worker_observation),
+            bool(getattr(args, "json", False)),
+        )
         return 0
     try:
         if command == "enable":

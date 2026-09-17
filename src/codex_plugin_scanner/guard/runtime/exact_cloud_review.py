@@ -325,9 +325,11 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
     return (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
-def exact_cloud_review_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+def exact_cloud_review_status(
+    store: GuardStore, *, now: str | None = None, read_only: bool = False
+) -> dict[str, object]:
     try:
-        capability = _verified_capability(store, now=now)
+        capability = _verified_capability(store, now=now, revoke_binding_drift=not read_only)
     except (AttributeError, ExactCloudReviewError) as error:
         reason = error.code if isinstance(error, ExactCloudReviewError) else "cloud_review_capability_missing"
         return enrich_exact_cloud_review_status(
