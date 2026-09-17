@@ -139,7 +139,7 @@ def _unwrap_search_invocation(executable: str | None, args: list[str]) -> tuple[
             while remaining and remaining[0] == "-p":
                 remaining = remaining[1:]
             if remaining and remaining[0] in {"-v", "-V"}:
-                return None, remaining
+                return name, remaining
         else:
             while remaining:
                 token = remaining[0]
@@ -170,9 +170,6 @@ def _search_command_executes_unreviewed_code(command: CanonicalCommand) -> bool:
         return False
     name, args = _unwrap_search_invocation(segment.executable, list(segment.arguments))
     if name is None:
-        return True
-    leftover = [wrapper for wrapper in command.wrapper_chain if wrapper != "command"]
-    if leftover:
         return True
     if name not in _READ_ONLY_SEARCH_COMMANDS:
         return False
