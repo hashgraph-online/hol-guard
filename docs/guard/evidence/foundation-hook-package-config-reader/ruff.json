@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/dev/shm/hol-guard-takeover/work/hol-guard/.venv/bin/ruff",
+    "check",
+    "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+    "src/codex_plugin_scanner/guard/cli/commands_support_observe_queue.py",
+    "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
+    "tests/test_hook_package_config_reader.py",
+    "tests/test_native_pretool_compatibility.py",
+    "tests/test_guard_hook_post_claim_freshness.py"
+  ],
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "started_utc": "2026-09-17T19:34:02.798738+00:00",
+  "exit_code": 0,
+  "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+  "bytes": 19
+}

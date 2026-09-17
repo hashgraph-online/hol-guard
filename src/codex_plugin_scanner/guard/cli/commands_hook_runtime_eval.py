@@ -1,14 +1,19 @@
 """Guard CLI runtime artifact hook evaluation."""
 
-# ruff: noqa: F403, F405
+# ruff: noqa: E402, F403, F405
 
 from __future__ import annotations
 
 import os
 import shlex
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
@@ -262,6 +267,7 @@ def _evaluate_runtime_artifact_hook(
     runtime_artifact: GuardArtifact,
     runtime_workspace: Path | None,
     store: GuardStore,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
     trusted_request_override_hash: str | None = None,
     post_claim_revalidator: (
         Callable[[str, bool, str | None, bool], int | RuntimeArtifactHookState | None] | None
@@ -326,6 +332,7 @@ def _evaluate_runtime_artifact_hook(
             runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
             store=store,
+            config_reader=config_reader,
             post_claim_revalidator=None,
             _claimed_saved_allow_hash=claimed_hash,
             _claimed_trusted_request_override=trusted_request_override,
@@ -344,6 +351,7 @@ def _evaluate_runtime_artifact_hook(
             store=store,
             workspace_dir=runtime_workspace,
             external_archive_network_authorized=False,
+            config_reader=config_reader,
         )
         if _package_evaluation_requires_external_archive_binding(package_evaluation):
             has_binding_sink = _runtime_external_archive_has_digest_binding_sink(

@@ -1,0 +1,36 @@
+[
+  {
+    "check": "generate",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "tests/guard_command_decision_diff.py",
+      "--write"
+    ],
+    "exit_code": 0,
+    "seconds_including_lock": 36.824
+  },
+  {
+    "check": "check",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "tests/guard_command_decision_diff.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds_including_lock": 51.446
+  },
+  {
+    "check": "regressions",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "--basetemp=/tmp/hol-guard-desktop-refresh-foundation",
+      "tests/test_guard_desktop_contract.py",
+      "tests/test_guard_command_decision_diff.py"
+    ],
+    "exit_code": 1,
+    "seconds_including_lock": 158.969
+  }
+]

@@ -15,7 +15,6 @@ import {
   applyLocalCliMutation,
   bulkCommandState,
   enrollablePackageScriptCommands,
-  fetchLocalCliList,
   LocalCliApiError,
   previewLocalCliMutation,
   type LocalCliCommandState,
@@ -31,6 +30,7 @@ import { InlineError, ProtectionModuleRow } from "./components/protection-primit
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
 
 export { AddCustomExtensionWorkspace } from "./add-custom-extension-dialog";
+export { useLocalCliCatalog } from "./use-local-cli-catalog";
 
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
@@ -440,21 +440,4 @@ function CustomExtensionReviewModal(props: {
       </form>
     </div>
   );
-}
-
-export function useLocalCliCatalog() {
-  const [data, setData] = useState<LocalCliListResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    try {
-      setData(await fetchLocalCliList());
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  return { data, error, load };
 }

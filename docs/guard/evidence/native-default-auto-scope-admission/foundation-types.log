@@ -1,0 +1,702 @@
+
+{
+    "version": "1.39.8",
+    "time": "1789676993096",
+    "generalDiagnostics": [
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"_installed_hook_request\" is Any",
+            "range": {
+                "start": {
+                    "line": 59,
+                    "character": 0
+                },
+                "end": {
+                    "line": 59,
+                    "character": 23
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"installed_hook_request\" is Any",
+            "range": {
+                "start": {
+                    "line": 59,
+                    "character": 26
+                },
+                "end": {
+                    "line": 59,
+                    "character": 68
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, /) -> (object | None), (key: Unknown, default: object, /) -> object, (key: Unknown, default: _T@get, /) -> (object | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 107,
+                    "character": 12
+                },
+                "end": {
+                    "line": 107,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"payload\" is Any",
+            "range": {
+                "start": {
+                    "line": 172,
+                    "character": 4
+                },
+                "end": {
+                    "line": 172,
+                    "character": 11
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"routes\" is partially unknown\n  Type of \"routes\" is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 173,
+                    "character": 4
+                },
+                "end": {
+                    "line": 173,
+                    "character": 10
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 173,
+                    "character": 13
+                },
+                "end": {
+                    "line": 173,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"harness\" is unknown",
+            "range": {
+                "start": {
+                    "line": 177,
+                    "character": 8
+                },
+                "end": {
+                    "line": 177,
+                    "character": 15
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"route\" is unknown",
+            "range": {
+                "start": {
+                    "line": 177,
+                    "character": 17
+                },
+                "end": {
+                    "line": 177,
+                    "character": 22
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"pre\" is partially unknown\n  Type of \"pre\" is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 180,
+                    "character": 8
+                },
+                "end": {
+                    "line": 180,
+                    "character": 11
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 180,
+                    "character": 14
+                },
+                "end": {
+                    "line": 180,
+                    "character": 23
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"post\" is partially unknown\n  Type of \"post\" is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 181,
+                    "character": 8
+                },
+                "end": {
+                    "line": 181,
+                    "character": 12
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 181,
+                    "character": 15
+                },
+                "end": {
+                    "line": 181,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"response_payload\" is Any",
+            "range": {
+                "start": {
+                    "line": 221,
+                    "character": 12
+                },
+                "end": {
+                    "line": 221,
+                    "character": 28
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"response\" in function \"is_allowed\"",
+            "range": {
+                "start": {
+                    "line": 225,
+                    "character": 34
+                },
+                "end": {
+                    "line": 225,
+                    "character": 50
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is Any",
+            "range": {
+                "start": {
+                    "line": 229,
+                    "character": 32
+                },
+                "end": {
+                    "line": 229,
+                    "character": 52
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"response\" in function \"_permission_decision\"",
+            "range": {
+                "start": {
+                    "line": 230,
+                    "character": 64
+                },
+                "end": {
+                    "line": 230,
+                    "character": 80
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"reason\" is Any",
+            "range": {
+                "start": {
+                    "line": 233,
+                    "character": 12
+                },
+                "end": {
+                    "line": 233,
+                    "character": 18
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is Any",
+            "range": {
+                "start": {
+                    "line": 233,
+                    "character": 21
+                },
+                "end": {
+                    "line": 233,
+                    "character": 41
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"response\" is Any",
+            "range": {
+                "start": {
+                    "line": 248,
+                    "character": 12
+                },
+                "end": {
+                    "line": 248,
+                    "character": 20
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 263,
+                    "character": 16
+                },
+                "end": {
+                    "line": 263,
+                    "character": 28
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"condition\" in function \"_require\"\n  Argument type is \"Unknown | bool\"",
+            "range": {
+                "start": {
+                    "line": 263,
+                    "character": 16
+                },
+                "end": {
+                    "line": 265,
+                    "character": 112
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 264,
+                    "character": 20
+                },
+                "end": {
+                    "line": 264,
+                    "character": 32
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 265,
+                    "character": 20
+                },
+                "end": {
+                    "line": 265,
+                    "character": 32
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"detail\" in function \"_require\"\n  Argument type is \"dict[str, str | dict[Unknown, Unknown]]\"",
+            "range": {
+                "start": {
+                    "line": 266,
+                    "character": 16
+                },
+                "end": {
+                    "line": 266,
+                    "character": 52
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 269,
+                    "character": 28
+                },
+                "end": {
+                    "line": 269,
+                    "character": 40
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 270,
+                    "character": 31
+                },
+                "end": {
+                    "line": 270,
+                    "character": 43
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 271,
+                    "character": 40
+                },
+                "end": {
+                    "line": 271,
+                    "character": 47
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"str | None\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 275,
+                    "character": 8
+                },
+                "end": {
+                    "line": 275,
+                    "character": 48
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"o\" in function \"__init__\"",
+            "range": {
+                "start": {
+                    "line": 305,
+                    "character": 24
+                },
+                "end": {
+                    "line": 305,
+                    "character": 28
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 326,
+                    "character": 40
+                },
+                "end": {
+                    "line": 326,
+                    "character": 47
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 338,
+                    "character": 33
+                },
+                "end": {
+                    "line": 338,
+                    "character": 40
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 351,
+                    "character": 31
+                },
+                "end": {
+                    "line": 351,
+                    "character": 38
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 357,
+                    "character": 19
+                },
+                "end": {
+                    "line": 357,
+                    "character": 26
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "\"_server\" is protected and used outside of the class in which it is declared",
+            "range": {
+                "start": {
+                    "line": 360,
+                    "character": 24
+                },
+                "end": {
+                    "line": 360,
+                    "character": 31
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Unnecessary isinstance call; \"Mapping[str, object]\" is always an instance of \"Mapping[Unknown, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 365,
+                    "character": 11
+                },
+                "end": {
+                    "line": 365,
+                    "character": 44
+                }
+            },
+            "rule": "reportUnnecessaryIsInstance"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Unnecessary isinstance call; \"Mapping[str, object]\" is always an instance of \"Mapping[Unknown, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 365,
+                    "character": 52
+                },
+                "end": {
+                    "line": 365,
+                    "character": 87
+                }
+            },
+            "rule": "reportUnnecessaryIsInstance"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"str | None\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 415,
+                    "character": 8
+                },
+                "end": {
+                    "line": 415,
+                    "character": 48
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"str | None\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 447,
+                    "character": 8
+                },
+                "end": {
+                    "line": 447,
+                    "character": 55
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"str | None\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 509,
+                    "character": 8
+                },
+                "end": {
+                    "line": 509,
+                    "character": 48
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 554,
+                    "character": 8
+                },
+                "end": {
+                    "line": 554,
+                    "character": 63
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Action\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 561,
+                    "character": 4
+                },
+                "end": {
+                    "line": 561,
+                    "character": 44
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Type of \"json\" is Any",
+            "range": {
+                "start": {
+                    "line": 563,
+                    "character": 36
+                },
+                "end": {
+                    "line": 563,
+                    "character": 50
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/ci/native_runtime/probe_native_default_auto.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"json_path\" in function \"main\"",
+            "range": {
+                "start": {
+                    "line": 563,
+                    "character": 36
+                },
+                "end": {
+                    "line": 563,
+                    "character": 50
+                }
+            },
+            "rule": "reportAny"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 1,
+        "errorCount": 0,
+        "warningCount": 43,
+        "informationCount": 0,
+        "timeInSec": 7.082
+    }
+}

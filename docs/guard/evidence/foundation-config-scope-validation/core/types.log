@@ -1,0 +1,3342 @@
+
+{
+    "version": "1.39.8",
+    "time": "1789672298993",
+    "generalDiagnostics": [
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Stub file not found for \"tomllib\"",
+            "range": {
+                "start": {
+                    "line": 19,
+                    "character": 11
+                },
+                "end": {
+                    "line": 19,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeStubs"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"datetime\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 68,
+                    "character": 8
+                },
+                "end": {
+                    "line": 68,
+                    "character": 60
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"key\" is unknown",
+            "range": {
+                "start": {
+                    "line": 341,
+                    "character": 8
+                },
+                "end": {
+                    "line": 341,
+                    "character": 11
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"value\" is unknown",
+            "range": {
+                "start": {
+                    "line": 341,
+                    "character": 13
+                },
+                "end": {
+                    "line": 341,
+                    "character": 18
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"value\" in function \"_action_map_value\"",
+            "range": {
+                "start": {
+                    "line": 344,
+                    "character": 35
+                },
+                "end": {
+                    "line": 344,
+                    "character": 40
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"key\" is unknown",
+            "range": {
+                "start": {
+                    "line": 354,
+                    "character": 8
+                },
+                "end": {
+                    "line": 354,
+                    "character": 11
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"value\" is unknown",
+            "range": {
+                "start": {
+                    "line": 354,
+                    "character": 13
+                },
+                "end": {
+                    "line": 354,
+                    "character": 18
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"value\" in function \"_action_map_value\"",
+            "range": {
+                "start": {
+                    "line": 357,
+                    "character": 35
+                },
+                "end": {
+                    "line": 357,
+                    "character": 40
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 367,
+                    "character": 15
+                },
+                "end": {
+                    "line": 367,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Return type, \"Unknown | None\", is partially unknown",
+            "range": {
+                "start": {
+                    "line": 367,
+                    "character": 15
+                },
+                "end": {
+                    "line": 367,
+                    "character": 34
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 369,
+                    "character": 15
+                },
+                "end": {
+                    "line": 369,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Return type, \"Unknown | None\", is partially unknown",
+            "range": {
+                "start": {
+                    "line": 369,
+                    "character": 15
+                },
+                "end": {
+                    "line": 369,
+                    "character": 42
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Return type, \"dict[Unknown, Unknown]\", is partially unknown",
+            "range": {
+                "start": {
+                    "line": 370,
+                    "character": 11
+                },
+                "end": {
+                    "line": 370,
+                    "character": 16
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"harness\" is unknown",
+            "range": {
+                "start": {
+                    "line": 377,
+                    "character": 8
+                },
+                "end": {
+                    "line": 377,
+                    "character": 15
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"value\" is unknown",
+            "range": {
+                "start": {
+                    "line": 377,
+                    "character": 17
+                },
+                "end": {
+                    "line": 377,
+                    "character": 22
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"payload\" in function \"_coerce_risk_action_map\"",
+            "range": {
+                "start": {
+                    "line": 380,
+                    "character": 50
+                },
+                "end": {
+                    "line": 380,
+                    "character": 55
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Unnecessary isinstance call; \"dict[str, Any]\" is always an instance of \"dict[Unknown, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 501,
+                    "character": 22
+                },
+                "end": {
+                    "line": 501,
+                    "character": 47
+                }
+            },
+            "rule": "reportUnnecessaryIsInstance"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"item\" is unknown",
+            "range": {
+                "start": {
+                    "line": 973,
+                    "character": 26
+                },
+                "end": {
+                    "line": 973,
+                    "character": 30
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"key\" is unknown",
+            "range": {
+                "start": {
+                    "line": 989,
+                    "character": 8
+                },
+                "end": {
+                    "line": 989,
+                    "character": 11
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"action\" is unknown",
+            "range": {
+                "start": {
+                    "line": 989,
+                    "character": 13
+                },
+                "end": {
+                    "line": 989,
+                    "character": 19
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"value\" in function \"coerce_guard_action\"",
+            "range": {
+                "start": {
+                    "line": 992,
+                    "character": 46
+                },
+                "end": {
+                    "line": 992,
+                    "character": 52
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"harness\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1003,
+                    "character": 8
+                },
+                "end": {
+                    "line": 1003,
+                    "character": 15
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"risk_payload\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1003,
+                    "character": 17
+                },
+                "end": {
+                    "line": 1003,
+                    "character": 29
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"value\" in function \"_coerce_risk_action_payload\"",
+            "range": {
+                "start": {
+                    "line": 1006,
+                    "character": 63
+                },
+                "end": {
+                    "line": 1006,
+                    "character": 75
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1043,
+                    "character": 4
+                },
+                "end": {
+                    "line": 1043,
+                    "character": 51
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1062,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1062,
+                    "character": 48
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1069,
+                    "character": 8
+                },
+                "end": {
+                    "line": 1069,
+                    "character": 46
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1075,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1075,
+                    "character": 50
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1078,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1078,
+                    "character": 50
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1084,
+                    "character": 4
+                },
+                "end": {
+                    "line": 1084,
+                    "character": 42
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is unknown\n  Argument corresponds to parameter \"value\" in function \"_toml_literal\"",
+            "range": {
+                "start": {
+                    "line": 1156,
+                    "character": 45
+                },
+                "end": {
+                    "line": 1156,
+                    "character": 49
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"item\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1156,
+                    "character": 55
+                },
+                "end": {
+                    "line": 1156,
+                    "character": 59
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"current\" is partially unknown\n  Type of \"current\" is \"object | Unknown\"",
+            "range": {
+                "start": {
+                    "line": 1284,
+                    "character": 8
+                },
+                "end": {
+                    "line": 1284,
+                    "character": 15
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Return type, \"dict[str, object] | object | Unknown\", is partially unknown",
+            "range": {
+                "start": {
+                    "line": 1285,
+                    "character": 11
+                },
+                "end": {
+                    "line": 1285,
+                    "character": 18
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"key\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1295,
+                    "character": 26
+                },
+                "end": {
+                    "line": 1295,
+                    "character": 29
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"item\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1295,
+                    "character": 31
+                },
+                "end": {
+                    "line": 1295,
+                    "character": 35
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Path\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1318,
+                    "character": 16
+                },
+                "end": {
+                    "line": 1318,
+                    "character": 46
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Path\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1327,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1327,
+                    "character": 42
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Path | str\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1332,
+                    "character": 8
+                },
+                "end": {
+                    "line": 1332,
+                    "character": 35
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"str | Any\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1343,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1343,
+                    "character": 60
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"progress\" in function \"backup\"\n  Argument type is \"(*_: Unknown) -> None\"",
+            "range": {
+                "start": {
+                    "line": 1369,
+                    "character": 25
+                },
+                "end": {
+                    "line": 1369,
+                    "character": 81
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of parameter \"_\" is partially unknown",
+            "range": {
+                "start": {
+                    "line": 1369,
+                    "character": 33
+                },
+                "end": {
+                    "line": 1369,
+                    "character": 34
+                }
+            },
+            "rule": "reportUnknownLambdaType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Path\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1373,
+                    "character": 8
+                },
+                "end": {
+                    "line": 1373,
+                    "character": 50
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Cursor\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 1383,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1383,
+                    "character": 88
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"nested_existing\" is partially unknown\n  Type of \"nested_existing\" is \"dict[str, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 1414,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1414,
+                    "character": 27
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"name\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1414,
+                    "character": 54
+                },
+                "end": {
+                    "line": 1414,
+                    "character": 58
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"nested_value\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1414,
+                    "character": 60
+                },
+                "end": {
+                    "line": 1414,
+                    "character": 72
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"nested_override\" is partially unknown\n  Type of \"nested_override\" is \"dict[str, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 1415,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1415,
+                    "character": 27
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"name\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1415,
+                    "character": 54
+                },
+                "end": {
+                    "line": 1415,
+                    "character": 58
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"nested_value\" is unknown",
+            "range": {
+                "start": {
+                    "line": 1415,
+                    "character": 60
+                },
+                "end": {
+                    "line": 1415,
+                    "character": 72
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"pop\" is partially unknown\n  Type of \"pop\" is \"Overload[(key: str, /) -> Unknown, (key: str, default: Unknown, /) -> Unknown, (key: str, default: _T@pop, /) -> (Unknown | _T@pop)]\"",
+            "range": {
+                "start": {
+                    "line": 1417,
+                    "character": 16
+                },
+                "end": {
+                    "line": 1417,
+                    "character": 35
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"pop\" is partially unknown\n  Type of \"pop\" is \"Overload[(key: str, /) -> Unknown, (key: str, default: Unknown, /) -> Unknown, (key: str, default: _T@pop, /) -> (Unknown | _T@pop)]\"",
+            "range": {
+                "start": {
+                    "line": 1418,
+                    "character": 16
+                },
+                "end": {
+                    "line": 1418,
+                    "character": 35
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"base\" in function \"_merge_config_payload\"\n  Argument type is \"dict[str, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 1419,
+                    "character": 48
+                },
+                "end": {
+                    "line": 1419,
+                    "character": 63
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"override\" in function \"_merge_config_payload\"\n  Argument type is \"dict[str, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 1419,
+                    "character": 65
+                },
+                "end": {
+                    "line": 1419,
+                    "character": 80
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"object\" in function \"__new__\"",
+            "range": {
+                "start": {
+                    "line": 1450,
+                    "character": 26
+                },
+                "end": {
+                    "line": 1450,
+                    "character": 32
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"row\" is Any",
+            "range": {
+                "start": {
+                    "line": 1450,
+                    "character": 38
+                },
+                "end": {
+                    "line": 1450,
+                    "character": 41
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config.py",
+            "severity": "warning",
+            "message": "Type of \"row\" is Any",
+            "range": {
+                "start": {
+                    "line": 1484,
+                    "character": 12
+                },
+                "end": {
+                    "line": 1484,
+                    "character": 15
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config_source_io.py",
+            "severity": "warning",
+            "message": "\"_open_locked_directory\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 86,
+                    "character": 38
+                },
+                "end": {
+                    "line": 86,
+                    "character": 60
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config_source_io.py",
+            "severity": "warning",
+            "message": "\"_WindowsApi\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 86,
+                    "character": 62
+                },
+                "end": {
+                    "line": 86,
+                    "character": 73
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config_source_io.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"tuple[int, ...]\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 159,
+                    "character": 12
+                },
+                "end": {
+                    "line": 159,
+                    "character": 46
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/config_source_io.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"tuple[int, ...]\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 161,
+                    "character": 12
+                },
+                "end": {
+                    "line": 161,
+                    "character": 38
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/daemon/config_read_scope.py",
+            "severity": "warning",
+            "message": "\"tomllib\" is not exported from module \"..config\"",
+            "range": {
+                "start": {
+                    "line": 46,
+                    "character": 29
+                },
+                "end": {
+                    "line": 46,
+                    "character": 36
+                }
+            },
+            "rule": "reportPrivateLocalImportUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/daemon/config_read_scope.py",
+            "severity": "warning",
+            "message": "Unnecessary isinstance call; \"dict[str, Any]\" is always an instance of \"dict[Unknown, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 49,
+                    "character": 26
+                },
+                "end": {
+                    "line": 49,
+                    "character": 51
+                }
+            },
+            "rule": "reportUnnecessaryIsInstance"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_LOCK_NAME\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 43,
+                    "character": 24
+                },
+                "end": {
+                    "line": 43,
+                    "character": 34
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_MAX_GENERATION\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 44,
+                    "character": 29
+                },
+                "end": {
+                    "line": 44,
+                    "character": 44
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_MAX_STATE_BYTES\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 45,
+                    "character": 30
+                },
+                "end": {
+                    "line": 45,
+                    "character": 46
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_STATE_NAME\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 46,
+                    "character": 25
+                },
+                "end": {
+                    "line": 46,
+                    "character": 36
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_STATE_SCHEMA\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 47,
+                    "character": 27
+                },
+                "end": {
+                    "line": 47,
+                    "character": 40
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 48,
+                    "character": 51
+                },
+                "end": {
+                    "line": 48,
+                    "character": 88
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"effective_native_policy_v3\" is not exported from module \"..native_policy_snapshot_contract\"",
+            "range": {
+                "start": {
+                    "line": 56,
+                    "character": 39
+                },
+                "end": {
+                    "line": 56,
+                    "character": 65
+                }
+            },
+            "rule": "reportPrivateLocalImportUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_integrity_mac_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 59,
+                    "character": 39
+                },
+                "end": {
+                    "line": 59,
+                    "character": 65
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_policy_digest_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 60,
+                    "character": 39
+                },
+                "end": {
+                    "line": 60,
+                    "character": 65
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_validate_snapshot_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 61,
+                    "character": 34
+                },
+                "end": {
+                    "line": 61,
+                    "character": 55
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_strict_json_loads_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 62,
+                    "character": 31
+                },
+                "end": {
+                    "line": 62,
+                    "character": 52
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_clear_v3_snapshot_pending\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 63,
+                    "character": 38
+                },
+                "end": {
+                    "line": 63,
+                    "character": 64
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_read_v3_generation_state\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 64,
+                    "character": 37
+                },
+                "end": {
+                    "line": 64,
+                    "character": 62
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_read_v3_snapshot_cache\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 65,
+                    "character": 35
+                },
+                "end": {
+                    "line": 65,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_read_v3_snapshot_file\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 66,
+                    "character": 34
+                },
+                "end": {
+                    "line": 66,
+                    "character": 56
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_recover_v3_snapshot_transaction\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 67,
+                    "character": 44
+                },
+                "end": {
+                    "line": 67,
+                    "character": 76
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_v3_generation_lock\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 68,
+                    "character": 31
+                },
+                "end": {
+                    "line": 68,
+                    "character": 50
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_read_snapshot_bytes\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 69,
+                    "character": 40
+                },
+                "end": {
+                    "line": 69,
+                    "character": 68
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_write_v3_generation_state\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 70,
+                    "character": 38
+                },
+                "end": {
+                    "line": 70,
+                    "character": 64
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_write_v3_snapshot_cache\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 71,
+                    "character": 36
+                },
+                "end": {
+                    "line": 71,
+                    "character": 60
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_write_v3_snapshot_file\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 72,
+                    "character": 35
+                },
+                "end": {
+                    "line": 72,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_dll\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 73,
+                    "character": 32
+                },
+                "end": {
+                    "line": 73,
+                    "character": 44
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_file_information_type\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 74,
+                    "character": 50
+                },
+                "end": {
+                    "line": 74,
+                    "character": 80
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_owner_sid\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 75,
+                    "character": 38
+                },
+                "end": {
+                    "line": 75,
+                    "character": 56
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_security_attributes_type\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 76,
+                    "character": 53
+                },
+                "end": {
+                    "line": 76,
+                    "character": 86
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_private_descriptor\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 77,
+                    "character": 47
+                },
+                "end": {
+                    "line": 77,
+                    "character": 74
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_path_has_reparse_component\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 78,
+                    "character": 55
+                },
+                "end": {
+                    "line": 78,
+                    "character": 90
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_close_handle\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 79,
+                    "character": 36
+                },
+                "end": {
+                    "line": 79,
+                    "character": 57
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_open_handle\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 80,
+                    "character": 35
+                },
+                "end": {
+                    "line": 80,
+                    "character": 55
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_apply_private_dacl\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 81,
+                    "character": 42
+                },
+                "end": {
+                    "line": 81,
+                    "character": 69
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_open_private_fd\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 82,
+                    "character": 39
+                },
+                "end": {
+                    "line": 82,
+                    "character": 63
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_repair_private_file\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 43
+                },
+                "end": {
+                    "line": 83,
+                    "character": 71
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_verify_private_file\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 84,
+                    "character": 43
+                },
+                "end": {
+                    "line": 84,
+                    "character": 71
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_write_private_bytes\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 85,
+                    "character": 43
+                },
+                "end": {
+                    "line": 85,
+                    "character": 71
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_verify_private_owner\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 88,
+                    "character": 45
+                },
+                "end": {
+                    "line": 88,
+                    "character": 74
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_verify_private_dacl\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 89,
+                    "character": 44
+                },
+                "end": {
+                    "line": 89,
+                    "character": 72
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_ensure_private_directory\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 90,
+                    "character": 51
+                },
+                "end": {
+                    "line": 90,
+                    "character": 84
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_private_directory_binding\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 91,
+                    "character": 52
+                },
+                "end": {
+                    "line": 91,
+                    "character": 86
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_private_state_binding\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 92,
+                    "character": 48
+                },
+                "end": {
+                    "line": 92,
+                    "character": 78
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_v3_generation_for_policy\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 93,
+                    "character": 40
+                },
+                "end": {
+                    "line": 93,
+                    "character": 65
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_merge_effective_native_policies\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 94,
+                    "character": 43
+                },
+                "end": {
+                    "line": 94,
+                    "character": 75
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_normalize_scope_text_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 95,
+                    "character": 35
+                },
+                "end": {
+                    "line": 95,
+                    "character": 59
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_utf8_size_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 96,
+                    "character": 23
+                },
+                "end": {
+                    "line": 96,
+                    "character": 36
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_valid_bounded_string_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 97,
+                    "character": 34
+                },
+                "end": {
+                    "line": 97,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_valid_selector_key_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 98,
+                    "character": 32
+                },
+                "end": {
+                    "line": 98,
+                    "character": 54
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_normalized_harness_selector_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 99,
+                    "character": 41
+                },
+                "end": {
+                    "line": 99,
+                    "character": 72
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_validate_json_limits_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 100,
+                    "character": 34
+                },
+                "end": {
+                    "line": 100,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_canonical_json_bytes_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 101,
+                    "character": 34
+                },
+                "end": {
+                    "line": 101,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_digest_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 102,
+                    "character": 20
+                },
+                "end": {
+                    "line": 102,
+                    "character": 30
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_runtime_state_directory\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 103,
+                    "character": 44
+                },
+                "end": {
+                    "line": 103,
+                    "character": 68
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_read_key\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 104,
+                    "character": 33
+                },
+                "end": {
+                    "line": 104,
+                    "character": 50
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_windows_provision_verifier_key\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 105,
+                    "character": 47
+                },
+                "end": {
+                    "line": 105,
+                    "character": 78
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_scope_digest_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 106,
+                    "character": 27
+                },
+                "end": {
+                    "line": 106,
+                    "character": 43
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_config_value\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 107,
+                    "character": 24
+                },
+                "end": {
+                    "line": 107,
+                    "character": 37
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_action_value\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 108,
+                    "character": 24
+                },
+                "end": {
+                    "line": 108,
+                    "character": 37
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_string_map\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 109,
+                    "character": 22
+                },
+                "end": {
+                    "line": 109,
+                    "character": 33
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_harness_risk_map\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 110,
+                    "character": 28
+                },
+                "end": {
+                    "line": 110,
+                    "character": 45
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_harness_action_map\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 111,
+                    "character": 30
+                },
+                "end": {
+                    "line": 111,
+                    "character": 49
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_require_snapshot_mapping_fields_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 112,
+                    "character": 48
+                },
+                "end": {
+                    "line": 112,
+                    "character": 83
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_valid_u16_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 113,
+                    "character": 26
+                },
+                "end": {
+                    "line": 113,
+                    "character": 39
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_valid_u64_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 114,
+                    "character": 26
+                },
+                "end": {
+                    "line": 114,
+                    "character": 39
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_valid_digest_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 115,
+                    "character": 29
+                },
+                "end": {
+                    "line": 115,
+                    "character": 45
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_policy_snapshot_push_bytes_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 116,
+                    "character": 43
+                },
+                "end": {
+                    "line": 116,
+                    "character": 73
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_cache_path_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 117,
+                    "character": 35
+                },
+                "end": {
+                    "line": 117,
+                    "character": 58
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_pending_path_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 118,
+                    "character": 37
+                },
+                "end": {
+                    "line": 118,
+                    "character": 62
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_inputs_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 119,
+                    "character": 34
+                },
+                "end": {
+                    "line": 119,
+                    "character": 53
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_snapshot_matches_inputs_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 120,
+                    "character": 42
+                },
+                "end": {
+                    "line": 120,
+                    "character": 69
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "\"_stricter_action\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 121,
+                    "character": 27
+                },
+                "end": {
+                    "line": 121,
+                    "character": 43
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 171,
+                    "character": 12
+                },
+                "end": {
+                    "line": 171,
+                    "character": 48
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "The function \"contextmanager\" is deprecated\n  Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead.",
+            "range": {
+                "start": {
+                    "line": 181,
+                    "character": 1
+                },
+                "end": {
+                    "line": 181,
+                    "character": 15
+                }
+            },
+            "rule": "reportDeprecated"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 196,
+                    "character": 12
+                },
+                "end": {
+                    "line": 196,
+                    "character": 38
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 205,
+                    "character": 16
+                },
+                "end": {
+                    "line": 205,
+                    "character": 52
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"state\" is Any",
+            "range": {
+                "start": {
+                    "line": 236,
+                    "character": 8
+                },
+                "end": {
+                    "line": 236,
+                    "character": 13
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"generation\" is partially unknown\n  Type of \"generation\" is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 241,
+                    "character": 4
+                },
+                "end": {
+                    "line": 241,
+                    "character": 14
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 241,
+                    "character": 17
+                },
+                "end": {
+                    "line": 241,
+                    "character": 26
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"policy_digest\" is partially unknown\n  Type of \"policy_digest\" is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 242,
+                    "character": 4
+                },
+                "end": {
+                    "line": 242,
+                    "character": 17
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 242,
+                    "character": 20
+                },
+                "end": {
+                    "line": 242,
+                    "character": 29
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is partially unknown\n  Type of \"get\" is \"Overload[(key: Unknown, default: None = None, /) -> (Unknown | None), (key: Unknown, default: Unknown, /) -> Unknown, (key: Unknown, default: _T@get, /) -> (Unknown | _T@get)]\"",
+            "range": {
+                "start": {
+                    "line": 244,
+                    "character": 8
+                },
+                "end": {
+                    "line": 244,
+                    "character": 17
+                }
+            },
+            "rule": "reportUnknownMemberType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"o\" in function \"__init__\"\n  Argument type is \"Unknown | None\"",
+            "range": {
+                "start": {
+                    "line": 245,
+                    "character": 16
+                },
+                "end": {
+                    "line": 245,
+                    "character": 26
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 266,
+                    "character": 12
+                },
+                "end": {
+                    "line": 266,
+                    "character": 33
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 321,
+                    "character": 12
+                },
+                "end": {
+                    "line": 321,
+                    "character": 53
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 326,
+                    "character": 12
+                },
+                "end": {
+                    "line": 326,
+                    "character": 53
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 328,
+                    "character": 16
+                },
+                "end": {
+                    "line": 328,
+                    "character": 57
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 329,
+                    "character": 16
+                },
+                "end": {
+                    "line": 329,
+                    "character": 47
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 337,
+                    "character": 8
+                },
+                "end": {
+                    "line": 337,
+                    "character": 49
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"int\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 338,
+                    "character": 8
+                },
+                "end": {
+                    "line": 338,
+                    "character": 39
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_PUBLISH_RETRY_MAX_SECONDS\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 15,
+                    "character": 4
+                },
+                "end": {
+                    "line": 15,
+                    "character": 30
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_PUBLISH_RETRY_SECONDS\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 16,
+                    "character": 4
+                },
+                "end": {
+                    "line": 16,
+                    "character": 26
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_PUBLISH_TIMEOUT_SECONDS\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 17,
+                    "character": 4
+                },
+                "end": {
+                    "line": 17,
+                    "character": 28
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_RENEWAL_JITTER_MAX_SECONDS\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 18,
+                    "character": 4
+                },
+                "end": {
+                    "line": 18,
+                    "character": 31
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_RENEWAL_LEAD_SECONDS\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 19,
+                    "character": 4
+                },
+                "end": {
+                    "line": 19,
+                    "character": 25
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_REQUIRED_PUBLISH_FEATURES\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 20,
+                    "character": 4
+                },
+                "end": {
+                    "line": 20,
+                    "character": 30
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_decode_ack_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 24,
+                    "character": 56
+                },
+                "end": {
+                    "line": 24,
+                    "character": 70
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "\"_publish_snapshot_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 24,
+                    "character": 72
+                },
+                "end": {
+                    "line": 24,
+                    "character": 92
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Return type is Any",
+            "range": {
+                "start": {
+                    "line": 31,
+                    "character": 4
+                },
+                "end": {
+                    "line": 31,
+                    "character": 17
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type `Any` is not allowed",
+            "range": {
+                "start": {
+                    "line": 31,
+                    "character": 23
+                },
+                "end": {
+                    "line": 31,
+                    "character": 26
+                }
+            },
+            "rule": "reportExplicitAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type `Any` is not allowed",
+            "range": {
+                "start": {
+                    "line": 46,
+                    "character": 38
+                },
+                "end": {
+                    "line": 46,
+                    "character": 41
+                }
+            },
+            "rule": "reportExplicitAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `store` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 53,
+                    "character": 13
+                },
+                "end": {
+                    "line": 53,
+                    "character": 18
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `guard_home` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 54,
+                    "character": 13
+                },
+                "end": {
+                    "line": 54,
+                    "character": 23
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `config_capture` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 55,
+                    "character": 13
+                },
+                "end": {
+                    "line": 55,
+                    "character": 27
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_status_provider` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 56,
+                    "character": 13
+                },
+                "end": {
+                    "line": 56,
+                    "character": 29
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_client_request` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 57,
+                    "character": 13
+                },
+                "end": {
+                    "line": 57,
+                    "character": 28
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_poll_interval_seconds` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 58,
+                    "character": 13
+                },
+                "end": {
+                    "line": 58,
+                    "character": 35
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_wall_clock` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 59,
+                    "character": 13
+                },
+                "end": {
+                    "line": 59,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_monotonic_clock` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 60,
+                    "character": 13
+                },
+                "end": {
+                    "line": 60,
+                    "character": 29
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_condition` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 61,
+                    "character": 13
+                },
+                "end": {
+                    "line": 61,
+                    "character": 23
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_publish_event` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 62,
+                    "character": 13
+                },
+                "end": {
+                    "line": 62,
+                    "character": 27
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_closed` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 63,
+                    "character": 13
+                },
+                "end": {
+                    "line": 63,
+                    "character": 20
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_started` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 64,
+                    "character": 13
+                },
+                "end": {
+                    "line": 64,
+                    "character": 21
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_acked` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 67,
+                    "character": 13
+                },
+                "end": {
+                    "line": 67,
+                    "character": 19
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_epoch` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 68,
+                    "character": 13
+                },
+                "end": {
+                    "line": 68,
+                    "character": 19
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `_failure_count` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 76,
+                    "character": 13
+                },
+                "end": {
+                    "line": 76,
+                    "character": 27
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"api\" is Any",
+            "range": {
+                "start": {
+                    "line": 81,
+                    "character": 8
+                },
+                "end": {
+                    "line": 81,
+                    "character": 11
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_PUBLISHER_LOCK\" is Any",
+            "range": {
+                "start": {
+                    "line": 82,
+                    "character": 13
+                },
+                "end": {
+                    "line": 82,
+                    "character": 32
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_PUBLISHERS\" is Any",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 12
+                },
+                "end": {
+                    "line": 83,
+                    "character": 27
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"setdefault\" is Any",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 12
+                },
+                "end": {
+                    "line": 83,
+                    "character": 38
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"add\" is Any",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 12
+                },
+                "end": {
+                    "line": 83,
+                    "character": 86
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_publisher_key\" is Any",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 39
+                },
+                "end": {
+                    "line": 83,
+                    "character": 57
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"api\" is Any",
+            "range": {
+                "start": {
+                    "line": 123,
+                    "character": 8
+                },
+                "end": {
+                    "line": 123,
+                    "character": 11
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_PUBLISHER_LOCK\" is Any",
+            "range": {
+                "start": {
+                    "line": 124,
+                    "character": 13
+                },
+                "end": {
+                    "line": 124,
+                    "character": 32
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"publishers\" is Any",
+            "range": {
+                "start": {
+                    "line": 125,
+                    "character": 12
+                },
+                "end": {
+                    "line": 125,
+                    "character": 22
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_PUBLISHERS\" is Any",
+            "range": {
+                "start": {
+                    "line": 125,
+                    "character": 25
+                },
+                "end": {
+                    "line": 125,
+                    "character": 40
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"get\" is Any",
+            "range": {
+                "start": {
+                    "line": 125,
+                    "character": 25
+                },
+                "end": {
+                    "line": 125,
+                    "character": 44
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_publisher_key\" is Any",
+            "range": {
+                "start": {
+                    "line": 125,
+                    "character": 45
+                },
+                "end": {
+                    "line": 125,
+                    "character": 63
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"discard\" is Any",
+            "range": {
+                "start": {
+                    "line": 127,
+                    "character": 16
+                },
+                "end": {
+                    "line": 127,
+                    "character": 34
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_PUBLISHERS\" is Any",
+            "range": {
+                "start": {
+                    "line": 129,
+                    "character": 20
+                },
+                "end": {
+                    "line": 129,
+                    "character": 35
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"pop\" is Any",
+            "range": {
+                "start": {
+                    "line": 129,
+                    "character": 20
+                },
+                "end": {
+                    "line": 129,
+                    "character": 39
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"_publisher_key\" is Any",
+            "range": {
+                "start": {
+                    "line": 129,
+                    "character": 40
+                },
+                "end": {
+                    "line": 129,
+                    "character": 58
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type annotation for attribute `notify_policy_changed` is required because this class is not decorated with `@final`",
+            "range": {
+                "start": {
+                    "line": 145,
+                    "character": 4
+                },
+                "end": {
+                    "line": 145,
+                    "character": 25
+                }
+            },
+            "rule": "reportUnannotatedClassAttribute"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"obj\" in function \"len\"\n  Argument type is \"tuple[Unknown, ...]\"",
+            "range": {
+                "start": {
+                    "line": 174,
+                    "character": 23
+                },
+                "end": {
+                    "line": 174,
+                    "character": 31
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Path\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 180,
+                    "character": 12
+                },
+                "end": {
+                    "line": 180,
+                    "character": 77
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"bool\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 280,
+                    "character": 16
+                },
+                "end": {
+                    "line": 280,
+                    "character": 55
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"bool\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 326,
+                    "character": 12
+                },
+                "end": {
+                    "line": 326,
+                    "character": 58
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"arg2\" in function \"min\"",
+            "range": {
+                "start": {
+                    "line": 363,
+                    "character": 16
+                },
+                "end": {
+                    "line": 363,
+                    "character": 84
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"identity\" is Any",
+            "range": {
+                "start": {
+                    "line": 390,
+                    "character": 12
+                },
+                "end": {
+                    "line": 390,
+                    "character": 20
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type of \"capabilities\" is Any",
+            "range": {
+                "start": {
+                    "line": 390,
+                    "character": 22
+                },
+                "end": {
+                    "line": 390,
+                    "character": 34
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type `Any` is not allowed",
+            "range": {
+                "start": {
+                    "line": 455,
+                    "character": 15
+                },
+                "end": {
+                    "line": 455,
+                    "character": 18
+                }
+            },
+            "rule": "reportExplicitAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Type `Any` is not allowed",
+            "range": {
+                "start": {
+                    "line": 455,
+                    "character": 20
+                },
+                "end": {
+                    "line": 455,
+                    "character": 23
+                }
+            },
+            "rule": "reportExplicitAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"o\" in function \"getattr\"",
+            "range": {
+                "start": {
+                    "line": 475,
+                    "character": 23
+                },
+                "end": {
+                    "line": 475,
+                    "character": 35
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"obj\" in function \"len\"\n  Argument type is \"tuple[Unknown, ...]\"",
+            "range": {
+                "start": {
+                    "line": 487,
+                    "character": 23
+                },
+                "end": {
+                    "line": 487,
+                    "character": 31
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
+            "severity": "warning",
+            "message": "\"_digest_v3\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 10,
+                    "character": 42
+                },
+                "end": {
+                    "line": 10,
+                    "character": 52
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
+            "severity": "warning",
+            "message": "\"_merge_effective_native_policies\" is private and used outside of the module in which it is declared",
+            "range": {
+                "start": {
+                    "line": 16,
+                    "character": 43
+                },
+                "end": {
+                    "line": 16,
+                    "character": 75
+                }
+            },
+            "rule": "reportPrivateUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
+            "severity": "warning",
+            "message": "\"tomllib\" is not exported from module \".config\"",
+            "range": {
+                "start": {
+                    "line": 207,
+                    "character": 28
+                },
+                "end": {
+                    "line": 207,
+                    "character": 35
+                }
+            },
+            "rule": "reportPrivateLocalImportUsage"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"object\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 252,
+                    "character": 12
+                },
+                "end": {
+                    "line": 252,
+                    "character": 47
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
+            "severity": "warning",
+            "message": "Unnecessary \"cast\" call; type is already \"str\"",
+            "range": {
+                "start": {
+                    "line": 254,
+                    "character": 16
+                },
+                "end": {
+                    "line": 254,
+                    "character": 56
+                }
+            },
+            "rule": "reportUnnecessaryCast"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 6,
+        "errorCount": 0,
+        "warningCount": 208,
+        "informationCount": 0,
+        "timeInSec": 3.12
+    }
+}

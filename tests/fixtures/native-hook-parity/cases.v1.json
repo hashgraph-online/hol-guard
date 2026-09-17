@@ -1,0 +1,42 @@
+{
+  "schema": "hol-guard.native-hook-parity.v1",
+  "version": 1,
+  "cases": [
+    {
+      "id": "pretool-safe-read",
+      "event": "PreToolUse",
+      "input_class": "read_only",
+      "expected_action": "allow"
+    },
+    {
+      "id": "pretool-sensitive-read",
+      "event": "PreToolUse",
+      "input_class": "sensitive_read",
+      "expected_action": "review"
+    },
+    {
+      "id": "posttool-clean-output",
+      "event": "PostToolUse",
+      "input_class": "bounded_clean_output",
+      "expected_action": "allow"
+    },
+    {
+      "id": "posttool-oversized-output",
+      "event": "PostToolUse",
+      "input_class": "oversized_output",
+      "expected_action": "require-reapproval"
+    },
+    {
+      "id": "unknown-envelope",
+      "event": "Unknown",
+      "input_class": "malformed_envelope",
+      "expected_action": "block"
+    },
+    {
+      "id": "native-unavailable",
+      "event": "PreToolUse",
+      "input_class": "native_worker_unavailable",
+      "expected_action": "block"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
-import { applyApprovalGateDraft, hasUnsavedChanges } from "./settings-workspace";
+import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -72,6 +73,17 @@ function testApprovalGateCooldownLabels(): void {
   assert(approvalGateCooldownLabel(3600) === "1 hour", "3600 should be '1 hour'");
   assert(approvalGateCooldownLabel(60) === "60 seconds", "60 should be '60 seconds'");
   assert(approvalGateCooldownLabel(1800) === "1800 seconds", "1800 should be '1800 seconds'");
+}
+
+function testApprovalGateCooldownIsUnavailableWithTotp(): void {
+  assert(
+    effectiveApprovalGateCooldownSeconds(900, true) === 0,
+    "authenticator-enabled gates must expose every approval as the effective cooldown",
+  );
+  assert(
+    effectiveApprovalGateCooldownSeconds(900, false) === 900,
+    "password gates must retain the configured cooldown",
+  );
 }
 
 function testApprovalPasswordPromptVisibility(): void {
@@ -277,10 +289,61 @@ function testApprovalProofRecentTotpSkipsCode(): void {
   assert(!("approval_password" in credentials), "recent totp should omit password");
 }
 
+function testApprovalProofFreshTotpRequiredForDisconnect(): void {
+  const recentGate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    totp_enabled: true,
+    totp_pending: false,
+    totp_recent_satisfied: true,
+  };
+  assert(
+    isApprovalProofSubmitDisabled(recentGate, { approvalPassword: "", approvalTotpCode: "" }, false, true) === true,
+    "disconnect must require a fresh authenticator code even after a recent proof",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(recentGate, { approvalPassword: "", approvalTotpCode: "469550" }, false, true) === false,
+    "disconnect proof submits once a fresh authenticator code is entered",
+  );
+  const credentials = buildApprovalProofCredentials(
+    recentGate,
+    { approvalPassword: "", approvalTotpCode: "469550" },
+    true,
+  );
+  assert(credentials.approval_totp_code === "469550", "disconnect proof must send the fresh authenticator code");
+}
+
+function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
+  const harnessSetupPanel = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
+  assert(
+    harnessSetupPanel.includes("Checking approval requirements before disconnect"),
+    "disconnect must wait for approval settings before showing confirm",
+  );
+  assert(
+    harnessSetupPanel.includes("Keep the app connected and retry disconnect"),
+    "disconnect must fail closed when approval settings cannot be loaded",
+  );
+  assert(
+    harnessSetupPanel.includes("requireFreshTotp={approvalGate.totp_enabled === true}"),
+    "disconnect must require a fresh authenticator code when MFA is on",
+  );
+  assert(
+    harnessSetupPanel.includes('if (!(action === "uninstall" && options.dryRun === true))'),
+    "disconnect dry-run must keep the confirm step armed",
+  );
+}
+
 const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
   ["testApprovalGateCooldownLabels", testApprovalGateCooldownLabels],
+  ["testApprovalGateCooldownIsUnavailableWithTotp", testApprovalGateCooldownIsUnavailableWithTotp],
   ["testApprovalPasswordPromptVisibility", testApprovalPasswordPromptVisibility],
   ["testApprovalGatePasswordFieldsNotPersisted", testApprovalGatePasswordFieldsNotPersisted],
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
@@ -288,6 +351,8 @@ const tests: Array<[string, () => void]> = [
   ["testBulkApproveGateCredentialsPayload", testBulkApproveGateCredentialsPayload],
   ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
   ["testApprovalProofRecentTotpSkipsCode", testApprovalProofRecentTotpSkipsCode],
+  ["testApprovalProofFreshTotpRequiredForDisconnect", testApprovalProofFreshTotpRequiredForDisconnect],
+  ["testDisconnectWaitsForApprovalSettingsBeforeConfirm", testDisconnectWaitsForApprovalSettingsBeforeConfirm],
 ];
 
 let passed = 0;

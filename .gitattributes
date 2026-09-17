@@ -3,3 +3,9 @@
 /src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf
 /contracts/guard-cloud-review/v2/*.json text eol=lf
 /docs/guard/contracts/guard-cloud-review-v2.md text eol=lf
+
+# Contribution digests must match canonical Git blobs on every checkout.
+/contributions/extensions/*.json text eol=lf
+/contributions/mcp-servers/*.json text eol=lf
+/contributions/extension-listings/*.json text eol=lf
+/docs/guard/extensions/catalog.v1.json text eol=lf

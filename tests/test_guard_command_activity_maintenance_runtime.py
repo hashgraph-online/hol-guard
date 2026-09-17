@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -48,6 +49,7 @@ class _FakeStore:
 @dataclass(frozen=True, slots=True)
 class _FakeServer:
     store: _FakeStore
+    hook_config_reader: Callable[[Path], dict[str, object]] | None = None
 
 
 class _ThreadStillStopping:
@@ -74,7 +76,12 @@ def test_long_lived_daemon_rechecks_daily_and_uses_global_retention(monkeypatch:
     object.__setattr__(service, "_server", _FakeServer(_FakeStore()))
     service._aibom_workspace_dir = Path("/workspace")
 
-    def load(home: Path, workspace: Path | None = None) -> _LoadedConfig:
+    def load(
+        home: Path,
+        workspace: Path | None = None,
+        *,
+        config_reader: Callable[[Path], dict[str, object]] | None = None,
+    ) -> _LoadedConfig:
         loaded.append((home, workspace))
         return _LoadedConfig(evidence_retain_days=90)
 

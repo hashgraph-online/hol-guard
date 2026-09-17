@@ -1,0 +1,7 @@
+{
+  "branch_scope": "foundation",
+  "head_before": "7bf385f600782daaa2c688604735bb10ff776437",
+  "fixture_path": "tests/guard_daemon_acceptance_fixtures.py",
+  "fixture_bytes": 13273,
+  "fixture_sha256": "cad9ceec40c510981e7aa04eb668e81de5a6c6613f1496aa98345dce708606f7"
+}

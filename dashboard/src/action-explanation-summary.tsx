@@ -3,7 +3,7 @@ import type { GuardActionExplanationV1 } from "./guard-types";
 export function ActionExplanationSummary({ explanation }: { explanation: GuardActionExplanationV1 }) {
   const { everyday, confidence, redaction } = explanation;
   return (
-    <section className="mt-3 space-y-3" data-guard-action-explanation={explanation.schema_version}>
+    <section className="mt-3 space-y-3" data-guard-action-explanation={explanation.schema_version} data-action-explanation>
       <div>
         <h3 className="text-base font-semibold text-brand-dark">{everyday.headline}</h3>
         <p className="mt-1 break-words text-sm text-slate-600">{everyday.summary}</p>

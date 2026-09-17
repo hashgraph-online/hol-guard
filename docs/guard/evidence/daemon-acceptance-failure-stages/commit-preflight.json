@@ -1,0 +1,34 @@
+{
+  "checks": [
+    {
+      "name": "staged-whitespace",
+      "command": [
+        "git",
+        "diff",
+        "--cached",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01414582401048392,
+      "log": "staged-whitespace.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "actual-parent-net-whitespace",
+      "command": [
+        "git",
+        "diff",
+        "--cached",
+        "--check",
+        "26cd4dff3f138990a8e9f6a729a970c1dbd90fa4"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013199521999922581,
+      "log": "actual-parent-net-whitespace.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "scope": "Owned staged changes and full staged actual-parent net before adding these command receipts; final staged/net checks repeated before commit."
+}

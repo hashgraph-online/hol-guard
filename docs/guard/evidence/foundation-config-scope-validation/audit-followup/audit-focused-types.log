@@ -1,0 +1,94 @@
+
+{
+    "version": "1.39.8",
+    "time": "1789675396700",
+    "generalDiagnostics": [
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/runtime/command_executors.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"HarnessAdapter\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 225,
+                    "character": 8
+                },
+                "end": {
+                    "line": 225,
+                    "character": 28
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/runtime/command_executors.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"HarnessAdapter\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 239,
+                    "character": 4
+                },
+                "end": {
+                    "line": 239,
+                    "character": 24
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/runtime/command_executors.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"resume\" in function \"safe_resume_metadata\"\n  Argument type is \"dict[Unknown, Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 355,
+                    "character": 32
+                },
+                "end": {
+                    "line": 355,
+                    "character": 38
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/runtime/command_executors.py",
+            "severity": "warning",
+            "message": "Type of \"manager\" is unknown",
+            "range": {
+                "start": {
+                    "line": 403,
+                    "character": 51
+                },
+                "end": {
+                    "line": 403,
+                    "character": 58
+                }
+            },
+            "rule": "reportUnknownVariableType"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/src/codex_plugin_scanner/guard/runtime/command_executors.py",
+            "severity": "warning",
+            "message": "Argument type is partially unknown\n  Argument corresponds to parameter \"obj\" in function \"len\"\n  Argument type is \"list[Unknown]\"",
+            "range": {
+                "start": {
+                    "line": 404,
+                    "character": 30
+                },
+                "end": {
+                    "line": 404,
+                    "character": 38
+                }
+            },
+            "rule": "reportUnknownArgumentType"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 1,
+        "errorCount": 0,
+        "warningCount": 5,
+        "informationCount": 0,
+        "timeInSec": 5.171
+    }
+}

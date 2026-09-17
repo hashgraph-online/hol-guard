@@ -1,0 +1,23 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "command": [
+    "flock",
+    "--close",
+    "-w",
+    "180",
+    "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    ".venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_native_default_auto_scope_admission.py",
+    "tests/test_native_default_auto_probe.py",
+    "--basetemp=/dev/shm/hol-guard-takeover/probe-scope-foundation-tests-final"
+  ],
+  "started_utc": "2026-09-17T20:30:31.117392+00:00",
+  "finished_utc": "2026-09-17T20:30:59.733740+00:00",
+  "elapsed_seconds_including_lock": 28.616375914003584,
+  "exit_code": 0,
+  "bytes": 99,
+  "sha256": "0ab016aafeb4dd675d45a8fd9286d4fc7c504a95875c815f51c2b820f33e1093"
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "hol-guard.foundation-ownership-backport-validation.v1",
+  "base": "a7b675a84b732ead542cdf77e5153c57b4257d9b",
+  "scope": "six-file ownership-gate backport plus final resolver type/interface correction; no product source or security disposition change",
+  "files": {
+    "docs/guard/contracts/hook-data-plane-ownership.v2.json": "d88c08243314c815ff1a7ba0404b354caff16c93d12c1bd10a3b791395a76518",
+    "scripts/ci/rust_io_ownership_contract.py": "5c05e971bf148eee0e15bf96a7df9a1f9f19e08477392e7330116d53e22fe2d1",
+    "scripts/ci/rust_io_ownership_gate.py": "228631359f3e52915478485e42537843969b60214bd9c953160b6cb8ba2e356e",
+    "scripts/ci/rust_io_ownership_resolver.py": "cc7ffac34e7169c5e19fce983c49361bf79511a2d45fd6734fbde703dd5076a5",
+    "tests/test_hook_data_plane_ownership_gate.py": "b24bd33ad63c8354273db5b3e93605e9fbc57e61a38fa4ce2d0dcc53a82a6316",
+    "tests/test_rust_io_ownership_gate.py": "09d9cd1486bcf2dc7a21d24bae602dc48710646dc5f4aa512cda5602f562b779"
+  },
+  "artifacts": {
+    "initial-ruff/manifest.json": {
+      "bytes": 1351,
+      "sha256": "5a343266ee2c449cb75844729619bdf4ea0d18cfb160f05eabbf247541907f84"
+    },
+    "initial-ruff/ruff.log": {
+      "bytes": 402,
+      "sha256": "28f83527c260c53adc528a73b5cae9381d9871f4fdc5d8809753bf2d654f8bfa"
+    },
+    "lint-corrected/format.log": {
+      "bytes": 26,
+      "sha256": "f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1"
+    },
+    "lint-corrected/manifest.json": {
+      "bytes": 2828,
+      "sha256": "4e0e681ac3b29b3324a96cf80787b75d228cd34d2bbad054b031312bd05d3d33"
+    },
+    "lint-corrected/ruff.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "lint-corrected/tests.log": {
+      "bytes": 110,
+      "sha256": "a49dcb83415606a8fc6330e7d73df7616be5f0bdee1b957aa47c1430769a4592"
+    },
+    "lint-corrected/types.log": {
+      "bytes": 13007,
+      "sha256": "872dd7f0d76a95a3d2a1c022ec0f34f048f4443605594a6247497fe38994b4ea"
+    },
+    "type-corrected/annotation-equivalence.json": {
+      "bytes": 775,
+      "sha256": "2a3676c78841ec24d0055e1d516b02392a61d2ee481b48ba4319e4977931f2d6"
+    },
+    "type-corrected/format.log": {
+      "bytes": 26,
+      "sha256": "f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1"
+    },
+    "type-corrected/manifest.json": {
+      "bytes": 3380,
+      "sha256": "afd20ae5c15d379d674a4bdfe8377703f311128eebae3055514da84699f5be3f"
+    },
+    "type-corrected/ruff.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "type-corrected/types.log": {
+      "bytes": 9233,
+      "sha256": "71c3718e31d2e343b3560e74c231f268d2a4c60df8f9ed57d1c1fdb372a2e68d"
+    }
+  },
+  "retained_attempts": {
+    "initial_ruff": "failed: raw 402-byte output retained",
+    "lint_corrected": "Ruff and format passed; 26 tests passed; focused types failed with five errors and 16 warnings",
+    "type_corrected": "Ruff and format passed; focused three-script types passed with zero errors and 16 unchanged warnings"
+  },
+  "behavior_validation": {
+    "tests_passed": 26,
+    "pytest_reported_seconds": 73.73,
+    "original_driver_recorded_seconds": 81.412,
+    "tests_repeated_after_type_only_fix": false,
+    "reason": "Final difference is a read-only Protocol interface plus four unused visitor parameter labels. Complete AST comparison outside those declared corrections passed; original resolver/gate behavior tests remain applicable.",
+    "other_five_backport_files_unchanged_since_passing_tests": true
+  },
+  "lock": "Every new Ruff/format/type invocation used shared flock --close -w180; no measurement or build was run",
+  "activation": "no product runtime activation or qualification claim"
+}

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import ClassVar
 from uuid import uuid4
 
-from . import store_review_event_outbox_schema
+from . import store_native_decision_receipts, store_review_event_outbox_schema
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
@@ -23,12 +23,17 @@ from .sqlite_recovery import (
     FATAL_SQLITE_ERROR_MARKERS,
     SQLITE_IO_ERROR_MARKER,
     restore_readable_sqlite_store,
+    salvage_local_cli_state,
     sqlite_store_is_proven_unusable,
 )
 
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_command_activity_api_schema import ensure_command_activity_api_schema
+from .store_command_activity_display_schema import (
+    COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
+    ensure_command_activity_display_schema,
+)
 from .store_command_activity_health_schema import ensure_command_activity_health_schema
 from .store_command_activity_maintenance_schema import ensure_command_activity_maintenance_schema
 from .store_command_activity_schema import ensure_command_activity_schema
@@ -162,6 +167,8 @@ _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the p
     WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
     WATCH_ONLY_APPROVAL_MIGRATION_VERSION,
     store_review_event_outbox_schema.REVIEW_EVENT_OUTBOX_MIGRATION_VERSION,
+    COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
+    *store_native_decision_receipts.native_decision_receipt_migration_versions(),
 )
 
 
@@ -186,6 +193,7 @@ class StoreConnectionSchemaMixin:
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
     _storage_gate_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
+    _last_sqlite_recovery_details: dict[str, bool] | None = None
 
     def _current_thread_owns_storage_recovery(self) -> bool:
         return getattr(self._storage_recovery_local, "owner", None) == id(self)
@@ -267,6 +275,7 @@ class StoreConnectionSchemaMixin:
         failed_identity: tuple[int, int] | None = None,
     ) -> bool:
         self._last_sqlite_recovery = "skipped"
+        self._last_sqlite_recovery_details = None
         is_io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
         if (
             not isinstance(error, sqlite3.DatabaseError)
@@ -314,7 +323,17 @@ class StoreConnectionSchemaMixin:
                     _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
                 else:
                     self._initialize_schema()
-                    self._last_sqlite_recovery = "reinitialized"
+                    from .sqlite_cloud_review_recovery import salvage_cloud_review_state
+
+                    cloud_restored = salvage_cloud_review_state(source=quarantined, destination=self.path)
+                    cli_restored = salvage_local_cli_state(source=quarantined, destination=self.path)
+                    # These independent stores recover atomically within their own
+                    # authority boundary; a CLI failure must not discard Review.
+                    self._last_sqlite_recovery_details = {"cloud_review": cloud_restored, "local_cli": cli_restored}
+                    if cloud_restored or cli_restored:
+                        self._last_sqlite_recovery = "reinitialized_salvaged"
+                    else:
+                        self._last_sqlite_recovery = "reinitialized"
             finally:
                 self._storage_recovery_local.owner = None
             return True
@@ -362,6 +381,7 @@ class StoreConnectionSchemaMixin:
                 except OSError:
                     failed_identity = None
                 if yielded:
+                    error.guard_failed_sqlite_identity = failed_identity
                     raise
         if fatal_error is None:
             return
@@ -390,9 +410,7 @@ class StoreConnectionSchemaMixin:
         database_failed = False
         try:
             connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-            # Hot-path tuning: synchronous=NORMAL is only safe once the database
-            # is in WAL mode (durability comes from checkpointing, not per-commit
-            # fsync). Leave FULL for rollback-journal DBs and schema-init paths.
+            # WAL can use synchronous=NORMAL; rollback-journal and schema-init stay FULL.
             journal_mode_row = connection.execute("pragma journal_mode").fetchone()
             if journal_mode_row is not None and str(journal_mode_row[0]).lower() == "wal":
                 connection.execute("pragma synchronous=NORMAL")
@@ -976,7 +994,9 @@ class StoreConnectionSchemaMixin:
             supply_chain_bundle_schema_statement(),
             supply_chain_eval_cache_schema_statement(),
             threat_intel_bundle_schema_statement(),
-            threat_intel_matches_schema_statement(),
+            *store_native_decision_receipts.native_decision_receipt_schema_statements(
+                threat_intel_matches_schema_statement()
+            ),
         )
         with self._connect() as connection:
             if initialize_incremental_vacuum:
@@ -993,6 +1013,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
+            ensure_command_activity_display_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)

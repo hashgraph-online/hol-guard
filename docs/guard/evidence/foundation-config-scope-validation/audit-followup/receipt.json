@@ -1,0 +1,38 @@
+[
+  {
+    "check": "audit-and-timeout-followup",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "--basetemp=/tmp/hol-guard-foundation-audit-followup",
+      "tests/test_daemon_remote_config_reader.py",
+      "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T20:03:01.483094+00:00",
+    "seconds_including_lock": 7.496,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 296001536,
+    "log": "audit-and-timeout-followup.log"
+  },
+  {
+    "check": "audit-focused-types",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "basedpyright",
+      "--outputjson",
+      "src/codex_plugin_scanner/guard/runtime/command_executors.py"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T20:03:09.157133+00:00",
+    "seconds_including_lock": 7.9,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 295997440,
+    "log": "audit-focused-types.log"
+  }
+]

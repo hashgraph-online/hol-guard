@@ -1,0 +1,9 @@
+# Daemon worker fixture keyword compatibility
+
+The daemon now supplies its scoped `config_reader` when starting the command queue worker. Two existing test doubles lacked that optional keyword and failed before exercising their intended lifecycle assertions. The fixtures now accept that explicit keyword while preserving their return values and recording behavior. No production code, deadline or policy changes are included.
+
+The retained before evidence consists of complete foundation hosted job logs for PR head `cdd14176ef0e0a258d4655c64210524d7047a257`, tested through synthetic merge `c92e557349cabd633db408912c644471c002ee4d`. Both logs report the unexpected `config_reader` keyword. Original test-file bytes match that PR head and were identical in foundation and main. The hosted failures are evidence for foundation; no hosted main failure is claimed.
+
+This directory records the **foundation** local after-run: **2 passed in 8.02 seconds**. It ran only `test_daemon_start_composes_all_background_workers` and `test_command_queue_worker_refresh_serializes_with_shutdown`, once, under the shared performance lock with ordinary pytest `/tmp` fixtures. Ruff check and format check also pass for the two files. These focused results do not replace a full hosted shard or release gate.
+
+The [manifest](manifest.json) pins the original and resulting owned source bytes, original branch HEAD, exact node IDs and all raw receipts. Original source and hosted logs use deterministic gzip (empty filename, mtime zero); both stored and decompressed hashes are recorded. `gzip -dc` restores their original bytes. [Focused test output](focused-tests.txt), [Ruff](ruff-check.txt) and [format output](ruff-format-check.txt) remain separate. Source pins cover the two owned test files, not a claim that every file in the shared checkout was frozen during execution.

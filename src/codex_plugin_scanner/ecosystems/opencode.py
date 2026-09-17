@@ -5,69 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..json_comment_stripping import strip_jsonc_comments
 from .base import iter_safe_recursive_dirs, iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
 
 
 def _strip_jsonc(text: str) -> str:
-    output: list[str] = []
-    in_string = False
-    escape = False
-    in_line_comment = False
-    in_block_comment = False
-    index = 0
-
-    while index < len(text):
-        char = text[index]
-        next_char = text[index + 1] if index + 1 < len(text) else ""
-        if in_line_comment:
-            if char == "\n":
-                in_line_comment = False
-                output.append(char)
-            index += 1
-            continue
-
-        if in_block_comment:
-            if char == "*" and next_char == "/":
-                in_block_comment = False
-                index += 2
-                continue
-            if char == "\n":
-                output.append(char)
-            index += 1
-            continue
-
-        if in_string:
-            output.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-
-        if char == '"':
-            in_string = True
-            output.append(char)
-            index += 1
-            continue
-
-        if char == "/" and next_char == "/":
-            in_line_comment = True
-            index += 2
-            continue
-
-        if char == "/" and next_char == "*":
-            in_block_comment = True
-            index += 2
-            continue
-
-        output.append(char)
-        index += 1
-
-    return "".join(output)
+    return strip_jsonc_comments(text)
 
 
 def _parse_opencode_config_text(text: str) -> tuple[dict[str, object] | None, str | None]:

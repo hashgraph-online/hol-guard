@@ -1,0 +1,17 @@
+{
+  "reviewer": "mcp_stream_review",
+  "mode": "read-only; no tests or timing",
+  "reviewed_files": {
+    "ci/native_runtime/probe_native_default_auto.py": {
+      "bytes": 25219,
+      "sha256": "49f3c7ef09d3df2fd2e6de5a680f00a6fd2b6bcd6a0fab79ee2f835dad3460e5"
+    },
+    "tests/test_native_default_auto_scope_admission.py": {
+      "bytes": 7247,
+      "sha256": "285c05faf08d4b582137cf6761a67daa45787d7fd15eec6887f4b696ce0a10ae"
+    }
+  },
+  "finding": "No concrete blocker: once-only admission precedes direct worker registration; unchanged readiness budget/deadline; exact fixed diagnostic code allowlist; actual capture/publisher retarget witness rejects and withdraws ACK. No native IPC/ACK qualification claim.",
+  "reviewed_checkout": "hol-guard",
+  "scope_note": "The reviewer read the main probe and shared regression file. Foundation retains the same narrow edits in its older branch-specific probe; no separate foundation review execution is claimed."
+}

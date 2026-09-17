@@ -1,4 +1,4 @@
-"""Python transport for Rust PreToolUse authority.
+"""Mechanical Python launcher for Rust PreToolUse authority.
 
 This module validates and returns the native decision. It does not parse,
 classify, or lower the semantic result. Command-model shadow comparison stays
@@ -8,29 +8,163 @@ in native_command_model and is not a PreToolUse authority.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
-from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
-    native_oneshot_lease,
-    native_record_oneshot_failure,
-    native_record_oneshot_success,
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
 
 _MAX_REQUEST_BYTES = 64 * 1024
-_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
+_PRETOOL_GENERIC_AUTHORITY_FEATURE = "pre-tool-generic-authority-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
+_PRETOOL_RESULT_KEYS = {
+    "schema",
+    "version",
+    "authority",
+    "action",
+    "decision",
+    "policy_action",
+    "minimum_action",
+    "reason_code",
+    "reason",
+    "explicitly_benign",
+}
+_PRETOOL_ACTION_KEYS = {
+    "schema",
+    "version",
+    "harness",
+    "event",
+    "action_type",
+    "operation",
+    "bounded",
+    "sensitive_target",
+}
+_PRETOOL_ACTION_TYPES = {
+    "command",
+    "file_read",
+    "file_write",
+    "package",
+    "mcp_tool",
+    "network",
+    "process_service",
+    "browser",
+    "config",
+    "prompt",
+    "harness",
+    "unknown",
+}
+_PRETOOL_OPERATIONS = {
+    "execute",
+    "read",
+    "write",
+    "install",
+    "call",
+    "request",
+    "start",
+    "stop",
+    "navigate",
+    "set",
+    "submit",
+    "unknown",
+}
+_PRETOOL_ACTION_OPERATIONS = {
+    "command": {"execute"},
+    "file_read": {"read"},
+    "file_write": {"write"},
+    "package": {"install"},
+    "mcp_tool": {"call"},
+    "network": {"request"},
+    "process_service": {"start", "stop"},
+    "browser": {"navigate"},
+    "config": {"set"},
+    "prompt": {"submit"},
+    "harness": {"start", "stop"},
+    "unknown": {"unknown"},
+}
+_POLICY_ACTIONS = {
+    "allow",
+    "warn",
+    "review",
+    "require-reapproval",
+    "sandbox-required",
+    "block",
+}
+_ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
+
+
+def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
+    decision = payload.get("decision")
+    policy_action = payload.get("policy_action")
+    minimum_action = payload.get("minimum_action")
+    reason_code = payload.get("reason_code")
+    reason = payload.get("reason")
+    if (
+        payload.get("schema") != "guard-pre-tool-result.v1"
+        or payload.get("version") != 1
+        or payload.get("authority") != "rust"
+        or not isinstance(decision, str)
+        or decision not in {"allow", "deny"}
+        or not isinstance(policy_action, str)
+        or policy_action not in _POLICY_ACTIONS
+        or minimum_action != policy_action
+        or not isinstance(reason_code, str)
+        or not reason_code
+        or len(reason_code) > _MAX_RESULT_TEXT
+        or not isinstance(reason, str)
+        or not reason
+        or len(reason) > _MAX_RESULT_TEXT
+        or not isinstance(payload.get("explicitly_benign"), bool)
+    ):
+        return False
+    return payload["explicitly_benign"] == (decision == "allow" and minimum_action == "allow")
+
+
+def _valid_generic_action(action: dict[str, Any]) -> bool:
+    action_type = action.get("action_type")
+    operation = action.get("operation")
+    if (
+        action.get("schema") != "guard-pre-tool-action.v1"
+        or action.get("version") != 1
+        or action.get("event") != "PreToolUse"
+        or not isinstance(action_type, str)
+        or action_type not in _PRETOOL_ACTION_TYPES
+        or not isinstance(operation, str)
+        or operation not in _PRETOOL_OPERATIONS
+        or not isinstance(action.get("harness"), str)
+        or not action["harness"]
+        or len(action["harness"]) > 64
+        or len(action["event"]) > 64
+        or not isinstance(action.get("bounded"), bool)
+        or not isinstance(action.get("sensitive_target"), bool)
+    ):
+        return False
+    return operation in _PRETOOL_ACTION_OPERATIONS[action_type]
+
+
+def _decode_generic_pre_tool(payload: object) -> dict[str, Any] | None:
+    if not isinstance(payload, dict) or set(payload) != _PRETOOL_RESULT_KEYS:
+        return None
+    action = payload.get("action")
+    if not isinstance(action, dict) or set(action) != _PRETOOL_ACTION_KEYS:
+        return None
+    if not _valid_generic_result_fields(payload) or not _valid_generic_action(action):
+        return None
+    expected_decision = "allow" if payload["minimum_action"] in _ALLOWING_POLICY_ACTIONS else "deny"
+    return payload if payload["decision"] == expected_decision else None
 
 
 def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
+    if isinstance(payload, dict) and "action" in payload:
+        return _decode_generic_pre_tool(payload)
     if not isinstance(payload, dict):
         return None
     decision = payload.get("decision")
@@ -40,7 +174,9 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     explicitly_benign = payload.get("explicitly_benign")
     model = payload.get("command_model")
     if (
-        decision not in {"allow", "deny"}
+        not isinstance(decision, str)
+        or decision not in {"allow", "deny"}
+        or not isinstance(action, str)
         or action not in {"allow", "review", "block"}
         or not isinstance(reason_code, str)
         or not reason_code
@@ -79,6 +215,10 @@ def review_pre_tool_native(
         if status.mode in {"auto", "force"}:
             return record_native_hook_result("native_fail_safe", None)
         return None
+    timeout_seconds = min(timeout_seconds, 1.0)
+    deadline_started = time.monotonic()
+    deadline_monotonic = deadline_started + timeout_seconds
+    deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
     request = {
         "command": command,
         "dialect": "posix",
@@ -88,21 +228,23 @@ def review_pre_tool_native(
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = min(timeout_seconds, 1.0)
     environment = _isolated_environment()
     if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
         resident = json.dumps(
-            {"operation": "pre_tool_use", "request": request},
+            {
+                "operation": "pre_tool_use",
+                "deadline_budget_ms": deadline_budget_ms,
+                "request": request,
+            },
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
-        output = resident_native_request(
+        output = native_resident_client_request(
             executable=status.identity.path,
-            identity_sha256=status.identity.sha256,
             guard_home=guard_home,
             environment=environment,
             payload=resident,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
         if output is not None:
             try:
@@ -121,37 +263,7 @@ def review_pre_tool_native(
             guard_home,
             reason="native_pre_tool_resident_unavailable",
         )
-    with native_oneshot_lease(status.identity.sha256, guard_home) as acquired:
-        if not acquired:
-            return record_native_hook_result("native_fail_safe", None)
-        result = run_isolated_hook_process(
-            (str(status.identity.path), "pre-tool", "--stdin"),
-            input_text=encoded.decode("utf-8"),
-            cwd=status.identity.path.parent,
-            environment=environment,
-            timeout_seconds=timeout_seconds,
-            output_limit=_MAX_RESPONSE_BYTES,
-        )
-        if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_oneshot_failed",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        try:
-            decoded = _decode_pre_tool(json.loads(result.stdout), command=command)
-        except json.JSONDecodeError:
-            decoded = None
-        if decoded is None:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_oneshot_invalid",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        native_record_oneshot_success(status.identity.sha256, guard_home)
-        return record_native_hook_result("native_oneshot", decoded)
+    return record_native_hook_result("native_fail_safe", None)
 
 
 def native_pre_tool_policy_floor(
@@ -170,6 +282,8 @@ def native_pre_tool_policy_floor(
     )
     if native is not None:
         action = native.get("minimum_action")
+        if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
+            return None
         return action if action in {"allow", "review", "block"} else "block"
     status = native_runtime_status()
     if status.mode in {"off", "shadow"}:

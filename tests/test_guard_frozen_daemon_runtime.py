@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from codex_plugin_scanner.guard import frozen_daemon_runtime
+from codex_plugin_scanner.guard import frozen_daemon_runtime, frozen_runtime_commands
 from codex_plugin_scanner.guard.daemon import manager
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +54,85 @@ def test_frozen_entrypoint_dispatches_multiprocessing_before_guard_imports(
         "private-command",
         "public-cli",
     ]
+
+
+def test_frozen_entrypoint_rejects_held_gate_before_guard_package_import(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "guard-imported"
+    package = tmp_path / "codex_plugin_scanner"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "import os\nfrom pathlib import Path\nPath(os.environ['GUARD_IMPORT_MARKER']).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    payload = json.dumps(
+        {
+            "guard_home": str(guard_home.resolve()),
+            "home_dir": str(home_dir.resolve()),
+            "port": 4781,
+        },
+        separators=(",", ":"),
+    )
+    invocation = (
+        "import sys; "
+        f"sys.argv=[sys.executable,{'--_hol-guard-daemon-serve'!r},{payload!r}]; "
+        f"entrypoint={str(FROZEN_ENTRYPOINT)!r}; "
+        "exec(compile(open(entrypoint, 'rb').read(), entrypoint, 'exec'), "
+        "{'__name__':'__main__','__file__':entrypoint})"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path)
+    environment["GUARD_IMPORT_MARKER"] = str(marker)
+    result = subprocess.run(
+        [sys.executable, "-c", invocation],
+        input=b"",
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert result.returncode == 70
+    assert not marker.exists()
+
+    marker.unlink(missing_ok=True)
+    released = subprocess.run(
+        [sys.executable, "-c", invocation],
+        input=b"1",
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert released.returncode != 70
+    assert marker.exists()
+
+
+def test_frozen_runtime_gate_fails_closed_on_stream_runtime_error(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    payload = json.dumps(
+        {
+            "guard_home": str(guard_home.resolve()),
+            "home_dir": str(home_dir.resolve()),
+            "port": 4781,
+        },
+        separators=(",", ":"),
+    )
+
+    class RuntimeErrorStream:
+        def read(self, _size: int) -> bytes:
+            raise RuntimeError("stream closed unexpectedly")
+
+    with pytest.raises(SystemExit) as exit_info:
+        frozen_runtime_commands.consume_frozen_daemon_serve_gate(
+            [sys.executable, frozen_runtime_commands.FROZEN_DAEMON_SERVE_ARG, payload],
+            stdin=RuntimeErrorStream(),
+        )
+
+    assert exit_info.value.code == 70
 
 
 def test_frozen_runtime_proves_same_executable_bootloader_parent(
@@ -303,3 +385,90 @@ def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.
 
     assert manager._guard_daemon_process_inventory_for_guard_home is inventory
     assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
+
+
+def test_spawned_launch_accepts_the_pyinstaller_onefile_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
+
+    assert manager._guard_daemon_pid_is_spawned_launch(4242, 4242) is True
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is True
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 9999) is False
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 0) is False
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda _pid: False)
+    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is False
+
+
+def test_guard_daemon_parent_pid_parses_posix_ps_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager.os, "name", "posix")
+    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: " 4242\n")
+    assert manager._guard_daemon_parent_pid(4243) == 4242
+
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "not-a-pid")
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "0")
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: None)
+    assert manager._guard_daemon_parent_pid(4243) is None
+    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: None)
+    assert manager._guard_daemon_parent_pid(4243) is None
+    assert manager._guard_daemon_parent_pid(0) is None
+    monkeypatch.setattr(manager.os, "name", "nt")
+    assert manager._guard_daemon_parent_pid(4243) is None
+
+
+def test_live_identity_accepts_expected_pid_as_the_frozen_bootloader_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        manager,
+        "_load_authenticated_daemon_identity",
+        lambda _home: (
+            {
+                "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "port": 4781,
+                "pid": 4243,
+            },
+            "token",
+        ),
+    )
+    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
+    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
+    monkeypatch.setattr(manager, "_guard_daemon_state_matches_current_runtime", lambda _payload: True)
+
+    class _Response:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"compatibility_version":%d}' % manager.GUARD_DAEMON_COMPATIBILITY_VERSION
+
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(manager.urllib.request, "urlopen", lambda *_args, **_kwargs: _Response())
+    monkeypatch.setattr(manager, "_guard_daemon_pid_matches_command", lambda *_args, **_kwargs: True)
+
+    identity = manager._live_guard_daemon_identity(
+        tmp_path,
+        require_current_runtime=False,
+        expected_pid=4242,
+    )
+    assert identity is not None
+    assert identity[0] == "http://127.0.0.1:4781"
+    assert (
+        manager._live_guard_daemon_identity(
+            tmp_path,
+            require_current_runtime=False,
+            expected_pid=9999,
+        )
+        is None
+    )

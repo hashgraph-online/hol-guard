@@ -1,0 +1,19 @@
+{
+  "original_ast_reconstructed_exactly": true,
+  "removed_diagnostic_nodes": {
+    "counter_or_result_field": 2,
+    "phase_assignment": 5,
+    "phase_count": 1,
+    "result_keyword": 1
+  },
+  "closed_phase_names": [
+    "hook_exchange",
+    "identity_challenge",
+    "request_setup",
+    "response_classification"
+  ],
+  "fixture_before_sha256": "cad9ceec40c510981e7aa04eb668e81de5a6c6613f1496aa98345dce708606f7",
+  "fixture_after_sha256": "4d0928bcdef22da379cbec118d1e4718d73390c7ac1e7afc6b22384e3d90357c",
+  "test_sha256": "20eb9854f7d9b976ce000162109996bb9869b76dda4cc36ba8eff4b77dee3e35",
+  "scope": "Whole fixture AST matches its branch-specific original after removing only added diagnostic field/counter/assignments/increment/result keyword. No original retry/deadline/concurrency/exception/accounting AST changed."
+}

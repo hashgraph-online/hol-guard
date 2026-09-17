@@ -1,0 +1,270 @@
+
+{
+    "version": "1.39.8",
+    "time": "1789671394036",
+    "generalDiagnostics": [
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Action\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 469,
+                    "character": 4
+                },
+                "end": {
+                    "line": 469,
+                    "character": 64
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Result of call expression is of type \"Action\" and is not used; assign to variable \"_\" if this is intentional",
+            "range": {
+                "start": {
+                    "line": 470,
+                    "character": 4
+                },
+                "end": {
+                    "line": 470,
+                    "character": 44
+                }
+            },
+            "rule": "reportUnusedCallResult"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"root\" is Any",
+            "range": {
+                "start": {
+                    "line": 472,
+                    "character": 23
+                },
+                "end": {
+                    "line": 472,
+                    "character": 32
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Argument type is Any\n  Argument corresponds to parameter \"root\" in function \"validate\"",
+            "range": {
+                "start": {
+                    "line": 472,
+                    "character": 23
+                },
+                "end": {
+                    "line": 472,
+                    "character": 32
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"json\" is Any",
+            "range": {
+                "start": {
+                    "line": 475,
+                    "character": 7
+                },
+                "end": {
+                    "line": 475,
+                    "character": 16
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"json\" is Any",
+            "range": {
+                "start": {
+                    "line": 476,
+                    "character": 8
+                },
+                "end": {
+                    "line": 476,
+                    "character": 17
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"parent\" is Any",
+            "range": {
+                "start": {
+                    "line": 476,
+                    "character": 8
+                },
+                "end": {
+                    "line": 476,
+                    "character": 24
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"mkdir\" is Any",
+            "range": {
+                "start": {
+                    "line": 476,
+                    "character": 8
+                },
+                "end": {
+                    "line": 476,
+                    "character": 30
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"json\" is Any",
+            "range": {
+                "start": {
+                    "line": 477,
+                    "character": 8
+                },
+                "end": {
+                    "line": 477,
+                    "character": 17
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_gate.py",
+            "severity": "warning",
+            "message": "Type of \"write_text\" is Any",
+            "range": {
+                "start": {
+                    "line": 477,
+                    "character": 8
+                },
+                "end": {
+                    "line": 477,
+                    "character": 28
+                }
+            },
+            "rule": "reportAny"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_Import\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 229,
+                    "character": 12
+                },
+                "end": {
+                    "line": 229,
+                    "character": 24
+                }
+            },
+            "rule": "reportImplicitOverride"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_ImportFrom\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 232,
+                    "character": 12
+                },
+                "end": {
+                    "line": 232,
+                    "character": 28
+                }
+            },
+            "rule": "reportImplicitOverride"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_FunctionDef\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 235,
+                    "character": 12
+                },
+                "end": {
+                    "line": 235,
+                    "character": 29
+                }
+            },
+            "rule": "reportImplicitOverride"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_AsyncFunctionDef\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 238,
+                    "character": 12
+                },
+                "end": {
+                    "line": 238,
+                    "character": 34
+                }
+            },
+            "rule": "reportImplicitOverride"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_ClassDef\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 241,
+                    "character": 12
+                },
+                "end": {
+                    "line": 241,
+                    "character": 26
+                }
+            },
+            "rule": "reportImplicitOverride"
+        },
+        {
+            "file": "/dev/shm/hol-guard-takeover/work/foundation/scripts/ci/rust_io_ownership_resolver.py",
+            "severity": "warning",
+            "message": "Method \"visit_Lambda\" is not marked as override but is overriding a method in class \"NodeVisitor\"",
+            "range": {
+                "start": {
+                    "line": 244,
+                    "character": 12
+                },
+                "end": {
+                    "line": 244,
+                    "character": 24
+                }
+            },
+            "rule": "reportImplicitOverride"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 3,
+        "errorCount": 0,
+        "warningCount": 16,
+        "informationCount": 0,
+        "timeInSec": 1.142
+    }
+}

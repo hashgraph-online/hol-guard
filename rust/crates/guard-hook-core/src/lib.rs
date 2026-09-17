@@ -181,6 +181,33 @@ fn sha256_text(text: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+fn has_output_key(payload: &Value) -> bool {
+    payload
+        .as_object()
+        .is_some_and(|record: &Map<String, Value>| {
+            PAYLOAD_OUTPUT_KEYS
+                .iter()
+                .any(|key| record.contains_key(*key))
+        })
+}
+
+fn allow_inline_output(reason_code: &str, text: &str) -> HookReviewResponseV1 {
+    let mut response = HookReviewResponseV1::allow(reason_code);
+    response.reviewed_output_sha256 = Some(sha256_text(text));
+    response
+}
+
+fn inline_output_hash(payload: &Value) -> Option<String> {
+    if !has_output_key(payload) {
+        return None;
+    }
+    let extracted = extract_payload_output(payload);
+    if extracted.truncated {
+        return None;
+    }
+    Some(sha256_text(&extracted.text))
+}
+
 fn output_equivalent(text: &str, output_sha256: &str, output_chars: i64) -> bool {
     if output_chars < 0 {
         return false;
@@ -335,20 +362,12 @@ fn review_source(
 
 fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
     let extracted = extract_payload_output(&request.payload);
-    let has_output_key = request
-        .payload
-        .as_object()
-        .is_some_and(|record: &Map<String, Value>| {
-            PAYLOAD_OUTPUT_KEYS
-                .iter()
-                .any(|key| record.contains_key(*key))
-        });
     if extracted.text.is_empty() {
         if extracted.truncated {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be safely excerpted within local limits.");
         }
-        if has_output_key {
-            return HookReviewResponseV1::allow("output_empty_allow");
+        if has_output_key(&request.payload) {
+            return allow_inline_output("output_empty_allow", &extracted.text);
         }
         return HookReviewResponseV1::deny(
             "no_output_to_review",
@@ -394,7 +413,7 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard blocked this output because it contains sensitive content.",
         );
     }
-    HookReviewResponseV1::allow("output_scan_allow")
+    allow_inline_output("output_scan_allow", &extracted.text)
 }
 
 pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
@@ -417,8 +436,17 @@ pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         review_inline(request)
     };
     if request.observe_mode {
-        let output_hash = source.map(|value| value.output_sha256);
-        response.observed(output_hash)
+        let output_hash = source
+            .as_ref()
+            .map(|value| value.output_sha256.clone())
+            .or_else(|| inline_output_hash(&request.payload));
+        if let Some(output_hash) = output_hash {
+            response.observed(Some(output_hash))
+        } else {
+            // Truncated inline output cannot prove the original bytes. Keep
+            // the fail-closed decision instead of allowing it without proof.
+            response
+        }
     } else {
         response
     }
@@ -462,6 +490,15 @@ mod tests {
         ));
         assert_eq!(response.decision, "allow");
         assert_eq!(response.reason_code, "output_scan_allow");
+        assert_eq!(response.reviewed_output_sha256, Some(sha256_text("hello")));
+    }
+
+    #[test]
+    fn empty_inline_output_is_allowed_with_digest() {
+        let response = review_post_tool(&request(json!({"tool_response": ""})));
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "output_empty_allow");
+        assert_eq!(response.reviewed_output_sha256, Some(sha256_text("")));
     }
 
     #[test]
@@ -469,6 +506,37 @@ mod tests {
         let response = review_post_tool(&request(json!({"tool_response": github_like_token()})));
         assert_eq!(response.decision, "deny");
         assert_eq!(response.reason_code, "output_secret_match");
+    }
+
+    #[test]
+    fn observe_inline_secret_preserves_original_with_digest() {
+        let output = github_like_token();
+        let expected_hash = sha256_text(&output);
+        let mut observe_request = request(json!({"tool_response": output}));
+        observe_request.observe_mode = true;
+
+        let response = review_post_tool(&observe_request);
+
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "observe_output_secret_match");
+        assert_eq!(response.model_output_action, "allow_original");
+        assert_eq!(response.reviewed_output_sha256, Some(expected_hash));
+        assert_eq!(response.observed_policy_action.as_deref(), Some("block"));
+        assert!(response.observe_mode);
+    }
+
+    #[test]
+    fn observe_truncated_inline_secret_remains_blocked_without_digest() {
+        let output = format!("{}{}", github_like_token(), "x".repeat(MAX_OUTPUT_CHARS));
+        let mut observe_request = request(json!({"tool_response": output}));
+        observe_request.observe_mode = true;
+
+        let response = review_post_tool(&observe_request);
+
+        assert_eq!(response.decision, "deny");
+        assert_eq!(response.reason_code, "output_too_large");
+        assert_eq!(response.reviewed_output_sha256, None);
+        assert!(!response.observe_mode);
     }
 
     #[test]

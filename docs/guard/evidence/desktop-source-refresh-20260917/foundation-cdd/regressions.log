@@ -1,0 +1,33 @@
+...............F                                                         [100%]
+=================================== FAILURES ===================================
+_______ test_fresh_process_report_is_environment_independent_and_bounded _______
+
+    def test_fresh_process_report_is_environment_independent_and_bounded() -> None:
+        script = Path(__file__).with_name("guard_command_decision_diff.py")
+        expected_digest = report_framed_sha256(_fixture())
+        metrics: list[dict[str, object]] = []
+        manifest = load_seed_manifest()
+        evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
+        for hash_seed, timezone, locale in (("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")):
+            environ = os.environ.copy()
+            environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
+            completed = subprocess.run(
+                [sys.executable, str(script), "--metrics"],
+                check=True,
+                capture_output=True,
+                timeout=evaluation_budget_seconds + 15,
+                env=environ,
+            )
+            value = cast(object, json.loads(completed.stdout))
+            assert isinstance(value, dict)
+            metrics.append(cast(dict[str, object], value))
+        assert [item["report_framed_sha256"] for item in metrics] == [expected_digest, expected_digest]
+>       assert all(float(str(item["elapsed_seconds"])) < evaluation_budget_seconds for item in metrics), metrics
+E       AssertionError: [{'elapsed_seconds': 43.905451821003226, 'report_framed_sha256': 'd412412112ca92299d2a8fa5a7126d96e440f7d3057b9919254c...62, 'report_framed_sha256': 'd412412112ca92299d2a8fa5a7126d96e440f7d3057b9919254c00921e01e71e', 'rss_mib': 243.890625}]
+E       assert False
+E        +  where False = all(<generator object test_fresh_process_report_is_environment_independent_and_bounded.<locals>.<genexpr> at 0x7fac5a46b6a0>)
+
+tests/test_guard_command_decision_diff.py:225: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded
+1 failed, 15 passed in 132.03s (0:02:12)

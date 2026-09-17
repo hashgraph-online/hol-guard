@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-daemon-acceptance" / "workloads.json"
 
@@ -65,6 +66,7 @@ class WorkloadResult:
     inbox_requests: int
     dispatch_counts: dict[str, int]
     failure_reasons: dict[str, int]
+    failure_stages: dict[str, int]
 
 
 def load_correctness_workloads() -> tuple[WorkloadSpec, ...]:
@@ -120,8 +122,9 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         dict[str, object],
         json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
     )
+    target = max(1, int(daemon._server.hook_process_runner.stats()["target"]))
     if not daemon._server.hook_process_runner.wait_for_capacity(
-        minimum_workers=1,
+        minimum_workers=target,
         timeout_seconds=15,
     ):
         raise RuntimeError("production hook workers did not become ready")
@@ -132,8 +135,11 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     outcomes: Counter[str] = Counter()
     dispatch: Counter[str] = Counter()
     failure_reasons: Counter[str] = Counter()
+    failure_stages: Counter[str] = Counter()
     latencies_ms: list[float] = []
     lock = threading.Lock()
+    remaining_ms = str(int(10_000 * under_coverage_scale(3.0)))
+    review_timeout_seconds = 30 * under_coverage_scale(3.0)
 
     def review(harness: str, client: str, index: int) -> None:
         started = time.monotonic()
@@ -148,17 +154,19 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             "tool_response": [{"type": "text", "text": output}],
             "stdout": output,
             "session_id": client,
-            "guard_remaining_ms": 10_000,
+            "guard_remaining_ms": int(remaining_ms),
         }
         query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
             f"home={urllib.parse.quote(str(root))}&"
             f"workspace={urllib.parse.quote(str(workspace))}"
         )
+        failure_stage = "request_setup"
         try:
-            if harness == "codex":
+            if harness in {"codex", "claude-code"}:
                 result = None
                 for attempt in range(2):
+                    failure_stage = "identity_challenge"
                     nonce = secrets.token_hex(32)
                     connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=12)
                     try:
@@ -183,9 +191,10 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                         if challenge_response.status != 200:
                             raise RuntimeError(f"challenge-status-{challenge_response.status}")
                         challenge = cast(dict[str, object], json.loads(challenge_body))
+                        failure_stage = "hook_exchange"
                         connection.request(
                             "POST",
-                            f"/v1/hooks/codex?{query}",
+                            f"/v1/hooks/{harness}?{query}",
                             body=json.dumps(payload).encode(),
                             headers={
                                 "Connection": "close",
@@ -193,7 +202,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                                 "X-Guard-Token": daemon._server.auth_token,
                                 "X-Guard-Daemon-Nonce": nonce,
                                 "X-Guard-Daemon-Proof": str(challenge["proof"]),
-                                "X-Guard-Remaining-Ms": "10000",
+                                "X-Guard-Remaining-Ms": remaining_ms,
                             },
                         )
                         hook_response = connection.getresponse()
@@ -207,18 +216,20 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 if result is None:
                     raise RuntimeError("codex-review-unavailable")
             else:
+                failure_stage = "hook_exchange"
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
                     data=json.dumps(payload).encode(),
                     headers={
                         "Content-Type": "application/json",
                         "X-Guard-Token": daemon._server.auth_token,
-                        "X-Guard-Remaining-Ms": "10000",
+                        "X-Guard-Remaining-Ms": remaining_ms,
                     },
                     method="POST",
                 )
                 with urllib.request.urlopen(request, timeout=12) as response:
                     result = cast(dict[str, object], json.loads(response.read()))
+            failure_stage = "response_classification"
             blocked = _response_blocks_action(result)
             reason_code = result.get("reason_code")
             outcome = (
@@ -243,6 +254,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                     else f"{type(error).__name__}:{error}"
                 )
                 failure_reasons[error_key] += 1
+                failure_stages[failure_stage] += 1
         elapsed_ms = (time.monotonic() - started) * 1000
         with lock:
             outcomes[outcome] += 1
@@ -263,7 +275,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 for index in range(client["requests"])
             ]
             for future in futures:
-                future.result(timeout=30)
+                future.result(timeout=review_timeout_seconds)
         worker_stats = daemon._server.hook_process_runner.stats()
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))
@@ -295,6 +307,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         inbox_requests=max(0, final_inbox - initial_inbox),
         dispatch_counts=dict(dispatch),
         failure_reasons=dict(failure_reasons),
+        failure_stages=dict(failure_stages),
     )
 
 

@@ -1,6 +1,7 @@
 """Regression checks for the GitHub Action bundle and Marketplace packaging."""
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,7 +28,8 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
-    assert 'python3 -P -m pip install "pypi-attestations==' in action_text
+    assert "pip install --require-hashes --only-binary=:all:" in action_text
+    assert 'PYPI_ATTESTATIONS_REQUIREMENTS_FILE="$GITHUB_ACTION_PATH/pypi-attestations-requirements.txt"' in action_text
     assert "install_source:" in action_text
     assert 'default: "pypi"' in action_text
     assert "INSTALL_SOURCE: ${{ inputs.install_source }}" in action_text
@@ -43,6 +45,7 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
     assert "install_source=local requires the hol-guard source checkout" in action_text
     assert 'python3 -P -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
+    assert 'python3 -P -m pip install "$LOCAL_SOURCE"' in action_text
     assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
         'python3 -P -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
@@ -53,8 +56,10 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert 'echo "Downloaded scanner wheel SHA256 does not match scanner-sha256.txt."' in action_text
     assert "python3 -P -m pypi_attestations verify pypi" in action_text
     assert '"$WHEEL_PATH"' in action_text
-    assert 'python3 -P -m pip install "$WHEEL_PATH"' in action_text
-    assert 'python3 -P -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
+    assert 'python3 -P -m pip install --no-deps "$WHEEL_PATH"' in action_text
+    assert "pip install --no-deps" in action_text
+    assert "scanner-runtime-requirements.txt" in action_text
+    assert "scanner-cisco-runtime-requirements.txt" in action_text
     assert "scanner-version.txt" in action_text
     scanner_version = (ROOT / "action" / "scanner-version.txt").read_text(encoding="utf-8").strip()
     scanner_sha256 = (ROOT / "action" / "scanner-sha256.txt").read_text(encoding="utf-8").strip()
@@ -62,6 +67,7 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert scanner_sha256 != "0" * 64
     assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
+    assert "pypi-attestations requirements lock does not match" in action_text
     assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/hol-guard"' in action_text
     assert "python3 -P -m codex_plugin_scanner.action_runner" in action_text
     assert "github/codeql-action/upload-sarif@" in action_text
@@ -90,6 +96,13 @@ def test_action_steps_enable_python_safe_path() -> None:
     assert summary_step["env"]["REPORT_PATH"] == "${{ steps.scan.outputs.report_path }}"
     assert 'if [ ! -s "$REPORT_PATH" ]; then' in summary_step["run"]
     assert 'cat "$REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"' in summary_step["run"]
+
+
+def test_cisco_action_version_matches_hashed_runtime_lock() -> None:
+    version = (ROOT / "action" / "cisco-version.txt").read_text(encoding="utf-8").strip()
+    runtime_lock = (ROOT / "action" / "scanner-cisco-runtime-requirements.txt").read_text(encoding="utf-8")
+
+    assert f"cisco-ai-skill-scanner=={version} " in runtime_lock
 
 
 def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> None:
@@ -157,6 +170,18 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "printf '%s\\n' \"${{ steps.scanner_sha256.outputs.sha256 }}\" > scanner-sha256.txt" in workflow_text
     assert "git push origin HEAD:main" in workflow_text
     assert "git push origin refs/tags/v1 --force" in workflow_text
+    assert "grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$'" in workflow_text
+    assert "Computed release tag does not match the expected format" in workflow_text
+    assert "ACTION_TAG: ${{ steps.version.outputs.tag }}" in workflow_text
+    assert "readme-incoming-canonical" in workflow_text
+    assert "readme-published-canonical" in workflow_text
+    assert 'cmp -s "$RUNNER_TEMP/readme-published-canonical" "$RUNNER_TEMP/readme-incoming-canonical"' in workflow_text
+    assert "floating_refs=$(grep -c 'hashgraph-online/ai-plugin-scanner-action@v1$' README.md || true)" in workflow_text
+    assert (
+        'sed -i "s|hashgraph-online/ai-plugin-scanner-action@v1$'
+        '|hashgraph-online/ai-plugin-scanner-action@${ACTION_TAG}|" README.md' in workflow_text
+    )
+    assert "README usage examples were not rewritten to ${ACTION_TAG}." in workflow_text
 
 
 def test_publish_action_repo_scanner_version_heredoc_is_shell_aligned() -> None:
@@ -176,3 +201,37 @@ def test_action_bundle_docs_reference_hol_guard_source() -> None:
     assert "hashgraph-online/ai-plugin-scanner-action@v1" in action_readme
     assert "hashgraph-online/hol-guard/tree/main/action" in action_readme
     assert "publish-action-repo.yml" in action_readme
+
+
+def test_action_bundle_documents_pinning_and_offline_analyzer_gating() -> None:
+    action_readme = (ROOT / "action" / "README.md").read_text(encoding="utf-8")
+
+    assert "## Pinning and supply-chain hygiene" in action_readme
+    assert "hashgraph-online/ai-plugin-scanner-action@<full-commit-sha>" in action_readme
+    assert "MCP_SCANNER_API_KEY" in action_readme
+    assert "MCP_SCANNER_LLM_API_KEY" in action_readme
+    assert "removed from the scan environment" in action_readme
+
+    # The publish workflow rewrites floating-tag usage examples to the immutable
+    # release tag with an end-of-line anchor, so references in the source README
+    # must be rewritable floating tags, explicit version pins, or the SHA
+    # placeholder — never mid-line prose the rewrite would miss.
+    pattern = re.compile(
+        r"hashgraph-online/ai-plugin-scanner-action@"
+        r"(v1$|v\d+\.\d+\.\d+$|<full-commit-sha>$)"
+    )
+    for line in action_readme.splitlines():
+        if "hashgraph-online/ai-plugin-scanner-action@v1" in line:
+            assert pattern.search(line.rstrip()), line
+
+
+def test_action_online_input_documents_analyzer_credential_gating() -> None:
+    yaml = pytest.importorskip("yaml")
+
+    parsed = yaml.safe_load((ROOT / "action" / "action.yml").read_text(encoding="utf-8"))
+    online = parsed["inputs"]["online"]
+
+    assert online["default"] == "false"
+    assert "MCP_SCANNER_API_KEY" in online["description"]
+    assert "MCP_SCANNER_LLM_API_KEY" in online["description"]
+    assert "cannot enable external analyzers" in online["description"]

@@ -1,0 +1,23 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "command": [
+    "git",
+    "diff",
+    "--check",
+    "cdd14176ef0e0a258d4655c64210524d7047a257",
+    "HEAD"
+  ],
+  "head_commit": "0984ddd35c91fa5710d66a8dea204661726c5305",
+  "started_utc": "2026-09-17T20:45:28.896580+00:00",
+  "finished_utc": "2026-09-17T20:45:28.911432+00:00",
+  "exit_code": 2,
+  "stdout_artifact": "packaging-preflight-failed.log.gz",
+  "stored": {
+    "bytes": 116,
+    "sha256": "54621d6e0c66c9aea39b3d8d9927134605501f6fb454cacf820b15db2408d7f4"
+  },
+  "decoded": {
+    "bytes": 204,
+    "sha256": "dcf7ee89b35ec8fdff9cfdc5e695fff40f5620fa535fd91d267d00e465bfdf55"
+  }
+}

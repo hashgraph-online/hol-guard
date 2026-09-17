@@ -1,0 +1,70 @@
+name: Decision-critical I/O ownership
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decision-critical-io-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  io-ownership:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Enforce always-selected ownership manifest coverage
+        env:
+          OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          args=(--root . --json rust-io-authority-ownership.json)
+          if [[ -n "$OWNERSHIP_BASE_REF" ]]; then
+            args+=(--base-ref "$OWNERSHIP_BASE_REF")
+          fi
+          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
+      - name: Inventory Python I/O and enforce Rust ownership
+        run: |
+          uv run --no-sync python scripts/ci/rust_io_ownership_gate.py \
+            --root . --json rust-io-ownership.json
+      - name: Prove route and evidence privacy
+        run: |
+          uv run --no-sync python scripts/ci/rust_io_privacy_gate.py \
+            --root . --json rust-io-privacy.json
+      - name: Check native I/O formatting and focused tests
+        run: |
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo test --manifest-path rust/Cargo.toml --locked -p guard-secure-fs -p guard-hook-core
+          uv run --no-sync pytest -q \
+            tests/test_rust_io_ownership_gate.py \
+            tests/test_rust_io_privacy_gate.py \
+            tests/test_hook_enrichment_queue.py \
+            tests/test_guard_runtime_hook_evidence_writer.py \
+            --tb=short
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: decision-critical-io-evidence
+          path: |
+            rust-io-ownership.json
+            rust-io-privacy.json
+            rust-io-authority-ownership.json
+          if-no-files-found: error
+          retention-days: 30

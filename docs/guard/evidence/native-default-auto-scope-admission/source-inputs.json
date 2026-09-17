@@ -1,0 +1,104 @@
+{
+  "hol-guard": {
+    "base_commit": "a6d55341b4d51423ccac24c800960a2cf189a16e",
+    "source": {
+      "ci/native_runtime/probe_native_default_auto.py": {
+        "bytes": 25219,
+        "sha256": "49f3c7ef09d3df2fd2e6de5a680f00a6fd2b6bcd6a0fab79ee2f835dad3460e5"
+      },
+      "tests/test_native_default_auto_scope_admission.py": {
+        "bytes": 7247,
+        "sha256": "285c05faf08d4b582137cf6761a67daa45787d7fd15eec6887f4b696ce0a10ae"
+      },
+      "tests/test_native_default_auto_probe.py": {
+        "bytes": 13366,
+        "sha256": "7e83825b023f5ff9859cec3e03dcfb70d21ac3647459387f63d8227b563affda"
+      },
+      "tests/conftest.py": {
+        "bytes": 13829,
+        "sha256": "ad53c2c93e24e27d284ce02461f5d1badd22b2a7c75a413bd0fb7b6f21858c92"
+      },
+      "pyproject.toml": {
+        "bytes": 8626,
+        "sha256": "5d25cbca36b0ebcd2d174e449aff00426d5ffc017bd2cbb2b10341a58eef7c41"
+      },
+      "src/codex_plugin_scanner/guard/daemon/config_read_scope.py": {
+        "bytes": 3017,
+        "sha256": "ece6a6221ea598505806e23bc45d639deb4504a2751f47c3233254eb8c166df3"
+      },
+      "src/codex_plugin_scanner/guard/config_source_io.py": {
+        "bytes": 9569,
+        "sha256": "fcccf07dfb99e689b2f50bfa04e960527830258e1ef43531a5aafc459e31bfa8"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py": {
+        "bytes": 26275,
+        "sha256": "445d2b7c0de25736f2918f19de2068acf5c18ac4ba7d5325888357d2a1c9ed36"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py": {
+        "bytes": 25782,
+        "sha256": "3ec7452c0d0b7201c0fa523ec025c425ea1c29fd4b9c148aff08e1d279e6c086"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot.py": {
+        "bytes": 18352,
+        "sha256": "01f398e5c835d03d0c6bcc7d038e0c5b273d4a448324a75167e3c11c6f24d47d"
+      },
+      "src/codex_plugin_scanner/guard/daemon/hook_worker.py": {
+        "bytes": 19320,
+        "sha256": "cc68db1ab6d11d40f9c0c08781aa61592451997c5c4e8805029450ecee66f786"
+      },
+      "tests/test_native_default_auto_command_fixture.py": {
+        "bytes": 3395,
+        "sha256": "720ad7767c64d8e47a0ab97d721343efa4806f1181d36917bd7b741c470eb115"
+      }
+    }
+  },
+  "foundation": {
+    "base_commit": "bf0c85d2372a904b3c228415cc9eaae8c8948c6f",
+    "source": {
+      "ci/native_runtime/probe_native_default_auto.py": {
+        "bytes": 23317,
+        "sha256": "8375901b997f38a5b6d271a65c80926bae01905b1abd445126f72e90be81c275"
+      },
+      "tests/test_native_default_auto_scope_admission.py": {
+        "bytes": 7247,
+        "sha256": "285c05faf08d4b582137cf6761a67daa45787d7fd15eec6887f4b696ce0a10ae"
+      },
+      "tests/test_native_default_auto_probe.py": {
+        "bytes": 13251,
+        "sha256": "4059c0ea9bfc26714db7d321350b497305255bc289c91b4912dc3342ac0dedce"
+      },
+      "tests/conftest.py": {
+        "bytes": 13829,
+        "sha256": "ad53c2c93e24e27d284ce02461f5d1badd22b2a7c75a413bd0fb7b6f21858c92"
+      },
+      "pyproject.toml": {
+        "bytes": 8462,
+        "sha256": "4665fdf894d7fb5445a80e1845025af636c0dc0ac953b005811720bbcc342922"
+      },
+      "src/codex_plugin_scanner/guard/daemon/config_read_scope.py": {
+        "bytes": 3017,
+        "sha256": "ece6a6221ea598505806e23bc45d639deb4504a2751f47c3233254eb8c166df3"
+      },
+      "src/codex_plugin_scanner/guard/config_source_io.py": {
+        "bytes": 9569,
+        "sha256": "fcccf07dfb99e689b2f50bfa04e960527830258e1ef43531a5aafc459e31bfa8"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py": {
+        "bytes": 23056,
+        "sha256": "4c5a1bf2c45feb743fb67a9d026141534bd83d109d830379fdc400e3f255a75d"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py": {
+        "bytes": 12536,
+        "sha256": "1f9bd9035b34942a355cac3b0679cacb359e1762296831ab88c411b94210af98"
+      },
+      "src/codex_plugin_scanner/guard/native_policy_snapshot.py": {
+        "bytes": 18352,
+        "sha256": "01f398e5c835d03d0c6bcc7d038e0c5b273d4a448324a75167e3c11c6f24d47d"
+      },
+      "src/codex_plugin_scanner/guard/daemon/hook_worker.py": {
+        "bytes": 19320,
+        "sha256": "cc68db1ab6d11d40f9c0c08781aa61592451997c5c4e8805029450ecee66f786"
+      }
+    }
+  }
+}

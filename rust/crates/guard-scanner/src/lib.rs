@@ -124,7 +124,7 @@ const PATTERNS: &[PatternDef] = &[
         family: "credential assignment",
         sensitivity: "medium",
         reason: "Guard found credential-looking assignment text.",
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
         case_insensitive: true,
         multi_line: true,
     },
@@ -133,6 +133,7 @@ const PATTERNS: &[PatternDef] = &[
 static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
 static SAMPLE: OnceLock<Regex> = OnceLock::new();
 static DOC_SAMPLE: OnceLock<Regex> = OnceLock::new();
+static INERT_CODE_EXPRESSION: OnceLock<Regex> = OnceLock::new();
 
 fn compiled() -> &'static [Regex] {
     COMPILED.get_or_init(|| {
@@ -167,6 +168,15 @@ fn doc_sample_regex() -> &'static Regex {
     })
 }
 
+fn inert_code_expression_regex() -> &'static Regex {
+    INERT_CODE_EXPRESSION.get_or_init(|| {
+        Regex::new(
+            r#"^(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF]"\{[A-Za-z_][A-Za-z0-9_.]*\}"|[fF]'\{[A-Za-z_][A-Za-z0-9_.]*\}')$"#,
+        )
+        .expect("inert code-expression rule must compile")
+    })
+}
+
 fn suppressible(classifier: &str) -> bool {
     matches!(classifier, "credential-assignment" | "generic-bearer-token")
 }
@@ -188,15 +198,32 @@ fn has_long_alphanumeric_run(token: &str) -> bool {
 
 fn assignment_value(matched: &str) -> Option<&str> {
     let index = matched.find([':', '='])?;
-    Some(
-        matched[index + 1..]
-            .trim()
-            .trim_matches(|character| character == '\'' || character == '"'),
-    )
+    let value = matched[index + 1..].trim();
+    if value.len() >= 2
+        && ((value.starts_with('\'') && value.ends_with('\''))
+            || (value.starts_with('"') && value.ends_with('"')))
+    {
+        return Some(&value[1..value.len() - 1]);
+    }
+    Some(value)
 }
 
-fn is_sample(classifier: &str, matched: &str, documentation_sample_context: bool) -> bool {
+fn is_sample(
+    classifier: &str,
+    matched: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
     if !suppressible(classifier) {
+        return false;
+    }
+    if classifier == "credential-assignment"
+        && assignment_value(matched)
+            .is_some_and(|value| inert_code_expression_regex().is_match(value))
+    {
+        return true;
+    }
+    if !suppress_samples {
         return false;
     }
     if classifier == "generic-bearer-token" {
@@ -226,12 +253,12 @@ fn classify_window(
             continue;
         }
         let has_match = compiled()[index].find_iter(text).any(|matched| {
-            !(suppress_samples
-                && is_sample(
-                    def.classifier,
-                    matched.as_str(),
-                    documentation_sample_context,
-                ))
+            !is_sample(
+                def.classifier,
+                matched.as_str(),
+                suppress_samples,
+                documentation_sample_context,
+            )
         });
         if has_match {
             found.insert(
@@ -411,5 +438,38 @@ mod tests {
             None,
         );
         assert!(result.matches.is_empty());
+    }
+
+    #[test]
+    fn inert_credential_expressions_are_suppressed_during_local_retry() {
+        for text in [
+            "secret = get_secret('deployment-config')",
+            "secret = f\"{config.token}\"",
+            "secret: {r.stderr}",
+        ] {
+            let result = scan_text(text, true, true, MAX_SCAN_BYTES, None);
+            assert!(result.matches.is_empty(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn realistic_medium_credentials_survive_local_retry() {
+        for text in [
+            "password = example-production-value",
+            "password = {user.password}",
+            "api_key = {token: \"AIza-realistic-value\"}",
+            "password = {r.stdout}real-password",
+            "secret = f\"{config.token}\" + \"prod-live-value\"",
+            "secret = get_secret(\"deployment-config\") + \"prod-live-value\"",
+        ] {
+            let result = scan_text(text, true, true, MAX_SCAN_BYTES, None);
+            assert!(
+                result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "credential-assignment"),
+                "{text:?}"
+            );
+        }
     }
 }

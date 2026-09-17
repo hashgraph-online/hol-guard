@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
 import stat
 import subprocess
 import time
@@ -14,6 +13,10 @@ from pathlib import Path
 
 from .base import HarnessContext
 from .cline_paths import cline_hook_roots as _resolve_cline_hook_roots
+from .cline_paths import ensure_safe_cline_destination
+from .cline_state_paths import canonical_cline_state_path as _canonical_state_path
+from .cline_state_paths import cline_hook_command as _hook_command
+from .cline_state_paths import uninstall_persisted_cline_hooks as uninstall_cline_hooks
 from .guard_cli_attestation import resolve_attested_guard_cli
 
 _MARKER = "HOL_GUARD_MANAGED_CLINE_HOOK_V1"
@@ -63,21 +66,6 @@ def _slot_for_event(root: Path, event: str, *, windows: bool | None = None) -> P
     if path.exists() and not _managed(path):
         raise RuntimeError(f"Cline already has a user-owned {event} hook in {root}; Guard will not overwrite it")
     return path
-
-
-def _safe_destination(path: Path, context: HarnessContext) -> None:
-    home = context.home_dir.resolve(strict=False)
-    guard_home = context.guard_home.resolve(strict=False)
-    parent = path.parent.resolve(strict=False)
-    if not parent.is_relative_to(home) and not parent.is_relative_to(guard_home):
-        raise RuntimeError("Cline hook destination escapes Guard-managed roots")
-    current = path.parent
-    while current not in {home, guard_home, current.parent}:
-        if current.exists() and current.is_symlink():
-            raise RuntimeError(f"Cline hook parent is a symlink: {current}")
-        current = current.parent
-    if path.exists() and path.is_symlink():
-        raise RuntimeError(f"Cline hook destination is a symlink: {path}")
 
 
 def _write(path: Path, text: str, *, executable: bool = False) -> None:
@@ -262,7 +250,7 @@ def command_payloads(value):
             item = item.get("command", item.get("cmd"))
         if not isinstance(item, str) or not item.strip():
             continue
-        out.append({{
+        entry = {{
             "hookName": "PreToolUse",
             "hook_event_name": "PreToolUse",
             "tool_call": {{
@@ -270,7 +258,11 @@ def command_payloads(value):
                 "name": "run_command",
                 "input": {{"command": item}},
             }},
-        }})
+        }}
+        cwd = value.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            entry["cwd"] = cwd.strip()
+        out.append(entry)
     return out or [value]
 
 
@@ -291,6 +283,16 @@ def proof(outcome):
         os.replace(temp, PROOF)
     except OSError:
         pass
+
+
+def emergency_continue(value):
+    if not BLOCKING:
+        return False
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
+        return hook_action_is_emergency_safe(value)
+    except Exception:
+        return False
 
 
 def main():
@@ -318,6 +320,7 @@ def main():
         return 0
     denied = False
     why = ""
+    degraded = False
     for item in command_payloads(value):
         try:
             result = subprocess.run(
@@ -329,10 +332,16 @@ def main():
                 check=False,
             )
         except (OSError, subprocess.SubprocessError):
+            if emergency_continue(item):
+                degraded = True
+                continue
             fail("HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.")
             return 0
         decision = parse_output(result.stdout)
         if decision is None:
+            if emergency_continue(item):
+                degraded = True
+                continue
             fail("HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.")
             return 0
         if blocked(decision):
@@ -340,7 +349,7 @@ def main():
             why = reason(decision)
             break
     if BLOCKING:
-        outcome = "blocked" if denied else "allowed"
+        outcome = "blocked" if denied else ("degraded" if degraded else "allowed")
     else:
         outcome = "observed"
     proof(outcome)
@@ -420,13 +429,6 @@ def _load_state(context: HarnessContext) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
 
 
-def _hook_command(path: Path) -> list[str]:
-    if path.suffix.lower() == ".ps1":
-        shell = shutil.which("powershell") or shutil.which("pwsh")
-        return [shell, "-NoProfile", "-File", str(path)] if shell else []
-    return [str(path)]
-
-
 def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     """Install global Cline hooks, then run a synthetic wire-contract canary."""
 
@@ -443,8 +445,8 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     for event in _EVENTS:
         slot = _slot_for_event(root, event)
         worker = _worker_path(context, event)
-        _safe_destination(slot, context)
-        _safe_destination(worker, context)
+        ensure_safe_cline_destination(context, slot)
+        ensure_safe_cline_destination(context, worker)
         worker_source = _hook_source(context, event_name=event, guard_cli=guard)
         _write(worker, worker_source)
         if os.name == "nt":
@@ -486,7 +488,12 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
 def run_cline_hook_canary(context: HarnessContext) -> dict[str, object]:
     state = _load_state(context)
     paths = state.get("paths")
-    path = Path(paths["PreToolUse"]) if isinstance(paths, dict) and isinstance(paths.get("PreToolUse"), str) else None
+    path = _canonical_state_path(
+        context,
+        "PreToolUse",
+        paths.get("PreToolUse") if isinstance(paths, dict) else None,
+        saved_root=state.get("root"),
+    )
     if path is None or not _managed(path):
         return {"ok": False, "reason": "pretool_hook_missing"}
     command = _hook_command(path)
@@ -508,6 +515,7 @@ def run_cline_hook_canary(context: HarnessContext) -> dict[str, object]:
             timeout=_TIMEOUT + 1,
             env=env,
             check=False,
+            shell=False,
         )
         output = json.loads(result.stdout.strip())
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
@@ -544,7 +552,10 @@ def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
         if not isinstance(path_value, str) or not isinstance(digest, str):
             missing.append(event)
             continue
-        path = Path(path_value)
+        path = _canonical_state_path(context, event, path_value, saved_root=state.get("root"))
+        if path is None:
+            missing.append(event)
+            continue
         try:
             actual = sha256(path.read_bytes()).hexdigest()
         except OSError:
@@ -562,7 +573,10 @@ def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
             if not isinstance(value, str) or not isinstance(digest, str):
                 missing.append(f"{event}:worker")
                 continue
-            worker = Path(value)
+            worker = _canonical_state_path(context, event, value, worker=True)
+            if worker is None:
+                missing.append(f"{event}:worker")
+                continue
             try:
                 actual = sha256(worker.read_bytes()).hexdigest()
             except OSError:
@@ -588,37 +602,6 @@ def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "missing_events": missing,
         "modified_events": modified,
         "ready": not missing and not modified and canary.get("ok") is True and pretool_blocking_proven,
-    }
-
-
-def uninstall_cline_hooks(context: HarnessContext) -> dict[str, object]:
-    state = _load_state(context)
-    removed: list[str] = []
-    retained: list[str] = []
-    for group in (state.get("paths"), state.get("workers")):
-        if not isinstance(group, dict):
-            continue
-        for value in group.values():
-            if not isinstance(value, str):
-                continue
-            path = Path(value)
-            if not path.exists():
-                continue
-            if _managed(path):
-                try:
-                    path.unlink()
-                    removed.append(str(path))
-                except OSError:
-                    retained.append(str(path))
-            else:
-                retained.append(str(path))
-    if not retained and _state_path(context).is_file():
-        _state_path(context).unlink()
-    return {
-        "transport": "hooks",
-        "removed": removed,
-        "retained_modified_or_unowned": retained,
-        "complete": not retained,
     }
 
 

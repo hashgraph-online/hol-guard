@@ -1,0 +1,16 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "command": [
+    "git",
+    "diff",
+    "--check",
+    "--cached",
+    "cdd14176ef0e0a258d4655c64210524d7047a257"
+  ],
+  "exit_code": 0,
+  "output": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "scope": "Whole staged net diff from the exact public base. This check precedes addition of its own receipt and final manifest refresh."
+}

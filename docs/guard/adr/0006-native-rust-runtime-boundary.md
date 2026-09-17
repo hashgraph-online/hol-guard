@@ -21,4 +21,10 @@ The first authoritative migration surface is PostToolUse. PreToolUse, approvals,
 
 ## Rollout
 
-`HOL_GUARD_NATIVE=off|shadow|auto|force` controls the backend. Eligible PostToolUse defaults to `auto`, which accepts only the verified bundled runtime with protocol and exact package-version compatibility and otherwise falls back to Python. Explicit `off` remains the immediate rollback, `shadow` keeps Python authoritative, and `force` remains a developer/test mode. See ADR 0010 for the release-gate decision.
+`HOL_GUARD_NATIVE=off|shadow|auto|force` controls the backend. Eligible hooks
+default to `auto`, which accepts only the verified bundled runtime with
+protocol and exact package-version compatibility. Native unavailability and
+explicit `off` fail closed; `off` is not a Python rollback. `shadow` may
+compare against the Python reference only on an explicitly marked
+non-production diagnostic surface, and `force` remains a developer/test mode.
+See ADR 0010 for the release-gate decision.

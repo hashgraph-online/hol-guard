@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli.commands_support_codex_git import (
+    _git_diff_external_helpers_are_disabled_or_unconfigured,
+)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_git_pathspec_identity_for_command,
     _codex_post_tool_output_artifact,
@@ -29,6 +32,17 @@ def _git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
         check=True,
         capture_output=True,
         text=True,
+    )
+
+
+def test_git_helper_suppression_ignores_option_shaped_pathspecs(git_repository: Path) -> None:
+    _git(git_repository, "config", "diff.guard.textconv", "/tmp/guard-textconv")
+
+    assert not _git_diff_external_helpers_are_disabled_or_unconfigured(
+        ["--", "--no-ext-diff", "--no-textconv"], cwd=git_repository
+    )
+    assert _git_diff_external_helpers_are_disabled_or_unconfigured(
+        ["--no-ext-diff", "--no-textconv", "--", "src/app.py"], cwd=git_repository
     )
 
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from pathlib import Path
 
 from ..approvals import queue_blocked_approvals
 from ..daemon.manager import guard_daemon_url_for_home
@@ -25,6 +26,7 @@ def queue_observe_mode_request(
     risk_summary: str | None,
     scanner_evidence: Sequence[Mapping[str, object]],
     store: GuardStore,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     """Queue retrospective review without changing the executable decision."""
 
@@ -83,6 +85,7 @@ def queue_observe_mode_request(
             approval_center_url=approval_center_url,
             notify=False,
             redaction_level=redaction_level,
+            config_reader=config_reader,
         )
     except (KeyError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         # Watch-only telemetry must never alter the executable hook decision.

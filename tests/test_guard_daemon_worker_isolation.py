@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,8 @@ def test_daemon_start_composes_all_background_workers(
     def _start_command_queue(
         _store: GuardStore,
         existing: threading.Thread | None,
+        *,
+        config_reader: Callable[[Path], dict[str, object]] | None = None,
     ) -> threading.Thread | None:
         started.append("command-queue")
         return existing

@@ -1,0 +1,22 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/hol-guard",
+  "command": [
+    "flock",
+    "--close",
+    "-w",
+    "180",
+    "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    ".venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_installed_pi_output_probe.py::test_probe_admits_private_root_before_scoped_workspace_capture[True]",
+    "--basetemp=/dev/shm/hol-guard-takeover/pi-scope-before-tests"
+  ],
+  "started_utc": "2026-09-17T20:56:57.392385+00:00",
+  "finished_utc": "2026-09-17T20:57:08.169389+00:00",
+  "elapsed_seconds_including_lock": 10.777076240992756,
+  "exit_code": 1,
+  "bytes": 14188,
+  "sha256": "54b31583c81ad6474fc159899077fa9ec170e13d2641cfbbd6f6a1d97438ca6e"
+}

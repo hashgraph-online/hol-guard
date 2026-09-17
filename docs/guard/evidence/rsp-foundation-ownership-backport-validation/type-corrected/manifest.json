@@ -1,0 +1,78 @@
+{
+  "base": "a7b675a84b732ead542cdf77e5153c57b4257d9b",
+  "files_before": {
+    "scripts/ci/rust_io_ownership_contract.py": "5c05e971bf148eee0e15bf96a7df9a1f9f19e08477392e7330116d53e22fe2d1",
+    "scripts/ci/rust_io_ownership_gate.py": "228631359f3e52915478485e42537843969b60214bd9c953160b6cb8ba2e356e",
+    "scripts/ci/rust_io_ownership_resolver.py": "cc7ffac34e7169c5e19fce983c49361bf79511a2d45fd6734fbde703dd5076a5",
+    "tests/test_hook_data_plane_ownership_gate.py": "b24bd33ad63c8354273db5b3e93605e9fbc57e61a38fa4ce2d0dcc53a82a6316",
+    "tests/test_rust_io_ownership_gate.py": "09d9cd1486bcf2dc7a21d24bae602dc48710646dc5f4aa512cda5602f562b779",
+    "docs/guard/contracts/hook-data-plane-ownership.v2.json": "d88c08243314c815ff1a7ba0404b354caff16c93d12c1bd10a3b791395a76518"
+  },
+  "steps": [
+    {
+      "name": "ruff",
+      "command": [
+        "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/ruff",
+        "check",
+        "scripts/ci/rust_io_ownership_contract.py",
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_ownership_resolver.py",
+        "tests/test_hook_data_plane_ownership_gate.py",
+        "tests/test_rust_io_ownership_gate.py"
+      ],
+      "lock_acquisition_timeout_seconds": 180,
+      "exit_code": 0,
+      "started_utc": "2026-09-17T18:56:29.042459+00:00",
+      "elapsed_including_lock_wait_seconds": 3.3764275899957283,
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "name": "format",
+      "command": [
+        "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/ruff",
+        "format",
+        "--check",
+        "scripts/ci/rust_io_ownership_contract.py",
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_ownership_resolver.py",
+        "tests/test_hook_data_plane_ownership_gate.py",
+        "tests/test_rust_io_ownership_gate.py"
+      ],
+      "lock_acquisition_timeout_seconds": 180,
+      "exit_code": 0,
+      "started_utc": "2026-09-17T18:56:32.419540+00:00",
+      "elapsed_including_lock_wait_seconds": 0.039879847994598094,
+      "bytes": 26,
+      "sha256": "f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1"
+    },
+    {
+      "name": "types",
+      "command": [
+        "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/basedpyright",
+        "scripts/ci/rust_io_ownership_contract.py",
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_ownership_resolver.py",
+        "--outputjson"
+      ],
+      "lock_acquisition_timeout_seconds": 180,
+      "exit_code": 0,
+      "started_utc": "2026-09-17T18:56:32.459702+00:00",
+      "elapsed_including_lock_wait_seconds": 1.6034838790001231,
+      "bytes": 9233,
+      "sha256": "71c3718e31d2e343b3560e74c231f268d2a4c60df8f9ed57d1c1fdb372a2e68d",
+      "summary": {
+        "filesAnalyzed": 3,
+        "errorCount": 0,
+        "warningCount": 16,
+        "informationCount": 0,
+        "timeInSec": 1.142
+      }
+    }
+  ],
+  "corrected_files_after": {
+    "scripts/ci/rust_io_ownership_contract.py": "5c05e971bf148eee0e15bf96a7df9a1f9f19e08477392e7330116d53e22fe2d1",
+    "scripts/ci/rust_io_ownership_gate.py": "228631359f3e52915478485e42537843969b60214bd9c953160b6cb8ba2e356e",
+    "scripts/ci/rust_io_ownership_resolver.py": "cc7ffac34e7169c5e19fce983c49361bf79511a2d45fd6734fbde703dd5076a5"
+  }
+}

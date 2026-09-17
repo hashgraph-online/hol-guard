@@ -29,3 +29,7 @@ HOL Guard already has one authoritative local dashboard and security-grade decis
 ## Consequences
 
 Friendly copy becomes a versioned contract rather than client heuristics. Existing explicit `simple` migrates to `everyday`; `advanced` and `developer` migrate to `technical`; missing or unknown values safely resolve to `everyday` with a non-sensitive diagnostic. Route changes, Core restart, Cloud logout, and Cloud disconnection do not reset the local explicit preference.
+
+## Implementation baseline
+
+The EVM-001–100 foundation was reconciled and validated against `release/3.0` at `d6f3eae11e67c82e0436d951c0b6d8c769858e1d`. The reconciliation regenerated source-bound command decision evidence and passed the focused Core presentation/explanation contracts plus the complete dashboard test and production-build commands before the final review/CI gate.

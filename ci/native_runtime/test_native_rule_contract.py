@@ -18,6 +18,33 @@ _COMPONENTS = (
     ("guard-scanner", Path("rust/crates/guard-scanner/src/lib.rs")),
     ("guard-secure-fs", Path("rust/crates/guard-secure-fs/src/lib.rs")),
     ("guard-hook-core", Path("rust/crates/guard-hook-core/src/lib.rs")),
+    ("guard-contracts", Path("rust/crates/guard-contracts/src/lib.rs")),
+    ("guard-command-pretool", Path("rust/crates/guard-command/src/pretool.rs")),
+    ("guard-command-pretool-generic", Path("rust/crates/guard-command/src/pretool/generic.rs")),
+    ("guard-command-pretool-result", Path("rust/crates/guard-command/src/pretool/generic_result.rs")),
+    ("guard-command-pretool-extract", Path("rust/crates/guard-command/src/pretool/generic_extract.rs")),
+    ("guard-runtime-policy-enforcement", Path("rust/crates/guard-runtime/src/policy_enforcement.rs")),
+    (
+        "guard-runtime-policy-enforcement-facts",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_facts.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-facts-tools",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_facts_tools.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-policy",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_policy.rs"),
+    ),
+    ("guard-policy-snapshot", Path("rust/crates/guard-policy-snapshot/src/lib.rs")),
+    (
+        "guard-policy-snapshot-canonical",
+        Path("rust/crates/guard-policy-snapshot/src/policy_snapshot_canonical.rs"),
+    ),
+    (
+        "guard-policy-snapshot-crypto",
+        Path("rust/crates/guard-policy-snapshot/src/policy_snapshot_crypto.rs"),
+    ),
 )
 
 
@@ -80,9 +107,7 @@ def test_rule_contract_changes_when_any_component_bytes_change() -> None:
         assert isinstance(component, dict)
         mutated_components = [dict(value) for value in components]
         digest = str(mutated_components[index]["sha256"])
-        mutated_components[index]["sha256"] = (
-            ("0" if digest[0] != "0" else "1") + digest[1:]
-        )
+        mutated_components[index]["sha256"] = ("0" if digest[0] != "0" else "1") + digest[1:]
         combined = hashlib.sha256()
         combined.update(_DOMAIN)
         for value in mutated_components:

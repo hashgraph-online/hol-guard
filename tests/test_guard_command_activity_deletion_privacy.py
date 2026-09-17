@@ -52,6 +52,7 @@ _COMMAND_TABLES = (
     "command_activity_rollup_pending",
     "command_activity_feedback",
     "command_activity_invalidations",
+    "command_activity_invocation",
     "command_activity_shadow_evaluations",
     "command_activity_shadow_cohorts",
 )

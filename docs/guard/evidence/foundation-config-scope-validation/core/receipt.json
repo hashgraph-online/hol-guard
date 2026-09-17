@@ -1,0 +1,14 @@
+[
+  {
+    "check": "tests",
+    "exit_code": 0,
+    "seconds_including_lock": 8.582,
+    "log": "/dev/shm/hol-guard-takeover/foundation-held-scope-validation/tests.log"
+  },
+  {
+    "check": "types",
+    "exit_code": 0,
+    "seconds_including_lock": 3.873,
+    "log": "/dev/shm/hol-guard-takeover/foundation-held-scope-validation/types.log"
+  }
+]

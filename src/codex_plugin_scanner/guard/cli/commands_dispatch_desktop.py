@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.metadata
 import json
 import sys
@@ -88,7 +89,6 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     installed = _bool(item.get("installed"))
     command_available = _bool(item.get("command_available"))
     artifact_count = _int(item.get("artifact_count"))
-    review_count = _int(item.get("review_count"))
     warning_count = _int(item.get("warning_count"))
     managed = _bool(item.get("managed"))
     detected = installed or command_available or artifact_count > 0
@@ -96,7 +96,7 @@ def _app_projection(item: dict[str, object], *, runtime_active: bool) -> dict[st
     if managed and not runtime_active:
         protection = "needs_repair"
         detail = "Guard management is installed, but local enforcement is unavailable until the runtime is active."
-    elif managed and review_count == 0 and warning_count == 0:
+    elif managed and warning_count == 0:
         protection = "protected"
         detail = "Guard management is installed and the latest local check is clean."
     elif managed:
@@ -201,7 +201,7 @@ def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
     elif state == "paired_waiting":
         status = "syncing"
         detail = "Guard Cloud pairing is complete and the first sync is pending."
-    elif state in {"connected", "active", "synced"}:
+    elif state in {"connected", "active", "synced", "paired_active"}:
         status = "connected"
         detail = "Guard Cloud is connected."
     else:
@@ -413,11 +413,15 @@ def _run_guard_desktop_command(
     if desktop_bootstrap_is_preflight():
         session_url = None
     else:
-        session_url = build_desktop_dashboard_session_url(guard_home=resolved_guard_home)
+        session_url = build_desktop_dashboard_session_url(
+            guard_home=resolved_guard_home,
+            home_dir=getattr(context, "home_dir", None),
+        )
     status_payload = importlib.import_module(".product", __package__).build_guard_status_payload(
         context,
         store,
         config,
+        scan_installed_apps=False,
     )
     now = datetime.now(timezone.utc)
     day_start = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)

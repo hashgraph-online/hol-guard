@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import yaml
 
+from codex_plugin_scanner._scanner_commands import _scan_with_policy
 from codex_plugin_scanner.action_runner import _build_scan_args, main
 from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
@@ -168,6 +169,64 @@ def test_build_scan_args_propagates_cisco_mcp_scan() -> None:
     )
 
     assert args.cisco_mcp_scan == "on"
+
+
+def test_action_policy_is_repository_untrusted_by_default(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+    (plugin_dir / "README.md").unlink()
+    (plugin_dir / "baseline.txt").write_text("README_MISSING\n", encoding="utf-8")
+    (plugin_dir / ".plugin-scanner.toml").write_text(
+        '[scanner]\nbaseline_file = "baseline.txt"\n',
+        encoding="utf-8",
+    )
+
+    args = _build_scan_args(
+        plugin_dir=str(plugin_dir),
+        profile="default",
+        config="",
+        baseline="",
+        min_score=0,
+        fail_on_severity="none",
+        cisco_scan="off",
+        cisco_mcp_scan="off",
+        cisco_policy="balanced",
+        trust_repository_policy=False,
+    )
+    _raw, result, _profile, _policy, _score, config_path, baseline_path = _scan_with_policy(args, plugin_dir)
+
+    assert any(finding.rule_id == "README_MISSING" for finding in result.findings)
+    assert config_path is None
+    assert baseline_path is None
+
+
+def test_action_can_explicitly_trust_repository_policy(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+    (plugin_dir / "README.md").unlink()
+    (plugin_dir / "baseline.txt").write_text("README_MISSING\n", encoding="utf-8")
+    (plugin_dir / ".plugin-scanner.toml").write_text(
+        '[scanner]\nbaseline_file = "baseline.txt"\n',
+        encoding="utf-8",
+    )
+
+    args = _build_scan_args(
+        plugin_dir=str(plugin_dir),
+        profile="default",
+        config="",
+        baseline="",
+        min_score=0,
+        fail_on_severity="none",
+        cisco_scan="off",
+        cisco_mcp_scan="off",
+        cisco_policy="balanced",
+        trust_repository_policy=True,
+    )
+    _raw, result, _profile, _policy, _score, config_path, baseline_path = _scan_with_policy(args, plugin_dir)
+
+    assert all(finding.rule_id != "README_MISSING" for finding in result.findings)
+    assert config_path == plugin_dir / ".plugin-scanner.toml"
+    assert baseline_path == plugin_dir / "baseline.txt"
 
 
 def test_action_runner_writes_step_summary_and_registry_payload(monkeypatch, tmp_path) -> None:
@@ -542,7 +601,7 @@ def test_action_runner_verify_mode_ignores_invalid_repo_pr_comment_config(
 
     assert exit_code == 0
     assert "pr_comment_status=created" in output_path.read_text(encoding="utf-8")
-    assert "Warning: failed to load scanner config for PR comment settings" in stderr
+    assert "Warning: failed to load scanner config for PR comment settings" not in stderr
 
 
 def test_action_runner_updates_pr_comment_before_gate_failure(monkeypatch, tmp_path) -> None:
@@ -664,6 +723,7 @@ pr_comment = "off"
     monkeypatch.setenv("PR_COMMENT", "auto")
     monkeypatch.setenv("PR_COMMENT_STYLE", "concise")
     monkeypatch.setenv("PR_COMMENT_MAX_FINDINGS", "5")
+    monkeypatch.setenv("TRUST_REPOSITORY_POLICY", "true")
 
     exit_code = main()
 

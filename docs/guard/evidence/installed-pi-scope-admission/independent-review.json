@@ -1,0 +1,7 @@
+{
+  "reviewer": "mcp_stream_review",
+  "mode": "read-only; no tests or edits",
+  "source_scope": "Pi root.resolve inside existing try before deriving paths; same canonical root feeds registration, prepare, positive/negative routes and cleanup; unchanged five-second readiness deadline. No source blocker found.",
+  "test_finding": "Initial new real-_run_probe witnesses needed an explicit Windows skip because this probe is POSIX-only. Final tests add that skip.",
+  "reviewed_probe_sha256": "fbfc61f0adbcf2872af8b4ea563c71ca7a2694faa4a3d0e10b8e7dc26640f902"
+}

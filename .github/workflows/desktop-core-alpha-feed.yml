@@ -6,14 +6,14 @@ on:
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
       - tests/test_stage_native_runtime_for_desktop_core.py
-      - tests/test_verify_pyinstaller_native_runtime.py
+      - tests/test_verify_*.py
       - tests/test_seal_pyinstaller_native_manifest.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/fix_pyinstaller_macos_exe_headers.py
       - scripts/release/verify_pyinstaller_macos_signing.py
-      - scripts/release/verify_pyinstaller_native_runtime.py
+      - scripts/release/verify_*.py
   push:
     branches: [main]
     paths:
@@ -23,7 +23,7 @@ on:
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/fix_pyinstaller_macos_exe_headers.py
       - scripts/release/verify_pyinstaller_macos_signing.py
-      - scripts/release/verify_pyinstaller_native_runtime.py
+      - scripts/release/verify_*.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -483,8 +483,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          MARKER="$BASE.attested.json"
-          COMMON=(--base "$BASE" --marker "$MARKER" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+          COMMON=(--base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
             --apple-team-id "$APPLE_TEAM_ID")
           if [[ "$MODE" == "build" ]]; then
@@ -492,6 +491,7 @@ jobs:
           else
             python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}"
           fi
+          python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-evidence.json"
       - name: Attest complete hardened Core asset set
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..approvals import first_approval_url, queue_blocked_approvals
@@ -66,6 +67,7 @@ class GuardSurfaceRuntime:
         surface: str,
         capabilities: tuple[str, ...],
         supported_protocol_versions: tuple[str, ...] = (),
+        include_sessions: bool = True,
     ) -> dict[str, object]:
         negotiated_version = _negotiate_protocol_version(supported_protocol_versions)
         client_id = uuid.uuid4().hex
@@ -75,7 +77,7 @@ class GuardSurfaceRuntime:
             {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
         )
         protocol_bundle["negotiated_version"] = negotiated_version
-        return {
+        response: dict[str, object] = {
             "protocol_version": negotiated_version,
             "schema_version": SCHEMA_VERSION,
             "schema": contract,
@@ -93,8 +95,10 @@ class GuardSurfaceRuntime:
                 "surface": surface,
                 "capabilities": list(capabilities),
             },
-            "sessions": self.store.list_guard_sessions(limit=20),
         }
+        if include_sessions:
+            response["sessions"] = self.store.list_guard_sessions(limit=20)
+        return response
 
     def start_session(
         self,
@@ -225,6 +229,7 @@ class GuardSurfaceRuntime:
         open_key: str | None,
         opener: Callable[[str], object],
         redaction_level: str = "full",
+        config_reader: Callable[[Path], dict[str, object]] | None = None,
     ) -> dict[str, object]:
         if self.store.get_guard_session(session_id) is None:
             raise ValueError(f"Unknown guard session: {session_id}")
@@ -245,6 +250,7 @@ class GuardSurfaceRuntime:
             now=queued_at,
             redaction_level=redaction_level,
             continuation_operation=continuation_operation,
+            config_reader=config_reader,
         )
         operation = self.start_operation(
             session_id=session_id,

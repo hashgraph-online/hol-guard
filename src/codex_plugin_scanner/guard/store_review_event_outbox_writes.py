@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping
 from uuid import uuid4
 
+from .continuation_snapshot import validated_continuation_snapshot
+from .review_correlation import cloud_review_correlation_id
 from .review_event_integrity import review_event_payload_digest
 from .store_review_event_outbox_binding import bind_review_events_for_request, load_review_oauth_binding
 from .store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION, review_event_payload_json
@@ -156,19 +159,112 @@ def append_request_snapshot_event(
     return max(0, int(cursor.rowcount or 0))
 
 
-def requeue_pending_request_events(connection: sqlite3.Connection, *, source: str, changed_at: str) -> int:
+def requeue_pending_request_events(
+    connection: sqlite3.Connection,
+    *,
+    source: str,
+    changed_at: str,
+    require_binding: bool = False,
+    snapshot_repair_sequences: dict[str, int] | None = None,
+    only_retry_identity_drift: bool = False,
+) -> int:
     connection.execute("begin immediate")
-    rows = connection.execute(
-        """
-        select request_id from approval_requests
+    current_binding = load_review_oauth_binding(connection, source)
+    if require_binding and current_binding is None:
+        return 0
+    if snapshot_repair_sequences is not None and not snapshot_repair_sequences:
+        return 0
+    current_identity = (
+        (
+            source,
+            current_binding["oauth_subject_hash"],
+            current_binding["workspace_id"],
+            current_binding["machine_id"],
+            current_binding["machine_installation_id"],
+        )
+        if current_binding is not None
+        else None
+    )
+    request_query = """
+        select request_id, continuation_snapshot_json from approval_requests
         where status = 'pending' and oauth_source = ?
-        order by coalesce(last_seen_at, created_at), request_id
-        """,
-        (source,),
+    """
+    request_parameters: list[object] = [source]
+    if snapshot_repair_sequences is not None:
+        request_query += " and request_id in (" + ", ".join("?" for _ in snapshot_repair_sequences) + ")"
+        request_parameters.extend(snapshot_repair_sequences)
+    rows = connection.execute(
+        request_query + " order by coalesce(last_seen_at, created_at), request_id", request_parameters
     ).fetchall()
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
+        if only_retry_identity_drift:
+            try:
+                frozen = validated_continuation_snapshot(json.loads(row["continuation_snapshot_json"]))
+            except (TypeError, ValueError):
+                frozen = None
+            if (
+                frozen is None
+                or frozen["capability"] not in {"retry-only", "unsupported"}
+                or frozen["correlationId"] == cloud_review_correlation_id(request_id)
+            ):
+                continue
+        if require_binding and current_binding is not None:
+            established = connection.execute(
+                """
+                select 1 from guard_review_outbox_request_sequences
+                where local_request_id = ? and oauth_source = ?
+                  and oauth_subject_hash = ? and workspace_id = ?
+                  and machine_id = ? and machine_installation_id = ?
+                """,
+                (
+                    request_id,
+                    source,
+                    current_binding["oauth_subject_hash"],
+                    current_binding["workspace_id"],
+                    current_binding["machine_id"],
+                    current_binding["machine_installation_id"],
+                ),
+            ).fetchone()
+            if established is None:
+                # Enabling decisions is not consent to upload another account's
+                # requests or requests whose original identity was lost.
+                continue
+        snapshot_query = """
+            select oauth_source, oauth_subject_hash, workspace_id, machine_id,
+                   machine_installation_id, binding_status
+            from guard_review_outbox_events
+            where local_request_id = ?
+              and event_type = 'review.request.snapshot_requeued'
+        """
+        snapshot_parameters: list[object] = [request_id]
+        if snapshot_repair_sequences is None:
+            snapshot_query += " and acknowledged_at is null"
+        else:
+            # A newer durable snapshot already repairs this event. Do not keep
+            # appending snapshots if an older server repeats the rejection.
+            snapshot_query += " and request_sequence > ?"
+            snapshot_parameters.append(snapshot_repair_sequences[request_id])
+        existing_snapshot = connection.execute(
+            snapshot_query + " order by request_sequence desc limit 1", snapshot_parameters
+        ).fetchone()
+        if (
+            existing_snapshot is not None
+            and current_identity is not None
+            and (
+                str(existing_snapshot["binding_status"]) == "ready"
+                and (
+                    str(existing_snapshot["oauth_source"]),
+                    existing_snapshot["oauth_subject_hash"],
+                    existing_snapshot["workspace_id"],
+                    existing_snapshot["machine_id"],
+                    existing_snapshot["machine_installation_id"],
+                )
+                == current_identity
+            )
+        ):
+            continue
         bind_review_events_for_request(connection, request_id=request_id, oauth_source=source)
         appended += append_request_snapshot_event(
             connection,

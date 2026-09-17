@@ -1,0 +1,33 @@
+{
+  "hosted_pr_head": "26cd4dff3f138990a8e9f6a729a970c1dbd90fa4",
+  "runtime_test_merge": "eafc8038f2d3051991768d944e0bd855fdcc5889",
+  "runtime_tree": "c8518c478ea19696e7087eb075f63b37b962d071",
+  "runtime_parents": [
+    "4b89e0d2d496a85f04922b2e019a4aea15326bb9",
+    "26cd4dff3f138990a8e9f6a729a970c1dbd90fa4"
+  ],
+  "job_id": 105377523075,
+  "failed_node": "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
+  "workload": {
+    "requests": 240,
+    "routine_allowed": 214,
+    "secrets_denied": 24,
+    "unaccounted_successful_responses": 2,
+    "claude_dispatch_count": 58,
+    "exception_key": "RemoteDisconnected:Remote end closed connection without response",
+    "exception_count": 2
+  },
+  "shard": {
+    "passed": 201,
+    "failed": 1,
+    "seconds": 128.03
+  },
+  "original_phase_known": false,
+  "production_cause_established": false,
+  "main_hosted_failure_claimed": false,
+  "hosted_foundation_fixture_matches_archived_before": true,
+  "hosted_foundation_fixture_sha256": "cad9ceec40c510981e7aa04eb668e81de5a6c6613f1496aa98345dce708606f7",
+  "log_bytes": 45075,
+  "log_sha256": "e6c8f8a4cc1442429d5f5d758ce642687b8236d2293c6cf13c000bd288bd10f7",
+  "log_preservation": "Exact UTF-8 bytes of connector-decoded job log; deterministic gzip retains every decoded byte."
+}

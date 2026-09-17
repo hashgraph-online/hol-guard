@@ -1,0 +1,74 @@
+{
+  "schema": "hol-guard.foundation-config-scope-validation.v1",
+  "scope": "Local source checks; no installed-host or hosted-security-analysis claim. Counts overlap and are not summed.",
+  "historical_source_receipts_verified_against_commits": true,
+  "source_commits": [
+    "dae0115961d43cfdb7e97a9807b253f01fa7baf9",
+    "1cb1068056c8eeef5babc5f4f355481b37bc06e0"
+  ],
+  "original_failed_attempt_preserved": "propagation/tests.log",
+  "failure_context": "Two existing ordinary-workspace tests correctly reject /dev/shm under the unchanged /dev policy. Both passed in the separately retained ordinary-/tmp targeted check. No policy or test threshold changed.",
+  "historical_deferred_keywords": "The propagation receipt accurately records the deferred API state at that commit; later foundation callback integration closes it without altering this receipt.",
+  "files": [
+    {
+      "path": "core/commit-receipt.json",
+      "bytes": 1472,
+      "sha256": "b96c3980bfb614d1bcb4ec1ec9e702e02258519cabfb96cf1a598a4918e9a8e1",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "core/receipt.json",
+      "bytes": 347,
+      "sha256": "0ffff7057b4f67c5b45da769c8b51b9b9c6d135c98270f391546cd3b8fdb380d",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "core/tests.log",
+      "bytes": 190,
+      "sha256": "96e57d74cdda37d7bd1ed523b0d55eb0dabf070bbf1f15e4ff3ee4d8a292bf05",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "core/types.log",
+      "bytes": 125338,
+      "sha256": "9c3dcc90e421f6bc710a347903e4c0bd75a9344520cc34e57e749e2f7f42ddc6",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/commit-receipt.json",
+      "bytes": 2349,
+      "sha256": "f002e21263bdbca0999f00e201307d01fd9e5a2cd91ee6e05dc5e09b949e1549",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/ordinary-path-regressions.json",
+      "bytes": 765,
+      "sha256": "452ec62fb0b10cc7e4b57e2bac6db6e910d6268f4ca942f88bd05f705a6336ef",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/ordinary-path-regressions.log",
+      "bytes": 98,
+      "sha256": "d2e19278f2acef7cfe468afa87fbba8925315ff38a8d23649526ec4f7bbe6521",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/receipt.json",
+      "bytes": 365,
+      "sha256": "3819d7a4138501298d78c7a8e484c77be47924b1c217d5943d395dace4c3a36b",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/tests.log",
+      "bytes": 2548,
+      "sha256": "262535df3cd0d16ee7ba5ea88f2c950036cf497d7ce1a375b9f203555b438b7d",
+      "retained_bytes_unchanged": true
+    },
+    {
+      "path": "propagation/types.log",
+      "bytes": 224041,
+      "sha256": "439c709809538701c59c79aacab82904e3c8623592486b34bb4c05231f139853",
+      "retained_bytes_unchanged": true
+    }
+  ]
+}

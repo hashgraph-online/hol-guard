@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import cast
 
 from .continuation_runtime import record_live_hook_completion
@@ -17,6 +18,7 @@ def complete_codex_live_decision(
     request_id: str,
     now: str,
     fresh_allow_authorized: bool = False,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Consume exact authority and persist terminal continuation evidence."""
 
@@ -56,6 +58,7 @@ def complete_codex_live_decision(
         action=action,
         now=now,
         approval_decision=approval_decision,
+        config_reader=config_reader,
     )
     expected_status = "resumed" if action == "allow" else "blocked_not_resumed"
     if not isinstance(completion, Mapping) or completion.get("continuationStatus") != expected_status:

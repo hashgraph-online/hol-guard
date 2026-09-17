@@ -80,7 +80,23 @@ def evaluate_decision_diff_shards() -> tuple[DecisionDiffShard, ...]:
         return tuple(executor.map(_evaluate_shard, range(EVALUATION_SHARD_COUNT)))
 
 
+def _pin_neutral_attribution() -> None:
+    """Keep corpus evaluation independent of the developer or CI harness."""
+
+    import os
+
+    from tests.harness_attribution_env import HARNESS_ENV_MARKERS
+
+    for marker in HARNESS_ENV_MARKERS:
+        os.environ.pop(marker, None)
+    os.environ["__CFBundleIdentifier"] = "com.apple.Terminal"  # noqa: SIM112
+    from codex_plugin_scanner.guard.runtime import package_protect_projection
+
+    package_protect_projection.resolve_parent_process_harness = lambda: None
+
+
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
+    _pin_neutral_attribution()
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     legacy_ids: defaultdict[str, list[str]] = defaultdict(list)
     reconciliation_ids: defaultdict[str, list[str]] = defaultdict(list)

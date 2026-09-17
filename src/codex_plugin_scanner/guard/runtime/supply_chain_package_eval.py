@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -74,6 +75,7 @@ from .runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
     _guard_sync_request,
+    _is_timeout_error,
     _normalized_receipts_sync_url,
     _resolve_guard_sync_auth_context,
     _urlopen_json_with_timeout_retry,
@@ -316,6 +318,7 @@ def evaluate_package_request_artifact(
     now: str | None = None,
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> PackageRequestEvaluation:
     cache_token = _LOCKFILE_PARSE_CACHE.set({})
     try:
@@ -326,6 +329,7 @@ def evaluate_package_request_artifact(
             now=now,
             external_archive_network_authorized=external_archive_network_authorized,
             retain_external_archive_blob=retain_external_archive_blob,
+            config_reader=config_reader,
         )
     finally:
         _LOCKFILE_PARSE_CACHE.reset(cache_token)
@@ -339,6 +343,7 @@ def _evaluate_package_request_artifact_uncached(
     now: str | None = None,
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> PackageRequestEvaluation:
     now_value = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     now_timestamp = _parse_evaluation_timestamp(now_value)
@@ -361,6 +366,7 @@ def _evaluate_package_request_artifact_uncached(
             parse_result=incomplete_lockfile,
             package_intent_hash=package_intent_hash,
             now=now_value,
+            config_reader=config_reader,
         )
     if external_archive_targets:
         # External archives use a deliberately local two-phase evaluation.  In
@@ -607,6 +613,7 @@ def _evaluate_package_request_artifact_uncached(
         bundle_defer_eligible=bundle_defer_eligible,
         bundle_decision=bundle_evaluation.decision if bundle_evaluation is not None else None,
         store=store,
+        config_reader=config_reader,
     )
     if cloud_result is not None and _cloud_result_should_defer_to_bundle(
         cloud_result, bundle_evaluation=bundle_evaluation
@@ -730,7 +737,9 @@ def _evaluate_package_request_artifact_uncached(
         retain_external_archive_blob=retain_external_archive_blob,
     )
     if heuristic is None:
-        fail_closed_unidentified = _unidentified_packages_fail_closed(store=store, workspace_dir=workspace_dir)
+        fail_closed_unidentified = _unidentified_packages_fail_closed(
+            store=store, workspace_dir=workspace_dir, config_reader=config_reader
+        )
         fallback_packages = _fallback_package_results(
             targets=targets,
             artifact=artifact,
@@ -1081,6 +1090,7 @@ def _evaluate_with_cloud(
     bundle_defer_eligible: bool,
     bundle_decision: str | None,
     store: GuardStore,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if not targets or workspace_id is None or workspace_fingerprint is None:
         return None, None
@@ -1089,7 +1099,9 @@ def _evaluate_with_cloud(
     def resolve_fail_closed_decision() -> str:
         nonlocal fail_closed_decision
         if fail_closed_decision is None:
-            fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
+            fail_closed_decision = _cloud_fail_closed_decision(
+                store=store, workspace_dir=workspace_dir, config_reader=config_reader
+            )
         result: str = fail_closed_decision
         return result
 
@@ -1129,6 +1141,57 @@ def _evaluate_with_cloud(
         if cloud_protection_is_explicitly_unpaid():
             return resolve_fail_closed_decision()
         return "block"
+
+    def handle_cloud_os_error(
+        error: OSError,
+    ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
+        if _is_timeout_error(error):
+            if resolve_cloud_failure_decision() == "block":
+                return (
+                    _cloud_fail_closed_evaluation(
+                        code="cloud_timeout",
+                        message=(
+                            "Guard Cloud evaluation timed out, so this package request is paused for explicit review."
+                        ),
+                        artifact=artifact,
+                        targets=targets,
+                        workspace_dir=workspace_dir,
+                        workspace_fingerprint=workspace_fingerprint,
+                        bundle_meta=bundle_meta,
+                        # A timeout is a transient availability failure, not a
+                        # package verdict. Keep the install stopped, but put it
+                        # in the approval queue so a human can decide remotely.
+                        fail_closed_decision="ask",
+                    ),
+                    None,
+                )
+            return None, _cloud_fallback_reason(
+                code="cloud_timeout",
+                message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
+            )
+
+        fail_closed_decision = resolve_cloud_failure_decision()
+        if fail_closed_decision == "block":
+            return (
+                _cloud_fail_closed_evaluation(
+                    code="cloud_http_error",
+                    message=(
+                        "Guard Cloud evaluation could not be reached, so Guard blocked the install "
+                        "rather than bypassing Cloud package protection."
+                    ),
+                    artifact=artifact,
+                    targets=targets,
+                    workspace_dir=workspace_dir,
+                    workspace_fingerprint=workspace_fingerprint,
+                    bundle_meta=bundle_meta,
+                    fail_closed_decision=fail_closed_decision,
+                ),
+                None,
+            )
+        return None, _cloud_fallback_reason(
+            code="cloud_http_error",
+            message="Guard Cloud evaluation could not be reached, so Guard used local package intelligence.",
+        )
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
@@ -1203,7 +1266,12 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
-                fail_closed_decision=resolve_cloud_failure_decision(),
+                # A trusted-session failure (typically a cloud token refresh
+                # error) is availability, not a package verdict, so it gets the
+                # same treatment as cloud timeouts: the install stays stopped,
+                # but every security level routes the request to the approval
+                # queue so a human can decide remotely.
+                fail_closed_decision="ask",
             ),
             None,
         )
@@ -1282,25 +1350,8 @@ def _evaluate_with_cloud(
                 response_payload = None
             except urllib.error.HTTPError as refreshed_error:
                 status_code = refreshed_error.code
-            except OSError:
-                if resolve_cloud_failure_decision() == "block":
-                    return (
-                        _cloud_fail_closed_evaluation(
-                            code="cloud_validation_error",
-                            message="Guard cloud evaluation timed out, so strict mode blocked this package request.",
-                            artifact=artifact,
-                            targets=targets,
-                            workspace_dir=workspace_dir,
-                            workspace_fingerprint=workspace_fingerprint,
-                            bundle_meta=bundle_meta,
-                            fail_closed_decision=resolve_cloud_failure_decision(),
-                        ),
-                        None,
-                    )
-                return None, _cloud_fallback_reason(
-                    code="cloud_timeout",
-                    message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-                )
+            except OSError as error:
+                return handle_cloud_os_error(error)
             except ValueError:
                 return (
                     _cloud_fail_closed_evaluation(
@@ -1342,25 +1393,8 @@ def _evaluate_with_cloud(
                     f"Guard cloud evaluation returned HTTP {status_code}, so Guard fell back to local intelligence."
                 ),
             )
-    except OSError:
-        if resolve_cloud_failure_decision() == "block":
-            return (
-                _cloud_fail_closed_evaluation(
-                    code="cloud_validation_error",
-                    message="Guard cloud evaluation timed out, so strict mode blocked this package request.",
-                    artifact=artifact,
-                    targets=targets,
-                    workspace_dir=workspace_dir,
-                    workspace_fingerprint=workspace_fingerprint,
-                    bundle_meta=bundle_meta,
-                    fail_closed_decision=resolve_cloud_failure_decision(),
-                ),
-                None,
-            )
-        return None, _cloud_fallback_reason(
-            code="cloud_timeout",
-            message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-        )
+    except OSError as error:
+        return handle_cloud_os_error(error)
     except (RuntimeError, ValueError):
         return (
             _cloud_fail_closed_evaluation(
@@ -1638,8 +1672,13 @@ def _cloud_fallback_requires_reconnect_copy(reason: dict[str, object]) -> bool:
     return _optional_string(reason.get("code")) == "cloud_auth_error"
 
 
-def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
-    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+def _cloud_fail_closed_decision(
+    *,
+    store: GuardStore,
+    workspace_dir: Path | None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
+) -> str:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir, config_reader=config_reader)
     cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
     if config.security_level in {"strict", "paranoid"}:
         return "block"
@@ -1648,8 +1687,13 @@ def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None
     return "ask"
 
 
-def _unidentified_packages_fail_closed(*, store: GuardStore, workspace_dir: Path | None) -> bool:
-    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+def _unidentified_packages_fail_closed(
+    *,
+    store: GuardStore,
+    workspace_dir: Path | None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
+) -> bool:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir, config_reader=config_reader)
     return config.security_level in {"strict", "paranoid"}
 
 
@@ -2344,8 +2388,9 @@ def _finalize_incomplete_lockfile_evaluation(
     parse_result: LockfileParseResult,
     package_intent_hash: str,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> PackageRequestEvaluation:
-    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    config = load_guard_config(store.guard_home, workspace=workspace_dir, config_reader=config_reader)
     decision = "block" if config.security_level in {"strict", "paranoid"} else "ask"
     package = _incomplete_lockfile_package_result(
         target=target,
@@ -2950,6 +2995,34 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _package_target_result(
+    target: dict[str, object],
+    *,
+    decision: str,
+    reasons: tuple[dict[str, object], ...],
+    rule_id: str | None = None,
+) -> dict[str, object]:
+    result = {
+        "decision": decision,
+        "ecosystem": target["ecosystem"],
+        "name": target["name"],
+        "namespace": target["namespace"],
+        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
+        "resolvedVersion": _optional_string(target.get("version")),
+        "recommendedFixVersion": None,
+        "riskScore": None,
+        "direct": True,
+        "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
+        "alias": _optional_string(target.get("alias")),
+    }
+    if rule_id is not None:
+        result["ruleId"] = rule_id
+    result["reasons"] = reasons
+    return result
+
+
 def _unknown_package_result(
     target: dict[str, object],
     *,
@@ -2992,22 +3065,7 @@ def _unknown_package_result(
                 "source": "guard-local",
             }
         )
-    return {
-        "decision": decision,
-        "ecosystem": target["ecosystem"],
-        "name": target["name"],
-        "namespace": target["namespace"],
-        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
-        "resolvedVersion": _optional_string(target.get("version")),
-        "recommendedFixVersion": None,
-        "riskScore": None,
-        "direct": True,
-        "dependencyPath": None,
-        "packageManager": _optional_string(target.get("package_manager")) or "npm",
-        "redactedCommand": _optional_string(target.get("redacted_command")),
-        "alias": _optional_string(target.get("alias")),
-        "reasons": tuple(reasons),
-    }
+    return _package_target_result(target, decision=decision, reasons=tuple(reasons))
 
 
 def _fallback_package_results(
@@ -3320,22 +3378,10 @@ def _dependency_confusion_policy_package_result(
         decision = _normalize_bundle_action(rule.action)
         if decision not in {"block", "ask", "warn"}:
             decision = "warn"
-        return {
-            "decision": decision,
-            "ecosystem": target["ecosystem"],
-            "name": target["name"],
-            "namespace": target["namespace"],
-            "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
-            "resolvedVersion": _optional_string(target.get("version")),
-            "recommendedFixVersion": None,
-            "riskScore": None,
-            "direct": True,
-            "dependencyPath": None,
-            "packageManager": _optional_string(target.get("package_manager")) or "npm",
-            "redactedCommand": _optional_string(target.get("redacted_command")),
-            "alias": _optional_string(target.get("alias")),
-            "ruleId": rule.rule_id,
-            "reasons": (
+        return _package_target_result(
+            target,
+            decision=decision,
+            reasons=(
                 {
                     "code": "dependency_confusion_risk",
                     "message": (
@@ -3346,7 +3392,8 @@ def _dependency_confusion_policy_package_result(
                     "source": "policy",
                 },
             ),
-        }
+            rule_id=rule.rule_id,
+        )
     return None
 
 

@@ -1,0 +1,28 @@
+{
+  "command": [
+    "flock",
+    "--close",
+    "-w",
+    "180",
+    "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/ruff",
+    "check",
+    "tests/guard_daemon_acceptance_fixtures.py",
+    "tests/test_guard_daemon_acceptance_failure_stages.py"
+  ],
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "started_at": "2026-09-17T21:03:23.369056+00:00",
+  "seconds_including_lock": 0.019234,
+  "exit_code": 0,
+  "source_before": {
+    "tests/guard_daemon_acceptance_fixtures.py": "4d0928bcdef22da379cbec118d1e4718d73390c7ac1e7afc6b22384e3d90357c",
+    "tests/test_guard_daemon_acceptance_failure_stages.py": "20eb9854f7d9b976ce000162109996bb9869b76dda4cc36ba8eff4b77dee3e35"
+  },
+  "source_after": {
+    "tests/guard_daemon_acceptance_fixtures.py": "4d0928bcdef22da379cbec118d1e4718d73390c7ac1e7afc6b22384e3d90357c",
+    "tests/test_guard_daemon_acceptance_failure_stages.py": "20eb9854f7d9b976ce000162109996bb9869b76dda4cc36ba8eff4b77dee3e35"
+  },
+  "owned_source_unchanged": true,
+  "bytes": 19,
+  "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+}

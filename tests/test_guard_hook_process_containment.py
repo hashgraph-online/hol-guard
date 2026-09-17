@@ -88,6 +88,52 @@ def test_post_request_unknown_isolation_does_not_signal_group_without_live_guard
     assert not retire_worker_slot(slot)
 
 
+@pytest.mark.parametrize("tree_contained", [False, True])
+def test_concurrent_retirement_waits_for_containment_proof(
+    monkeypatch: pytest.MonkeyPatch, tree_contained: bool
+) -> None:
+    """An in-progress retirement must not let another caller report unproven containment."""
+
+    slot = HookWorkerSlot(process=_DeadGuardian(), connection=_Connection(), isolation_ready=True)
+    entered = threading.Event()
+    release = threading.Event()
+    second_started = threading.Event()
+    results: dict[str, bool] = {}
+
+    def prove_containment(_process: object, _signal: int) -> bool:
+        """Pause the containment result until the competing retirement has started."""
+
+        entered.set()
+        assert release.wait(timeout=5)
+        return tree_contained
+
+    def retire_second() -> None:
+        """Attempt shutdown while another caller is still proving containment."""
+
+        second_started.set()
+        results["second"] = retire_worker_slot(slot)
+
+    monkeypatch.setattr(hook_worker_module.os, "name", "posix")
+    monkeypatch.setattr(hook_worker_module, "terminate_owned_process_group", prove_containment)
+    first = threading.Thread(target=lambda: results.update(first=retire_worker_slot(slot)))
+    second = threading.Thread(target=retire_second)
+    first.start()
+    try:
+        assert entered.wait(timeout=5)
+        second.start()
+        assert second_started.wait(timeout=5)
+        assert not slot.retired
+    finally:
+        release.set()
+        first.join(timeout=5)
+        if second.ident is not None:
+            second.join(timeout=5)
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert results == {"first": tree_contained, "second": tree_contained}
+    assert slot.retired is tree_contained
+
+
 def test_explicit_pre_isolation_failure_allows_direct_cleanup() -> None:
     slot = HookWorkerSlot(
         process=_DeadGuardian(),

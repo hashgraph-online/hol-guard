@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "created_utc": "2026-09-17T20:32:30.491329+00:00",
+  "branch_scope": "foundation",
+  "base_commit": "bf0c85d2372a904b3c228415cc9eaae8c8948c6f",
+  "final_tests_passed": 35,
+  "test_counts_are_not_summed_across_runs": true,
+  "focused_type_summary": {
+    "filesAnalyzed": 1,
+    "errorCount": 0,
+    "warningCount": 43,
+    "informationCount": 0,
+    "timeInSec": 7.082
+  },
+  "artifacts": {
+    "README.md": {
+      "bytes": 5038,
+      "sha256": "9b59387be58af3bd90a8eda2c18c6b8f3035e9e6f6c07d8a1550860349099dbb"
+    },
+    "alias-witness.py.txt": {
+      "bytes": 2722,
+      "sha256": "ad8d53aaf489baf5123df17344354fb30c877640e16a99e04821f9c7bfe562f4"
+    },
+    "foundation-alias-witness.json": {
+      "bytes": 581,
+      "sha256": "122a5d377c1eae4e7df5bafdd81c60195f9c44c0359df50de626b4e796db6bf4"
+    },
+    "foundation-alias-witness.log": {
+      "bytes": 284,
+      "sha256": "d84930ca8a15629fa46cfcbd3e588c935938fe4d8a277864cd28d40a93f496a1"
+    },
+    "foundation-format-check.json": {
+      "bytes": 518,
+      "sha256": "6b6049c8829d0c76751488464635757522781856ccc4332201f815b4131c3a08"
+    },
+    "foundation-format-check.log": {
+      "bytes": 26,
+      "sha256": "3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938"
+    },
+    "foundation-format-final.json": {
+      "bytes": 517,
+      "sha256": "11cb30cb2341ab18b17635489023692448a60d3e565e7c676ab6e073a7826bd7"
+    },
+    "foundation-format-final.log": {
+      "bytes": 26,
+      "sha256": "3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938"
+    },
+    "foundation-format.json": {
+      "bytes": 546,
+      "sha256": "b77ebd285c0cb669719770cc148186ec1297715e12abe21d9bc08cb7f6568c1d"
+    },
+    "foundation-format.log": {
+      "bytes": 42,
+      "sha256": "10869b88a75066aa23546ef1f95fcd4678c3fb92a56ed46ef91688052b67976a"
+    },
+    "foundation-lint-final.json": {
+      "bytes": 501,
+      "sha256": "eee78c3500d2d2944699538df97e3495b43a7b944a06d8d0b56d686245e233d9"
+    },
+    "foundation-lint-final.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "foundation-lint.json": {
+      "bytes": 502,
+      "sha256": "41e4dff6df5dc47d6f5f944cb25b0840febaeac667b72e9c311b1e8b2400ea3d"
+    },
+    "foundation-lint.log": {
+      "bytes": 597,
+      "sha256": "8da6f5a26eec849322d6b4fc6dedef6f5b88ec243651f5e89b802169883e1a7f"
+    },
+    "foundation-tests-final.json": {
+      "bytes": 714,
+      "sha256": "4489f36bec51ed90cb407ad20dc36b4ff460aab135f1b498cf669a7b571e46cd"
+    },
+    "foundation-tests-final.log": {
+      "bytes": 99,
+      "sha256": "0ab016aafeb4dd675d45a8fd9286d4fc7c504a95875c815f51c2b820f33e1093"
+    },
+    "foundation-tests.json": {
+      "bytes": 707,
+      "sha256": "aac2d76e3d34387a4be0d7f1dadfd4008801c4b23f696e1bc5905a1dde96f0c0"
+    },
+    "foundation-tests.log": {
+      "bytes": 99,
+      "sha256": "6d06a7c1a85d186071814cc098be4e534aee3e88db02a7c3308858172aa50084"
+    },
+    "foundation-types.json": {
+      "bytes": 576,
+      "sha256": "5bdb4ee54ab8ec05d5d4e31f6dd6d68adb814c5bde160f18bf14b84db2db01d1"
+    },
+    "foundation-types.log": {
+      "bytes": 26677,
+      "sha256": "5572598b3fae80f4f1b7c3380a62efbfd7bc77ea50f8a3d3ec0ebdbbb188bc2d"
+    },
+    "hosted-failure-inputs.json": {
+      "bytes": 1304,
+      "sha256": "46bbf5662e8f68f6db3d5134836d4b9f17f7a7f0410b9b6f084f03da4343d352"
+    },
+    "independent-review.json": {
+      "bytes": 968,
+      "sha256": "fe6101a2d04d64bf45bc2027de4514f992f92e199eccd079f82e4f2bc9af5de0"
+    },
+    "probe-change.patch": {
+      "bytes": 3076,
+      "sha256": "dbe923ba4ff28c2aa414d952bc354ac55c674aeac2931efcfc36be264e712f9c"
+    },
+    "run-check.py.txt": {
+      "bytes": 914,
+      "sha256": "3746e9542ff0eca0002895da4d5dbf43bc7cb3ded4eb120f7b329be3cc05885b"
+    },
+    "source-inputs.json": {
+      "bytes": 4286,
+      "sha256": "ced539e3db20bb4151cee1c2b8a2b73b779581a4241cce31e859f9a20274120e"
+    }
+  }
+}

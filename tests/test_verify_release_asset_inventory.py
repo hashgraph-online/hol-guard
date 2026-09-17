@@ -46,7 +46,7 @@ def test_accepts_complete_desktop_core_assets_for_alpha(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "asset_name",
-    ["unowned.bin", f"hol-guard-core-{VERSION}-aarch64-apple-darwin"],
+    ["unowned.bin"],
 )
 def test_rejects_unowned_stable_release_asset(tmp_path: Path, asset_name: str) -> None:
     release_dir, dist_dir = _directories(tmp_path)
@@ -54,6 +54,16 @@ def test_rejects_unowned_stable_release_asset(tmp_path: Path, asset_name: str) -
 
     with pytest.raises(ValueError, match=re.escape(f"Unexpected release asset: {asset_name}")):
         verify_release_assets(release_dir, dist_dir, VERSION, "stable")
+
+
+def test_accepts_complete_linux_and_macos_core_assets_for_stable(tmp_path: Path) -> None:
+    release_dir, dist_dir = _directories(tmp_path)
+    for target in ("aarch64-apple-darwin", "x86_64-unknown-linux-gnu"):
+        core_base = f"hol-guard-core-{VERSION}-{target}"
+        for suffix in ("", ".json", ".attested.json"):
+            (release_dir / f"{core_base}{suffix}").write_bytes(b"core asset")
+
+    verify_release_assets(release_dir, dist_dir, VERSION, "stable")
 
 
 @pytest.mark.parametrize("missing_suffix", ["", ".sha256"])
@@ -72,7 +82,7 @@ def test_rejects_incomplete_desktop_core_assets(tmp_path: Path) -> None:
     (release_dir / core_base).write_bytes(b"incomplete core")
 
     with pytest.raises(ValueError, match="must be a complete set"):
-        verify_release_assets(release_dir, dist_dir, VERSION, "alpha")
+        verify_release_assets(release_dir, dist_dir, VERSION, "stable")
 
 
 def test_rejects_mcpb_checksum_mismatch(tmp_path: Path) -> None:
