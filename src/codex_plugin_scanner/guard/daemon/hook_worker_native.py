@@ -367,7 +367,6 @@ class HookWorkerNativeMixin:
                 recording_only=recording_only,
             )
         raw_receipt = edge.get("receipt")
-        native_receipt = raw_receipt if isinstance(raw_receipt, Mapping) else None
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
@@ -388,7 +387,7 @@ class HookWorkerNativeMixin:
                     harness=native_harness,
                     payload=payload,
                     native_result=native_result,
-                    native_receipt=native_receipt,
+                    native_receipt=accepted_receipt,
                     workspace=workspace,
                     guard_home=guard_home,
                 )
@@ -410,14 +409,18 @@ class HookWorkerNativeMixin:
         return harness_json_from_native_post_tool(native_harness, native_result)
 
     def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
-        """Hand Rust evidence to the non-authoritative writer without waiting."""
+        """Accept only a validated Rust receipt; persistence remains best-effort."""
 
-        self._last_native_decision_receipt = dict(receipt) if isinstance(receipt, Mapping) else None
+        from ..native_decision_receipt import validate_native_decision_receipt
+
+        self._last_native_decision_receipt = None
+        accepted = validate_native_decision_receipt(receipt)
+        if accepted is None:
+            return None
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
-        if not callable(submit) or not isinstance(receipt, Mapping):
-            return None
-        with suppress(Exception):
-            if submit(receipt=receipt) is True:
-                return receipt
-        return None
+        if callable(submit):
+            with suppress(Exception):
+                submit(receipt=accepted)
+        self._last_native_decision_receipt = accepted
+        return accepted

@@ -240,7 +240,28 @@ def _command_reuse_is_payload_bound(command: str) -> bool:
     basename = Path(executable).name.lower()
     if basename in _MUTABLE_CODE_LAUNCHERS or _PYTHON_LAUNCHER.fullmatch(basename):
         return False
+    if basename == "sed" and _sed_uses_file_backed_program(tokens[1:]):
+        return False
     return basename in _DIRECT_REUSABLE_COMMANDS
+
+
+def _sed_uses_file_backed_program(tokens: list[str]) -> bool:
+    """Reject sed programs loaded from a mutable file instead of argv."""
+
+    skip_next = False
+    for token in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in {"-f", "--file"}:
+            return True
+        if token.startswith("--file="):
+            return True
+        if token.startswith("-f") and token != "-f" and not token.startswith("--"):
+            return True
+        if token in {"-e", "--expression"}:
+            skip_next = True
+    return False
 
 
 def _native_review_binding(

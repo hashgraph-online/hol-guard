@@ -115,7 +115,31 @@ def _missing_workspace_read_only_search(cwd: Path | None, command: CanonicalComm
     executable = segment.executable
     if executable is None or segment.environment_names or segment.pipeline_index != 0:
         return False
-    return Path(executable).name.lower() in _READ_ONLY_SEARCH_COMMANDS
+    if "/" in executable or "\\" in executable or executable.startswith("."):
+        return False
+    name = Path(executable).name.lower()
+    if name not in _READ_ONLY_SEARCH_COMMANDS:
+        return False
+    from .developer_inspection import _read_only_lookup_search_args_are_safe
+
+    return _read_only_lookup_search_args_are_safe(name, list(segment.arguments))
+
+
+def _search_command_executes_unreviewed_code(command: CanonicalCommand) -> bool:
+    """Return True when a search CLI can run a preprocessor or other local program."""
+
+    if command.redirects or command.embedded_commands or command.wrapper_chain or len(command.segments) != 1:
+        return False
+    segment = command.segments[0]
+    executable = segment.executable
+    if executable is None or segment.environment_names or segment.pipeline_index != 0:
+        return False
+    name = Path(executable).name.lower()
+    if name not in _READ_ONLY_SEARCH_COMMANDS:
+        return False
+    from .developer_inspection import _read_only_lookup_search_args_are_safe
+
+    return not _read_only_lookup_search_args_are_safe(name, list(segment.arguments))
 
 
 def _direct_shell_risk_match(
@@ -193,8 +217,9 @@ def _direct_shell_risk_match(
             script_read_identity_sha256=assessment.identity_sha256,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    search_executes_code = _search_command_executes_unreviewed_code(canonical_command)
     if assessment.requires_review:
-        if _missing_workspace_read_only_search(cwd, canonical_command):
+        if (not search_executes_code) and _missing_workspace_read_only_search(cwd, canonical_command):
             return None
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -206,6 +231,18 @@ def _direct_shell_risk_match(
             guard_default_action="require-reapproval",
             reason_code="shell_local_script_execution_review",
             script_read_identity_sha256=assessment.identity_sha256,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    if search_executes_code:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=_LOCAL_SCRIPT_ACTION_CLASS,
+            reason=("This command executes local or incompletely inspected code. Review it before execution."),
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="shell_local_script_execution_review",
             interpreter_executable_identities=interpreter_executable_identities,
         )
     return None

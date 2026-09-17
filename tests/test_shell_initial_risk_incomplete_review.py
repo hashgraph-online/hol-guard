@@ -32,3 +32,14 @@ def test_incomplete_script_inspection_still_builds_review_request(case: str, tmp
     assert request.action_class == "local script execution shell command"
     assert request.guard_default_action == "require-reapproval"
     assert request.reason_code == "shell_local_script_execution_review"
+
+
+def test_missing_workspace_search_with_exec_flag_still_requires_review(tmp_path: Path) -> None:
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "rg --pre ./payload TOKEN ."},
+        cwd=None,
+        home_dir=tmp_path,
+    )
+    assert request is not None
+    assert request.guard_default_action == "require-reapproval"

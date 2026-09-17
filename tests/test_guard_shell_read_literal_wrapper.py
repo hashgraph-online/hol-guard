@@ -11,9 +11,15 @@ from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_r
 
 @pytest.mark.parametrize("shell", ("sh", "bash", "dash", "ash", "zsh"))
 def test_literal_wrapper_does_not_invent_a_script_file(shell: str, tmp_path: Path) -> None:
-    assessment = assess_shell_reads(f"{shell} -lc 'git stash list'", cwd=tmp_path, home_dir=tmp_path)
+    assessment = assess_shell_reads(f"{shell} -c 'git stash list'", cwd=tmp_path, home_dir=tmp_path)
     assert assessment.requires_review is False
     assert assessment.script_sources == ()
+
+
+@pytest.mark.parametrize("shell", ("bash", "zsh"))
+def test_login_shell_wrapper_keeps_execution_review(shell: str, tmp_path: Path) -> None:
+    assessment = assess_shell_reads(f"{shell} -lc 'true'", cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.requires_review is True
 
 
 @pytest.mark.parametrize("payload", ("cat .env", "git stash; cat .env", "git stash && cat .npmrc"))

@@ -209,6 +209,11 @@ class TestRedactSensitiveText:
         result = redact_sensitive_text("api_key: my_secret_value_here")
         assert "my_secret_value_here" not in result
 
+    def test_escaped_quotes_do_not_expose_password_suffix(self) -> None:
+        result = redact_sensitive_text(r'password: "foo\"bar-secret"')
+        assert "bar-secret" not in result
+        assert result == "[redacted]"
+
     def test_clean_text_unchanged(self) -> None:
         text = "Daemon started on port 4001"
         assert redact_sensitive_text(text) == text

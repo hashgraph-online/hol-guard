@@ -45,3 +45,20 @@ def test_mutable_resolution_or_execution_is_never_reusable(command: str) -> None
 
 def test_exact_direct_reader_remains_eligible_for_one_use_native_binding() -> None:
     assert _command_reuse_is_payload_bound("cat .env") is True
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "sed -f mutable.sed .env",
+        "sed --file mutable.sed .env",
+        "sed --file=mutable.sed .env",
+        "sed -fmutable.sed .env",
+    ),
+)
+def test_file_backed_sed_programs_are_never_reusable(command: str) -> None:
+    assert _command_reuse_is_payload_bound(command) is False
+
+
+def test_argv_sed_expression_remains_eligible_for_one_use_native_binding() -> None:
+    assert _command_reuse_is_payload_bound("sed s/a/b/ .env") is True

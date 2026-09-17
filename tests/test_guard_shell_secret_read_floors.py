@@ -257,11 +257,37 @@ def test_path_object_construction_is_not_a_file_read(tmp_path: Path) -> None:
     assert assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path).sensitive_paths
 
 
-def test_absolute_interpreter_subcommand_is_not_a_local_script(tmp_path: Path) -> None:
+def test_absolute_interpreter_script_operand_requires_review(tmp_path: Path) -> None:
     command = f"{Path('/usr/bin/python3')} issue lock 17 --repo example/repo"
     result = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
-    assert not result.requires_review
-    assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action != "block"
+    assert result.requires_review
+    assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+
+
+def test_python_warning_option_does_not_hide_script_operand(tmp_path: Path) -> None:
+    script = tmp_path / "check.py"
+    script.write_text("print('ok')\n")
+    result = assess_shell_reads("python3 -W ignore check.py", cwd=tmp_path, home_dir=tmp_path)
+    assert result.requires_review
+    assert result.script_sources
+
+
+def test_python_module_after_warning_option_still_requires_review(tmp_path: Path) -> None:
+    result = assess_shell_reads("python3 -W ignore -m app.main", cwd=tmp_path, home_dir=tmp_path)
+    assert result.requires_review
+
+
+@pytest.mark.parametrize("command", ("ag TOKEN .env", "ack TOKEN .env"))
+def test_search_tools_inspect_protected_operands(command: str, tmp_path: Path) -> None:
+    result = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
+    assert result.requires_review
+    assert result.sensitive_paths
+
+
+def test_shadowed_sleep_prefix_does_not_drop_script_review(tmp_path: Path) -> None:
+    (tmp_path / "sleep").write_text("#!/bin/sh\necho shadowed\n")
+    result = assess_shell_reads("sleep 1 && ./check", cwd=tmp_path, home_dir=tmp_path)
+    assert result.requires_review
 
 
 def test_relative_script_launch_still_requires_review(tmp_path: Path) -> None:
