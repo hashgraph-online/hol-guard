@@ -138,11 +138,16 @@ def _unwrap_search_invocation(executable: str | None, args: list[str]) -> tuple[
         if name == "command":
             while remaining and remaining[0] == "-p":
                 remaining = remaining[1:]
-            if remaining and remaining[0] in {"-v", "-V"}:
+            if remaining and remaining[0] == "--":
+                remaining = remaining[1:]
+            elif remaining and remaining[0] in {"-v", "-V"}:
                 return name, remaining
         else:
             while remaining:
                 token = remaining[0]
+                if token == "--":
+                    remaining = remaining[1:]
+                    break
                 if token == "-a":
                     remaining = remaining[2:] if len(remaining) > 1 else []
                     continue

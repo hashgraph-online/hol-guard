@@ -71,6 +71,8 @@ def test_file_backed_sed_programs_are_never_reusable(command: str) -> None:
 
 def test_argv_sed_expression_remains_eligible_for_one_use_native_binding() -> None:
     assert _command_reuse_is_payload_bound("sed s/a/b/ .env") is True
+    assert _command_reuse_is_payload_bound("sed -ef s/a/b/ .env") is True
+    assert _command_reuse_is_payload_bound("grep -efoo .env") is True
 
 
 def test_ripgrep_files_listing_remains_eligible_for_one_use_native_binding() -> None:

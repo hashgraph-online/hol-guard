@@ -266,12 +266,17 @@ def _uses_file_backed_program(tokens: list[str]) -> bool:
             return True
         if token.startswith(("--file=", "--fi=", "--fil=")):
             return True
-        if token.startswith("-f") and token != "-f" and not token.startswith("--"):
-            return True
-        if token.startswith("-") and not token.startswith("--") and "=" not in token and "f" in token[1:]:
-            return True
         if token in {"-e", "--expression", "--regexp"}:
             skip_next = True
+            continue
+        if token.startswith("-") and not token.startswith("--") and token != "-":
+            cluster = token[1:]
+            for index, flag in enumerate(cluster):
+                if flag == "e":
+                    skip_next = index == len(cluster) - 1
+                    break
+                if flag == "f":
+                    return True
     return False
 
 

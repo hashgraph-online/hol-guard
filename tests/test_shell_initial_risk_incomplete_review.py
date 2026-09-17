@@ -51,6 +51,8 @@ def test_missing_workspace_search_with_exec_flag_still_requires_review(tmp_path:
         "command rg --pre ./payload TOKEN .",
         "exec rg --pre ./payload TOKEN .",
         "exec -cl rg --pre ./payload TOKEN .",
+        "command -- rg --pre ./payload TOKEN .",
+        "exec -- rg --pre ./payload TOKEN .",
     ),
 )
 def test_wrapped_search_preprocessor_still_requires_review(command: str, tmp_path: Path) -> None:
