@@ -85,8 +85,8 @@ def _failed_cd_short_circuit_state(
     """Return the failed-cd state and whether this segment is provably unreachable."""
 
     operator = _flow_operator_before(execution)
-    if operator in {"||", ";", "&"}:
+    if operator in {"||", ";", "&", "|"}:
         active = False
     if execution.directory_operation is not None and execution.reason_code in _SHORT_CIRCUITING_CD_FAILURES:
         return True, False
-    return active, bool(active and operator in {"&&", "|"})
+    return active, bool(active and operator == "&&")

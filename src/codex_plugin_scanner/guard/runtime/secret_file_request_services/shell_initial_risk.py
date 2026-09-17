@@ -125,21 +125,60 @@ def _missing_workspace_read_only_search(cwd: Path | None, command: CanonicalComm
     return _read_only_lookup_search_args_are_safe(name, list(segment.arguments))
 
 
+def _unwrap_search_invocation(executable: str | None, args: list[str]) -> tuple[str | None, list[str]]:
+    """Strip command/exec prefixes so preprocessor flags stay visible."""
+
+    if executable is None:
+        return None, args
+    name = Path(executable).name.lower()
+    remaining = list(args)
+    for _ in range(8):
+        if name not in {"command", "exec"}:
+            return name, remaining
+        if name == "command":
+            while remaining and remaining[0] == "-p":
+                remaining = remaining[1:]
+            if remaining and remaining[0] in {"-v", "-V"}:
+                return None, remaining
+        else:
+            while remaining:
+                token = remaining[0]
+                if token in {"-c", "-l"}:
+                    remaining = remaining[1:]
+                    continue
+                if token == "-a":
+                    remaining = remaining[2:] if len(remaining) > 1 else []
+                    continue
+                if token.startswith("-a") and len(token) > 2:
+                    remaining = remaining[1:]
+                    continue
+                break
+        if not remaining:
+            return None, remaining
+        name = Path(remaining[0]).name.lower()
+        remaining = remaining[1:]
+    return None, remaining
+
+
 def _search_command_executes_unreviewed_code(command: CanonicalCommand) -> bool:
     """Return True when a search CLI can run a preprocessor or other local program."""
 
-    if command.redirects or command.embedded_commands or command.wrapper_chain or len(command.segments) != 1:
+    if command.redirects or command.embedded_commands or len(command.segments) != 1:
         return False
     segment = command.segments[0]
-    executable = segment.executable
-    if executable is None or segment.environment_names or segment.pipeline_index != 0:
+    if segment.environment_names or segment.pipeline_index != 0:
         return False
-    name = Path(executable).name.lower()
+    name, args = _unwrap_search_invocation(segment.executable, list(segment.arguments))
+    if name is None:
+        return True
+    leftover = [wrapper for wrapper in command.wrapper_chain if wrapper != "command"]
+    if leftover:
+        return True
     if name not in _READ_ONLY_SEARCH_COMMANDS:
         return False
     from .developer_inspection import _read_only_lookup_search_args_are_safe
 
-    return not _read_only_lookup_search_args_are_safe(name, list(segment.arguments))
+    return not _read_only_lookup_search_args_are_safe(name, args)
 
 
 def _direct_shell_risk_match(

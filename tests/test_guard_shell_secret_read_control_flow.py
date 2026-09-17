@@ -54,6 +54,16 @@ def test_failed_literal_cd_does_not_hide_or_branch_read(tmp_path: Path) -> None:
     assert assessment.incomplete
 
 
+def test_failed_literal_cd_does_not_hide_pipeline_read(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".env").write_text("SECRET=1\n")
+    command = "cd missing | cat .env"
+
+    assessment = assess_shell_reads(command, cwd=workspace, home_dir=tmp_path / "home")
+    assert assessment.requires_review
+
+
 def test_failed_literal_cd_or_recovery_does_not_hide_later_and_read(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
