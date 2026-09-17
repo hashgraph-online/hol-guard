@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "695899ead5c8369287f9ad98ce6a7d095f01b1a8662495a50e86c239399cfa32",
+  "catalog_digest": "98847da6796cdbda110de6d27b609256e8803dfe52a41c2a3fc080dee672f6cd",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 70,
+  "extension_count": 71,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -90,13 +90,14 @@
     "command.storage.azure-blob",
     "command.storage.google-cloud",
     "command.storage.minio",
+    "command.syngraphe",
     "command.system",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 247,
+  "permission_count": 250,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -343,6 +344,9 @@
     "command.storage.minio.permission.mb": "mc mb",
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
+    "command.syngraphe.permission.document-new": "syngraphe truth new domain-model",
+    "command.syngraphe.permission.init": "syngraphe init",
+    "command.syngraphe.permission.state-archive": "syngraphe state archive phase-one",
     "command.system.permission.disk-or-power-mutation": "halt",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
@@ -688,6 +692,9 @@
     "command.storage.minio.permission.mb",
     "command.storage.minio.permission.mirror",
     "command.storage.minio.permission.mv",
+    "command.syngraphe.permission.document-new",
+    "command.syngraphe.permission.init",
+    "command.syngraphe.permission.state-archive",
     "command.system.permission.disk-or-power-mutation",
     "command.windows.permission.destructive-storage"
   ],
@@ -701,7 +708,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 237,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -935,6 +942,9 @@
     "command.storage.minio.mv",
     "command.storage.minio.cat",
     "command.storage.minio.mirror",
+    "command.syngraphe.init",
+    "command.syngraphe.document-new",
+    "command.syngraphe.state-archive",
     "command.system.disk-or-power-mutation",
     "command.windows.destructive-storage"
   ],
