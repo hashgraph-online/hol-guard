@@ -25,7 +25,7 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
 )
 
-_NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required"})
+_NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
 def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
