@@ -45,7 +45,9 @@ def test_incomplete_or_invalid_backend_status_fails_closed(payload: bytes, code:
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX backend descriptor contract")
 def test_application_stdout_cannot_attest_backend_startup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    backend = Path(sys.executable).resolve()
+    backend = tmp_path / "fake-backend"
+    backend.write_bytes(b"#!/bin/sh\nexit 0\n")
+    backend.chmod(0o755)
     identity = executor._BackendIdentity(
         ContainmentBackend.LINUX_BWRAP, str(backend), executor.file_sha256(str(backend))
     )
@@ -58,7 +60,9 @@ def test_application_stdout_cannot_attest_backend_startup(tmp_path: Path, monkey
     def launch_fake_backend(argv, **kwargs):
         assert argv[1] == "--json-status-fd"
         assert kwargs["pass_fds"] == (int(argv[2]),)
-        return original_popen([str(backend), "-c", "print('{\"child-pid\":42}'); print('{\"exit-code\":0}')"], **kwargs)
+        return original_popen(
+            [sys.executable, "-c", "print('{\"child-pid\":42}'); print('{\"exit-code\":0}')"], **kwargs
+        )
 
     monkeypatch.setattr(executor.subprocess, "Popen", launch_fake_backend)
     result = executor.execute_contained(_request(tmp_path.resolve(), (str(backend),)))

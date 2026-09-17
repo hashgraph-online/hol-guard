@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -74,11 +75,11 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         harness = str(rendered["harness"])
         workspace = kwargs.get("cwd")
         digest = _test_request_digest(harness, kwargs.get("payload"), workspace)
-        rendered["receipt"] = {
+        receipt = {
             "schema": "guard-native-hook-decision-receipt.v1",
             "version": 1,
             "authority": "rust",
-            "decision_id": digest,
+            "decision_id": "0" * 64,
             "request_id": f"sha256:{digest}",
             "request_digest": digest,
             "harness": harness,
@@ -99,6 +100,8 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
             "observe_mode": False,
             "deadline_budget_ms": None,
         }
+        receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
+        rendered["receipt"] = receipt
         return rendered
 
     monkeypatch.setattr(

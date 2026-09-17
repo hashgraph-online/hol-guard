@@ -13,7 +13,7 @@ CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 CI_BRANCHES = ["main", "release/3.0", "release/3.1", "release/3.2"]
 RELEASE_BRANCHES = ["main", "release/3.0"]
 PR_CANARY_BRANCHES = ["main", "release/3.0", "release/3.2"]
-RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
+RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots", "@zerocodefast"}
 
 
 def _workflow(path: Path) -> dict[object, object]:
@@ -22,7 +22,7 @@ def _workflow(path: Path) -> dict[object, object]:
     return workflow
 
 
-def test_release_codeowners_are_the_two_named_maintainers() -> None:
+def test_release_codeowners_are_the_named_maintainers() -> None:
     pattern, *owners = CODEOWNERS.read_text(encoding="utf-8").split()
 
     assert pattern == "*"

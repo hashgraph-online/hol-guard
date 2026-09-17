@@ -149,7 +149,7 @@ def test_claimed_workflow_authorization_preserves_command_floor_approval_context
 
     initial = evaluate()
     assert not isinstance(initial, int)
-    assert initial.policy_action == "review"
+    assert initial.policy_action == "require-reapproval"
     request = _seed_resolved_request(store, descriptor)
     assert issue_resolved_github_workflow_capability(store, request, resolved_at=format_utc_timestamp(_ISSUED))
 
