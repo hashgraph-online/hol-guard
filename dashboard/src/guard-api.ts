@@ -787,6 +787,25 @@ async function initializeGuardDashboardSessionAtOrigin(
   }
 }
 
+export async function ensureGuardDashboardSession(): Promise<boolean> {
+  const origin =
+    establishedGuardDaemonOriginForReconnect() ?? (await discoverGuardDaemonOrigin());
+  if (!origin) {
+    return false;
+  }
+  const existing = readGuardToken();
+  let token = await initializeGuardDashboardSessionAtOrigin(origin, existing);
+  if (!token && existing) {
+    token = await initializeGuardDashboardSessionAtOrigin(origin, null);
+  }
+  if (!token) {
+    return false;
+  }
+  saveGuardToken(token);
+  saveGuardDaemonOrigin(origin);
+  return true;
+}
+
 export async function fetchGuardUpdateStatusAtOrigin(
   origin: string,
   guardToken: string | null,
