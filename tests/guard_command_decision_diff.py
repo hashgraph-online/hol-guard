@@ -38,9 +38,7 @@ def _install_evaluator_packages() -> _EvaluatorPackageState:
         for name, module in sys.modules.items()
         if name == _PACKAGE_PREFIX or name.startswith(f"{_PACKAGE_PREFIX}.")
     }
-    existing_parent_snapshots = tuple(
-        (module, module.__dict__.copy()) for module in existing_modules.values()
-    )
+    existing_parent_snapshots = tuple((module, module.__dict__.copy()) for module in existing_modules.values())
     package_root = REPO_ROOT / "src" / "codex_plugin_scanner"
     packages = (
         ("codex_plugin_scanner", package_root),
@@ -339,7 +337,7 @@ def _expected_known_gaps(payload: Mapping[str, object]) -> dict[str, tuple[int, 
 
 def _source_bindings() -> dict[str, str]:
     paths = sorted({path.resolve() for path in _EVIDENCE_SOURCE_PATHS})
-    return {source_binding_id(str(path.relative_to(REPO_ROOT))): _sha256(path) for path in paths}
+    return {source_binding_id(path.relative_to(REPO_ROOT).as_posix()): _sha256(path) for path in paths}
 
 
 def _oracle_digest(records: Iterable[OracleRecord]) -> str:

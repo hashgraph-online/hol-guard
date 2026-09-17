@@ -273,6 +273,26 @@ class AllMatcher:
         return tuple(evidence)
 
 
+@final
+@dataclass(frozen=True, slots=True)
+class IndexedCommandMatcher:
+    """Wrap any command matcher with explicit, complete registry index hints."""
+
+    matcher: CommandMatcher
+    executables: frozenset[str] = frozenset()
+    keywords: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_keywords = frozenset(value.strip().lower() for value in self.keywords if value.strip())
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "keywords", normalized_keywords)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        """Delegate command matching directly to the wrapped matcher."""
+        return self.matcher.match(command)
+
+
 _FAMILY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _EXAMPLE_MAX_LENGTH = 120
 
@@ -385,6 +405,8 @@ def example_for_matcher(matcher: CommandMatcher | None) -> str | None:
     returns ``None`` for matcher shapes without a stable executable prefix.
     """
 
+    if isinstance(matcher, IndexedCommandMatcher):
+        return example_for_matcher(matcher.matcher)
     if isinstance(matcher, ExecutableMatcher):
         if not matcher.executables:
             return None
@@ -439,6 +461,12 @@ class MatcherIndexHints:
 def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
     """Return conservative executable and keyword hints for a trusted matcher."""
 
+    if isinstance(matcher, IndexedCommandMatcher):
+        return MatcherIndexHints(
+            executables=matcher.executables,
+            keywords=matcher.keywords,
+            complete=True,
+        )
     if isinstance(matcher, ExecutableMatcher):
         return MatcherIndexHints(
             executables=matcher.executables,

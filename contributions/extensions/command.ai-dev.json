@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.ai-dev",
+  "version": "1.0.0",
+  "name": "ai-dev",
+  "description": "Detects sensitive ai-dev CLI operations and provides structured evidence for policy review.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.ai-dev",
+    "displayName": "ai-dev community",
+    "url": "https://github.com/MatthiasLew/ai-dev-cli-tools"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#2563EB" },
+  "homepage": "https://github.com/MatthiasLew/ai-dev-cli-tools",
+  "license": "MIT",
+  "executables": ["ai-dev"],
+  "ecosystemIds": ["ai-dev"],
+  "riskClasses": ["destructive_shell", "execution"],
+  "actionClasses": [
+    "ai-dev forced integration config overwrite command",
+    "ai-dev index daemon lifecycle command",
+    "ai-dev agent coordination mutation command"
+  ],
+  "referenceUrls": [
+    "https://github.com/MatthiasLew/ai-dev-cli-tools",
+    "https://github.com/hashgraph-online/hol-guard/issues/2940"
+  ],
+  "saferAlternatives": [
+    "Run integrations install without --force to verify dependencies first.",
+    "Query daemon status before starting or stopping background indexing.",
+    "Inspect task assignment before claiming or releasing agent work units."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_ai_dev_extensions"
+  }
+}

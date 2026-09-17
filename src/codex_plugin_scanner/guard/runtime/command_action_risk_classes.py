@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .command_ai_dev_extensions import AI_DEV_ACTION_RISK_CLASSES
 from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES
 from .command_ollama_extensions import OLLAMA_ACTION_RISK_CLASSES
@@ -71,5 +72,6 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe destructive command": ("destructive_shell",),
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
+    **AI_DEV_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
 }
