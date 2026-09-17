@@ -11,6 +11,7 @@ from typing import Final, cast
 
 from .models import DecisionScope, GuardAction, PolicyDecision
 from .policy_document import GuardPolicyDocument
+from .policy_document_export import coalesce_exported_rules
 from .policy_document_types import CompiledPolicyRow, PolicyCompilationError
 
 _POLICY_API_VERSION: Final = "guard.hashgraphonline.com/v1alpha1"
@@ -195,13 +196,22 @@ def build_policy_document_from_rows(
             json.dumps(row, sort_keys=True, separators=(",", ":"), default=str),
         ),
     )
+    origins: dict[str, object] = {}
+    for row in ordered:
+        rule_id = _stable_rule_id(row)
+        origin = row.get("policy_document_id")
+        if rule_id in origins and origins[rule_id] != origin:
+            raise PolicyCompilationError("policy_rule_identity_conflict", rule_id)
+        origins[rule_id] = origin
     mapping: dict[str, object] = {
         "apiVersion": _POLICY_API_VERSION,
         "kind": _POLICY_KIND,
         "metadata": {"id": document_id, "name": name[:256], "revision": revision},
         "spec": {
             "defaults": {"mode": "prompt"},
-            "rules": [_rule_from_policy_row(row, include_provenance=include_provenance) for row in ordered],
+            "rules": coalesce_exported_rules(
+                [_rule_from_policy_row(row, include_provenance=include_provenance) for row in ordered]
+            ),
         },
     }
     return GuardPolicyDocument.from_mapping(mapping)
@@ -259,10 +269,10 @@ def _local_scope(
     preferred = extension.get("scope")
     if isinstance(preferred, str) and preferred in _LOCAL_SCOPES:
         return cast(DecisionScope, preferred)
-    if artifact_id is not None:
-        return "artifact"
     if workspace is not None:
         return "workspace"
+    if artifact_id is not None:
+        return "artifact"
     if publisher is not None:
         return "publisher"
     if harness is not None:
@@ -338,6 +348,16 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
                 publisher=publisher,
                 harness=harness,
             )
+            if (
+                (workspace is not None and scope != "workspace")
+                or (publisher is not None and scope != "publisher")
+                or (
+                    artifact_id is not None
+                    and scope not in {"artifact", "workspace"}
+                    and not (artifact_id.startswith("family:") and scope == "harness")
+                )
+            ):
+                raise PolicyCompilationError("unsupported_policy_scope_projection", rule_id)
             compiled.append(
                 CompiledPolicyRow(
                     decision=PolicyDecision(

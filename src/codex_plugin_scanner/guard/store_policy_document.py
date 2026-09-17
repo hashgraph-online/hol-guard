@@ -11,7 +11,8 @@ from typing import Literal
 from .approval_gate import ApprovalGateGrant, require_high_risk
 from .policy_authority import validate_policy_write_authority
 from .policy_document import GuardPolicyDocument, policy_document_digest
-from .policy_document_io import CompiledPolicyRow
+from .policy_document_import_identity import validate_import_identities
+from .policy_document_io import CompiledPolicyRow, PolicyCompilationError
 from .store_base import _validate_scoped_policy_artifact_target
 
 PolicyImportMode = Literal["merge", "replace"]
@@ -38,10 +39,19 @@ class StorePolicyDocumentMixin:
         compiled_rows: tuple[CompiledPolicyRow, ...],
         *,
         mode: PolicyImportMode,
+        document: GuardPolicyDocument | None = None,
     ) -> PolicyDocumentImportPlan:
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
+        if document is None:
+            raise PolicyCompilationError("policy_import_document_required", "document")
         current_rows = self.list_policy_decisions()
+        validate_import_identities(
+            self._normalize_compiled_rows(compiled_rows),
+            current_rows,
+            document=document,
+            mode=mode,
+        )
         current_by_key: dict[
             tuple[str, str, str | None, str | None, str | None, str | None],
             dict[str, object],
@@ -182,6 +192,15 @@ class StorePolicyDocumentMixin:
         ``apply_policy_creation_request``.
         """
         next_control_state: dict[str, object] | None = None
+        validate_import_identities(
+            normalized_rows,
+            (
+                dict(row)
+                for row in connection.execute("select * from policy_decisions where source = 'policy-yaml-import'")
+            ),
+            document=document,
+            mode=mode,
+        )
         inserted_ids: set[int] = set()
         replaced = 0
         state = self._refresh_policy_integrity_state(

@@ -207,6 +207,7 @@ def test_replace_removes_only_prior_yaml_imports(tmp_path: Path) -> None:
     plan = store.plan_policy_document_import(
         compile_policy_document(second),
         mode="replace",
+        document=second,
     )
     assert plan.additions == ("rule-2",)
     assert plan.replacements == ()
@@ -247,7 +248,7 @@ def test_merge_preserves_cloud_policy_with_the_same_selector(tmp_path: Path) -> 
     )
     document = _document(rule_ids=("rule-1",))
 
-    plan = store.plan_policy_document_import(compile_policy_document(document), mode="merge")
+    plan = store.plan_policy_document_import(compile_policy_document(document), mode="merge", document=document)
     result = store.import_policy_document(
         document,
         compile_policy_document(document),

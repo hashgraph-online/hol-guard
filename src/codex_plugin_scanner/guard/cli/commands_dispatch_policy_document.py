@@ -25,6 +25,7 @@ from ..policy_document_io import (
     write_private_policy_text,
 )
 from ..policy_document_yaml import PolicyDocumentError, format_policy_document_yaml
+from ..policy_error_guidance import public_policy_document_error
 from ..runtime.command_policy import compile_command_policy_rules, evaluate_command_policy_rules
 from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
@@ -319,7 +320,7 @@ def _run_guard_policy_document_command(
                 include_provenance=True,
             )
             difference = diff_policy_documents(current_document, document)
-            plan = store.plan_policy_document_import(compiled, mode=mode)
+            plan = store.plan_policy_document_import(compiled, mode=mode, document=document)
             dry_run = bool(args.dry_run)
             if dry_run:
                 _write_payload(
@@ -395,7 +396,11 @@ def _run_guard_policy_document_command(
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(
             f"policy {command}",
-            {"error": str(code), "message": str(error)},
+            (
+                public_policy_document_error(error)
+                if isinstance(error, (PolicyCompilationError, PolicyDocumentError))
+                else {"error": str(code), "message": str(error)}
+            ),
             as_json=as_json,
             output_stream=output_stream,
         )

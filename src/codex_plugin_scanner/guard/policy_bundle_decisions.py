@@ -221,7 +221,7 @@ def _policy_bundle_rule_matches_local_scope(
     if not isinstance(scope, dict):
         return False
     devices = scope.get("devices")
-    if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
+    if isinstance(devices, list) and devices and device_id not in devices:
         return False
     environments = scope.get("environments")
     if not isinstance(environments, list) or not environments:
