@@ -18,6 +18,7 @@ _ARTIFACTS = {
     "contributions/extensions/command.ollama.json": "extensions/contributions/command.ollama.json",
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
+    "contributions/extensions/command.shellroute.json": "extensions/contributions/command.shellroute.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
