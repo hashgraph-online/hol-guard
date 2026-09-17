@@ -262,9 +262,9 @@ def _uses_file_backed_program(tokens: list[str]) -> bool:
         if skip_next:
             skip_next = False
             continue
-        if token in {"-f", "--file"}:
+        if token in {"-f", "--file", "--fi", "--fil"}:
             return True
-        if token.startswith("--file="):
+        if token.startswith(("--file=", "--fi=", "--fil=")):
             return True
         if token.startswith("-f") and token != "-f" and not token.startswith("--"):
             return True

@@ -224,6 +224,11 @@ class TestRedactSensitiveText:
         assert "secret" not in result
         assert "other" in result
 
+    def test_quoted_password_does_not_span_escaped_carriage_return(self) -> None:
+        result = redact_sensitive_text('password: "secret\\\rnext"')
+        assert "secret" not in result
+        assert "next" in result
+
     def test_clean_text_unchanged(self) -> None:
         text = "Daemon started on port 4001"
         assert redact_sensitive_text(text) == text

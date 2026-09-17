@@ -53,6 +53,7 @@ def test_exact_direct_reader_remains_eligible_for_one_use_native_binding() -> No
         "sed -f mutable.sed .env",
         "sed --file mutable.sed .env",
         "sed --file=mutable.sed .env",
+        "sed --fi mutable.sed .env",
         "sed -fmutable.sed .env",
         "sed -nf mutable.sed .env",
         "sed -fn mutable.sed .env",
@@ -70,3 +71,7 @@ def test_file_backed_sed_programs_are_never_reusable(command: str) -> None:
 
 def test_argv_sed_expression_remains_eligible_for_one_use_native_binding() -> None:
     assert _command_reuse_is_payload_bound("sed s/a/b/ .env") is True
+
+
+def test_ripgrep_files_listing_remains_eligible_for_one_use_native_binding() -> None:
+    assert _command_reuse_is_payload_bound("rg --files src") is True
