@@ -145,13 +145,63 @@ def matches_subcommands_conservatively(
 ) -> bool:
     """Match a destructive prefix, including when bounded parsing is uncertain."""
 
-    outcome = _subcommand_parse_outcome(
+    tails = subcommand_parse_tails(
         arguments,
         subcommands,
         options_with_values=options_with_values,
         known_flags=known_flags,
     )
-    return outcome is not _ParseOutcome.NO_MATCH
+    return tails is None or bool(tails)
+
+
+def subcommand_parse_tails(
+    arguments: tuple[str, ...],
+    subcommands: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str],
+    known_flags: frozenset[str],
+) -> tuple[tuple[str, ...], ...] | None:
+    """Return every argument tail a bounded parse can place after a subcommand path.
+
+    An unknown option may or may not consume the token after it, so each
+    reading is explored and every tail it reaches is returned. An empty result
+    means no parse reaches the path; ``None`` means the parse exceeded its state
+    budget, which callers must treat as uncertainty rather than absence.
+    """
+
+    tails: list[tuple[str, ...]] = []
+    pending = [(0, 0)]
+    visited: set[tuple[int, int]] = set()
+    while pending:
+        state = pending.pop()
+        if state in visited:
+            continue
+        if len(visited) >= _MAX_OPTION_PARSE_STATES:
+            return None
+        visited.add(state)
+        argument_index, subcommand_index = state
+        if subcommand_index == len(subcommands):
+            tails.append(arguments[argument_index:])
+            continue
+        if argument_index >= len(arguments):
+            continue
+        argument = arguments[argument_index]
+        if argument == "--":
+            remaining = len(subcommands) - subcommand_index
+            if arguments[argument_index + 1 : argument_index + 1 + remaining] == subcommands[subcommand_index:]:
+                tails.append(arguments[argument_index + 1 + remaining :])
+            continue
+        if _is_option(argument):
+            shape = _option_shape(
+                argument,
+                options_with_values=options_with_values,
+                known_flags=known_flags,
+            )
+            pending.extend((argument_index + transition.advance, subcommand_index) for transition in shape.transitions)
+            continue
+        if argument == subcommands[subcommand_index]:
+            pending.append((argument_index + 1, subcommand_index + 1))
+    return tuple(dict.fromkeys(tails))
 
 
 def flags_present_in_all_option_parses(
@@ -201,46 +251,6 @@ def long_flag_assignment_is_enabled(argument: str) -> bool:
 
     _option_name, separator, value = argument.partition("=")
     return not separator or value.lower() in _TRUTHY_FLAG_VALUES
-
-
-def _subcommand_parse_outcome(
-    arguments: tuple[str, ...],
-    subcommands: tuple[str, ...],
-    *,
-    options_with_values: frozenset[str],
-    known_flags: frozenset[str],
-) -> _ParseOutcome:
-    pending = [(0, 0)]
-    visited: set[tuple[int, int]] = set()
-    while pending:
-        state = pending.pop()
-        if state in visited:
-            continue
-        if len(visited) >= _MAX_OPTION_PARSE_STATES:
-            return _ParseOutcome.UNCERTAIN
-        visited.add(state)
-        argument_index, subcommand_index = state
-        if subcommand_index == len(subcommands):
-            return _ParseOutcome.MATCH
-        if argument_index >= len(arguments):
-            continue
-        argument = arguments[argument_index]
-        if argument == "--":
-            remaining = len(subcommands) - subcommand_index
-            if arguments[argument_index + 1 : argument_index + 1 + remaining] == subcommands[subcommand_index:]:
-                return _ParseOutcome.MATCH
-            continue
-        if _is_option(argument):
-            shape = _option_shape(
-                argument,
-                options_with_values=options_with_values,
-                known_flags=known_flags,
-            )
-            pending.extend((argument_index + transition.advance, subcommand_index) for transition in shape.transitions)
-            continue
-        if argument == subcommands[subcommand_index]:
-            pending.append((argument_index + 1, subcommand_index + 1))
-    return _ParseOutcome.NO_MATCH
 
 
 def _flag_parse_outcome(

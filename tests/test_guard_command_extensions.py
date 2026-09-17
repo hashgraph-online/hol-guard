@@ -107,6 +107,7 @@ def test_command_inspection_preserves_existing_safe_command_classification(comma
     assert payload["rules"] == []
 
 
+
 @pytest.mark.parametrize(
     ("command", "extension_id", "rule_id", "action_class"),
     [
