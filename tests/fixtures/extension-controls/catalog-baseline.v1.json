@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "c09d1c49c4cd750395ad0166fc82549b1ec37ccb2bafa5d449811607a237f0d9",
+  "catalog_digest": "98847da6796cdbda110de6d27b609256e8803dfe52a41c2a3fc080dee672f6cd",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 70,
+  "extension_count": 71,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -64,6 +64,7 @@
     "command.messaging.rabbitmq",
     "command.monitoring",
     "command.noodle",
+    "command.ollama",
     "command.package.go",
     "command.package.jvm",
     "command.package.node",
@@ -96,7 +97,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 250,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -268,6 +269,8 @@
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
     "command.monitoring.permission.delete": "aws cloudwatch delete-alarms",
     "command.noodle.permission.run": "noodle request run users/get --collection ./my-api",
+    "command.ollama.permission.push": "ollama push",
+    "command.ollama.permission.rm": "ollama rm",
     "command.package.go.permission.package-protection": "go install golang.org/x/tools/cmd/goimports@latest",
     "command.package.jvm.permission.package-protection": "mvn dependency:copy-dependencies",
     "command.package.node.permission.package-protection": "npm install left-pad",
@@ -307,9 +310,6 @@
     "command.shell-mutations.permission.process-environment-secret-read": "python3 -c 'import os; print(os.environ)'",
     "command.shell-mutations.permission.sensitive-file-write": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
     "command.skill-sunset.permission.audit": "skill-sunset audit",
-    "command.syngraphe.permission.document-new": "syngraphe truth new domain-model",
-    "command.syngraphe.permission.init": "syngraphe init",
-    "command.syngraphe.permission.state-archive": "syngraphe state archive phase-one",
     "command.storage.aws-s3.permission.access-control": "aws s3api put-bucket-policy",
     "command.storage.aws-s3.permission.bucket-configuration": "aws s3api put-bucket-versioning",
     "command.storage.aws-s3.permission.cp": "aws s3 cp",
@@ -344,6 +344,9 @@
     "command.storage.minio.permission.mb": "mc mb",
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
+    "command.syngraphe.permission.document-new": "syngraphe truth new domain-model",
+    "command.syngraphe.permission.init": "syngraphe init",
+    "command.syngraphe.permission.state-archive": "syngraphe state archive phase-one",
     "command.system.permission.disk-or-power-mutation": "halt",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
@@ -614,6 +617,8 @@
     "command.messaging.rabbitmq.permission.delete",
     "command.monitoring.permission.delete",
     "command.noodle.permission.run",
+    "command.ollama.permission.push",
+    "command.ollama.permission.rm",
     "command.package.go.permission.package-protection",
     "command.package.jvm.permission.package-protection",
     "command.package.node.permission.package-protection",
@@ -703,7 +708,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 235,
+  "rule_count": 237,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -870,6 +875,8 @@
     "command.messaging.rabbitmq.delete",
     "command.monitoring.delete",
     "command.noodle.run",
+    "command.ollama.push",
+    "command.ollama.rm",
     "command.payment.delete",
     "command.platform.heroku.app-destruction",
     "command.platform.heroku.release-change",

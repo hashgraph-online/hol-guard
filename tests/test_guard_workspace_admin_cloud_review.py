@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_queue import command_queue_enabled, command_queue_should_poll
+from codex_plugin_scanner.guard.runtime.command_queue import (
+    COMMAND_QUEUE_ENABLED_ENV,
+    command_queue_enabled,
+    command_queue_should_poll,
+)
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     ExactCloudReviewError,
@@ -114,9 +118,12 @@ def test_workspace_admin_mfa_review_honors_local_cloud_review_revocation(tmp_pat
     store = _connected_store(tmp_path)
     request = _request("admin-mfa-revoked")
     _add_request(store, request)
+    poll_env = {COMMAND_QUEUE_ENABLED_ENV: "1"}
     enable_exact_cloud_review(store)
+    assert command_queue_should_poll(store, poll_env) is True
     disable_exact_cloud_review(store)
     assert exact_cloud_review_operations(store) == ()
+    assert command_queue_should_poll(store, poll_env) is False
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,

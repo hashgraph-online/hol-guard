@@ -210,6 +210,23 @@ fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
 }
 
 #[test]
+fn evaluates_cursor_dotenv_read_as_sensitive_review() {
+    let bytes = evaluate_isolated(envelope(
+        "beforeReadFile",
+        serde_json::json!({
+            "event": "beforeReadFile",
+            "toolName": "read_file",
+            "toolInput": {"file_path": ".env.synthetic"}
+        }),
+    ))
+    .unwrap();
+    let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(result.result["action"]["action_type"], "file_read");
+    assert_eq!(result.result["minimum_action"], "review");
+    assert_ne!(result.result["minimum_action"], "allow");
+}
+
+#[test]
 fn evaluates_generic_pretool_for_supported_harness_aliases() {
     for (harness, expected) in [
         ("Claude", "claude-code"),

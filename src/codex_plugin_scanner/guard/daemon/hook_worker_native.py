@@ -25,6 +25,8 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
 )
 
+_NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
+
 
 def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
     rewritten = dict(native)
@@ -267,7 +269,7 @@ class HookWorkerNativeMixin:
                     return _record_native_pre_activity(self, harness, payload, response)
             else:
                 action = str(native.get("minimum_action") or "")
-                if action == "review":
+                if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                     record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return _record_native_pre_activity(
@@ -366,7 +368,8 @@ class HookWorkerNativeMixin:
                 guard_home=guard_home,
                 recording_only=recording_only,
             )
-        accepted_receipt = self._record_native_decision_receipt(edge.get("receipt"))
+        raw_receipt = edge.get("receipt")
+        accepted_receipt = self._record_native_decision_receipt(raw_receipt)
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             if recording_only:
@@ -380,12 +383,13 @@ class HookWorkerNativeMixin:
                     )
                     return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
             action = str(native_result.get("minimum_action") or "")
-            if action == "review":
+            if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                 response = pause_native_pre_tool_for_approval(
                     self.store,
                     harness=native_harness,
                     payload=payload,
                     native_result=native_result,
+                    native_receipt=accepted_receipt,
                     workspace=workspace,
                     guard_home=guard_home,
                 )
@@ -407,14 +411,18 @@ class HookWorkerNativeMixin:
         return harness_json_from_native_post_tool(native_harness, native_result)
 
     def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
-        """Hand Rust evidence to the non-authoritative writer without waiting."""
+        """Accept only a validated Rust receipt; persistence remains best-effort."""
 
-        self._last_native_decision_receipt = dict(receipt) if isinstance(receipt, Mapping) else None
+        from ..native_decision_receipt import validate_native_decision_receipt
+
+        self._last_native_decision_receipt = None
+        accepted = validate_native_decision_receipt(receipt)
+        if accepted is None:
+            return None
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
-        if not callable(submit) or not isinstance(receipt, Mapping):
-            return None
-        with suppress(Exception):
-            if submit(receipt=receipt) is True:
-                return receipt
-        return None
+        if callable(submit):
+            with suppress(Exception):
+                submit(receipt=accepted)
+        self._last_native_decision_receipt = accepted
+        return accepted

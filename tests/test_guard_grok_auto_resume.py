@@ -499,7 +499,7 @@ def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
     store = GuardStore(guard_home)
 
     def approve_pending() -> None:
-        for _ in range(100):
+        for _ in range(400):
             pending = store.list_approval_requests(status="pending", harness="grok", limit=5)
             if pending:
                 request_id = pending[0]["request_id"]

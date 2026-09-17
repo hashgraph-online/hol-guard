@@ -16,7 +16,6 @@ from scripts.verify_release_registry import (
     assert_pypi_release_absent,
     compute_local_distribution_hashes,
     inspect_release,
-    list_registry_versions,
     main,
     verify_registry_release,
     verify_testpypi_release,
@@ -135,29 +134,6 @@ def _local_plugin_dist(tmp_path: Path) -> Path:
     return dist
 
 
-def test_lists_sorted_canonical_registry_versions() -> None:
-    fetcher = FakeFetcher(
-        {_project_url(Registry.PYPI): json.dumps({"releases": {"2.2.0a2": [], "2.1.0": [], "2.2.0a1": []}}).encode()}
-    )
-
-    assert list_registry_versions(Registry.PYPI, fetcher=fetcher) == (
-        "2.1.0",
-        "2.2.0a1",
-        "2.2.0a2",
-    )
-
-
-def test_lists_plugin_scanner_registry_versions() -> None:
-    fetcher = FakeFetcher(
-        {_project_url(Registry.PYPI, PLUGIN_PROJECT): json.dumps({"releases": {"3.0.0a2": [], "3.0.0a1": []}}).encode()}
-    )
-
-    assert list_registry_versions(Registry.PYPI, project_name=PLUGIN_PROJECT, fetcher=fetcher) == (
-        "3.0.0a1",
-        "3.0.0a2",
-    )
-
-
 def test_verifies_plugin_scanner_release_independently(tmp_path: Path) -> None:
     dist = _local_plugin_dist(tmp_path)
     payload = _release_payload(
@@ -204,91 +180,6 @@ def test_verify_release_cli_accepts_plugin_scanner_project(tmp_path: Path, capsy
         == 0
     )
     assert json.loads(capsys.readouterr().out)["status"] == "exact"
-
-
-@pytest.mark.parametrize(
-    "response",
-    [
-        b"not-json",
-        json.dumps([]).encode(),
-        json.dumps({}).encode(),
-        json.dumps({"releases": {"v2.2.0a1": []}}).encode(),
-    ],
-)
-def test_listing_registry_versions_fails_closed_on_invalid_data(response: bytes) -> None:
-    fetcher = FakeFetcher({_project_url(Registry.PYPI): response})
-
-    with pytest.raises(RegistryVerificationError):
-        list_registry_versions(Registry.PYPI, fetcher=fetcher)
-    assert fetcher.calls == [_project_url(Registry.PYPI)]
-
-
-def test_listing_registry_versions_fails_closed_on_network_error() -> None:
-    fetcher = FakeFetcher({_project_url(Registry.PYPI): urllib.error.URLError("offline")})
-
-    with pytest.raises(RegistryVerificationError, match="Registry request failed"):
-        list_registry_versions(Registry.PYPI, fetcher=fetcher, retry_attempts=1)
-
-
-@pytest.mark.parametrize(
-    "transient_error",
-    [
-        urllib.error.URLError("offline"),
-        _http_error(_project_url(Registry.PYPI), 503),
-    ],
-)
-def test_listing_registry_versions_retries_transient_errors(transient_error: Exception) -> None:
-    url = _project_url(Registry.PYPI)
-    payload = json.dumps({"releases": {"2.2.0": []}}).encode()
-    fetcher = SequencedFetcher(url, [transient_error, payload])
-    delays: list[float] = []
-
-    assert list_registry_versions(
-        Registry.PYPI,
-        fetcher=fetcher,
-        retry_attempts=2,
-        retry_initial_delay_seconds=0,
-        retry_max_delay_seconds=0,
-        sleep=delays.append,
-    ) == ("2.2.0",)
-    assert fetcher.calls == [url, url]
-    assert delays == [0]
-
-
-def test_listing_registry_versions_exhausts_transient_retries() -> None:
-    url = _project_url(Registry.PYPI)
-    fetcher = SequencedFetcher(url, [urllib.error.URLError("offline"), urllib.error.URLError("offline")])
-    delays: list[float] = []
-
-    with pytest.raises(RegistryVerificationError, match="Registry request failed"):
-        list_registry_versions(
-            Registry.PYPI,
-            fetcher=fetcher,
-            retry_attempts=2,
-            retry_initial_delay_seconds=0,
-            retry_max_delay_seconds=0,
-            sleep=delays.append,
-        )
-    assert fetcher.calls == [url, url]
-    assert delays == [0]
-
-
-def test_listing_registry_versions_fails_fast_on_permanent_http_error() -> None:
-    url = _project_url(Registry.PYPI)
-    fetcher = FakeFetcher({url: _http_error(url, 401)})
-    delays: list[float] = []
-
-    with pytest.raises(RegistryVerificationError, match="HTTP 401"):
-        list_registry_versions(
-            Registry.PYPI,
-            fetcher=fetcher,
-            retry_attempts=2,
-            retry_initial_delay_seconds=0,
-            retry_max_delay_seconds=0,
-            sleep=delays.append,
-        )
-    assert fetcher.calls == [url]
-    assert delays == []
 
 
 def test_stdlib_fetch_rejects_oversized_chunked_responses(monkeypatch: pytest.MonkeyPatch) -> None:

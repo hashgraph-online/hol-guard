@@ -1,0 +1,69 @@
+name: Containment execution CI
+
+on:
+  pull_request:
+    branches: [main, release/3.2]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: containment-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-contained-runners:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Provision the production Linux backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apparmor bubblewrap
+          sudo tee /etc/apparmor.d/hol-guard-bwrap <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+          /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap
+          /usr/bin/bwrap --version
+      - name: Install the real Vitest fixture without lifecycle scripts
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: |
+          mkdir -p "$GUARD_VITEST_FIXTURE"
+          printf '%s\n' '{"name":"guard-containment-test","private":true,"type":"module","devDependencies":{"vitest":"3.2.4","typescript":"5.8.3"}}' > "$GUARD_VITEST_FIXTURE/package.json"
+          npm install --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
+      - name: Exercise real contained execution and failure paths
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: >-
+          uv run --no-sync pytest ci/containment/test_linux_containment.py
+          tests/test_guard_containment_backend_status.py
+          tests/test_guard_contained_vitest_handoff_fail_closed.py
+          --tb=short --junitxml=containment-results.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: containment-execution-results
+          path: containment-results.xml
+          if-no-files-found: error

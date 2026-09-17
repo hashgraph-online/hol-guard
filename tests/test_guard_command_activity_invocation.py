@@ -36,6 +36,26 @@ def test_invocation_preview_redacts_secrets_and_keeps_the_command() -> None:
     assert "ghp_0123456789FORBIDDEN" not in preview
 
 
+def test_invocation_preview_redacts_colon_delimited_credentials() -> None:
+    preview = build_invocation_preview(
+        "tool --meta 'password: hunter2' --meta 'authorization: abc123' --meta 'access_key: xyz789'"
+    )
+    assert preview is not None
+    for secret in ("hunter2", "abc123", "xyz789"):
+        assert secret not in preview
+    assert preview.count("[redacted]") == 3
+
+
+def test_invocation_preview_redacts_authorization_scheme_credentials() -> None:
+    preview = build_invocation_preview(
+        "tool --header 'Authorization: Bearer live-jwt-token' --header 'Authorization: Basic live-basic-token'"
+    )
+    assert preview is not None
+    assert "live-jwt-token" not in preview
+    assert "live-basic-token" not in preview
+    assert preview.count("[redacted]") + preview.count("*****") >= 2
+
+
 def test_invocation_preview_scrubs_spaced_heredocs_urls_and_quoted_secrets() -> None:
     heredoc = build_invocation_preview("git push origin main << EOF\nHEREDOC_PRIVATE\nEOF")
     assert heredoc is not None
@@ -62,9 +82,7 @@ def test_invocation_preview_scrubs_spaced_heredocs_urls_and_quoted_secrets() -> 
     assert quoted_windows is not None
     assert "Documents/token.txt" not in quoted_windows
     assert "My Documents" not in quoted_windows
-    quoted_windows_backslash = build_invocation_preview(
-        r"type 'C:\Docs\alice\My Documents\token.txt'"
-    )
+    quoted_windows_backslash = build_invocation_preview(r"type 'C:\Docs\alice\My Documents\token.txt'")
     assert quoted_windows_backslash is not None
     assert r"Documents\token.txt" not in quoted_windows_backslash
     quoted_posix = build_invocation_preview('cat "/var/secret dir/token.txt"')

@@ -81,6 +81,7 @@
       "command.blitcp",
       "command.mcp-filesystem",
       "command.noodle",
+      "command.ollama",
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",

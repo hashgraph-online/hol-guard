@@ -2,6 +2,7 @@ import { useCallback, type RefObject } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
 import { guardAwareHref } from "../guard-api";
+import { commitDashboardLocation } from "../dashboard-location";
 import { Badge, SectionLabel } from "../approval-center-primitives";
 import {
   commandDecisionLabel,
@@ -89,8 +90,7 @@ function extensionPatternHref(extensionId: string, ruleId: string): string {
 function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; controlling: boolean }) {
   const effects = commandEffectLabels(props.match);
   const openPatternFromRule = useCallback(() => {
-    window.history.pushState({}, "", extensionPatternHref(props.match.extension_id, props.match.rule_id));
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    commitDashboardLocation(extensionPatternHref(props.match.extension_id, props.match.rule_id));
   }, [props.match.extension_id, props.match.rule_id]);
   return (
     <li className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
