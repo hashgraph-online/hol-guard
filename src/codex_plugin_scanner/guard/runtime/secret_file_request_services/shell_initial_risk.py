@@ -143,13 +143,13 @@ def _unwrap_search_invocation(executable: str | None, args: list[str]) -> tuple[
         else:
             while remaining:
                 token = remaining[0]
-                if token in {"-c", "-l"}:
-                    remaining = remaining[1:]
-                    continue
                 if token == "-a":
                     remaining = remaining[2:] if len(remaining) > 1 else []
                     continue
                 if token.startswith("-a") and len(token) > 2:
+                    remaining = remaining[1:]
+                    continue
+                if len(token) > 1 and token.startswith("-") and set(token[1:]) <= {"c", "l"}:
                     remaining = remaining[1:]
                     continue
                 break

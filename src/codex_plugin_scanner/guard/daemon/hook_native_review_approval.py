@@ -268,12 +268,7 @@ def _uses_file_backed_program(tokens: list[str]) -> bool:
             return True
         if token.startswith("-f") and token != "-f" and not token.startswith("--"):
             return True
-        if (
-            token.startswith("-")
-            and not token.startswith("--")
-            and "=" not in token
-            and "f" in token[1:]
-        ):
+        if token.startswith("-") and not token.startswith("--") and "=" not in token and "f" in token[1:]:
             return True
         if token in {"-e", "--expression", "--regexp"}:
             skip_next = True
