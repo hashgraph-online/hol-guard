@@ -169,6 +169,10 @@ def run_guard_command(
         home_override_explicit=bool(home_override),
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
+    if args.guard_command == "desktop" and getattr(args, "desktop_command", None) == "status":
+        from .desktop_status_command import run_desktop_status_command
+
+        return run_desktop_status_command(args, guard_home=guard_home, context=context, output_stream=output_stream)
     try:
         enforce_lifecycle_gate(args, guard_home=guard_home)
     except ApprovalGateError as error:
