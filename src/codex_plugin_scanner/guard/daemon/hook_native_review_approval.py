@@ -55,6 +55,7 @@ _MUTABLE_CODE_LAUNCHERS = {
     "pipx",
 }
 _PYTHON_LAUNCHER = re.compile(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
+_FILE_BACKED_PROGRAM_COMMANDS = {"sed", "grep", "egrep", "fgrep", "rg"}
 _DIRECT_REUSABLE_COMMANDS = {
     "cat",
     "head",
@@ -240,13 +241,21 @@ def _command_reuse_is_payload_bound(command: str) -> bool:
     basename = Path(executable).name.lower()
     if basename in _MUTABLE_CODE_LAUNCHERS or _PYTHON_LAUNCHER.fullmatch(basename):
         return False
-    if basename == "sed" and _sed_uses_file_backed_program(tokens[1:]):
+    if basename in _FILE_BACKED_PROGRAM_COMMANDS and _uses_file_backed_program(tokens[1:]):
+        return False
+    if basename == "rg" and _rg_executes_unreviewed_preprocessor(tokens[1:]):
         return False
     return basename in _DIRECT_REUSABLE_COMMANDS
 
 
-def _sed_uses_file_backed_program(tokens: list[str]) -> bool:
-    """Reject sed programs loaded from a mutable file instead of argv."""
+def _rg_executes_unreviewed_preprocessor(tokens: list[str]) -> bool:
+    """Reject ripgrep launches that run a mutable preprocessor."""
+
+    return any(token == "--pre" or token.startswith("--pre=") for token in tokens)
+
+
+def _uses_file_backed_program(tokens: list[str]) -> bool:
+    """Reject programs or patterns loaded from a mutable file instead of argv."""
 
     skip_next = False
     for token in tokens:
@@ -259,7 +268,14 @@ def _sed_uses_file_backed_program(tokens: list[str]) -> bool:
             return True
         if token.startswith("-f") and token != "-f" and not token.startswith("--"):
             return True
-        if token in {"-e", "--expression"}:
+        if (
+            token.startswith("-")
+            and not token.startswith("--")
+            and "=" not in token
+            and "f" in token[1:]
+        ):
+            return True
+        if token in {"-e", "--expression", "--regexp"}:
             skip_next = True
     return False
 

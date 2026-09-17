@@ -214,6 +214,11 @@ class TestRedactSensitiveText:
         assert "bar-secret" not in result
         assert result == "[redacted]"
 
+    def test_unclosed_quoted_password_is_redacted(self) -> None:
+        result = redact_sensitive_text(r'password: "secret\"')
+        assert "secret" not in result
+        assert result == "[redacted]"
+
     def test_clean_text_unchanged(self) -> None:
         text = "Daemon started on port 4001"
         assert redact_sensitive_text(text) == text

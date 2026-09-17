@@ -54,6 +54,14 @@ def test_exact_direct_reader_remains_eligible_for_one_use_native_binding() -> No
         "sed --file mutable.sed .env",
         "sed --file=mutable.sed .env",
         "sed -fmutable.sed .env",
+        "sed -nf mutable.sed .env",
+        "sed -fn mutable.sed .env",
+        "grep -f mutable.pat .env",
+        "grep -Hnf mutable.pat .env",
+        "rg -f mutable.pat .env",
+        "rg --file mutable.pat .env",
+        "rg --pre python .env",
+        "rg --pre=python .env",
     ),
 )
 def test_file_backed_sed_programs_are_never_reusable(command: str) -> None:
