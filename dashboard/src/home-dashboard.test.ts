@@ -4,7 +4,6 @@ import {
 } from "./queue-state";
 import {
   buildDailyStory,
-  buildDaemonErrorCopy,
   buildEmptyStateCopy,
   buildRecentProtectionCopy,
   computeStreak,
@@ -365,12 +364,6 @@ assert(
 assert(
   !containsJargon(`${emptyStateCopy.title} ${emptyStateCopy.body}`),
   `GR176: empty Home copy should avoid implementation jargon — got: "${emptyStateCopy.body}"`
-);
-
-const daemonErrorCopy = buildDaemonErrorCopy();
-assert(
-  daemonErrorCopy.primaryCta === "Go to Settings" && daemonErrorCopy.secondaryCta === "Open review queue",
-  "GR191: daemon error copy gives recoverable Home actions"
 );
 
 const setupHomeState = deriveHomeState({

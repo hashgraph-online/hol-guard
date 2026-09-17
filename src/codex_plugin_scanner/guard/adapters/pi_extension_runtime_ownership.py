@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..stable_guard_cli import desktop_core_shim_for_executable
+from ..stable_guard_cli import desktop_core_shim_for_executable, durable_desktop_current_hol_guard
 
 _DESKTOP_RUNTIME_OWNER_ENV = "HOL_GUARD_DESKTOP_RUNTIME_OWNER"
 
@@ -59,9 +59,13 @@ def resolve_pi_extension_runtime_ownership(
 
 def _stable_guard_cli_command(home_dir: Path) -> str:
     # AppImages prepend a transient mount to PATH. The official user install is
-    # durable and must own hooks after the desktop process exits.
+    # durable and must own hooks after the desktop process exits. Managed Core
+    # under the Desktop app-data directory is also durable and must outrank a
+    # PATH pipx hol-guard that would start a second, older daemon.
+    durable_desktop = durable_desktop_current_hol_guard(home_dir)
     candidates = (
         os.environ.get(_DESKTOP_RUNTIME_OWNER_ENV),
+        str(durable_desktop) if durable_desktop is not None else None,
         str(home_dir / ".local" / "bin" / "hol-guard"),
         shutil.which("hol-guard"),
     )

@@ -139,11 +139,16 @@ def apply_posture_confidence(
     injection_disables_guard: bool = False,
     skill_is_known_bad: bool = False,
 ) -> GuardAction:
-    if not explicit or posture not in {"protected", "extra_careful"}:
+    if posture not in {"protected", "extra_careful"}:
+        return action
+    # Strong credential/data-flow exfiltration remains terminal even when the
+    # protected posture was inherited from legacy/default configuration. This
+    # prevents a newly introduced review floor from weakening an earlier block.
+    if risk_class in HIGH_CONFIDENCE_STOP_RISK_CLASSES and is_high_confidence(confidence):
+        return "block"
+    if not explicit:
         return action
     if risk_class in ALWAYS_STOP_RISK_CLASSES:
-        return "block"
-    if risk_class in HIGH_CONFIDENCE_STOP_RISK_CLASSES and is_high_confidence(confidence):
         return "block"
     if risk_class == "prompt_injection" and injection_disables_guard and is_high_confidence(confidence):
         return "block"

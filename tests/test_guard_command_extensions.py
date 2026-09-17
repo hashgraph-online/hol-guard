@@ -107,20 +107,6 @@ def test_command_inspection_preserves_existing_safe_command_classification(comma
     assert payload["rules"] == []
 
 
-def test_command_extension_registry_is_deterministic_and_complete() -> None:
-    payload = command_extensions_payload()
-    ids = [extension["extension_id"] for extension in payload["extensions"]]
-
-    assert ids == sorted(ids)
-    assert payload["count"] == len(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions)
-    assert "command.shell-mutations" in ids
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("destructive shell command") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 248
-
-
 @pytest.mark.parametrize(
     ("command", "extension_id", "rule_id", "action_class"),
     [

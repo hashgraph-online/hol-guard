@@ -22,6 +22,7 @@ import {
   resolveRequestWithQueueResult,
   GuardRequestResolutionError,
   retryResume,
+  ensureGuardDashboardSession,
 } from "./guard-api";
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import type { AppView } from "./approval-center-primitives";
@@ -32,6 +33,7 @@ import { lazyWorkspace } from "./lazy-workspace";
 import { runAutomaticProtectionRepair } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
+import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
 
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
@@ -109,21 +111,8 @@ type InventoryState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardInventoryItem[] };
 
-function usePathname(): string {
-  const [pathname, setPathname] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  return pathname;
-}
-
 function navigate(pathname: string): void {
-  window.history.pushState({}, "", guardAwareHref(pathname));
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  commitDashboardLocation(guardAwareHref(pathname));
 }
 
 function focusVisibleDashboardSearch(): boolean {
@@ -248,7 +237,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
           return { kind: "mcp-policy", requestId };
         }
       } catch {
-        // Swallow — the original 404 is the source of truth here.
+        // Swallow the MCP probe error; the original 404 is the source of truth here.
       }
       return { kind: "stale" };
     }
@@ -280,7 +269,7 @@ export function shouldFetchArtifactDiff(artifactType: string): boolean {
 }
 
 export function App() {
-  const pathname = usePathname();
+  const pathname = useDashboardPathname();
   const view = resolveView(pathname);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
@@ -620,6 +609,19 @@ export function App() {
     await refreshStateAfterAction();
   }, [refreshStateAfterAction]);
 
+  const handleReconnectSession = useCallback(async () => {
+    setRuntime({ kind: "loading" });
+    setRequests({ kind: "loading" });
+    const reminted = await ensureGuardDashboardSession();
+    if (!reminted) {
+      const message = "unauthorized (401)";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
+      return;
+    }
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction]);
+
   const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
     setClearConfirm(scope);
   }, []);
@@ -946,6 +948,7 @@ export function App() {
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
+            onReconnectSession={handleReconnectSession}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}

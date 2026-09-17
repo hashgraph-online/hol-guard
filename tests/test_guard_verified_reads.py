@@ -57,7 +57,11 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
     )
 
 
-def test_raw_shell_candidates_never_mint_positive_proof() -> None:
+def test_raw_shell_candidates_never_mint_positive_proof(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    cwd = home / "workspace"
+    (cwd / "src").mkdir(parents=True)
+    (cwd / "workspace" / "service-1" / "src").mkdir(parents=True)
     commands = (
         "pwd",
         "rg -n GuardAction src",
@@ -65,10 +69,24 @@ def test_raw_shell_candidates_never_mint_positive_proof() -> None:
         "gh pr view 17 --repo hol-fake/example --json number,state,mergeable",
     )
     for command in commands:
-        evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
+        evaluation = evaluate_command(command, cwd=cwd, home_dir=home)
         assert verified_read_candidate_operation(evaluation.command) is not None
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
+
+
+def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    missing = home / "missing-workspace"
+    assert not missing.exists()
+
+    evaluation = evaluate_command("rg -n GuardAction src", cwd=missing, home_dir=home)
+
+    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert evaluation.decision_plane.action == "require-reapproval"
+    assert evaluation.decision_plane.proof_routes == frozenset()
+    assert any(reason.reason_code == "critical.local-script-execution" for reason in evaluation.decision_plane.reasons)
 
 
 def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:

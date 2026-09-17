@@ -13,6 +13,8 @@ from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from .containment_executor import file_sha256
+from .local_node_runner_options import bun_locked_version as _bun_locked_version
+from .local_node_runner_options import vitest_result_arguments as _vitest_result_arguments
 from .package_evidence_common import (
     object_mapping,
     read_json_with_integrity,
@@ -50,6 +52,7 @@ class LocalNodeRunnerEvidence:
     lockfile_hash: str | None
     package_manifest_hash: str | None
     package_version: str | None
+    lockfile_name: str = "package-lock.json"
     evidence_scope: Literal["launch_identity"] = "launch_identity"
     review_disposition: Literal["review_required"] = "review_required"
     direct_silent_verification: bool = False
@@ -72,9 +75,13 @@ def build_local_node_runner_evidence(
         return None
     runner, runner_args, input_files, argument_reasons = parsed
     reasons = list(argument_reasons)
-    require(manager == "npx", "manager_mismatch", reasons)
+    require(manager in {"npx", "bunx"}, "manager_mismatch", reasons)
     require(execution.manager_name == manager, "manager_evidence_mismatch", reasons)
-    require(execution.local_only_requested or runner == "tsx", "remote_install_not_disabled", reasons)
+    # Bare bunx is eligible only for execution-owned containment, which
+    # launches the pinned local Node binary directly and never invokes bunx.
+    require(
+        execution.local_only_requested or manager == "bunx" or runner == "tsx", "remote_install_not_disabled", reasons
+    )
     require(execution.package_name == runner, "package_mismatch", reasons)
     require(execution.executable_name == runner, "executable_mismatch", reasons)
     require(
@@ -96,18 +103,22 @@ def build_local_node_runner_evidence(
     )
 
     root_manifest = workspace / "package.json"
-    lockfile = workspace / "package-lock.json"
+    lockfile = workspace / ("bun.lock" if (workspace / "bun.lock").exists() else "package-lock.json")
     package_root = workspace / "node_modules" / runner
     package_manifest = package_root / "package.json"
     root_payload, root_hash = read_json_with_integrity(root_manifest)
-    lock_payload, lock_hash = read_json_with_integrity(lockfile)
+    lock_payload, lock_hash = read_json_with_integrity(lockfile, allow_jsonc=lockfile.name == "bun.lock")
     package_payload, package_hash = read_json_with_integrity(package_manifest)
     require(_evidence_contains(execution.manifests, root_manifest, root_hash), "manifest_identity_drift", reasons)
     require(_evidence_contains(execution.lockfiles, lockfile, lock_hash), "lock_identity_drift", reasons)
-    require(_has_only_package_lock(execution), "lock_source_ambiguous", reasons)
+    require(_has_only_supported_lock(execution, lockfile.name), "lock_source_ambiguous", reasons)
 
     declared_version = _dependency_version(root_payload, runner)
-    locked_version, lock_source_ok = _locked_version(lock_payload, runner)
+    locked_version, lock_source_ok = (
+        _bun_locked_version(lock_payload, runner)
+        if lockfile.name == "bun.lock"
+        else _locked_version(lock_payload, runner)
+    )
     installed_name = _string_value(package_payload, "name")
     installed_version = _string_value(package_payload, "version")
     require(declared_version is not None, "manifest_dependency_missing", reasons)
@@ -152,6 +163,7 @@ def build_local_node_runner_evidence(
         "context_hash": execution.context_hash,
         "manifest_hash": root_hash,
         "lock_hash": lock_hash,
+        "lockfile_name": lockfile.name,
         "package_manifest_hash": package_hash,
         "declared_version": declared_version,
         "locked_version": locked_version,
@@ -180,6 +192,7 @@ def build_local_node_runner_evidence(
         lockfile_hash=lock_hash,
         package_manifest_hash=package_hash,
         package_version=installed_version,
+        lockfile_name=lockfile.name,
     )
 
 
@@ -188,7 +201,7 @@ def _runner_arguments(
     argv: tuple[str, ...],
     workspace: Path,
 ) -> tuple[RunnerKind, tuple[str, ...], tuple[str, ...], tuple[str, ...]] | None:
-    if manager != "npx":
+    if manager not in {"npx", "bunx"}:
         return None
     index = 0
     while index < len(argv) and argv[index] in {"--no", "--no-install"}:
@@ -202,11 +215,9 @@ def _runner_arguments(
         reasons.append("explicit_package_source")
     raw_files: tuple[str, ...]
     if runner == "vitest":
-        if not tail or tail[0] != "run" or any(token.startswith("-") for token in tail[1:]):
+        raw_files, valid = _vitest_result_arguments(tail)
+        if not valid:
             reasons.append("runner_arguments_not_result_only")
-            raw_files = ()
-        else:
-            raw_files = tail[1:]
     elif runner == "eslint":
         if tail.count("--no-cache") != 1 or any(token.startswith("-") and token != "--no-cache" for token in tail):
             reasons.append("runner_arguments_not_result_only")
@@ -267,9 +278,13 @@ def _evidence_contains(
     )
 
 
-def _has_only_package_lock(execution: LocalPackageExecutionEvidence) -> bool:
+def _has_only_supported_lock(execution: LocalPackageExecutionEvidence, name: str) -> bool:
     available = tuple(item for item in execution.lockfiles if item.status == "available")
-    return len(available) == 1 and Path(available[0].resolved_path or "").name == "package-lock.json"
+    return (
+        len(available) == 1
+        and name in {"package-lock.json", "bun.lock"}
+        and Path(available[0].resolved_path or "").name == name
+    )
 
 
 def _dependency_version(payload: dict[str, object] | None, package: str) -> str | None:

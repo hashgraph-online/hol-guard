@@ -34,6 +34,7 @@ import { WatchProtectionBanner } from "./watch-protection-banner";
 import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
+import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -85,14 +86,7 @@ export function buildEmptyStateCopy(): { title: string; body: string; installHin
   };
 }
 
-export function buildDaemonErrorCopy(): { title: string; body: string; primaryCta: string; secondaryCta: string } {
-  return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Go to Settings to repair the connection and restore protection.",
-    primaryCta: "Go to Settings",
-    secondaryCta: "Open review queue",
-  };
-}
+export { buildDaemonErrorCopy, buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 
 export function redactHomeArtifactLabel(value: string | null | undefined): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -146,6 +140,7 @@ export function HomeWorkspace(props: {
   onOpenCommands: () => void;
   onOpenSettings: () => void;
   onRefreshRuntime?: () => Promise<void> | void;
+  onReconnectSession?: () => Promise<void> | void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
@@ -300,15 +295,23 @@ export function HomeWorkspace(props: {
   }
 
   if (props.runtime.kind === "error") {
-    const errorCopy = buildDaemonErrorCopy();
+    const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    const handlePrimary = () => {
+      if (errorCopy.kind === "session") {
+        void props.onReconnectSession?.();
+        return;
+      }
+      void props.onRefreshRuntime?.();
+    };
+    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
     return (
       <EmptyState
         title={errorCopy.title}
         body={errorCopy.body}
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
-            <ActionButton onClick={props.onOpenSettings}>{errorCopy.primaryCta}</ActionButton>
-            <ActionButton variant="outline" onClick={props.onOpenInbox}>{errorCopy.secondaryCta}</ActionButton>
+            <ActionButton onClick={handlePrimary}>{errorCopy.primaryCta}</ActionButton>
+            <ActionButton variant="outline" onClick={handleSecondary}>{errorCopy.secondaryCta}</ActionButton>
           </div>
         }
         tone="teach"

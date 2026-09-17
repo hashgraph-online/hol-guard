@@ -4821,7 +4821,7 @@ clearer UX and an implementation plan with technical references.
                 "hook_event_name": "PreToolUse",
                 "tool_name": "Bash",
                 "tool_input": {
-                    "command": "node build-skill-index.js",
+                    "command": "echo hello",
                     "active_skill_path": ".codex/skills/project-review/SKILL.md",
                 },
             },
@@ -7504,7 +7504,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_spli
     assert output == {"permissionDecision": "allow"}
 
 
-def test_guard_hook_emits_copilot_native_allow_response_for_node_script_argument_named_eval_flag(
+def test_guard_hook_emits_copilot_native_ask_response_for_node_script_argument_named_eval_flag(
     tmp_path,
     capsys,
     monkeypatch,
@@ -7518,6 +7518,9 @@ def test_guard_hook_emits_copilot_native_allow_response_for_node_script_argument
         "sourceScope": "project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(
+        guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
+    )
 
     rc = main(
         [
@@ -7534,7 +7537,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_node_script_argument
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_later_destructive_node_eval_flag(

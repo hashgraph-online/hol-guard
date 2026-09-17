@@ -68,20 +68,20 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
             "assert models is sys.modules['codex_plugin_scanner.guard.models']"
         ),
         (
-                "import sys; "
-                "import codex_plugin_scanner.guard as guard; "
-                "import codex_plugin_scanner.guard.runtime as runtime; "
-                "guard_modules = {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "import tests.guard_command_decision_diff; "
-                "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "from codex_plugin_scanner.guard.runtime import effect_decision; "
-                "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
+            "import sys; "
+            "import codex_plugin_scanner.guard as guard; "
+            "import codex_plugin_scanner.guard.runtime as runtime; "
+            "guard_modules = {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "import tests.guard_command_decision_diff; "
+            "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "from codex_plugin_scanner.guard.runtime import effect_decision; "
+            "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
         ),
     )
     for script in scripts:
@@ -168,10 +168,11 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
     }
     assert groups == {
         "allow|block": 9373,
-        "allow|require-reapproval": 16691,
+        "allow|require-reapproval": 4191,
         "allow|review": 250,
         "block|block": 4167,
         "review|block": 19794,
+        "review|require-reapproval": 12500,
         "review|review": 725,
     }
 

@@ -8,6 +8,7 @@ from ..command_extension_interaction import CommandExtensionInteraction
 from ..command_model import CanonicalCommand
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..self_approval import SELF_APPROVAL_ACTION_CLASS, SELF_APPROVAL_REASON, is_guard_approval_mutation_command
+from ..shell_secret_reads import assess_shell_reads
 from .destructive_shell_detection import _contains_shell_credential_exfiltration
 from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
 from .github_pr_expansion import (
@@ -18,6 +19,10 @@ from .github_pr_expansion import (
 from .interpreter_trust import _contains_shell_network_file_upload
 from .request_models import ToolActionRequestMatch
 from .upload_arguments import _contains_encoded_or_encrypted_shell_command
+
+_LOCAL_SCRIPT_ACTION_CLASS = "local script execution shell command"
+_LOCAL_SECRET_READ_ACTION_CLASS = "local secret read shell command"
+_READ_ONLY_SEARCH_COMMANDS = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack"})
 
 
 def initial_shell_risk_match(
@@ -43,7 +48,12 @@ def initial_shell_risk_match(
         canonical_command=canonical_command,
         interpreter_executable_identities=interpreter_executable_identities,
     )
-    if match is not None:
+    deferred_review_match = (
+        match
+        if match is not None and match.action_class in {_LOCAL_SCRIPT_ACTION_CLASS, _LOCAL_SECRET_READ_ACTION_CLASS}
+        else None
+    )
+    if match is not None and deferred_review_match is None:
         return True, match
     if extension_interaction.priority is not None:
         return True, ToolActionRequestMatch(
@@ -60,7 +70,7 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or gh_pr_create_uses_safe_ephemeral_body(raw_command_text)
     ):
-        return True, None
+        return deferred_review_match is None, deferred_review_match
     match = _github_shell_risk_match(
         tool_name=tool_name,
         normalized_tool_name=normalized_tool_name,
@@ -77,8 +87,35 @@ def initial_shell_risk_match(
         or raw_command_text == detection_command_text
         or is_nonexecuting_github_actions_read_workflow(raw_command_text, cwd=cwd)
     ):
-        return True, None
-    return False, None
+        return deferred_review_match is None, deferred_review_match
+    # Keep the generic execution floor available after more specific policies
+    # classify the command. A pytest segment or an extension fallback must not
+    # erase a separate, uninspected script launch from the same request.
+    return False, deferred_review_match
+
+
+def _missing_workspace_read_only_search(cwd: Path | None, command: CanonicalCommand) -> bool:
+    """Do not relabel a pure search as script execution just because a synthetic cwd is absent.
+
+    Direct protected operands are classified before this helper. In production
+    the hook workspace exists; this branch only avoids turning the cwd model's
+    missing-directory uncertainty into a local-code-execution finding for a
+    single read-only search command.
+    """
+
+    if (
+        (cwd is not None and cwd.exists())
+        or command.redirects
+        or command.embedded_commands
+        or command.wrapper_chain
+        or len(command.segments) != 1
+    ):
+        return False
+    segment = command.segments[0]
+    executable = segment.executable
+    if executable is None or segment.environment_names or segment.pipeline_index != 0:
+        return False
+    return Path(executable).name.lower() in _READ_ONLY_SEARCH_COMMANDS
 
 
 def _direct_shell_risk_match(
@@ -138,6 +175,37 @@ def _direct_shell_risk_match(
                 "contents to a network endpoint before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    assessment = assess_shell_reads(detection_command_text, cwd=cwd, home_dir=home_dir)
+    if assessment.sensitive_paths:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="local secret read shell command",
+            reason=(
+                "This command or a local script reads a protected credential file. Review the read before execution."
+            ),
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="shell_local_secret_read",
+            script_read_identity_sha256=assessment.identity_sha256,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    if assessment.requires_review:
+        if _missing_workspace_read_only_search(cwd, canonical_command):
+            return None
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=_LOCAL_SCRIPT_ACTION_CLASS,
+            reason=("This command executes local or incompletely inspected code. Review it before execution."),
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="shell_local_script_execution_review",
+            script_read_identity_sha256=assessment.identity_sha256,
             interpreter_executable_identities=interpreter_executable_identities,
         )
     return None

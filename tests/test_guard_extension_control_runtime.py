@@ -263,6 +263,30 @@ def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
 
 
+def test_unavailable_authority_blocks_compatibility_destructive_shell() -> None:
+    from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            AuthorityHealth.UNENROLLED,
+            0,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            (),
+        )
+    )
+    with use_extension_control_snapshot(snapshot):
+        evaluation = evaluate_command("echo MALICIOUS > dangerous-marker.json")
+        fd_evaluation = evaluate_command("echo MALICIOUS 2> dangerous-marker.json")
+        noclobber_evaluation = evaluate_command("echo MALICIOUS >| dangerous-marker.json")
+
+    assert evaluation.decision_plane.action == "block"
+    assert fd_evaluation.decision_plane.action == "block"
+    assert noclobber_evaluation.decision_plane.action == "block"
+    assert any(
+        reason.reason_code == "control.resolver-failure" for reason in evaluation.decision_plane.controlling_reasons
+    )
+
+
 def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)

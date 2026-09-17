@@ -22,9 +22,11 @@ from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
+    risk_classes_for_command_action,
 )
 from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
+from .command_shell_read_factors import shell_read_floor_factors
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
 from .effect_contract import DecisionBasis, ProofRequirement, ProofRoute, UncertaintyKind
@@ -36,7 +38,12 @@ from .effect_decision import (
     PositiveProof,
     evaluate_effect_decision,
 )
-from .extension_control_contract import ControlResolution, ControlSurface, ExtensionControlLayer
+from .extension_control_contract import (
+    ControlResolution,
+    ControlSurface,
+    ExtensionControlLayer,
+    ResolverFailureCode,
+)
 from .extension_control_resolver import resolve_extension_controls
 from .extension_control_runtime import (
     ExtensionControlDecisionEvidence,
@@ -53,6 +60,17 @@ from .github_workflow_authorization import (
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
+_UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS = frozenset(
+    {
+        "destructive_shell",
+        "credential_exfiltration",
+        "data_flow_exfiltration",
+        "encoded_execution",
+        "encoded_exfiltration",
+        "guard_bypass",
+        "policy_bypass",
+    }
+)
 _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 _MODE_FLOOR: dict[CommandRuleMode, CommandDecisionFloor] = {
     "disabled": "allow",
@@ -96,7 +114,14 @@ class CompositeCommandEvaluation:
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
-        return tuple(sorted({risk for owned in self.matches for risk in owned.match.rule.risk_classes}))
+        risks = {risk for owned in self.matches for risk in owned.match.rule.risk_classes}
+        if self.controlling_action_class is not None:
+            risks.update(risk_classes_for_command_action(self.controlling_action_class))
+        if any(factor.reason_code == "critical.local-secret-read" for factor in self.baseline_factors):
+            risks.add("local_secret_read")
+        if any(factor.reason_code == "critical.local-script-execution" for factor in self.baseline_factors):
+            risks.add("execution")
+        return tuple(sorted(risks))
 
     @property
     def matched(self) -> bool:
@@ -268,7 +293,15 @@ def evaluate_command(
         workflow_authorization,
         command_identity=command.security_identity,
     )
-    baseline_critical_floor_factors = command_critical_floor_factors(command)
+    read_factors = shell_read_floor_factors(command_text, command.security_identity, cwd=cwd, home_dir=home_dir)
+    if authorization_evidence is not None:
+        # Claimed workflow proof already covers exact GitHub CLI execution.
+        # Keep secret-read floors; do not let a script-shaped interpreter
+        # argv raise an independent local-code review on that same claim.
+        read_factors = tuple(factor for factor in read_factors if factor.reason_code == "critical.local-secret-read")
+    if read_factors:
+        minimum_action = _stronger_floor(minimum_action, "review")
+    baseline_critical_floor_factors = (*command_critical_floor_factors(command), *read_factors)
     explicitly_allowed_github_capabilities = frozenset(
         capability
         for permission_id in relaxable_enabled_permissions
@@ -345,8 +378,39 @@ def evaluate_command(
             )
         )
     )
+    # Unavailable authority still fail-closes cataloged, destructive, or write
+    # commands. Secret reads and unmatched PATH tools keep their review floor
+    # instead of becoming terminal blocks just because enrollment is missing.
+    apply_control_fail_closed = False
     if control_resolution.blocked:
-        minimum_action = _stronger_floor(minimum_action, "block")
+        authority_unavailable_only = bool(control_resolution.failures) and all(
+            failure.code is ResolverFailureCode.AUTHORITY_UNAVAILABLE for failure in control_resolution.failures
+        )
+        write_redirect = any(
+            redirect.operator.lstrip("0123456789") in {">", ">>", ">|"} for redirect in command.redirects
+        )
+        apply_control_fail_closed = (
+            not authority_unavailable_only
+            or bool(extension_ids)
+            or minimum_action == "block"
+            or bool(workspace_write_candidates)
+            or write_redirect
+        )
+        if not apply_control_fail_closed:
+            for owned in owned_matches:
+                if _UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS.intersection(owned.match.rule.risk_classes):
+                    apply_control_fail_closed = True
+                    break
+        if (
+            not apply_control_fail_closed
+            and effective_compatibility_class is not None
+            and _UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS.intersection(
+                risk_classes_for_command_action(effective_compatibility_class)
+            )
+        ):
+            apply_control_fail_closed = True
+        if apply_control_fail_closed:
+            minimum_action = _stronger_floor(minimum_action, "block")
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
             factors=(
@@ -355,7 +419,8 @@ def evaluate_command(
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
                 *workspace_write_candidates,
                 *critical_floor_factors,
-                *control_resolution.factors,
+                *read_factors,
+                *(control_resolution.factors if apply_control_fail_closed else ()),
                 *explicit_permission_allow_factors,
             ),
             uncertainties=decision_uncertainties,
