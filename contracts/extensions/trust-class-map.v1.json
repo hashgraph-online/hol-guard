@@ -84,6 +84,7 @@
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
+      "command.sandbin",
       "command.skill-sunset"
     ]
   }
