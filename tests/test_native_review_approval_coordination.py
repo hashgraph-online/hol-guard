@@ -157,6 +157,42 @@ def test_cursor_native_review_asks_and_queues_approval(
     assert "example.test" in envelope.get("network_hosts", [])
 
 
+@pytest.mark.parametrize("action", ("review", "require-reapproval"))
+def test_native_secret_read_policy_floors_queue_inbox(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+) -> None:
+    edge = _edge("cursor")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result["minimum_action"] = action
+    result["policy_action"] = action
+    result["reason_code"] = "native_sensitive_access_review"
+    result["reason"] = "HOL Guard requires review before this command can access sensitive local data."
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    response = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Shell",
+            "tool_input": {"command": "cat .env"},
+        },
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+
+    assert response.get("prompted") is True
+    assert isinstance(response.get("approval_request_id"), str)
+    pending = store.list_approval_requests(status="pending")
+    assert pending
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] != "allow"
+
+
 def test_native_block_stays_terminal_without_an_approval_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -183,6 +219,38 @@ def test_native_block_stays_terminal_without_an_approval_request(
     assert response["policy_action"] == "block"
     assert "approval_request_id" not in response
     assert store.list_approval_requests(status="pending") == []
+
+
+def test_native_sandbox_required_stays_terminal_without_an_approval_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edge = _edge("cursor")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result["minimum_action"] = "sandbox-required"
+    result["policy_action"] = "sandbox-required"
+    result["reason_code"] = "native_sandbox_required"
+    worker, store = _worker(tmp_path, monkeypatch, edge)
+    response = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Shell",
+            "tool_input": {"command": "python -c 'print(1)'"},
+        },
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] != "allow"
+    assert "approval_request_id" not in response
+    assert store.list_approval_requests(status="pending") == []
+    assert response.get("approval_reuse_status") != "accepted"
 
 
 def test_native_review_does_not_raise_worker_unsupported(

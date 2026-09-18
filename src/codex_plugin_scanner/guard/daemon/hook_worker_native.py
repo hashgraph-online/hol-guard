@@ -25,6 +25,8 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
 )
 
+_NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
+
 
 def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
     rewritten = dict(native)
@@ -267,7 +269,7 @@ class HookWorkerNativeMixin:
                     return _record_native_pre_activity(self, harness, payload, response)
             else:
                 action = str(native.get("minimum_action") or "")
-                if action == "review":
+                if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                     record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return _record_native_pre_activity(
@@ -381,7 +383,7 @@ class HookWorkerNativeMixin:
                     )
                     return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
             action = str(native_result.get("minimum_action") or "")
-            if action == "review":
+            if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                 response = pause_native_pre_tool_for_approval(
                     self.store,
                     harness=native_harness,
