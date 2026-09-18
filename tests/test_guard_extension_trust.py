@@ -82,6 +82,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert ids_for_class("external") == {
         "command.blitcp",
         "command.mcp-filesystem",
+        "command.mcp-seahorse",
         "command.noodle",
         "command.ollama",
         "command.probe",

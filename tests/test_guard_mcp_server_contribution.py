@@ -22,6 +22,13 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
 )
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
+_SEAHORSE = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.seahorse.json"
+
+
+def _seahorse_payload() -> dict[str, object]:
+    payload = json.loads(_SEAHORSE.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -126,6 +133,44 @@ def test_filesystem_catalog_item_is_external_opt_in() -> None:
     assert payload["permissions"][0]["configurable"] is False
     assert trust_class_for("command.mcp-filesystem") == "external"
     overlay = catalog_mcp_fields("command.mcp-filesystem")
+    assert overlay is not None
+    assert overlay["surface"] == "mcp"
+
+
+def test_seahorse_contribution_blocks_mutations_and_allows_reads() -> None:
+    payload = _seahorse_payload()
+    for mutation in ("remember", "improve", "forget", "skill_add"):
+        assert mcp_tool_state(payload, mutation) == "block"
+    for read in (
+        "recall",
+        "recall_full",
+        "recall_timeline",
+        "context",
+        "freshness_view",
+        "audit_log",
+        "follow_supersedes_chain",
+        "build_pit",
+        "skill_list",
+        "skill_search",
+        "skill_show",
+    ):
+        assert mcp_tool_state(payload, read) == "allow"
+    assert mcp_tool_state(payload, "unknown_tool") == "inherit"
+
+
+def test_seahorse_catalog_item_is_external_opt_in() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.mcp-seahorse")
+    assert extension is not None
+    payload = extension.to_dict()
+    assert payload["enabled"] is False
+    assert payload["trust_class"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["surface"] == "mcp"
+    assert payload["mcp_launch"]["package"] == "seahorse-memory"
+    assert payload["publisher"]["id"] == "community.seahorse"
+    assert payload["permissions"][0]["configurable"] is False
+    assert trust_class_for("command.mcp-seahorse") == "external"
+    overlay = catalog_mcp_fields("command.mcp-seahorse")
     assert overlay is not None
     assert overlay["surface"] == "mcp"
 

@@ -80,6 +80,7 @@
     "external": [
       "command.blitcp",
       "command.mcp-filesystem",
+      "command.mcp-seahorse",
       "command.noodle",
       "command.ollama",
       "command.probe",
