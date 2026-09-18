@@ -585,7 +585,7 @@ def _apply_temporary_mcp_grant(
                 )
                 break
     granted = apply_local_mcp_extension_decision(store, artifact, original_action)
-    if granted is not None and (granted[0] == "block" or current.action != "allow"):
+    if granted is not None and (granted[0] in {"block", "review"} or current.action != "allow"):
         return replace(current, action=granted[0], source=granted[1], summary=granted[2])
     return current
 
