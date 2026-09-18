@@ -88,6 +88,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.noodle",
         "command.ollama",
         "command.probe",
+        "command.promptbranch",
         "command.remote.essh",
         "command.repo2nb",
         "command.skill-sunset",

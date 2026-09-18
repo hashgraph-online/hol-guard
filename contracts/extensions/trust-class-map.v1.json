@@ -84,6 +84,7 @@
       "command.noodle",
       "command.ollama",
       "command.probe",
+      "command.promptbranch",
       "command.remote.essh",
       "command.repo2nb",
       "command.skill-sunset",

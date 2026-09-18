@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.promptbranch",
+  "version": "1.0.0",
+  "name": "PromptBranch",
+  "description": "Reviews PromptBranch CLI sharing operations and persistent agent-written library records.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.promptbranch",
+    "displayName": "PromptBranch",
+    "url": "https://github.com/PromptBranch"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#111827"
+  },
+  "homepage": "https://promptbranch.app",
+  "license": "MIT",
+  "executables": ["promptbranch", "npx", "bunx"],
+  "ecosystemIds": ["promptbranch"],
+  "riskClasses": ["network_egress", "destructive_shell"],
+  "actionClasses": [
+    "PromptBranch prompt publication command",
+    "PromptBranch shared prompt import command",
+    "PromptBranch prompt note write command",
+    "PromptBranch prompt run report command"
+  ],
+  "referenceUrls": ["https://promptbranch.app/docs/integrations/cli"],
+  "saferAlternatives": [
+    "Use promptbranch publish --preview to inspect the exact payload and destination first.",
+    "Review imported prompts and agent-written notes before saving them to the shared local library."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_promptbranch_extensions"
+  }
+}

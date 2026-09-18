@@ -18,6 +18,7 @@ _ARTIFACTS = {
     "contributions/extensions/command.noodle.json": "extensions/contributions/command.noodle.json",
     "contributions/extensions/command.ollama.json": "extensions/contributions/command.ollama.json",
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
+    "contributions/extensions/command.promptbranch.json": "extensions/contributions/command.promptbranch.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
