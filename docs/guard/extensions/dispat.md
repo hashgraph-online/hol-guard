@@ -4,20 +4,10 @@
 `command.dispat.release` rule reviews release starts with high severity and the `execution` and
 `network_egress` risk classes. Guard policy retains the final decision.
 
-For extended Dispat help, agents must run the installed `dispat --help` and open the official
-agent-guide URL printed under "If you are an agent, read the common guide:". The link depends on the
-binary's version; do not replace it with a fixed URL to `main`. See
-[Using Dispat as an agent](dispat-agent-guide.md) for the official-guide handoff and Guard workflow
-requirements.
-
-> **Agent workflow: release only through CI/CD.** Agents must not execute bare `dispat`,
-> `dispat release`, or equivalent publishing work themselves. Prepare and validate changes, then
-> leave release execution and retries to the repository's reviewed CI/CD release workflow. Do not
-> bypass it with script helpers, manual publishing, or release-tag/record changes. A Guard approval
-> does not replace this workflow requirement.
-
-This guidance does not change the runtime rule below: the Extension reviews release starts and does
-not enforce CI-only execution or detect every alternative publishing command.
+Agents must follow the official Dispat guide via [Using Dispat as an agent](dispat-agent-guide.md).
+Guard approval does not authorize bypassing that guide's CI/CD release workflow. The Extension
+reviews release starts; it does not enforce CI-only execution or detect every alternative publishing
+command.
 
 > **Important:** With release locking enabled, both `dispat` and `dispat release` first attempt to
 > acquire the remote `dispat-release-lock` tag before planning or executing release work. This also

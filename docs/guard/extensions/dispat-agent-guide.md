@@ -1,30 +1,18 @@
 # Using Dispat as an agent
 
-Use Dispat's official guide for command usage, configuration, testing, release stages, and recovery.
-Discover the guide through the installed binary rather than a fixed URL:
+Before working with Dispat, read its official agent guide. Discover it through the installed binary:
 
 ```sh
 dispat --version
 dispat --help
 ```
 
-Open the agent-guide URL printed by top-level help, including its stderr output. Follow that guide's
-instructions for selecting compatible guide and documentation patches on the installed CLI's
-major/minor line; their patch numbers are independent. Keep the help-linked configuration and API
-references when checking the binary's implemented contract. Do not substitute `main`, Next, or a
-prerelease for a stable installation. If links or update checks are unavailable, report the
-limitation and use verified version-compatible references.
+Open the agent-guide URL printed by top-level help, including its stderr output. Follow the official
+guide's instructions for selecting the current compatible guide and references. If it cannot be
+accessed, report that limitation rather than guessing its instructions.
 
-Keep these Guard workflow rules:
+The official guide owns Dispat command usage, configuration, testing, CI/CD releases, and recovery.
+This page is only a handoff: do not copy those instructions here or pin an upstream guide URL or
+version. Dispat guidance updates belong upstream and do not require changes to this page.
 
-- **Release only through the repository's established CI/CD workflow.** Agents prepare changes, run
-  non-publishing checks, and monitor results. Do not execute releases or retries locally, or bypass
-  the pipeline through script helpers, manual publishing, release tags, or release records.
-- **Change Dispat configuration only when directly instructed.** Inspection or a release request
-  does not itself authorize changes to scripts, hooks, credentials, lock settings, or release
-  policy.
-- **Use explicit help for discovery.** Bare `dispat` starts a release; use `dispat status` to
-  inspect the plan. Check what configured scripts do before executing them.
-
-See [Dispat release protection](dispat.md) for Guard's command coverage. Guard approval does not
-replace the CI/CD requirement; the extension itself does not enforce a CI-only execution policy.
+See [Dispat release protection](dispat.md) for Guard-specific command coverage and limitations.
