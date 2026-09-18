@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "695899ead5c8369287f9ad98ce6a7d095f01b1a8662495a50e86c239399cfa32",
+  "catalog_digest": "bd7c7d47a6ff024c9b6097d9df2a5254adb12a9c8b22f6b6c4ecae9df8b2d7d3",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 70,
+  "extension_count": 71,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -43,6 +43,7 @@
     "command.database.redis",
     "command.database.sqlite",
     "command.database.supabase",
+    "command.dispat",
     "command.dns.aws",
     "command.dns.azure",
     "command.dns.gcp",
@@ -96,7 +97,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 247,
+  "permission_count": 248,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -144,6 +145,7 @@
     "command.database.redis.permission.delete": "redis-cli --scan --pattern 'session:*' | xargs redis-cli del",
     "command.database.sqlite.permission.restore": "sqlite3 app.db '.restore backup.sql'",
     "command.database.supabase.permission.reset": "supabase db reset",
+    "command.dispat.permission.release": "dispat release",
     "command.dns.aws.permission.dnssec-disable": "aws route53 disable-hosted-zone-dnssec --hosted-zone-id Z123",
     "command.dns.aws.permission.health-check-deletion": "aws route53 delete-health-check --health-check-id abc",
     "command.dns.aws.permission.record-change": "aws route53 change-resource-record-sets --hosted-zone-id Z123 --change-batch file://change.json",
@@ -489,6 +491,7 @@
     "command.database.redis.permission.delete",
     "command.database.sqlite.permission.restore",
     "command.database.supabase.permission.reset",
+    "command.dispat.permission.release",
     "command.dns.aws.permission.dnssec-disable",
     "command.dns.aws.permission.health-check-deletion",
     "command.dns.aws.permission.record-change",
@@ -701,7 +704,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -749,6 +752,7 @@
     "command.database.redis.delete",
     "command.database.sqlite.restore",
     "command.database.supabase.reset",
+    "command.dispat.release",
     "command.dns.aws.zone-deletion",
     "command.dns.aws.record-change",
     "command.dns.aws.health-check-deletion",
