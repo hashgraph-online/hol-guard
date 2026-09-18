@@ -1,0 +1,79 @@
+name: Installed timing comparison
+
+on:
+  pull_request:
+    paths:
+      - "scripts/ci/compare_installed_timing.py"
+      - "ci/native_runtime/test_installed_timing_comparison.py"
+      - ".github/workflows/installed-timing-comparison.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evidence-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - run: python -m unittest ci.native_runtime.test_installed_timing_comparison -v
+
+  installed-comparison:
+    needs: evidence-contract
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify the unchanged benchmark and dependency baseline
+        run: |
+          git fetch --no-tags --depth=1 origin 90807163965d829f704bc5fa1d52e6908fd9f70e
+          git diff --exit-code 90807163965d829f704bc5fa1d52e6908fd9f70e -- scripts/bench_guard_native_installed_slo.py scripts/bench_guard_native_installed_slo_runtime.py scripts/native_slo_adapter.py scripts/native_slo_session.py scripts/native_slo_capacity.py scripts/native_slo_baseline.py scripts/native_slo_contract.py scripts/native_slo_reporting.py ci/native_runtime/probe_native_default_auto.py docs/guard/contracts/hook-data-plane-ownership.v2.json pyproject.toml uv.lock
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - name: Install the same locked dependencies
+        run: |
+          uv sync --frozen --extra dev --python 3.12
+          uv pip uninstall --python .venv/bin/python hol-guard
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: hol-guard-native-wheel-x86_64-apple-darwin
+          repository: ${{ github.repository }}
+          run-id: 35292511646
+          github-token: ${{ github.token }}
+          path: retained-builds/previous
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: hol-guard-native-wheel-x86_64-apple-darwin
+          repository: ${{ github.repository }}
+          run-id: 35296190719
+          github-token: ${{ github.token }}
+          path: retained-builds/current
+      - name: Run the fixed comparison schedule
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+        run: .venv/bin/python scripts/ci/compare_installed_timing.py --artifacts retained-builds --output timing-observations
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: installed-timing-observations
+          path: timing-observations/*.json
+          if-no-files-found: error
