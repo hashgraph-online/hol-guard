@@ -24,38 +24,9 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.cloud_sync_consent_fixture import allow_optional_activity
+from tests.cloud_sync_existing_setup import seed_guard_cloud_without_keys as _seed_guard_cloud
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
-
-
-def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
-    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-
-    dpop_key_material = generate_dpop_key_pair()
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token=token,
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id=workspace_id,
-        now=now,
-    )
-    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
-    guard_runner_module._test_sync_auth_context_override = {
-        "sync_url": effective_sync_url,
-        "access_token": token,
-        "dpop_key_material": None,
-    }
 
 
 def _signed_runtime_status_policy_bundle(*, workspace_id: str) -> dict[str, object]:
@@ -268,13 +239,14 @@ def test_sync_guard_events_records_failed_backoff_without_dropping_pending_event
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    _seed_guard_cloud(store, workspace_id="00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     store.add_guard_event_v1(
         build_runtime_session_event(
             session_id="session-1",
             occurred_at="2026-04-24T00:00:00+00:00",
             payload={"sessionSecret": "sk-live-secret-token"},
-            workspace_id="workspace-alpha",
+            workspace_id="00000000-0000-4000-8000-000000000042",
             device_id="device-1",
         )
     )
@@ -341,14 +313,15 @@ def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavaila
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    _seed_guard_cloud(store, workspace_id="00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     for index in range(250):
         store.add_guard_event_v1(
             build_runtime_session_event(
                 session_id=f"session-{index}",
                 occurred_at=f"2026-04-24T00:{index // 60:02d}:{index % 60:02d}+00:00",
                 payload={"index": index},
-                workspace_id="workspace-alpha",
+                workspace_id="00000000-0000-4000-8000-000000000042",
                 device_id="device-1",
             )
         )
@@ -380,7 +353,8 @@ def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavaila
 
 def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    _seed_guard_cloud(store, workspace_id="00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     store.set_sync_payload(
         "guard_events_v1_summary",
         {
@@ -1243,13 +1217,14 @@ def test_sync_guard_events_preserves_pending_events_when_rate_limited(
 ) -> None:
     """On HTTP 429, events must remain pending and the summary must report rate-limited state."""
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    _seed_guard_cloud(store, workspace_id="00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     store.add_guard_event_v1(
         build_runtime_session_event(
             session_id="session-rate-limited",
             occurred_at="2026-06-25T00:00:00+00:00",
             payload={"test": "rate_limit"},
-            workspace_id="workspace-alpha",
+            workspace_id="00000000-0000-4000-8000-000000000042",
             device_id="device-1",
         )
     )

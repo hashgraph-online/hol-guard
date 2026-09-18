@@ -18,43 +18,10 @@ from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySna
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
-
-
-def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-
-def _build_codex_fixture(home_dir: Path, workspace_dir: Path) -> None:
-    _write_text(
-        home_dir / ".codex" / "config.toml",
-        """
-[mcp_servers.global_tools]
-command = "python"
-args = ["-m", "http.server", "9000"]
-""".strip()
-        + "\n",
-    )
-    _write_text(
-        workspace_dir / ".codex" / "config.toml",
-        """
-[mcp_servers.workspace_skill]
-command = "node"
-args = ["workspace-skill.js"]
-""".strip()
-        + "\n",
-    )
-
-
-def _seed_inventory(store: GuardStore, artifact: GuardArtifact, *, now: str) -> None:
-    store.record_inventory_artifact(
-        artifact=artifact,
-        artifact_hash="hash-1",
-        policy_action="allow",
-        changed=False,
-        now=now,
-        approved=True,
-    )
+from tests.cloud_sync_consent_fixture import allow_optional_activity
+from tests.cloud_sync_existing_setup import build_codex_fixture as _build_codex_fixture
+from tests.cloud_sync_existing_setup import seed_inventory as _seed_inventory
+from tests.cloud_sync_existing_setup import write_text as _write_text
 
 
 @pytest.mark.parametrize("content_status", ["accepted", "missing_endpoint"])
@@ -78,7 +45,8 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
     _write_text(workspace / "AGENTS.md", instruction_body.decode())
     context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=tmp_path / "guard")
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
     monkeypatch.setattr(
         aibom_cli,
@@ -326,7 +294,8 @@ def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypat
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     now = "2026-06-10T13:00:00+00:00"
     store.set_sync_payload(
         "aibom_sync_summary",
@@ -344,12 +313,13 @@ def test_sync_aibom_snapshots_if_due_rejects_changed_workspace(tmp_path: Path, m
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-beta")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000043")
+    allow_optional_activity(store)
 
     summary = sync_aibom_snapshots_if_due(
         store,
         generated_at="2026-06-10T13:00:00+00:00",
-        expected_workspace_id="workspace-alpha",
+        expected_workspace_id="00000000-0000-4000-8000-000000000042",
     )
 
     assert summary == {
@@ -363,7 +333,8 @@ def test_sync_aibom_snapshots_if_due_binds_current_workspace(tmp_path: Path, mon
     from codex_plugin_scanner.guard import aibom_cli
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-alpha")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     calls: list[dict[str, object]] = []
 
     def _fake_sync(*_args: object, **kwargs: object) -> dict[str, object]:
@@ -379,14 +350,15 @@ def test_sync_aibom_snapshots_if_due_binds_current_workspace(tmp_path: Path, mon
     )
 
     assert summary == {"synced": True}
-    assert calls[0]["expected_workspace_id"] == "workspace-alpha"
+    assert calls[0]["expected_workspace_id"] == "00000000-0000-4000-8000-000000000042"
 
 
 def test_sync_aibom_snapshots_if_due_skips_recent_empty_sync(tmp_path: Path, monkeypatch) -> None:
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     now = "2026-06-10T12:03:00+00:00"
     store.set_sync_payload(
         "aibom_sync_summary",
@@ -413,7 +385,8 @@ def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     calls: list[str] = []
 
     def _fake_sync(*_args, **_kwargs):
@@ -446,7 +419,8 @@ def test_sync_aibom_snapshots_if_due_force_bypasses_recent_sync(
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     calls: list[str] = []
 
     def _fake_sync(*_args, **_kwargs):
@@ -691,7 +665,8 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     store.set_sync_payload(
         "guard_events_v1_summary",
         {"synced_at": "2026-06-10T11:00:00+00:00", "events": 12, "accepted": 12},
@@ -752,7 +727,8 @@ def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     snapshots = tuple(
         GuardAgentInventorySnapshot(
             snapshot_id=f"snapshot-{index}",
@@ -827,7 +803,8 @@ def test_sync_aibom_snapshots_skips_oversized_snapshot_and_syncs_valid_snapshot(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -912,7 +889,8 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -999,7 +977,8 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -1155,7 +1134,8 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, mon
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "00000000-0000-4000-8000-000000000042")
+    allow_optional_activity(store)
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=tmp_path / "workspace",

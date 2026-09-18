@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ..action_lattice import is_action_bearing_key, normalize_guard_action_result
-from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
 from ..redaction import redact_sensitive_text, redact_text
 from ..review_contracts import (
     GuardReviewContractError,
@@ -20,7 +19,6 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
-from ..synced_policy import validated_synced_policy_bundle
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from .env_wrapper import parse_env_wrapper
 
@@ -348,18 +346,9 @@ def _local_request_snapshot_next_cursor(
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
-    policy_bundle = validated_synced_policy_bundle(store)
-    if policy_bundle is not None:
-        level = policy_bundle.get("receiptRedactionLevel")
-        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
-            return level
-    try:
-        config = load_guard_config(store.guard_home)
-        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-            return config.receipt_redaction_level
-    except (OSError, ValueError):
-        pass
-    return "full"
+    from .workspace_preferences import effective_receipt_redaction_level
+
+    return effective_receipt_redaction_level(store)
 
 
 def _optional_string(value: object) -> str | None:

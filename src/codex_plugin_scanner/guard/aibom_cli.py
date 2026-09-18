@@ -146,6 +146,10 @@ def sync_aibom_snapshots(
     expected_workspace_id: str | None = None,
 ) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
+    from .runtime.workspace_preferences import optional_upload_allowed
+
+    if not optional_upload_allowed(store):
+        return {"synced": False, "skipped": True, "reason": "optional_upload_paused"}
     runner = _runner_module()
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 

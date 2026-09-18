@@ -147,6 +147,10 @@ def sync_aibom_snapshots_if_due(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     """Apply connection and freshness checks before invoking the existing sync API."""
+    from .runtime.workspace_preferences import optional_upload_allowed
+
+    if not optional_upload_allowed(store):
+        return {"synced": False, "skipped": True, "reason": "optional_upload_paused"}
     from . import aibom_cli as api
 
     runner = api._runner_module()

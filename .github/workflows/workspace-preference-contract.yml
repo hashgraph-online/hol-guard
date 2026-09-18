@@ -1,0 +1,103 @@
+name: Workspace preference contract
+on:
+  pull_request:
+    paths:
+      - 'src/codex_plugin_scanner/guard/runtime/workspace_*.py'
+      - 'src/codex_plugin_scanner/guard/runtime/runner.py'
+      - 'src/codex_plugin_scanner/guard/runtime/receipt_sync_cursor.py'
+      - 'src/codex_plugin_scanner/guard/runtime/local_request_snapshots.py'
+      - 'src/codex_plugin_scanner/guard/aibom_cli.py'
+      - 'src/codex_plugin_scanner/guard/aibom_commands.py'
+      - 'tests/test_workspace_preference*.py'
+      - '.github/workflows/workspace-preference-contract.yml'
+  push:
+    branches: ['hgp/workspace-preference-contract']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: workspace-preferences-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preference-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
+          save-cache: false
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --python '${{ matrix.python }}'
+      - name: Reproduce pending-row loss with the previous initial selection
+        if: matrix.python == '3.12'
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python - <<'PYBASE'
+          from pathlib import Path
+          path = Path('src/codex_plugin_scanner/guard/runtime/receipt_sync_cursor.py')
+          text = path.read_text()
+          current = 'return store.list_receipts_since_rowid(after_rowid=None, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)'
+          assert text.count(current) == 1
+          path.write_text(text.replace(current, 'return store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)'))
+          PYBASE
+          set +e
+          uv run --no-sync pytest tests/test_workspace_preference_runtime.py::test_initial_cursor_never_skips_unsent_rows_after_first_batch_withdrawal --tb=short --junitxml=preference-baseline.xml
+          status=$?
+          set -e
+          git restore src/codex_plugin_scanner/guard/runtime/receipt_sync_cursor.py
+          test "$status" -ne 0
+          python - <<'PYBASE'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('preference-baseline.xml').getroot().findall('.//testcase')
+          assert len(cases) == 1 and cases[0].find('error') is None
+          failure = cases[0].find('failure')
+          assert failure is not None and 'an unsent row must remain beyond the durable cursor' in (failure.text or '')
+          PYBASE
+      - name: Verify real preference storage and policy synchronization
+        env:
+          PYTHONPATH: src:.
+        run: uv run --no-sync pytest tests/test_workspace_preferences.py tests/test_workspace_preference_runtime.py --tb=short --junitxml=preference-contract.xml
+      - name: Verify existing optional and mandatory synchronization paths
+        if: matrix.python == '3.12'
+        env:
+          PYTHONPATH: src:.
+        run: |
+          uv run --no-sync pytest --tb=short --junitxml=preference-existing.xml \
+            tests/test_guard_cloud_local_sync.py tests/test_guard_settings_sync_preservation.py \
+            tests/test_policy_bundle_sync_outcomes.py tests/test_policy_sync_truth.py \
+            tests/test_guard_review_key_sync.py tests/test_guard_aibom_cli.py \
+            tests/test_guard_aibom_content_upload.py tests/test_guard_aibom_content_upload_batches.py \
+            tests/test_guard_events.py
+      - name: Check actual source and test types
+        if: matrix.python == '3.12'
+        run: |
+          uv run --no-sync basedpyright --level error \
+            src/codex_plugin_scanner/guard/runtime/workspace_preferences.py \
+            src/codex_plugin_scanner/guard/runtime/workspace_optional_sync.py \
+            src/codex_plugin_scanner/guard/runtime/runner.py \
+            src/codex_plugin_scanner/guard/runtime/receipt_sync_cursor.py \
+            src/codex_plugin_scanner/guard/runtime/local_request_snapshots.py \
+            src/codex_plugin_scanner/guard/aibom_cli.py \
+            src/codex_plugin_scanner/guard/aibom_commands.py \
+            tests/test_workspace_preferences.py tests/test_workspace_preference_runtime.py
+      - name: Retain bounded test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: workspace-preference-contract-${{ matrix.python }}
+          path: preference-*.xml
+          if-no-files-found: error
+          retention-days: 7

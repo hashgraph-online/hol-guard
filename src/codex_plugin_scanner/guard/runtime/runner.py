@@ -144,11 +144,16 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
-from .optional_telemetry_sync import PainSignalSyncError, sync_nonessential_telemetry
+from .optional_telemetry_sync import PainSignalSyncError
 from .policy_runtime_posture import cloud_policy_runtime_posture, local_policy_runtime_posture
 from .policy_sync_acknowledgement import validated_upload_policy_acknowledgement
 from .prompt_injection import detect_prompt_injection_requests
-from .receipt_sync_cursor import _receipt_sync_cursor_rowid, _receipt_sync_rows_for_upload
+from .receipt_sync_cursor import (
+    _persist_receipt_sync_cursor,
+    _receipt_sync_cursor_rowid,
+    _receipt_sync_cursor_rowids_from_batch,
+    _receipt_sync_rows_for_upload,
+)
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
@@ -160,6 +165,13 @@ from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 from .sync_response import InvalidSyncResponseError, read_sync_object
 from .telemetry_upload_progress import persist_pain_signal_cursor, record_guard_events_sync_failure
+from .workspace_optional_sync import prepare_receipt_batch, sync_nonessential_telemetry
+from .workspace_preferences import (
+    effective_receipt_redaction_level,
+    optional_upload_allowed,
+    preference_sync_context,
+    receipt_upload_accepted,
+)
 
 _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
@@ -2611,7 +2623,8 @@ def sync_receipts(
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
-    _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
+    if optional_upload_allowed(store):
+        _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     cursor_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
@@ -2621,6 +2634,9 @@ def sync_receipts(
         redaction_level=redaction_level,
         synced_at=local_guard_online_at,
     )
+    if not optional_upload_allowed(store):
+        receipts, command_detail_backfill_marker = [], None
+    request_workspace_id = store.get_cloud_workspace_id()
     inventory = store.list_inventory()
     payload: dict[str, object] = {}
     receipts_stored_total = 0
@@ -2641,22 +2657,29 @@ def sync_receipts(
         device_id=device_id,
         device_name=device_name,
     )
+    sync_context.update(preference_sync_context(store))
     latest_uploaded_rowid: int | None = None
+    upload_accepted = False
     auth_refresh_retried = False
     persisted_command_detail_backfill_marker = command_detail_backfill_marker
+
+    def prepare_batch(rows: list[dict[str, object]]) -> tuple[list[dict[str, object]], bytes, bool]:
+        return prepare_receipt_batch(
+            store,
+            workspace_id=request_workspace_id,
+            receipt_batch=rows,
+            sync_context=sync_context,
+            serialize=lambda batch, level: _cloud_sync_receipts_payload(
+                batch,
+                store=store,
+                device_id=device_id,
+                device_name=device_name,
+                redaction_level=level,
+            ),
+        )
+
     for receipt_batch in _iter_receipt_sync_batches(receipts):
-        body = json.dumps(
-            {
-                "receipts": _cloud_sync_receipts_payload(
-                    receipt_batch,
-                    store=store,
-                    device_id=device_id,
-                    device_name=device_name,
-                    redaction_level=redaction_level,
-                ),
-                "syncContext": sync_context,
-            }
-        ).encode("utf-8")
+        receipt_batch, body, optional_batch_paused = prepare_batch(receipt_batch)
         request = _guard_sync_request(
             resolved_auth_context,
             request_url=sync_url,
@@ -2678,6 +2701,8 @@ def sync_receipts(
                     sync_url = _normalized_receipts_sync_url(
                         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
                     )
+                    receipt_batch, body, retry_paused = prepare_batch(receipt_batch)
+                    optional_batch_paused = optional_batch_paused or retry_paused
                     request = _guard_sync_request(
                         resolved_auth_context,
                         request_url=sync_url,
@@ -2715,32 +2740,39 @@ def sync_receipts(
                 raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
-        cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
-            receipt_batch,
-            cursor_receipt_ids=cursor_receipt_ids,
+        upload_accepted = receipt_upload_accepted(
+            store,
+            payload,
+            workspace_id=request_workspace_id,
+            sent_revision=sync_context.get("workspacePreferenceRevision"),
         )
-        for rowid in cursor_batch_rowids:
-            if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
-                latest_uploaded_rowid = rowid
-        batch_synced_at = _sync_timestamp(payload)
-        updated_command_detail_backfill_marker = _advance_command_detail_backfill_marker(
-            persisted_command_detail_backfill_marker,
-            receipt_batch=receipt_batch,
-            synced_at=batch_synced_at,
-        )
-        if updated_command_detail_backfill_marker is not None:
-            persisted_command_detail_backfill_marker = updated_command_detail_backfill_marker
-            store.set_sync_payload(
-                _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
-                persisted_command_detail_backfill_marker,
-                batch_synced_at,
+        if upload_accepted:
+            cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
+                receipt_batch,
+                cursor_receipt_ids=cursor_receipt_ids,
             )
-        if latest_uploaded_rowid is not None:
-            _persist_receipt_sync_cursor(
-                store=store,
-                latest_uploaded_rowid=latest_uploaded_rowid,
+            for rowid in cursor_batch_rowids:
+                if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
+                    latest_uploaded_rowid = rowid
+            batch_synced_at = _sync_timestamp(payload)
+            updated_command_detail_backfill_marker = _advance_command_detail_backfill_marker(
+                persisted_command_detail_backfill_marker,
+                receipt_batch=receipt_batch,
                 synced_at=batch_synced_at,
             )
+            if updated_command_detail_backfill_marker is not None:
+                persisted_command_detail_backfill_marker = updated_command_detail_backfill_marker
+                store.set_sync_payload(
+                    _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+                    persisted_command_detail_backfill_marker,
+                    batch_synced_at,
+                )
+            if latest_uploaded_rowid is not None:
+                _persist_receipt_sync_cursor(
+                    store=store,
+                    latest_uploaded_rowid=latest_uploaded_rowid,
+                    synced_at=batch_synced_at,
+                )
         batch_receipts_stored = payload.get("receiptsStored")
         if isinstance(batch_receipts_stored, int):
             receipts_stored_total += batch_receipts_stored
@@ -2763,6 +2795,8 @@ def sync_receipts(
             alert_preferences_payload = alert_preferences
         if "reviewVerificationKeys" in payload:
             review_verification_keys_payload = payload.get("reviewVerificationKeys")
+        if not upload_accepted or optional_batch_paused:
+            break
     now = _sync_timestamp(payload)
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -2774,18 +2808,13 @@ def sync_receipts(
             aibom_context["workspace_id"] = workspace_id
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
-    if persisted_command_detail_backfill_marker is not None:
+    if upload_accepted and persisted_command_detail_backfill_marker is not None:
         store.set_sync_payload(
             _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
             persisted_command_detail_backfill_marker,
             now,
         )
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
-    _persist_receipt_sync_cursor(
-        store=store,
-        latest_uploaded_rowid=persisted_cursor_rowid,
-        synced_at=now,
-    )
     deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
     # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
     # legacy unsigned siblings. They may be present on an authenticated HTTPS
@@ -3137,15 +3166,12 @@ def sync_receipts(
                         },
                         now,
                     )
-                cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                if upload_accepted and optional_upload_allowed(store):
                     _persist_cloud_receipt_redaction_level(
                         store,
-                        level=cloud_redaction_level,
+                        level=effective_receipt_redaction_level(store),
                         synced_at=now,
                     )
-                else:
-                    _reset_cloud_receipt_redaction_authority(store, synced_at=now)
         except ApprovalGateError as error:
             cloud_exception_items = []
             remote_policy_sync_blocked = True
@@ -3566,6 +3592,8 @@ def sync_guard_events(
 ) -> dict[str, object]:
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
+    if not optional_upload_allowed(store, telemetry=True):
+        return {"events": 0, "accepted": 0, "sync_skipped": True, "sync_reason": "optional_upload_paused"}
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
@@ -3924,6 +3952,8 @@ def sync_pain_signals(
     *,
     auth_context: dict[str, object] | None = None,
 ) -> int:
+    if not optional_upload_allowed(store, telemetry=True):
+        return 0
     try:
         resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
     except GuardSyncAuthorizationExpiredError:
@@ -5740,14 +5770,6 @@ def _advance_command_detail_backfill_marker(
     return updated_marker
 
 
-def _receipt_sync_cursor_rowids_from_batch(
-    receipt_batch: Sequence[Mapping[str, object]],
-    *,
-    cursor_receipt_ids: set[object],
-) -> list[object]:
-    return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
-
-
 def _validated_policy_bundle_acknowledgement(
     store: GuardStore,
     *,
@@ -5802,21 +5824,6 @@ def _receipt_sync_context(
     if runtime_synced_at is not None:
         context["lastRuntimeSyncAt"] = runtime_synced_at
     return context
-
-
-def _persist_receipt_sync_cursor(
-    *,
-    store: GuardStore,
-    latest_uploaded_rowid: int | None,
-    synced_at: str,
-) -> None:
-    if latest_uploaded_rowid is None:
-        return
-    payload: dict[str, object] = {
-        "last_rowid": latest_uploaded_rowid,
-        "synced_at": synced_at,
-    }
-    store.set_sync_payload("receipt_sync_cursor", payload, synced_at)
 
 
 _RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
@@ -5942,18 +5949,7 @@ def _ensure_relaxed_receipt_redaction_resync(
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
-    """Resolve the receipt redaction level for cloud sync.
-
-    A cloud relaxation is authoritative only while its signed policy bundle
-    remains valid. The separately persisted level is cursor bookkeeping, not
-    an authority source, because it can outlive or be detached from a bundle.
-    """
-    policy_bundle = validated_synced_policy_bundle(store)
-    if policy_bundle is not None:
-        level = policy_bundle.get("receiptRedactionLevel")
-        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
-            return level
-    return local_receipt_redaction_level(store.guard_home)
+    return effective_receipt_redaction_level(store)
 
 
 def _cloud_sync_command_display_part(value: str) -> str:
