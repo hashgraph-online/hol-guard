@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.keibidrop",
       "command.mcp-filesystem",
       "command.noodle",
       "command.ollama",
