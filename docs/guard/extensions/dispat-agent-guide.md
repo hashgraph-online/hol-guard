@@ -9,10 +9,11 @@ dispat --help
 ```
 
 Open the agent-guide URL printed by top-level help, including its stderr output. Follow that guide's
-instructions for selecting compatible guide updates, and use the configuration and API references
-provided by the installed binary. If no guide link is available, report the limitation and verify
-compatible upstream documentation before relying on it. Do not substitute a link to `main` or assume
-another version's commands apply.
+instructions for selecting compatible guide and documentation patches on the installed CLI's
+major/minor line; their patch numbers are independent. Keep the help-linked configuration and API
+references when checking the binary's implemented contract. Do not substitute `main`, Next, or a
+prerelease for a stable installation. If links or update checks are unavailable, report the
+limitation and use verified version-compatible references.
 
 Keep these Guard workflow rules:
 

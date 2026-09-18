@@ -113,6 +113,8 @@ QUIET_COMMANDS = (
     "dispat -hpapi release",
     "dispat preview --package core",
     "dispat run build",
+    "dispat run build -- --help",
+    "dispat exec build -- --help",
     "dispat build",
     "dispat Release",
     "dispat init",
@@ -140,6 +142,7 @@ def test_previews_help_and_other_commands_stay_quiet(command: str, tmp_path: Pat
         "dispat release --dry-run",
         "dispat --help=maybe",
         "dispat release -- --help",
+        "dispat -- --help",
         'dispat "release',
     ),
 )

@@ -54,7 +54,7 @@ def _release_intent(arguments: tuple[str, ...]) -> str | None:
         argument = arguments[index]
         if argument == "--":
             if index + 1 < len(arguments):
-                return "Uncertain release invocation: release does not forward arguments."
+                return "Uncertain release invocation: arguments after -- are not evaluated for release intent."
             break
         if not argument.startswith("-") or argument == "-":
             if not operands and argument != "release":
