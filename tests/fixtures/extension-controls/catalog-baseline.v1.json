@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "7e0b77350bbf50331ce2c622ff1aaa92fa7147769ff48a2a2f305a4c7b5182ae",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -79,6 +79,7 @@
     "command.platform.netlify",
     "command.platform.vercel",
     "command.probe",
+    "command.promptbranch",
     "command.remote.essh",
     "command.remote.rsync",
     "command.remote.scp",
@@ -97,7 +98,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 252,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -295,6 +296,10 @@
     "command.probe.permission.request-output": "probe request run api.yml items/0 --output response.json",
     "command.probe.permission.request-run": "probe request run api.yml items/0 --environment production",
     "command.probe.permission.request-write": "probe request set api.yml items/0 --method POST",
+    "command.promptbranch.permission.add-note": "promptbranch add-note",
+    "command.promptbranch.permission.import": "promptbranch import",
+    "command.promptbranch.permission.publish": "promptbranch publish",
+    "command.promptbranch.permission.report-run": "promptbranch report-run",
     "command.remote.essh.permission.cache-removal": "essh keys remove deploy-key",
     "command.remote.essh.permission.group-execution": "essh run web -- sudo systemctl restart api",
     "command.remote.rsync.permission.deletion": "rsync --del",
@@ -641,6 +646,10 @@
     "command.probe.permission.request-output",
     "command.probe.permission.request-run",
     "command.probe.permission.request-write",
+    "command.promptbranch.permission.add-note",
+    "command.promptbranch.permission.import",
+    "command.promptbranch.permission.publish",
+    "command.promptbranch.permission.report-run",
     "command.remote.essh.permission.cache-removal",
     "command.remote.essh.permission.group-execution",
     "command.remote.rsync.permission.deletion",
@@ -704,7 +713,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 238,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -888,6 +897,10 @@
     "command.probe.folder-delete",
     "command.probe.environment-write",
     "command.probe.environment-delete",
+    "command.promptbranch.publish",
+    "command.promptbranch.import",
+    "command.promptbranch.add-note",
+    "command.promptbranch.report-run",
     "command.remote.essh.group-execution",
     "command.remote.essh.cache-removal",
     "command.remote.rsync.remote-shell",
