@@ -61,7 +61,9 @@ class TestSourceReadCacheMaterial:
 class TestSourceTargetId:
     def test_same_material_returns_same_target_id(self, cache: HookDecisionCache) -> None:
         m = _material()
-        assert cache.source_target_id(m) == cache.source_target_id(m)
+        first = cache.source_target_id(m)
+        second = cache.source_target_id(m)
+        assert first == second
 
     def test_different_harness_different_target_id(self, cache: HookDecisionCache) -> None:
         m1 = _material(harness="pi")
@@ -77,7 +79,9 @@ class TestSourceTargetId:
 class TestSourceInputHash:
     def test_same_material_returns_same_input_hash(self, cache: HookDecisionCache) -> None:
         m = _material()
-        assert cache.source_input_hash(m) == cache.source_input_hash(m)
+        first = cache.source_input_hash(m)
+        second = cache.source_input_hash(m)
+        assert first == second
 
     def test_content_hash_change_causes_different_hash(self, cache: HookDecisionCache) -> None:
         m1 = _material(content_sha256="aaa")

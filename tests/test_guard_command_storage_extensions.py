@@ -132,6 +132,56 @@ STORAGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage.aws-s3.website",
     ),
     (
+        "aws s3api put-object --bucket archive --key private.json --body ./out",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.object-write",
+    ),
+    (
+        "aws s3api copy-object --bucket archive --key copy.json --copy-source archive/private.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.object-write",
+    ),
+    (
+        "aws s3api put-bucket-policy --bucket archive --policy file://policy.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.access-control",
+    ),
+    (
+        "aws s3api put-public-access-block --bucket archive --public-access-block-configuration BlockPublicAcls=true",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.access-control",
+    ),
+    (
+        "aws s3api put-bucket-versioning --bucket archive --versioning-configuration Status=Enabled",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.bucket-configuration",
+    ),
+    (
+        "aws s3api update-bucket-metadata-annotation-table-configuration --bucket archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.bucket-configuration",
+    ),
+    (
+        "aws s3api put-object-tagging --bucket archive --key private.json --tagging TagSet=[{Key=env,Value=prod}]",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.object-tagging",
+    ),
+    (
+        "aws s3api delete-bucket-policy --bucket archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.deletion",
+    ),
+    (
+        "aws s3api create-bucket --bucket archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.mb",
+    ),
+    (
+        "aws s3api get-object --bucket archive --key private.json outfile.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.download",
+    ),
+    (
         "gcloud storage cp ./out gs://archive/private.json",
         "Google storage destructive command",
         "command.storage.google-cloud.cp",
@@ -168,6 +218,12 @@ STORAGE_SAFE_COMMANDS: tuple[str, ...] = (
     "aws s3 sync ./out s3://archive --dryrun",
     "aws s3 ls s3://archive",
     "aws --future-global-option account s3 ls s3://archive",
+    "aws s3api list-objects-v2 --bucket archive",
+    "aws s3api head-object --bucket archive --key private.json",
+    "aws s3api head-bucket --bucket archive",
+    "aws s3api put-object --generate-cli-skeleton input",
+    "aws s3api delete-objects --generate-cli-skeleton output",
+    "aws s3api put-bucket-policy --generate-cli-skeleton yaml-input",
     "gcloud storage ls gs://archive",
     "gcloud --filter active storage ls gs://archive",
     "az storage blob list --container-name archive",
@@ -215,6 +271,7 @@ def test_storage_safe_segment_does_not_hide_later_deletion(tmp_path: Path) -> No
 def test_storage_read_permissions_keep_executable_matchers() -> None:
     read_rule_ids = {
         "command.storage.aws-s3.ls",
+        "command.storage.aws-s3.get",
         "command.storage.google-cloud.ls",
         "command.storage.google-cloud.cat",
         "command.storage.azure-blob.list",
@@ -239,6 +296,12 @@ def test_storage_catalog_lists_supported_terminal_commands() -> None:
             "aws s3 presign",
             "aws s3 sync",
             "aws s3 website",
+            "aws s3api put-object",
+            "aws s3api put-bucket-policy",
+            "aws s3api put-bucket-versioning",
+            "aws s3api put-object-tagging",
+            "aws s3api get-object",
+            "aws s3api head-object",
         },
         "command.storage.google-cloud": {
             "gcloud storage rm",

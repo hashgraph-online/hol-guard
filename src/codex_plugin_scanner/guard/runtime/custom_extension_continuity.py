@@ -275,10 +275,12 @@ def record_local_custom_extension_mutation(
         raise CustomExtensionContinuityError("local continuity state changed during local mutation") from error
 
 
-def _parse_observation(value: object) -> dict[str, object]:
+def _validated_observation_frame(value: object, *, schema_version: str) -> tuple[dict[str, object], list[object]]:
+    """Validate the shared observation frame and return (payload, raw items)."""
+
     if not isinstance(value, dict) or set(value) != _TOP_LEVEL_FIELDS:
         raise CustomExtensionContinuityError("continuity observation contains unsupported fields")
-    if value.get("schemaVersion") != CUSTOM_EXTENSION_CONTINUITY_SCHEMA:
+    if value.get("schemaVersion") != schema_version:
         raise CustomExtensionContinuityError("unsupported continuity observation schema")
     revision = value.get("revision")
     if type(revision) is not int or cast(int, revision) < 1:
@@ -292,6 +294,11 @@ def _parse_observation(value: object) -> dict[str, object]:
     raw_items = value.get("items")
     if not isinstance(raw_items, list) or len(raw_items) > _MAX_ITEMS:
         raise CustomExtensionContinuityError("continuity item limit exceeded")
+    return value, cast(list[object], raw_items)
+
+
+def _parse_observation(value: object) -> dict[str, object]:
+    payload, raw_items = _validated_observation_frame(value, schema_version=CUSTOM_EXTENSION_CONTINUITY_SCHEMA)
     items: list[dict[str, object]] = []
     seen: set[str] = set()
     for raw_item in raw_items:
@@ -305,7 +312,7 @@ def _parse_observation(value: object) -> dict[str, object]:
             raise CustomExtensionContinuityError("invalid continuity identity hash")
         seen.add(cli_id)
         items.append({"cliId": cli_id, "identityHash": identity_hash, "settings": _settings(raw_item.get("settings"))})
-    return {**value, "items": items}
+    return {**payload, "items": items}
 
 
 def _identity_from_local(local: dict[str, object]) -> UnlistedCliIdentity:

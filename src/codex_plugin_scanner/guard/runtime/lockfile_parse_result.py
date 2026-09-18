@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from ..stable_digest import stable_digest_hex
 from .jsonc import loads_jsonc
+from .lockfile_text_projection import TextLockfileValidationError, parse_text_lockfile
 from .package_manifest_diff import _DeadlineExceededError
 
 if TYPE_CHECKING or sys.version_info >= (3, 11):
@@ -61,15 +62,30 @@ class LockfileParseResult:
     warnings: tuple[str, ...] = ()
     error_reason: str | None = None
     parser_version: str = LOCKFILE_PARSER_VERSION
+    manifest_dependencies: tuple[tuple[str, str], ...] | None = None
+    direct_version_candidates: tuple[tuple[str, str], ...] = ()
+    yarn_selector_versions: tuple[tuple[tuple[str, ...], str], ...] = ()
+    source_hash_complete: bool = True
+    source_byte_count: int | None = None
+    source_byte_limit: int | None = None
 
     def dependency_map(self) -> dict[str, str]:
         if not self.complete:
             return {}
         return {entry.dependency_path: entry.version for entry in self.entries}
 
+    def manifest_dependency_map(self) -> dict[str, str]:
+        if not self.complete:
+            return {}
+        if self.manifest_dependencies is not None:
+            return dict(self.manifest_dependencies)
+        return self.dependency_map()
+
 
 class DependencyMapParser(Protocol):
-    def __call__(self, path: str, text: str, *, deadline: float) -> dict[str, str]: ...
+    def __call__(
+        self, path: str, text: str, *, deadline: float, document: dict[str, object] | None = None
+    ) -> dict[str, str]: ...
 
 
 class PackageLockParser(Protocol):
@@ -78,6 +94,7 @@ class PackageLockParser(Protocol):
         text: str,
         *,
         deadline: float | None = None,
+        document: dict[str, object] | None = None,
     ) -> list[tuple[str, str, str, bool]]: ...
 
 
@@ -94,15 +111,23 @@ def incomplete_lockfile_result(
     error_reason: str,
     budget_ms: float,
     elapsed_ms: float = 0.0,
+    source_hash: str | None = None,
+    source_hash_complete: bool = True,
+    source_byte_count: int | None = None,
+    source_byte_limit: int | None = None,
 ) -> LockfileParseResult:
     return LockfileParseResult(
         entries=(),
         complete=False,
         format=_lockfile_format(path),
-        source_hash=stable_digest_hex(source),
+        source_hash=stable_digest_hex(source) if source_hash is None else source_hash,
         elapsed_ms=elapsed_ms,
         budget_ms=budget_ms,
         error_reason=error_reason,
+        source_hash_complete=source_hash_complete,
+        source_byte_count=source_byte_count,
+        source_byte_limit=source_byte_limit,
+        warnings=() if source_hash_complete else ("source_hash_unavailable",),
     )
 
 
@@ -127,12 +152,28 @@ def parse_lockfile_text(
         lower_name = path.rsplit("/", 1)[-1].lower()
         if lower_name not in _JSON_LOCKFILES | _JSONC_LOCKFILES | _TOML_LOCKFILES | _TEXT_LOCKFILES:
             raise _LockfileValidationError("unsupported_format")
-        _validate_lockfile_structure(lower_name, text, deadline=deadline)
-        if lower_name == "package-lock.json":
-            raw_entries = package_lock_parser(text, deadline=deadline)
+        document = (
+            None if lower_name in _TEXT_LOCKFILES else _validate_lockfile_structure(lower_name, text, deadline=deadline)
+        )
+        manifest_dependencies = None
+        direct_version_candidates = ()
+        yarn_selector_versions = ()
+        if lower_name in _TEXT_LOCKFILES:
+            projection = parse_text_lockfile(lower_name, text, deadline=deadline, max_entries=LOCKFILE_MAX_ENTRIES)
+            entries = tuple(
+                LockfileDependencyEntry(package_name, package_name, version, False)
+                for package_name, version in projection.dependencies
+            )
+            direct_version_candidates = projection.direct_versions
+            yarn_selector_versions = projection.yarn_selector_versions
+        elif lower_name == "package-lock.json":
+            raw_entries = package_lock_parser(text, deadline=deadline, document=document)
             entries = tuple(LockfileDependencyEntry(*entry) for entry in raw_entries)
+            # The manifest resolver retains its legacy empty-packages fallback.
+            # Both extraction views consume the same validated JSON document.
+            manifest_dependencies = tuple(dependency_parser(path, text, deadline=deadline, document=document).items())
         else:
-            dependency_map = dependency_parser(path, text, deadline=deadline)
+            dependency_map = dependency_parser(path, text, deadline=deadline, document=document)
             entries = tuple(
                 LockfileDependencyEntry(
                     dependency_path=package_name,
@@ -143,8 +184,15 @@ def parse_lockfile_text(
                 for package_name, version in dependency_map.items()
             )
         _ensure_within_deadline(deadline)
-        if len(entries) > LOCKFILE_MAX_ENTRIES:
+        if len(entries) > LOCKFILE_MAX_ENTRIES or (
+            manifest_dependencies is not None and len(manifest_dependencies) > LOCKFILE_MAX_ENTRIES
+        ):
             raise _LockfileValidationError("entry_limit_exceeded")
+        if lower_name not in _TEXT_LOCKFILES:
+            direct_version_candidates = _direct_version_candidates(lower_name, document, deadline=deadline)
+        if len(direct_version_candidates) > LOCKFILE_MAX_ENTRIES:
+            raise _LockfileValidationError("entry_limit_exceeded")
+        _ensure_within_deadline(deadline)
         return LockfileParseResult(
             entries=entries,
             complete=True,
@@ -152,10 +200,13 @@ def parse_lockfile_text(
             source_hash=stable_digest_hex(source),
             elapsed_ms=(time.monotonic() - started) * 1000,
             budget_ms=budget_ms,
+            manifest_dependencies=manifest_dependencies,
+            direct_version_candidates=direct_version_candidates,
+            yarn_selector_versions=yarn_selector_versions,
         )
     except _DeadlineExceededError:
         error_reason = "deadline_exceeded"
-    except _LockfileValidationError as exc:
+    except (_LockfileValidationError, TextLockfileValidationError) as exc:
         error_reason = exc.reason
     except (json.JSONDecodeError, tomllib.TOMLDecodeError):
         error_reason = "syntax_error"
@@ -182,12 +233,39 @@ def _lockfile_format(path: str) -> str:
     return _LOCKFILE_FORMAT_MAP.get(name, "unknown")
 
 
+def _direct_version_candidates(
+    name: str, document: dict[str, object] | None, *, deadline: float
+) -> tuple[tuple[str, str], ...]:
+    """Keep Python direct-selector input order without retaining a mutable parse tree."""
+
+    if document is None:
+        return ()
+    pairs: list[tuple[str, str]] = []
+    if name in {"poetry.lock", "uv.lock"}:
+        packages = document.get("package")
+        for package in packages if isinstance(packages, list) else ():
+            _ensure_within_deadline(deadline)
+            if isinstance(package, dict):
+                package_name, version = package.get("name"), package.get("version")
+                if isinstance(package_name, str) and isinstance(version, str):
+                    pairs.append((package_name, version))
+    elif name == "pipfile.lock":
+        for section in ("default", "develop"):
+            packages = document.get(section)
+            for package_name, package in packages.items() if isinstance(packages, dict) else ():
+                _ensure_within_deadline(deadline)
+                version = package.get("version") if isinstance(package, dict) else None
+                if isinstance(package_name, str) and isinstance(version, str):
+                    pairs.append((package_name, version))
+    return tuple(pairs)
+
+
 def _ensure_within_deadline(deadline: float) -> None:
     if time.monotonic() > deadline:
         raise _DeadlineExceededError("deadline_exceeded")
 
 
-def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> None:
+def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> dict[str, object] | None:
     if name in _JSON_LOCKFILES:
         payload = json.loads(text or "{}", object_pairs_hook=_unique_object)
         _validate_object_bounds(payload, deadline=deadline)
@@ -199,7 +277,7 @@ def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> No
             _validate_optional_lists(payload, ("packages", "packages-dev"))
         else:
             _validate_optional_mappings(payload, ("default", "develop"))
-        return
+        return payload
     if name in _JSONC_LOCKFILES:
         payload = loads_jsonc(
             text or "{}",
@@ -210,7 +288,7 @@ def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> No
         if not isinstance(payload, dict):
             raise _LockfileValidationError("unsupported_shape")
         _validate_bun_lock(payload)
-        return
+        return payload
     if name in _TOML_LOCKFILES:
         payload = tomllib.loads(text or "")
         _validate_object_bounds(payload, deadline=deadline)
@@ -219,8 +297,8 @@ def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> No
         packages = payload.get("package")
         if packages is not None and not isinstance(packages, list):
             raise _LockfileValidationError("unsupported_shape")
-        return
-    _validate_text_lockfile(name, text, deadline=deadline)
+        return payload
+    raise _LockfileValidationError("unsupported_format")
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -274,24 +352,3 @@ def _validate_optional_lists(payload: dict[str, object], keys: tuple[str, ...]) 
     for key in keys:
         if key in payload and not isinstance(payload[key], list):
             raise _LockfileValidationError("unsupported_shape")
-
-
-def _validate_text_lockfile(name: str, text: str, *, deadline: float) -> None:
-    bracket_depth = 0
-    for raw_line in text.splitlines():
-        _ensure_within_deadline(deadline)
-        if "\x00" in raw_line or ("\t" in raw_line and name == "pnpm-lock.yaml"):
-            raise _LockfileValidationError("syntax_error")
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        bracket_depth += raw_line.count("[") + raw_line.count("{")
-        bracket_depth -= raw_line.count("]") + raw_line.count("}")
-        if bracket_depth < 0:
-            raise _LockfileValidationError("syntax_error")
-        if name == "pnpm-lock.yaml" and ":" not in stripped and not stripped.startswith("-"):
-            raise _LockfileValidationError("syntax_error")
-        if name == "yarn.lock" and not raw_line.startswith((" ", "\t")) and not stripped.endswith(":"):
-            raise _LockfileValidationError("syntax_error")
-    if bracket_depth != 0:
-        raise _LockfileValidationError("syntax_error")

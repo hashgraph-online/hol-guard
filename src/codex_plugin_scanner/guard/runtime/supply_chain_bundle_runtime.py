@@ -292,13 +292,12 @@ def evaluate_cached_supply_chain_bundle(
         normalized_ecosystem = normalize_ecosystem(ecosystem) if ecosystem is not None else None
     except PackageIdentityError:
         normalized_ecosystem = ""
-    deny_entries = _matching_emergency_deny_entries(
-        response.bundle,
+    package, deny_entry = response.bundle.package_index.match(
         package_name=package_name,
+        package_version=package_version,
         ecosystem=normalized_ecosystem,
     )
-    if deny_entries:
-        deny_entry = deny_entries[0]
+    if deny_entry is not None:
         return OfflineSupplyChainDecision(
             action="block",
             bundle_version=response.bundle.bundle_version,
@@ -308,13 +307,7 @@ def evaluate_cached_supply_chain_bundle(
             recommended_fix_version=deny_entry.recommended_fix_version,
             emergency_deny=True,
         )
-    matches = [
-        item
-        for item in response.bundle.packages
-        if (normalized_ecosystem is None or item.ecosystem == normalized_ecosystem)
-        and _package_matches(item, package_name, package_version)
-    ]
-    if not matches:
+    if package is None:
         return OfflineSupplyChainDecision(
             action="monitor",
             bundle_version=response.bundle.bundle_version,
@@ -322,7 +315,6 @@ def evaluate_cached_supply_chain_bundle(
             reason="no_cached_match",
             stale=stale,
         )
-    package = max(matches, key=lambda item: item.risk_score)
     blocking_reason = _blocking_bundle_reason(package)
     if blocking_reason is not None:
         return OfflineSupplyChainDecision(

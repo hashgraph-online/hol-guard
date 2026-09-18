@@ -8,13 +8,31 @@ on:
       - ".github/workflows/native-release-contract.yml"
       - "scripts/verify_native_runtime_release.py"
       - "ci/native_runtime/test_native_runtime_release.py"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "scripts/*native*.py"
+      - "scripts/release/**"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - ".github/workflows/publish.yml"
       - ".github/workflows/native-release-contract.yml"
       - "scripts/verify_native_runtime_release.py"
       - "ci/native_runtime/test_native_runtime_release.py"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "scripts/*native*.py"
+      - "scripts/release/**"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   workflow_dispatch:
 
 permissions:

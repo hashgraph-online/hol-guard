@@ -89,14 +89,18 @@ def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
     steps = _steps(_job("build-native-guard-wheels"))
     checkout = _action_step(steps, "actions/checkout")
     setup_python = _action_step(steps, "actions/setup-python")
-    install_uv = _named_step(steps, "Install pinned uv without cache")
 
     checkout_ref = _text(_mapping(checkout["with"])["ref"])
     assert "github.event.pull_request.head.sha" in checkout_ref
     assert "github.sha" in checkout_ref
     assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
-    assert steps.index(setup_python) < steps.index(install_uv) < steps.index(checkout)
-    assert "--no-cache-dir uv==0.9.26" in _text(install_uv["run"])
+    assert steps.index(setup_python) < steps.index(checkout)
+    assert not any("cache" in str(step.get("uses", "")) for step in steps)
+    setup_python_inputs = _mapping(setup_python["with"])
+    assert not {"cache", "cache-dependency-path", "pip-install"} & setup_python_inputs.keys()
+    commands = "\n".join(str(step.get("run", "")) for step in steps)
+    assert "pip install" not in commands
+    assert "uv sync" not in commands
 
 
 def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard() -> None:

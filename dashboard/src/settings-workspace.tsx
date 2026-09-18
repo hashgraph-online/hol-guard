@@ -77,10 +77,20 @@ import { withoutPresentationSettings } from "./presentation-mode-state";
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./settings/settings-row-primitives";
 import { resolveInitialSettingsTab, type LocalSettingsTabKey } from "./settings/settings-ia";
+import { ApprovalPasswordSection } from "./settings/approval-password-copy";
+import { CloudReviewSettings } from "./settings/cloud-review-settings";
+import { normalizePresentationSettings } from "./settings-presentation";
+export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
+export {
+  buildSettingsUpdatePayload,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
+  resolveSettingsPresentation,
+} from "./settings-presentation";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
-
 export { resolveInitialSettingsTab };
+type SettingsSaveScope = "all" | "approval-gate";
 
 export function resolveSecurityLevelCardDescription(level: "relaxed" | "balanced" | "strict" | "custom"): string {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
@@ -157,11 +167,11 @@ export function hasApprovalGateSettingsChanged(
   );
 }
 
-export function resolveApprovalPasswordSectionCopy(wasConfigured: boolean): string {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
+export function effectiveApprovalGateCooldownSeconds(
+  cooldownSeconds: number,
+  totpEnabled: boolean,
+): number {
+  return totpEnabled ? 0 : cooldownSeconds;
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -307,7 +317,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     ? settings.protection_posture
     : deriveProtectionPosture(settings.mode, securityLevel);
   return {
-    ...settings,
+    ...normalizePresentationSettings(settings),
     protection_posture: posture,
     watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
@@ -460,7 +470,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [proofModalError, setProofModalError] = useState<string | null>(null);
   const [proofModalPending, setProofModalPending] = useState(false);
   const [pendingProofAction, setPendingProofAction] = useState<
-    | { kind: "save" }
+    | { kind: "save"; scope?: SettingsSaveScope }
     | {
         kind: "maintenance";
         action:
@@ -781,7 +791,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
   }, [proofModalPending]);
 
-  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials) => {
+  const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials, scope: SettingsSaveScope = "all") => {
     if (draft === null) {
       return;
     }
@@ -813,11 +823,16 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      const settingsToSave: Partial<GuardSettings> = {
-        ...withoutPresentationSettings(draft),
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate,
-      };
+      let settingsToSave: Partial<GuardSettings>;
+      if (scope === "approval-gate") {
+        settingsToSave = { approval_gate: approvalGateUpdate };
+      } else {
+        settingsToSave = {
+          ...withoutPresentationSettings(draft),
+          risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+          approval_gate: approvalGateUpdate,
+        };
+      }
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -993,7 +1008,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setProofModalError(null);
     try {
       if (pendingProofAction.kind === "save") {
-        await executeSave(proof);
+        await executeSave(proof, pendingProofAction.scope);
       } else if (pendingProofAction.action === "import-settings") {
         if (pendingProofAction.importExport === undefined) {
           throw new Error("Missing settings import payload.");
@@ -1031,8 +1046,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
 
-  const handleOpenPasswordChangeModal = useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
+  const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
+    openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
   }, [openProofModal]);
 
   const handleRequestRevokeCooldown = useCallback(() => {
@@ -1461,6 +1476,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   checked={draft.sync}
                   onChange={handleSyncToggle}
                 />
+                <CloudReviewSettings />
                 <SettingsSelectRow
                   label="Cloud receipt privacy"
                   description="Choose how much command detail Guard includes when syncing receipts. Secrets are always removed."
@@ -2066,7 +2082,7 @@ type ApprovalGateCardProps = {
   totpActionPending: "enroll" | "verify" | "disable" | null;
   totpActionError: string | null;
   onToggle: (event: ChangeEvent<HTMLInputElement>) => void;
-  onOpenPasswordChangeModal: () => void;
+  onOpenPasswordChangeModal: (mode?: "change-password" | "setup-gate") => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -2094,6 +2110,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
   const failClosed = props.gateConfig?.fail_closed === true;
+  const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt
     ? new Date(cooldownExpiresAt).toLocaleTimeString()
     : null;
@@ -2124,21 +2141,11 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
 
       {showGateDetails ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Approval password</SectionLabel>
-            <p className="mt-1 text-xs text-slate-500">{resolveApprovalPasswordSectionCopy(wasConfigured)}</p>
-            {wasConfigured ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={props.onOpenPasswordChangeModal}
-                  className="text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80"
-                >
-                  Change password
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <ApprovalPasswordSection
+            wasConfigured={wasConfigured}
+            enabled={props.enabled}
+            onOpenPasswordChangeModal={props.onOpenPasswordChangeModal}
+          />
 
           <div className="rounded-xl border border-slate-100 bg-white p-4">
             <SectionLabel>Extra checks</SectionLabel>
@@ -2152,14 +2159,22 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               <label className="block">
                 <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
                 <select
-                  value={String(props.cooldownSeconds)}
+                  id="settings-approval-gate-cooldown"
+                  value={String(effectiveCooldownSeconds)}
                   onChange={props.onCooldownChange}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  disabled={totpEnabled}
+                  aria-describedby={totpEnabled ? "settings-approval-gate-cooldown-help" : undefined}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   {cooldownOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+                {totpEnabled ? (
+                  <span id="settings-approval-gate-cooldown-help" className="mt-1 block text-xs leading-5 text-slate-500">
+                    Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off.
+                  </span>
+                ) : null}
               </label>
             </div>
           </div>

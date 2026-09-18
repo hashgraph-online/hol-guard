@@ -15,12 +15,18 @@ from .hook_process_metrics import increment_bounded_metric
 from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot, worker_retirement_thread
 
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
+_HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
+
+
+def hook_worker_ready_timeout(configured_timeout: float) -> float:
+    return min(_HOOK_PROCESS_START_TIMEOUT_SECONDS, max(_HOOK_PROCESS_READY_TIMEOUT_SECONDS, configured_timeout))
 
 
 class HookProcessRunnerLifecycleMixin:
     _slots: queue.Queue[HookWorkerSlot]
     _all_slots: dict[int, HookWorkerSlot]
     _spawn_threads: set[threading.Thread]
+    _process_creation_lock: threading.Lock
     _supervisor_thread: threading.Thread | None
     _retirement_threads: set[threading.Thread]
     _state_lock: threading.Lock
@@ -28,6 +34,7 @@ class HookProcessRunnerLifecycleMixin:
     _recovery_event: threading.Event
     _ready_slot_ids: set[int]
     _capacity_target: int
+    _startup_capacity_waiting: bool
     _capacity_listener: Callable[[int], None] | None
     _adaptive_capacity: AdaptiveHookProcessCapacity | None
     _adaptive_refresh_enabled: bool
@@ -133,9 +140,16 @@ class HookProcessRunnerLifecycleMixin:
             elif metric == "restarts":
                 self._restarts += 1
 
-    def _record_response_metrics(self, response: Mapping[str, object]) -> None:
+    def _record_response_metrics(
+        self,
+        response: Mapping[str, object],
+        *,
+        envelope_reason_code: object = None,
+    ) -> None:
         decision = response.get("decision")
         reason_code = response.get("reason_code")
+        if not (isinstance(reason_code, str) and reason_code.strip()):
+            reason_code = envelope_reason_code
         if not self._metrics_lock.acquire(blocking=False):
             return
         try:

@@ -6,8 +6,7 @@ import importlib
 from pathlib import Path
 
 from ..models import GuardArtifact
-from .package_manifest_diff import parse_manifest_dependencies
-from .workspace_path_guard import read_text_within_workspace, resolve_path_within_workspace
+from .workspace_path_guard import read_bytes_within_workspace, read_text_within_workspace, resolve_path_within_workspace
 
 _MANIFEST_ECOSYSTEMS = {
     "package.json": "npm",
@@ -74,14 +73,15 @@ def _manifest_dependency_targets(
             if not isinstance(relative_path, str) or not relative_path:
                 continue
             lockfile_path = resolve_path_within_workspace(workspace_dir, relative_path)
-            if lockfile_path is None or not lockfile_path.exists():
+            if lockfile_path is None:
                 continue
-            lockfile_text = read_text_within_workspace(workspace_dir, relative_path)
-            if lockfile_text is None:
+            lockfile_source = read_bytes_within_workspace(workspace_dir, relative_path)
+            if lockfile_source is None:
                 continue
             lockfile_ecosystem = package_eval._lockfile_ecosystem(lockfile_path.name) or "npm"
             versions: dict[str, str] = {}
-            for package_name, version in parse_manifest_dependencies(path=relative_path, text=lockfile_text).items():
+            parse_result = package_eval._parse_lockfile_text_result(lockfile_path.name, lockfile_source)
+            for package_name, version in parse_result.manifest_dependency_map().items():
                 normalized_name = package_eval._normalize_package_name(lockfile_ecosystem, package_name)
                 versions[normalized_name] = version
             lockfile_dependencies.append((lockfile_path.parent, lockfile_ecosystem, versions))
@@ -93,7 +93,7 @@ def _manifest_dependency_targets(
         if ecosystem is None:
             continue
         manifest_path = resolve_path_within_workspace(workspace_dir, relative_path)
-        if manifest_path is None or not manifest_path.exists():
+        if manifest_path is None:
             continue
         manifest_text = read_text_within_workspace(workspace_dir, relative_path)
         if manifest_text is None:

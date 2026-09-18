@@ -92,15 +92,8 @@ class TrustedCodexHookLaunch:
         return result.stdout
 
 
-def validate_codex_hook_launch(
-    *,
-    manifest_path: str | Path,
-    state_path: str | Path,
-    fallback_command: Sequence[str],
-    start_command: Sequence[str],
-    config_json: str,
-) -> TrustedCodexHookLaunch:
-    """Authenticate the complete current bridge config and child identities."""
+def _resolve_managed_hook_paths(state_path: str | Path, manifest_path: str | Path) -> tuple[Path, Path, Path]:
+    """Validate managed Codex hook paths; return (state, manifest, guard home)."""
 
     state = Path(state_path)
     configured_manifest = Path(manifest_path)
@@ -113,7 +106,20 @@ def validate_codex_hook_launch(
         raise ValueError("managed Codex hook paths do not belong to this Guard home")
     if not configured_manifest.name.startswith("hooks-") or not configured_manifest.name.endswith(".manifest.json"):
         raise ValueError("managed Codex hook manifest path is invalid")
+    return state, configured_manifest, guard_home
 
+
+def validate_codex_hook_launch(
+    *,
+    manifest_path: str | Path,
+    state_path: str | Path,
+    fallback_command: Sequence[str],
+    start_command: Sequence[str],
+    config_json: str,
+) -> TrustedCodexHookLaunch:
+    """Authenticate the complete current bridge config and child identities."""
+
+    _state, configured_manifest, guard_home = _resolve_managed_hook_paths(state_path, manifest_path)
     manifest = load_authenticated_hook_manifest_path(guard_home, configured_manifest)
     _verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
     interpreter = _mapping(manifest.get("interpreter"), label="interpreter")

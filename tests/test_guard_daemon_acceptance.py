@@ -10,7 +10,9 @@ from typing import Protocol, cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
+from tests.coverage_ci import under_coverage_scale
 from tests.guard_daemon_acceptance_fixtures import (
     WorkloadSpec,
     assert_adversarial_nodeids_resolve,
@@ -29,7 +31,18 @@ def test_adversarial_workload_nodeids_resolve() -> None:
 
 
 @pytest.mark.parametrize("workload", load_correctness_workloads(), ids=_fixture_id)
-def test_packaged_correctness_workloads(workload: WorkloadSpec, tmp_path: Path) -> None:
+def test_packaged_correctness_workloads(
+    workload: WorkloadSpec, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Coverage tracing inflates every request round trip; scale the transport
+    # admission deadline and the latency SLA budgets so the workload verdicts
+    # (deny/allow/fairness) stay the assertion target, not tracer overhead.
+    coverage_scale = under_coverage_scale(3.0)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
+        daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
+    )
     result = run_workload(workload, root=tmp_path)
     expected_secrets = sum(
         (client["requests"] + workload["secret_stride"] - 1) // workload["secret_stride"]
@@ -41,14 +54,23 @@ def test_packaged_correctness_workloads(workload: WorkloadSpec, tmp_path: Path) 
     assert result.routine_allowed + result.secrets_denied == result.requests
     assert result.capacity_denials == 0
     assert result.generic_failures == 0
+    # Successful logical reviews and HTTP admission attempts are separate.
+    # Refusals never count as an evaluated allow/deny, and retries remain part
+    # of the request latency measured above.
+    assert result.transport_counts["hook_attempts"] == result.requests + result.transport_counts.get(
+        "hook_admission_refusals", 0
+    )
+    assert result.transport_counts.get("hook_admission_refusals", 0) == result.transport_counts.get(
+        "hook_admission_retries", 0
+    )
     assert result.pid_stable
     assert result.workers_stable
     assert result.queue_bounded
     assert result.rss_growth_bytes < 128 * 1024 * 1024
     # Codex requests add an authenticated challenge round trip in the mixed-harness profile.
-    p95_limit_ms = 1_000 if workload["id"] == "mixed-harness-fairness" else 750
+    p95_limit_ms = (1_000 if workload["id"] == "mixed-harness-fairness" else 750) * coverage_scale
     assert result.p95_ms < p95_limit_ms
-    assert result.p99_ms < 2_500
+    assert result.p99_ms < 2_500 * coverage_scale
     assert result.browser_launches == 0
     assert result.inbox_requests == 0
     if len(result.dispatch_counts) == 4:
@@ -228,6 +250,7 @@ def test_aggregate_report_drops_sensitive_and_unbounded_fields() -> None:
                 "fixture_id": "pi-240-24",
                 "requests": 240,
                 "secrets_denied": 24,
+                "transport_counts": {"hook_attempts": 241, "hook_admission_refusals": 1, "hook_admission_retries": 1},
                 "command": "do not persist",
                 "workspace": "/private/path",
                 "raw_payload": {"token": "do not persist"},
@@ -241,6 +264,18 @@ def test_aggregate_report_drops_sensitive_and_unbounded_fields() -> None:
     assert "command" not in serialized
     assert "workspace" not in serialized
     assert "token" not in serialized
+    assert "'hook_attempts': 241" in serialized
+    assert "'hook_admission_refusals': 1" in serialized
+    assert "'hook_admission_retries': 1" in serialized
+
+
+@pytest.mark.parametrize(
+    "counts",
+    [{"private/path": 1}, {"hook_attempts": "private/path"}, {"hook_attempts": -1}, {"hook_attempts": True}],
+)
+def test_aggregate_report_rejects_unbounded_transport_counter_fields(counts: dict[str, object]) -> None:
+    report = _load_report_module().sanitize_report({"results": [{"transport_counts": counts}]})
+    assert "transport_counts" not in repr(report)
 
 
 @pytest.mark.slow

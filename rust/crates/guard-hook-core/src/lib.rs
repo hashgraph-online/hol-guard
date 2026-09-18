@@ -15,6 +15,9 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+mod output_reference_tests;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedOutput {
     pub text: String,
@@ -22,26 +25,36 @@ pub struct ExtractedOutput {
     pub truncated: bool,
 }
 
+fn append_bounded(text: &str, output: &mut String, chars: &mut usize) -> bool {
+    let remaining = MAX_OUTPUT_CHARS.saturating_sub(*chars);
+    let text_chars = text.chars().count();
+    if text_chars > remaining {
+        let end = text
+            .char_indices()
+            .nth(remaining)
+            .map_or(text.len(), |(index, _)| index);
+        output.push_str(&text[..end]);
+        *chars = MAX_OUTPUT_CHARS;
+        true
+    } else {
+        output.push_str(text);
+        *chars += text_chars;
+        false
+    }
+}
+
 fn collect_output_text(value: &Value) -> ExtractedOutput {
-    fn append(parts: &mut Vec<String>, chars: &mut usize, truncated: &mut bool, text: &str) {
+    fn append(output: &mut String, chars: &mut usize, truncated: &mut bool, text: &str) {
         if *truncated || text.is_empty() {
             return;
         }
-        let remaining = MAX_OUTPUT_CHARS.saturating_sub(*chars);
-        if text.chars().count() > remaining {
-            parts.push(text.chars().take(remaining).collect());
-            *chars = MAX_OUTPUT_CHARS;
-            *truncated = true;
-            return;
-        }
-        parts.push(text.to_owned());
-        *chars += text.chars().count();
+        *truncated = append_bounded(text, output, chars);
     }
 
     fn traverse(
         value: &Value,
         depth: usize,
-        parts: &mut Vec<String>,
+        output: &mut String,
         chars: &mut usize,
         truncated: &mut bool,
         seen: &mut HashSet<usize>,
@@ -54,7 +67,7 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
             return;
         }
         match value {
-            Value::String(text) => append(parts, chars, truncated, text),
+            Value::String(text) => append(output, chars, truncated, text),
             Value::Array(items) => {
                 let id = value as *const Value as usize;
                 if !seen.insert(id) {
@@ -62,7 +75,7 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
                     return;
                 }
                 for item in items.iter().take(MAX_CONTENT_ITEMS) {
-                    traverse(item, depth + 1, parts, chars, truncated, seen);
+                    traverse(item, depth + 1, output, chars, truncated, seen);
                     if *truncated {
                         break;
                     }
@@ -75,7 +88,7 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
             Value::Object(record) => {
                 if record.get("type").and_then(Value::as_str) == Some("text") {
                     if let Some(text) = record.get("text").and_then(Value::as_str) {
-                        append(parts, chars, truncated, text);
+                        append(output, chars, truncated, text);
                         return;
                     }
                 }
@@ -94,7 +107,7 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
                         break;
                     }
                     keys_seen += 1;
-                    traverse(child, depth + 1, parts, chars, truncated, seen);
+                    traverse(child, depth + 1, output, chars, truncated, seen);
                     if *truncated {
                         break;
                     }
@@ -105,13 +118,13 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
         }
     }
 
-    let mut parts = Vec::new();
+    let mut text = String::new();
     let mut chars = 0usize;
     let mut truncated = false;
     let mut seen = HashSet::new();
-    traverse(value, 0, &mut parts, &mut chars, &mut truncated, &mut seen);
+    traverse(value, 0, &mut text, &mut chars, &mut truncated, &mut seen);
     ExtractedOutput {
-        text: parts.concat(),
+        text,
         chars,
         truncated,
     }
@@ -125,25 +138,24 @@ pub fn extract_payload_output(payload: &Value) -> ExtractedOutput {
             truncated: false,
         };
     };
-    let mut parts = Vec::new();
+    let mut text = String::new();
+    let mut chars = 0usize;
     let mut truncated = false;
     for key in PAYLOAD_OUTPUT_KEYS {
         if let Some(value) = record.get(*key) {
             let result = collect_output_text(value);
             truncated |= result.truncated;
             if !result.text.is_empty() {
-                parts.push(result.text);
+                if !text.is_empty() {
+                    truncated |= append_bounded("\n", &mut text, &mut chars);
+                }
+                truncated |= append_bounded(&result.text, &mut text, &mut chars);
             }
         }
     }
-    let joined = parts.join("\n");
-    let chars = joined.chars().count();
-    if chars > MAX_OUTPUT_CHARS {
-        truncated = true;
-    }
     ExtractedOutput {
-        text: joined.chars().take(MAX_OUTPUT_CHARS).collect(),
-        chars: chars.min(MAX_OUTPUT_CHARS),
+        text,
+        chars,
         truncated,
     }
 }
@@ -179,6 +191,33 @@ fn sha256_text(text: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
     hex::encode(hasher.finalize())
+}
+
+fn has_output_key(payload: &Value) -> bool {
+    payload
+        .as_object()
+        .is_some_and(|record: &Map<String, Value>| {
+            PAYLOAD_OUTPUT_KEYS
+                .iter()
+                .any(|key| record.contains_key(*key))
+        })
+}
+
+fn allow_inline_output(reason_code: &str, text: &str) -> HookReviewResponseV1 {
+    let mut response = HookReviewResponseV1::allow(reason_code);
+    response.reviewed_output_sha256 = Some(sha256_text(text));
+    response
+}
+
+fn inline_output_hash(payload: &Value) -> Option<String> {
+    if !has_output_key(payload) {
+        return None;
+    }
+    let extracted = extract_payload_output(payload);
+    if extracted.truncated {
+        return None;
+    }
+    Some(sha256_text(&extracted.text))
 }
 
 fn output_equivalent(text: &str, output_sha256: &str, output_chars: i64) -> bool {
@@ -252,6 +291,7 @@ fn inconclusive_source() -> HookReviewResponseV1 {
 fn review_source(
     request: &NativeHookRequestV1,
     source: &HookSourceFileRefV1,
+    deadline: Option<Instant>,
 ) -> HookReviewResponseV1 {
     if source.version != 1 {
         return inconclusive_source();
@@ -317,7 +357,7 @@ fn review_source(
         local_samples_should_be_unsuppressed(&source.path),
         true,
         MAX_SCAN_BYTES,
-        deadline(request),
+        deadline,
     );
     if scan.budget_exhausted {
         return inconclusive_source();
@@ -333,22 +373,14 @@ fn review_source(
     response
 }
 
-fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
+fn review_inline(request: &NativeHookRequestV1, deadline: Option<Instant>) -> HookReviewResponseV1 {
     let extracted = extract_payload_output(&request.payload);
-    let has_output_key = request
-        .payload
-        .as_object()
-        .is_some_and(|record: &Map<String, Value>| {
-            PAYLOAD_OUTPUT_KEYS
-                .iter()
-                .any(|key| record.contains_key(*key))
-        });
     if extracted.text.is_empty() {
         if extracted.truncated {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be safely excerpted within local limits.");
         }
-        if has_output_key {
-            return HookReviewResponseV1::allow("output_empty_allow");
+        if has_output_key(&request.payload) {
+            return allow_inline_output("output_empty_allow", &extracted.text);
         }
         return HookReviewResponseV1::deny(
             "no_output_to_review",
@@ -363,13 +395,7 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             .chars()
             .take(REVIEWED_EXCERPT_CHARS)
             .collect();
-        let scan = scan_text(
-            &excerpt,
-            local_content,
-            true,
-            MAX_SCAN_BYTES,
-            deadline(request),
-        );
+        let scan = scan_text(&excerpt, local_content, true, MAX_SCAN_BYTES, deadline);
         if scan.budget_exhausted || !scan.matches.is_empty() {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be fully scanned within local limits.");
         }
@@ -380,7 +406,7 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         local_content,
         true,
         MAX_SCAN_BYTES,
-        deadline(request),
+        deadline,
     );
     if scan.budget_exhausted {
         return HookReviewResponseV1::deny(
@@ -394,10 +420,23 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard blocked this output because it contains sensitive content.",
         );
     }
-    HookReviewResponseV1::allow("output_scan_allow")
+    allow_inline_output("output_scan_allow", &extracted.text)
 }
 
 pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
+    review_post_tool_with_deadline(request, deadline(request))
+}
+
+/// Preserve an upstream monotonic deadline through extraction, source reads
+/// and scanning. A caller cannot extend the request's own bounded budget.
+pub fn review_post_tool_with_deadline(
+    request: &NativeHookRequestV1,
+    upstream_deadline: Option<Instant>,
+) -> HookReviewResponseV1 {
+    let deadline = match (upstream_deadline, deadline(request)) {
+        (Some(upstream), Some(local)) => Some(upstream.min(local)),
+        (upstream, local) => upstream.or(local),
+    };
     if request.protocol_version != NATIVE_PROTOCOL_VERSION {
         return HookReviewResponseV1::deny(
             "protocol_version_mismatch",
@@ -412,13 +451,22 @@ pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
     }
     let source = source_ref(&request.payload);
     let response = if let Some(source) = source.as_ref() {
-        review_source(request, source)
+        review_source(request, source, deadline)
     } else {
-        review_inline(request)
+        review_inline(request, deadline)
     };
     if request.observe_mode {
-        let output_hash = source.map(|value| value.output_sha256);
-        response.observed(output_hash)
+        let output_hash = source
+            .as_ref()
+            .map(|value| value.output_sha256.clone())
+            .or_else(|| inline_output_hash(&request.payload));
+        if let Some(output_hash) = output_hash {
+            response.observed(Some(output_hash))
+        } else {
+            // Truncated inline output cannot prove the original bytes. Keep
+            // the fail-closed decision instead of allowing it without proof.
+            response
+        }
     } else {
         response
     }
@@ -462,6 +510,25 @@ mod tests {
         ));
         assert_eq!(response.decision, "allow");
         assert_eq!(response.reason_code, "output_scan_allow");
+        assert_eq!(response.reviewed_output_sha256, Some(sha256_text("hello")));
+    }
+
+    #[test]
+    fn empty_inline_output_is_allowed_with_digest() {
+        let response = review_post_tool(&request(json!({"tool_response": ""})));
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "output_empty_allow");
+        assert_eq!(response.reviewed_output_sha256, Some(sha256_text("")));
+    }
+
+    #[test]
+    fn upstream_deadline_is_not_restarted_before_scanning() {
+        let request = request(json!({"tool_response": "clean output"}));
+        let expired = Instant::now() - Duration::from_millis(1);
+        let response = review_post_tool_with_deadline(&request, Some(expired));
+        assert_eq!(response.decision, "deny");
+        assert_eq!(response.reason_code, "scanner_budget_exhausted");
+        assert_eq!(review_post_tool(&request).decision, "allow");
     }
 
     #[test]
@@ -469,6 +536,37 @@ mod tests {
         let response = review_post_tool(&request(json!({"tool_response": github_like_token()})));
         assert_eq!(response.decision, "deny");
         assert_eq!(response.reason_code, "output_secret_match");
+    }
+
+    #[test]
+    fn observe_inline_secret_preserves_original_with_digest() {
+        let output = github_like_token();
+        let expected_hash = sha256_text(&output);
+        let mut observe_request = request(json!({"tool_response": output}));
+        observe_request.observe_mode = true;
+
+        let response = review_post_tool(&observe_request);
+
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "observe_output_secret_match");
+        assert_eq!(response.model_output_action, "allow_original");
+        assert_eq!(response.reviewed_output_sha256, Some(expected_hash));
+        assert_eq!(response.observed_policy_action.as_deref(), Some("block"));
+        assert!(response.observe_mode);
+    }
+
+    #[test]
+    fn observe_truncated_inline_secret_remains_blocked_without_digest() {
+        let output = format!("{}{}", github_like_token(), "x".repeat(MAX_OUTPUT_CHARS));
+        let mut observe_request = request(json!({"tool_response": output}));
+        observe_request.observe_mode = true;
+
+        let response = review_post_tool(&observe_request);
+
+        assert_eq!(response.decision, "deny");
+        assert_eq!(response.reason_code, "output_too_large");
+        assert_eq!(response.reviewed_output_sha256, None);
+        assert!(!response.observe_mode);
     }
 
     #[test]

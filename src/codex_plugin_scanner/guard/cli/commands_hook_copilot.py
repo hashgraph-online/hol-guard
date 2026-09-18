@@ -1,17 +1,22 @@
 """Guard CLI Copilot hook helpers."""
 
-# ruff: noqa: F403, F405
+# ruff: noqa: E402, F403, F405
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
     from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
     from .commands_support_interaction import (
-        _attach_primary_approval_link,
+        _bind_hook_blocked_operation_queue,
         _codex_browser_wait_metadata,
         _emit,
         _preferred_approval_review_url,
@@ -102,6 +107,7 @@ def _run_hook_copilot_pretool(
     fresh_tool_call_authority_provider: (
         Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
     ) = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> int | None:
     if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
         return None
@@ -146,6 +152,7 @@ def _run_hook_copilot_pretool(
             risk_summary=decision.summary,
             scanner_evidence=decision_scanner_evidence,
             store=store,
+            config_reader=config_reader,
         )
     # Copilot review/reapproval continues to PermissionRequest, which owns that
     # activity. PreToolUse records only decisions that terminate at this stage.
@@ -250,6 +257,7 @@ def _run_hook_copilot_permission_request(
     fresh_tool_call_authority_provider: (
         Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
     ) = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> int | None:
     if copilot_permission_request is None:
         return None
@@ -339,6 +347,7 @@ def _run_hook_copilot_permission_request(
             risk_summary=decision.summary,
             scanner_evidence=decision_scanner_evidence,
             store=store,
+            config_reader=config_reader,
         )
     if policy_action in {"allow", "warn"}:
         receipt = allow_tool_call(
@@ -482,27 +491,22 @@ def _run_hook_copilot_permission_request(
             store=store,
             approval_center_url=approval_center_url,
             now=now,
+            config_reader=config_reader,
+        )
+        _bind_hook_blocked_operation_queue(
+            harness=args.harness,
+            approval_center_url=approval_center_url,
+            response_payload=response_payload,
+            queued=queued,
         )
     else:
-        operation = blocked_operation.get("operation")
-        if not isinstance(operation, dict):
-            operation = {}
-        queued = blocked_operation.get("approval_requests")
-        if not isinstance(queued, list):
-            queued = []
-        operation_id = _optional_string(operation.get("operation_id"))
-        if operation_id is not None:
-            response_payload["operation_id"] = operation_id
-        response_payload["operation"] = operation
-        approval_request_ids = operation.get("approval_request_ids")
-        if isinstance(approval_request_ids, list):
-            response_payload["approval_request_ids"] = approval_request_ids
-    response_payload["approval_requests"] = queued
-    _attach_primary_approval_link(
-        response_payload,
-        harness=_optional_string(args.harness) or args.harness,
-        approval_center_url=approval_center_url,
-    )
+        queued = _bind_hook_blocked_operation_queue(
+            harness=args.harness,
+            approval_center_url=approval_center_url,
+            response_payload=response_payload,
+            queued=[],
+            blocked_operation=blocked_operation,
+        )
     response_payload["approval_center_url"] = approval_center_url
     response_payload["review_hint"] = approval_center_hint(
         context=context,

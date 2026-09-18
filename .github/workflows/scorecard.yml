@@ -4,7 +4,7 @@ on:
     - cron: '0 0 * * 0'
   push:
     branches: [main]
-permissions: read-all
+permissions: {}
 
 jobs:
   scorecard:

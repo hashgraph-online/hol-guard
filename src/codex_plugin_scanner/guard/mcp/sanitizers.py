@@ -34,7 +34,7 @@ def _normalize_text(value: Any, max_length: int) -> str:
     return text[:max_length]
 
 
-def sanitize_search_result(raw: dict[str, object]) -> dict[str, object]:
+def _sanitized_common_fields(raw: dict[str, object]) -> dict[str, object]:
     allowed: dict[str, object] = {}
 
     raw_id = _normalize_text(raw.get("id"), 256)
@@ -53,21 +53,12 @@ def sanitize_search_result(raw: dict[str, object]) -> dict[str, object]:
     return allowed
 
 
+def sanitize_search_result(raw: dict[str, object]) -> dict[str, object]:
+    return _sanitized_common_fields(raw)
+
+
 def sanitize_fetch_result(raw: dict[str, object]) -> dict[str, object]:
-    allowed: dict[str, object] = {}
-
-    raw_id = _normalize_text(raw.get("id"), 256)
-    if raw_id:
-        allowed["id"] = raw_id
-
-    allowed["title"] = _normalize_text(raw.get("title"), _MAX_TITLE_LENGTH)
-    allowed["kind"] = _validate_enum(raw.get("kind"), VALID_KINDS, "receipt")
-    allowed["harness"] = _validate_enum(raw.get("harness"), VALID_HARNESSES, "")
-    allowed["decision"] = _validate_enum(raw.get("decision"), VALID_DECISIONS, "unknown")
-
-    changed = raw.get("changedSinceLastApproval")
-    if isinstance(changed, bool):
-        allowed["changedSinceLastApproval"] = changed
+    allowed = _sanitized_common_fields(raw)
 
     text = _normalize_text(raw.get("text"), MAX_FETCH_TEXT_BYTES)
     allowed["text"] = text

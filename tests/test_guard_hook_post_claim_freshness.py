@@ -443,7 +443,18 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
         "source_scope": "project",
     }
     args = _hook_args("codex", json_output=True)
-    monkeypatch.setattr(hook_command, "load_guard_config", lambda *_args, **_kwargs: config)
+
+    def reader(_path):
+        return {}
+
+    reloads = []
+
+    def scoped_reload(home, *, workspace, config_reader=None):
+        assert config_reader is reader
+        reloads.append((home, workspace))
+        return config
+
+    monkeypatch.setattr(hook_command, "load_guard_config", scoped_reload)
     monkeypatch.setattr(hook_command, "_hook_runtime_artifact", lambda **_kwargs: artifact)
     monkeypatch.setattr(hook_command, "_review_runtime_artifact_hook", lambda *_args, **_kwargs: None)
 
@@ -455,6 +466,7 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
     )
     capsys.readouterr()
     initial_receipt = store.list_receipts(limit=1)[0]
@@ -483,12 +495,14 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
     )
     capsys.readouterr()
 
     receipt = store.list_receipts(limit=1)[0]
     assert receipt["policy_decision"] == "block"
     assert _approval_reuse_reason(receipt) == "approval_reuse_context_changed_after_claim"
+    assert reloads
 
 
 def test_generic_hook_reloads_synced_policy_after_atomic_claim(
@@ -516,7 +530,18 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
         "tool_input": {"target": "unchanged"},
     }
     args = _hook_args("generic-test", json_output=True)
-    monkeypatch.setattr(hook_command, "load_guard_config", lambda *_args, **_kwargs: config)
+
+    def reader(_path):
+        return {}
+
+    reloads = []
+
+    def scoped_reload(home, *, workspace, config_reader=None):
+        assert config_reader is reader
+        reloads.append((home, workspace))
+        return config
+
+    monkeypatch.setattr(hook_command, "load_guard_config", scoped_reload)
     monkeypatch.setattr(hook_command, "_hook_runtime_artifact", lambda **_kwargs: None)
 
     hook_command._run_guard_hook_command(
@@ -527,6 +552,7 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
     )
     capsys.readouterr()
     initial_receipt = store.list_receipts(limit=1)[0]
@@ -555,6 +581,7 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
     )
     output = json.loads(capsys.readouterr().out)
     receipt = store.list_receipts(limit=1)[0]
@@ -564,6 +591,7 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
     assert output["approval_reuse"]["reason_code"] == "approval_reuse_context_changed_after_claim"
     assert receipt["policy_decision"] == "block"
     assert _approval_reuse_reason(receipt) == "approval_reuse_context_changed_after_claim"
+    assert reloads
 
 
 def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
@@ -629,7 +657,18 @@ def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_sync_block)
-    monkeypatch.setattr(hook_command, "load_guard_config", lambda *_args, **_kwargs: config)
+
+    def reader(_path):
+        return {}
+
+    reloads = []
+
+    def scoped_reload(home, *, workspace, config_reader=None):
+        assert config_reader is reader
+        reloads.append((home, workspace))
+        return config
+
+    monkeypatch.setattr(hook_command, "load_guard_config", scoped_reload)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
     output = io.StringIO()
 
@@ -641,6 +680,7 @@ def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
         output_stream=output,
     )
 
@@ -651,6 +691,7 @@ def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
     assert response["approval_reuse"]["reason_code"] == "approval_reuse_context_changed_after_claim"
     assert receipt["policy_decision"] == "block"
     assert _approval_reuse_reason(receipt) == "approval_reuse_context_changed_after_claim"
+    assert reloads
 
 
 def test_browser_post_wait_revalidation_reloads_synced_policy(
@@ -679,7 +720,18 @@ def test_browser_post_wait_revalidation_reloads_synced_policy(
         "source_scope": "project",
     }
     observed_fresh_context: dict[str, object] = {}
-    monkeypatch.setattr(hook_command, "load_guard_config", lambda *_args, **_kwargs: config)
+
+    def reader(_path):
+        return {}
+
+    reloads = []
+
+    def scoped_reload(home, *, workspace, config_reader=None):
+        assert config_reader is reader
+        reloads.append((home, workspace))
+        return config
+
+    monkeypatch.setattr(hook_command, "load_guard_config", scoped_reload)
     monkeypatch.setattr(hook_command, "_review_runtime_artifact_hook", lambda *_args, **_kwargs: None)
 
     def browser_decision(**kwargs: object) -> str:
@@ -701,12 +753,14 @@ def test_browser_post_wait_revalidation_reloads_synced_policy(
         store=store,
         config=config,
         input_text=json.dumps(payload),
+        config_reader=reader,
     )
     capsys.readouterr()
 
     assert observed_fresh_context["current_action"] == "block"
     assert observed_fresh_context["authoritative_action"] == "block"
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "block"
+    assert reloads
 
 
 def test_copilot_permission_postclaim_uses_fresh_authority_without_observe_queue(

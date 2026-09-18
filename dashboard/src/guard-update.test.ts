@@ -36,25 +36,52 @@ assert(normalized.version_check.update_available === true, "version_check should
 assert(normalized.update_in_progress === true, "update_in_progress should normalize");
 assert(normalized.release_channel === "stable", "missing update channel should default to stable");
 
+const alphaReadyStatus = normalizeGuardUpdateStatus({
+  current_version: "1.2.3",
+  latest_version: "1.2.4a1",
+  installer: "pip",
+  version_check: { source: "pypi", status: "stale", current_version: "1.2.3", latest_version: "1.2.4a1", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+  release_channel: "alpha",
+});
+
 const alphaMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
-    updateStatus: normalizeGuardUpdateStatus({
-      current_version: "1.2.3",
-      latest_version: "1.2.4a1",
-      installer: "pip",
-      version_check: { source: "pypi", status: "stale", current_version: "1.2.3", latest_version: "1.2.4a1", update_available: true },
-      auto_updatable: true,
-      update_available: true,
-      blocked_reason: null,
-      release_channel: "alpha",
-    }),
+    updateStatus: alphaReadyStatus,
     onSetUpdateChannel: () => undefined,
   }),
 );
 assert(alphaMarkup.includes('aria-label="Alpha updates enabled"'), "sidebar should show the active alpha channel");
 assert(alphaMarkup.includes('aria-label="Manage alpha updates"'), "sidebar should expose a compact alpha settings control");
+assert(alphaMarkup.includes('data-testid="guard-alpha-updates-control"'), "alpha settings should stay findable as a dedicated control");
 assert(!alphaMarkup.includes("Alpha updates enabled</button>"), "active alpha status should not render as a wide text button");
 assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
+assert(alphaMarkup.includes("min-h-8") && !alphaMarkup.includes("min-h-11") && !alphaMarkup.includes("min-h-6") && !alphaMarkup.includes("w-full"), "Local Guard update controls stay compact inline rows with uniform 32px targets, not full-width blocks");
+assert(alphaMarkup.includes("1.2.4a1 is ready") && alphaMarkup.includes("Restarts briefly. Approvals stay saved."), "update-ready copy keeps the version line and reassurance together");
+assert(alphaMarkup.includes('<span class="text-[11px] font-semibold leading-4">Manage</span>'), "control labels carry font sizing on an inner span the button reset cannot override");
+
+const alphaUpdateMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: alphaReadyStatus,
+    onUpdateGuard: () => undefined,
+    onSetUpdateChannel: () => undefined,
+  }),
+);
+assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</span></button>"), "update-ready state pairs the version line with a compact inline Update action");
+assert(alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"), "the ready-version label wraps long release strings instead of clipping them");
+
+const longVersion = "3.0.111a1.dev456+g1a2b3c4d5e6";
+const longVersionMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    guardVersion: "3.0.110",
+    updateStatus: normalizeGuardUpdateStatus({ ...alphaReadyStatus, current_version: "3.0.110", latest_version: longVersion, version_check: { source: "pypi", status: "stale", current_version: "3.0.110", latest_version: longVersion, update_available: true } }),
+    onUpdateGuard: () => undefined,
+    onSetUpdateChannel: () => undefined,
+  }),
+);
+assert(longVersionMarkup.includes("v3.0.110") && longVersionMarkup.includes(`${longVersion} is ready`), "long release strings render in full on both the version and ready-version lines");
 
 const loadingMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
@@ -371,5 +398,93 @@ assert(
   failedUpdateMarkup.includes("The installed version stays in place"),
   "failed desktop updates should say the current install remains",
 );
+
+// Embedded in the HOL Guard Desktop window, the panel must defer updates to
+// the app's own updater instead of offering a second, competing action.
+const priorWindow = (globalThis as { window?: unknown }).window;
+Object.assign(globalThis, {
+  window: {
+    location: { search: "?desktop_embed=1", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const embeddedMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a241",
+      installer: "desktop",
+      version_check: { source: "desktop_core", status: "stale", current_version: "3.0.0a239", latest_version: "3.0.0a241", update_available: true },
+      auto_updatable: true,
+      update_available: true,
+      blocked_reason: null,
+    }),
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(!embeddedMarkup.includes("Update Guard"), "embedded dashboard must not offer its own Update Guard button");
+assert(
+  embeddedMarkup.includes("Check for Updates in the HOL Guard menu-bar"),
+  "embedded dashboard should point at the app's updater",
+);
+assert(embeddedMarkup.includes("v3.0.0a239"), "embedded dashboard should still show the running version");
+
+// Internal navigation replaces the URL with routes that drop desktop_embed;
+// once the handoff was seen, the dashboard stays embedded for the session.
+const embeddedNavigationStatus = normalizeGuardUpdateStatus({
+  current_version: "3.0.0a239",
+  latest_version: "3.0.0a241",
+  installer: "desktop",
+  version_check: { source: "desktop_core", status: "stale", current_version: "3.0.0a239", latest_version: "3.0.0a241", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+});
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/about", search: "", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const navigatedMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: embeddedNavigationStatus,
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(!navigatedMarkup.includes("Update Guard"), "navigation inside the embedded dashboard must not restore the Update Guard button");
+
+// A recovery-reinstall prompt inside the Desktop window must not point at the
+// hidden PyPI reinstall action.
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/", search: "?desktop_embed=1", hash: "" },
+    sessionStorage: rememberedChannelStorage,
+    localStorage: rememberedChannelStorage,
+  },
+});
+const reinstallMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a241",
+      installer: "desktop",
+      auto_updatable: false,
+      update_available: false,
+      recovery_reinstall_available: true,
+      blocked_reason: "This install came from a local wheel whose source file is no longer available, so automatic updates are off.",
+    }),
+    onReinstallGuard: () => undefined,
+  }),
+);
+assert(!reinstallMarkup.includes("Reinstall from PyPI"), "embedded dashboard must not offer its own reinstall button");
+assert(
+  reinstallMarkup.includes("Check for Updates in the HOL Guard menu bar"),
+  "embedded reinstall prompt should point at the app first",
+);
+
+(globalThis as { window?: unknown }).window = priorWindow;
 
 console.log("guard-update.test.ts: all tests passed");

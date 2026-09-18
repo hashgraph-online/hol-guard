@@ -58,6 +58,12 @@ def process_identity_matches(value: object) -> bool:
     return _process_start_token(pid) == start_token
 
 
+def process_start_token(pid: int) -> str | None:
+    """Return the platform-specific marker for the process currently using ``pid``."""
+
+    return _process_start_token(pid)
+
+
 def _process_start_token(pid: int) -> str | None:
     if os.name == "nt":
         created_at = windows_process_creation_time(pid)
@@ -117,4 +123,5 @@ __all__ = [
     "bound_wait_timeout_seconds",
     "current_process_identity",
     "process_identity_matches",
+    "process_start_token",
 ]

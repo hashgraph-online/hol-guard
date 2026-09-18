@@ -59,11 +59,12 @@ def prompt_for_approval_gate(
     *,
     use_cooldown: bool = True,
     summary: str | None = None,
+    require_fresh_totp: bool = False,
 ) -> ApprovalGateInput | None:
     gate = public_config(guard_home)
     if not gate.enabled:
         return None
-    if gate.totp_enabled and recent_totp_satisfied(guard_home):
+    if gate.totp_enabled and recent_totp_satisfied(guard_home) and not require_fresh_totp:
         return None
     if not sys.stdin.isatty():
         proof_name = "Authenticator code" if gate.totp_enabled else "Approval password"

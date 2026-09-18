@@ -17,6 +17,7 @@ from .workflow_capabilities import (
     parse_utc_timestamp,
     validate_workflow_capability_identifier,
 )
+from .workflow_capability_transitions import _integer, _optional_string, _string
 
 AUTHORITY_STATE_SCHEMA: Final = "hol-guard.workflow-capability-authority-state.v1"
 REVOCATION_SCHEMA: Final = "hol-guard.workflow-capability-revocation.v1"
@@ -217,19 +218,3 @@ def _strict(payload: object, keys: set[str]) -> dict[str, object]:
 def _digest(name: str, value: str) -> None:
     if type(value) is not str or _SHA256.fullmatch(value) is None:
         raise WorkflowCapabilityError(f"invalid_{name}")
-
-
-def _string(name: str, value: object) -> str:
-    if type(value) is not str:
-        raise WorkflowCapabilityError(f"invalid_{name}")
-    return value
-
-
-def _optional_string(name: str, value: object) -> str | None:
-    return None if value is None else _string(name, value)
-
-
-def _integer(name: str, value: object) -> int:
-    if type(value) is not int:
-        raise WorkflowCapabilityError(f"invalid_{name}")
-    return value

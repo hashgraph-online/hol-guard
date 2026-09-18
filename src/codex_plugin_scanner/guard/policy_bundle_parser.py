@@ -187,7 +187,11 @@ def _policy_bundle_resource_limit_error(value: object) -> str | None:
 _stable_serialize = stable_json_serialize
 
 
-def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
+def _policy_bundle_core(
+    policy_bundle: dict[str, object], *, drop_public_key_pem_when_unsupported: bool
+) -> dict[str, object]:
+    """Assemble the canonical core fields shared by the bundle hash and payload."""
+
     bundle_core: dict[str, object] = {}
     for key in _POLICY_BUNDLE_CORE_KEYS:
         if key not in policy_bundle:
@@ -201,7 +205,7 @@ def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
         normalized_verifier = dict(verifier)
         if verifier.get("algorithm") == "rsa-pss-sha256":
             normalized_verifier["publicKeyPem"] = None
-        else:
+        elif drop_public_key_pem_when_unsupported:
             normalized_verifier.pop("publicKeyPem", None)
         normalized_verifier["signature"] = None
         bundle_core["verifier"] = normalized_verifier
@@ -211,6 +215,11 @@ def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
     min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
     if min_daemon_version is not None:
         bundle_core["minDaemonVersion"] = min_daemon_version
+    return bundle_core
+
+
+def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
+    bundle_core = _policy_bundle_core(policy_bundle, drop_public_key_pem_when_unsupported=True)
     return f"sha256:{hashlib.sha256(_stable_serialize(bundle_core).encode('utf-8')).hexdigest()}"
 
 
@@ -295,24 +304,7 @@ def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:
 
 
 def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
-    bundle_core: dict[str, object] = {}
-    for key in _POLICY_BUNDLE_CORE_KEYS:
-        if key not in policy_bundle:
-            raise ValueError(f"missing_policy_bundle_key:{key}")
-        bundle_core[key] = policy_bundle[key]
-    for key in _POLICY_BUNDLE_OPTIONAL_CORE_KEYS:
-        if key in policy_bundle:
-            bundle_core[key] = policy_bundle[key]
-    verifier = bundle_core.get("verifier")
-    if isinstance(verifier, dict):
-        normalized_verifier = dict(verifier)
-        if verifier.get("algorithm") == "rsa-pss-sha256":
-            normalized_verifier["publicKeyPem"] = None
-        normalized_verifier["signature"] = None
-        bundle_core["verifier"] = normalized_verifier
-    workspace_id = policy_bundle.get("workspaceId")
-    if workspace_id is not None:
-        bundle_core["workspaceId"] = workspace_id
+    bundle_core = _policy_bundle_core(policy_bundle, drop_public_key_pem_when_unsupported=False)
     acknowledgements = policy_bundle.get("acknowledgements")
     if acknowledgements is None:
         raise ValueError("missing_policy_bundle_key:acknowledgements")
@@ -320,9 +312,6 @@ def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
     cloud_exceptions = policy_bundle.get("cloudExceptions")
     if cloud_exceptions is not None:
         bundle_core["cloudExceptions"] = cloud_exceptions
-    min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
-    if min_daemon_version is not None:
-        bundle_core["minDaemonVersion"] = min_daemon_version
     return _stable_serialize(bundle_core).encode("utf-8")
 
 

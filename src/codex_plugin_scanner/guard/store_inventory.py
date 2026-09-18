@@ -203,13 +203,6 @@ class StoreInventoryMixin:
         if artifact.command:
             launch_command = " ".join([artifact.command, *artifact.args]).strip()
         with self._connect() as connection:
-            existing = connection.execute(
-                """
-                select first_seen_at from artifact_inventory where artifact_id = ? and harness = ?
-                """,
-                (artifact.artifact_id, artifact.harness),
-            ).fetchone()
-            first_seen_at = str(existing["first_seen_at"]) if existing is not None else now
             last_changed_at = now if changed else None
             last_approved_at = now if approved else None
             connection.execute(
@@ -248,7 +241,7 @@ class StoreInventoryMixin:
                     artifact.url,
                     launch_command,
                     artifact.transport,
-                    first_seen_at,
+                    now,  # ON CONFLICT preserves the original first_seen_at.
                     now,
                     last_changed_at,
                     last_approved_at,

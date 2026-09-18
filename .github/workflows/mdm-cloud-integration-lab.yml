@@ -10,7 +10,6 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
-      - "ci/test-suite-ratchet-baseline.json"
   push:
     branches: [release/3.0]
     paths:
@@ -20,7 +19,6 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
-      - "ci/test-suite-ratchet-baseline.json"
   workflow_dispatch:
 
 permissions:

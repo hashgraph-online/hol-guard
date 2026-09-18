@@ -39,7 +39,6 @@ def test_linux_graphical_session_launches_xdg_open_quietly(monkeypatch) -> None:
     monkeypatch.setattr(browser_opener.platform, "system", lambda: "Linux")
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    monkeypatch.setattr(browser_opener, "_linux_userns_available", lambda: True)
     monkeypatch.setattr(browser_opener.subprocess, "Popen", fake_popen)
 
     assert browser_opener.open_browser_url("http://127.0.0.1:5474") is True
@@ -50,41 +49,19 @@ def test_linux_graphical_session_launches_xdg_open_quietly(monkeypatch) -> None:
     assert captured["start_new_session"] is True
 
 
-def test_linux_graphical_session_skips_browser_when_userns_is_blocked(monkeypatch) -> None:
+def test_linux_graphical_session_uses_generic_handler_without_chromium_probe(monkeypatch) -> None:
+    class CompletedProcess:
+        def wait(self, *, timeout: float) -> int:
+            assert timeout == 0.2
+            return 0
+
     monkeypatch.setattr(browser_opener.platform, "system", lambda: "Linux")
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    monkeypatch.setattr(browser_opener, "_linux_userns_available", lambda: False)
-    monkeypatch.setattr(
-        browser_opener.subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("browser should not launch")),
-    )
+    monkeypatch.setattr(browser_opener.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Chromium probe should not run")))
+    monkeypatch.setattr(browser_opener.subprocess, "Popen", lambda *_args, **_kwargs: CompletedProcess())
 
-    assert browser_opener.open_browser_url("http://127.0.0.1:5474") is False
-
-
-def test_linux_userns_probe_is_quiet(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    class Result:
-        returncode = 1
-
-    monkeypatch.setattr(browser_opener.shutil, "which", lambda _name: "/usr/bin/unshare")
-    monkeypatch.setattr(Path, "is_file", lambda _self: False)
-
-    def fake_run(command: list[str], **kwargs: object) -> Result:
-        captured["command"] = command
-        captured.update(kwargs)
-        return Result()
-
-    monkeypatch.setattr(browser_opener.subprocess, "run", fake_run)
-
-    assert browser_opener._linux_userns_available() is False
-    assert captured["command"] == ["/usr/bin/unshare", "--user", "--map-root-user", "true"]
-    assert captured["stdin"] is subprocess.DEVNULL
-    assert captured["stdout"] is subprocess.DEVNULL
-    assert captured["stderr"] is subprocess.DEVNULL
+    assert browser_opener.open_browser_url("http://127.0.0.1:5474") is True
 
 
 def test_linux_graphical_launcher_failure_is_quiet_and_not_opened(monkeypatch) -> None:
@@ -102,7 +79,6 @@ def test_linux_graphical_launcher_failure_is_quiet_and_not_opened(monkeypatch) -
     monkeypatch.setattr(browser_opener.platform, "system", lambda: "Linux")
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.delenv("DISPLAY", raising=False)
-    monkeypatch.setattr(browser_opener, "_linux_userns_available", lambda: True)
     monkeypatch.setattr(browser_opener.subprocess, "Popen", fake_popen)
 
     assert browser_opener.open_browser_url("http://127.0.0.1:5474") is False

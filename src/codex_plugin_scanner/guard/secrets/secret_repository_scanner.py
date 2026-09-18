@@ -12,13 +12,18 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from ...path_support import FileChangedDuringReadError, read_bytes_file_within_root
 from .secret_detection import (
     SecretFinding,
     SecretScanSource,
     detector_version,
     scan_secret_text,
 )
+
+if TYPE_CHECKING:
+    from .git_object_reader import GitBlobReference
 
 DEFAULT_MAX_FILES = 5_000
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -244,16 +249,10 @@ def _read_working_file(root: Path, relative_path: str, max_file_bytes: int) -> b
         resolved.relative_to(root.resolve())
     except (OSError, ValueError):
         return None
-    if not resolved.is_file() or resolved.is_symlink():
-        return None
     try:
-        size = resolved.stat().st_size
-    except OSError:
-        return None
-    if size > max_file_bytes:
-        return None
-    try:
-        return resolved.read_bytes()
+        return read_bytes_file_within_root(root, resolved, max_bytes=max_file_bytes)
+    except FileChangedDuringReadError:
+        raise
     except OSError:
         return None
 
@@ -268,40 +267,19 @@ def _git_commits(root: Path, max_commits: int) -> list[str] | None:
     return [line.decode("ascii", errors="ignore").strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def _git_changed_paths(root: Path, commit: str) -> list[str] | None:
+def _git_changed_paths(root: Path, commit: str) -> list[GitBlobReference] | None:
+    from .git_object_reader import parse_raw_diff
+
     try:
         result = _run_git(
             root,
-            ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", commit],
+            ["diff-tree", "--root", "--no-commit-id", "--raw", "--no-abbrev", "--no-renames", "-r", "-z", commit],
         )
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode != 0:
         return None
-    return [item.decode("utf-8", errors="surrogateescape") for item in result.stdout.split(b"\0") if item]
-
-
-def _git_blob(root: Path, commit: str, path: str, max_file_bytes: int) -> bytes | None:
-    spec = f"{commit}:{path}"
-    try:
-        size_result = _run_git(root, ["cat-file", "-s", spec])
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if size_result.returncode != 0:
-        return None
-    try:
-        size = int(size_result.stdout.strip())
-    except ValueError:
-        return None
-    if size < 0 or size > max_file_bytes:
-        return None
-    try:
-        blob_result = _run_git(root, ["cat-file", "blob", spec])
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if blob_result.returncode != 0 or len(blob_result.stdout) > max_file_bytes:
-        return None
-    return blob_result.stdout
+    return parse_raw_diff(result.stdout)
 
 
 def scan_repository_secrets(
@@ -361,7 +339,13 @@ def scan_repository_secrets(
             truncation_reasons.update(active_reasons)
             truncated = True
             break
-        data = _read_working_file(scan_root, relative_path, max_file_bytes)
+        try:
+            data = _read_working_file(scan_root, relative_path, max_file_bytes)
+        except FileChangedDuringReadError:
+            if "working_tree_file_changed" not in errors:
+                errors.append("working_tree_file_changed")
+            truncated = True
+            continue
         if data is None:
             continue
         if bytes_scanned + len(data) > max_total_bytes:
@@ -380,6 +364,9 @@ def scan_repository_secrets(
         findings.extend(found)
 
     if include_history and git_repo:
+        from .git_blob_scan_cache import GitBlobScanCache
+        from .git_object_reader import GitObjectReader, GitObjectReadError
+
         active_reasons = _active_limit_reasons(
             files_scanned=files_scanned,
             bytes_scanned=bytes_scanned,
@@ -402,26 +389,9 @@ def scan_repository_secrets(
                 if len(commit_candidates) > max_commits:
                     truncation_reasons.add("max_commits")
                     truncated = True
-            for commit in commits:
-                active_reasons = _active_limit_reasons(
-                    files_scanned=files_scanned,
-                    bytes_scanned=bytes_scanned,
-                    finding_count=len(findings),
-                    max_files=max_files,
-                    max_total_bytes=max_total_bytes,
-                    max_findings=max_findings,
-                )
-                if active_reasons:
-                    truncation_reasons.update(active_reasons)
-                    truncated = True
-                    break
-                commits_scanned += 1
-                changed_paths = _git_changed_paths(scan_root, commit)
-                if changed_paths is None:
-                    errors.append("git_history_changed_paths_failed")
-                    truncated = True
-                    continue
-                for relative_path in changed_paths:
+            cache = GitBlobScanCache()
+            with GitObjectReader(scan_root, timeout=_GIT_TIMEOUT_SECONDS) as objects:
+                for commit in commits:
                     active_reasons = _active_limit_reasons(
                         files_scanned=files_scanned,
                         bytes_scanned=bytes_scanned,
@@ -434,23 +404,52 @@ def scan_repository_secrets(
                         truncation_reasons.update(active_reasons)
                         truncated = True
                         break
-                    data = _git_blob(scan_root, commit, relative_path, max_file_bytes)
-                    if data is None:
-                        continue
-                    if bytes_scanned + len(data) > max_total_bytes:
-                        truncation_reasons.add("max_total_bytes")
+                    commits_scanned += 1
+                    changed_paths = _git_changed_paths(scan_root, commit)
+                    if changed_paths is None:
+                        errors.append("git_history_changed_paths_failed")
                         truncated = True
-                        break
-                    found, scanned_bytes = _scan_blob(
-                        data,
-                        path=relative_path.replace("\\", "/"),
-                        source="git_history",
-                        commit=commit,
-                        finding_budget=max_findings - len(findings),
-                    )
-                    files_scanned += 1
-                    bytes_scanned += scanned_bytes
-                    findings.extend(found)
+                        continue
+                    for reference in changed_paths:
+                        active_reasons = _active_limit_reasons(
+                            files_scanned=files_scanned,
+                            bytes_scanned=bytes_scanned,
+                            finding_count=len(findings),
+                            max_files=max_files,
+                            max_total_bytes=max_total_bytes,
+                            max_findings=max_findings,
+                        )
+                        if active_reasons:
+                            truncation_reasons.update(active_reasons)
+                            truncated = True
+                            break
+                        try:
+                            size = objects.size(reference.oid)
+                            if size is None or size > max_file_bytes:
+                                continue
+                            if bytes_scanned + size > max_total_bytes:
+                                truncation_reasons.add("max_total_bytes")
+                                truncated = True
+                                break
+                            found, scanned_bytes = cache.scan(
+                                objects,
+                                oid=reference.oid,
+                                size=size,
+                                path=reference.path.replace("\\", "/"),
+                                source="git_history",
+                                commit=commit,
+                                finding_budget=max_findings - len(findings),
+                                max_file_bytes=max_file_bytes,
+                                scan_blob=_scan_blob,
+                            )
+                        except (GitObjectReadError, OSError, subprocess.SubprocessError):
+                            if "git_history_blob_unavailable" not in errors:
+                                errors.append("git_history_blob_unavailable")
+                            truncated = True
+                            continue
+                        files_scanned += 1
+                        bytes_scanned += scanned_bytes
+                        findings.extend(found)
     elif include_history and not git_repo:
         errors.append("history_requested_for_non_git_target")
         truncated = True

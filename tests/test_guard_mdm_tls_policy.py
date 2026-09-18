@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+from codex_plugin_scanner.guard.mdm import network_trust as trust_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.mdm.network import managed_ssl_context
 
@@ -52,6 +53,7 @@ def test_shell_ca_overrides_are_ignored_but_managed_ca_is_additive(
     ambient_bundle = tmp_path / "ambient-ca.pem"
     ambient_bundle.write_bytes(pem)
     ambient_bundle.chmod(0o600)
+    monkeypatch.setattr(trust_module, "machine_controlled_file_is_trusted", lambda path: path == ambient_bundle)
     monkeypatch.setenv("SSL_CERT_FILE", str(ambient_bundle))
     monkeypatch.setenv("SSL_CERT_DIR", str(tmp_path / "ambient-ca-dir"))
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(ambient_bundle))

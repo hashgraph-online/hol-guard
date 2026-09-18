@@ -7,13 +7,39 @@ on:
       - "ci/native_runtime/test_native_runtime_manifest.py"
       - "scripts/build_native_hol_guard_wheel.py"
       - ".github/workflows/rust-native-identity.yml"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "scripts/*native*.py"
+      - "scripts/release/**"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/package_offline.py"
+      - "tests/native_*support.py"
+      - "tests/test_native_runtime_live_identity.py"
+      - "tests/test_native_runtime_unsupported_inspection.py"
+      - "tests/test_installed_runtime_identity_probe.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "ci/native_runtime/test_native_runtime_manifest.py"
       - "scripts/build_native_hol_guard_wheel.py"
       - ".github/workflows/rust-native-identity.yml"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "scripts/*native*.py"
+      - "scripts/release/**"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/package_offline.py"
+      - "tests/native_*support.py"
+      - "tests/test_native_runtime_live_identity.py"
+      - "tests/test_native_runtime_unsupported_inspection.py"
+      - "tests/test_installed_runtime_identity_probe.py"
   workflow_dispatch:
 
 permissions:
@@ -41,7 +67,18 @@ jobs:
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Lint native identity boundary
         run: |
-          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime.py ci/native_runtime/test_native_runtime_manifest.py
-          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime.py
-      - name: Run manifest identity contracts
-        run: uv run --no-sync pytest ci/native_runtime/test_native_runtime_manifest.py --tb=short
+          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime.py src/codex_plugin_scanner/guard/native_runtime_identity.py ci/native_runtime/test_native_runtime_manifest.py ci/native_runtime/probe_installed_runtime_identity.py tests/test_native_runtime_live_identity.py tests/test_native_runtime_unsupported_inspection.py tests/test_installed_runtime_identity_probe.py
+          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime.py src/codex_plugin_scanner/guard/native_runtime_identity.py
+      - name: Run manifest and live Linux identity contracts
+        run: >-
+          uv run --no-sync python -m pytest -p tests.package_offline
+          ci/native_runtime/test_native_runtime_manifest.py
+          tests/test_native_runtime_live_identity.py
+          tests/test_native_runtime_unsupported_inspection.py
+          tests/test_installed_runtime_identity_probe.py
+          --tb=short
+      - name: Verify actual ownership transition on a disposable executable
+        run: >-
+          sudo .venv/bin/python -m pytest -p tests.package_offline
+          tests/test_native_runtime_live_identity.py::test_executable_ownership_change_retires_the_live_proof
+          --tb=short

@@ -10,10 +10,10 @@ import {
   isFineTuningEditable,
   resolveTotpSetupStep,
   hasApprovalGateSettingsChanged,
-  resolveApprovalPasswordSectionCopy,
   resolveTotpSetupModalTitle,
   resolveInitialSettingsTab,
 } from "./settings-workspace";
+import { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -107,6 +107,7 @@ assert(resolveInitialSettingsTab("?section=defaults") === "protection", "setting
 assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
 
 const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+const approvalPasswordCopySource = readFileSync(new URL("./settings/approval-password-copy.tsx", import.meta.url), "utf8");
 assert(!settingsWorkspaceSource.includes("Ask first"), "settings: Ask first is not a first-class label");
 assert(!settingsWorkspaceSource.includes("Block until approved"), "settings: Block until approved is not a first-class label");
 assert(!settingsWorkspaceSource.includes("Watch only"), "settings: Watch only is not a first-class label");
@@ -115,6 +116,14 @@ assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", 
 assert(settingsWorkspaceSource.includes('label="Cloud receipt privacy"'), "receipt privacy: redaction control is visible in settings");
 assert(settingsWorkspaceSource.includes("<SettingsSelectRow"), "receipt privacy: redaction control uses the accessible select primitive");
 assert(settingsWorkspaceSource.includes('handleStringChange("receipt_redaction_level")'), "receipt privacy: redaction changes persist through settings save");
+const presentationSettingsSource = readFileSync(new URL("./settings/presentation-mode-settings.tsx", import.meta.url), "utf8");
+assert(resolveInitialSettingsTab("?section=experience") === "experience", "presentation: display preferences have an Experience section");
+assert(presentationSettingsSource.includes('role="switch"') && presentationSettingsSource.includes("Technical Mode"), "presentation: Experience has an accessible mode control");
+assert(presentationSettingsSource.includes("usePresentationMode") && presentationSettingsSource.includes("void setMode("), "presentation: mode changes use the Core-backed preference provider");
+assert(settingsWorkspaceSource.includes("withoutPresentationSettings(draft)"), "presentation: generic settings saves preserve the independently updated display preference");
+assert(settingsWorkspaceSource.includes("disabled={totpEnabled}"), "approval-gate: cooldown selector is disabled while authenticator MFA is enabled");
+assert(settingsWorkspaceSource.includes("effectiveApprovalGateCooldownSeconds"), "approval-gate: settings render the effective cooldown when MFA is enabled");
+assert(settingsWorkspaceSource.includes("Authenticator approvals do not use the password cooldown"), "approval-gate: settings explain why MFA disables password cooldown");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(
@@ -137,8 +146,24 @@ assert(
   "approval-password: configured copy points to save flow",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(false).includes("save settings"),
-  "approval-password: first-time copy points to save flow",
+  resolveApprovalPasswordSectionCopy(true, false).includes("Save settings"),
+  "approval-password: configured copy wins when the gate is disabled",
+);
+assert(
+  resolveApprovalPasswordSectionCopy(false).includes("setup action"),
+  "approval-password: first-time copy points to the explicit setup action",
+);
+assert(
+  resolveApprovalPasswordSectionCopy(false, false).includes("Enable the approval gate"),
+  "approval-password: disabled gate copy points to the gate toggle",
+);
+assert(
+  approvalPasswordCopySource.includes("Set up approval password"),
+  "approval-password: first-time setup has an explicit action",
+);
+assert(
+  settingsWorkspaceSource.includes('"setup-gate"'),
+  "approval-password: explicit setup reuses the setup-gate proof flow",
 );
 assert(
   resolveTotpSetupModalTitle(true) === "Confirm your approval password",

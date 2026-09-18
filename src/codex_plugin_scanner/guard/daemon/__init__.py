@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .manager import (
     ensure_guard_daemon,
     guard_daemon_url_for_home,
@@ -11,6 +13,9 @@ from .manager import (
     repair_approval_center_locator,
     schedule_guard_daemon_recovery,
 )
+
+if TYPE_CHECKING:
+    from .runtime_repair import repair_guard_daemon_runtime
 
 __all__ = [
     "GuardDaemonServer",
@@ -22,11 +27,17 @@ __all__ = [
     "load_guard_surface_daemon_client",
     "recover_guard_daemon_after_hook_failure",
     "repair_approval_center_locator",
+    "repair_guard_daemon_runtime",
     "schedule_guard_daemon_recovery",
 ]
 
 
 def __getattr__(name: str):
+    if name == "repair_guard_daemon_runtime":
+        from .runtime_repair import repair_guard_daemon_runtime
+
+        globals()[name] = repair_guard_daemon_runtime
+        return repair_guard_daemon_runtime
     if name == "GuardDaemonServer":
         from .server import GuardDaemonServer
 

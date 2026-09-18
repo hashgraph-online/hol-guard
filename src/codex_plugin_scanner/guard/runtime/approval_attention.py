@@ -61,12 +61,14 @@ class ApprovalAttentionCoordinator:
         opener: Callable[[str], object],
         clock: Callable[[], float] = time.monotonic,
         cooldown_seconds: float = _BROWSER_OPEN_COOLDOWN_SECONDS,
+        config_reader: Callable[[Path], dict[str, object]] | None = None,
     ) -> None:
         self._store = store
         self._runtime = runtime
         self._opener = opener
         self._clock = clock
         self._cooldown_seconds = cooldown_seconds
+        self._config_reader = config_reader
         self._condition = threading.Condition()
         self._pending: dict[str, _PendingAttention] = {}
         self._last_opened_at: float | None = None
@@ -210,4 +212,4 @@ class ApprovalAttentionCoordinator:
             (Path(value) for request in requests if isinstance((value := request.get("workspace")), str)),
             None,
         )
-        return load_guard_config(self._store.guard_home, workspace)
+        return load_guard_config(self._store.guard_home, workspace, config_reader=self._config_reader)

@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix impor
     AWS_DESTRUCTIVE_COMMAND_PATHS,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4,
+    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5,
     aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
@@ -71,13 +72,17 @@ def test_aws_batch_4_matrix_is_exactly_one_hundred_unique_operations() -> None:
     )
 
 
-def test_aws_combined_matrix_is_exactly_two_hundred_unique_operations() -> None:
-    assert len(AWS_DESTRUCTIVE_COMMAND_PATHS) == 200
-    assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) == 200
+def test_aws_combined_matrix_is_exactly_three_hundred_unique_operations() -> None:
+    assert len(AWS_DESTRUCTIVE_COMMAND_PATHS) == 300
+    assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) == 300
     assert AWS_DESTRUCTIVE_COMMAND_PATHS == (
-        AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1 + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+        AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+        + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+        + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5
     )
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)
+    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
+    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
 
 
 def test_aws_batch_4_compiles_into_the_combined_path_set_matcher() -> None:

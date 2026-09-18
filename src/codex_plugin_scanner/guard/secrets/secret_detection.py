@@ -610,6 +610,23 @@ def _path_is_high_signal(path: str) -> bool:
     return basename in _HIGH_SIGNAL_BASENAMES or any(part in {".aws", ".ssh", ".gnupg"} for part in pure.parts)
 
 
+def _path_policy_key(path: str) -> tuple[bool, bool, bool, bool, bool]:
+    """All path-dependent detector inputs, excluding occurrence metadata.
+
+    Scan-scoped immutable-blob caches use this key. Any new path-sensitive
+    detection rule must extend it; fixture, public-config, signal, documentation
+    and code-context decisions must never share a cached result accidentally.
+    """
+
+    return (
+        _path_is_documentation(path),
+        _path_is_sample_fixture(path),
+        _path_is_public_client_config(path),
+        _path_is_high_signal(path),
+        PurePosixPath(_normalized_path(path)).suffix in _CODE_SUFFIXES,
+    )
+
+
 def _character_class_count(value: str) -> int:
     return sum(
         (
@@ -746,16 +763,29 @@ def _provider_match_is_fixture(
 ) -> bool:
     if rule.rule_id == "google-api-key" and _path_is_public_client_config(path):
         return True
-    context = _surrounding_context(text, match_start)
     unwrapped = candidate.strip().strip("<>[]{}()")
     explicit_placeholder = (
         _COMMON_PLACEHOLDER.fullmatch(unwrapped) is not None or _SAMPLE_WORDS.search(candidate) is not None
     )
-    if explicit_placeholder and (_path_is_sample_fixture(path) or _SAMPLE_WORDS.search(context) is not None):
-        return True
+    sample_fixture = _path_is_sample_fixture(path)
+    # Surrounding-line materialization splits the entire input. Ordinary
+    # provider matches do not use it: only placeholder and fixture suppression
+    # consult neighboring lines. Delay that work until one of those paths needs
+    # it, keeping the same suppression order even for sensitive fixture paths.
+    context: str | None = None
+    if explicit_placeholder:
+        if sample_fixture:
+            return True
+        context = _surrounding_context(text, match_start)
+        if _SAMPLE_WORDS.search(context) is not None:
+            return True
     if _path_is_high_signal(path):
         return False
-    return _path_is_sample_fixture(path) and _TEST_FIXTURE_CONTEXT.search(context) is not None
+    if not sample_fixture:
+        return False
+    if context is None:
+        context = _surrounding_context(text, match_start)
+    return _TEST_FIXTURE_CONTEXT.search(context) is not None
 
 
 def _confidence_label(score: float) -> SecretConfidence:

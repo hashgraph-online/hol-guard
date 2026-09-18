@@ -1,0 +1,75 @@
+{
+  "schema": "hol-guard.native-qualification-corpus.v1",
+  "oracle_base_commit": "2e672d2d950c6ec471005ddba46e49bba16dc23b",
+  "boundary": "daemon_adapter",
+  "http_body_bytes": 1000000,
+  "source_scan_bytes": 5242880,
+  "size_bytes": {"1k": 1024, "16k": 16384, "256k": 262144, "1m": 1048576, "max": 5242880},
+  "harness_routes": {
+    "antigravity": {"pre_tool_use": "preflight_only", "post_tool_use": "unavailable"},
+    "claude-code": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "cline": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_observation_only"},
+    "codex": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "copilot": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
+    "cursor": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
+    "gemini": {"pre_tool_use": "detected_external_only", "post_tool_use": "unavailable"},
+    "grok": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "hermes": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "kimi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "omp": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "openclaw": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "opencode": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "paseo": {"pre_tool_use": "unavailable", "post_tool_use": "unavailable"},
+    "pi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical_source_ref"},
+    "zcode": {"pre_tool_use": "installed_canonical", "post_tool_use": "normalizer_only_not_installed"}
+  },
+  "installed_event_aliases": {
+    "copilot": {"PreToolUse": ["preToolUse"], "PostToolUse": ["postToolUse"]},
+    "cursor": {"PreToolUse": ["beforeShellExecution", "beforeMCPExecution", "beforeReadFile", "beforeWriteFile"], "PostToolUse": ["afterShellExecution", "afterMCPExecution"]}
+  },
+  "normalizer_only_aliases": {
+    "PreToolUse": ["pretool", "pre_tool_use", "pre-tool-use"],
+    "PostToolUse": ["posttool", "post_tool_use", "post-tool-use", "afterReadFile", "afterWriteFile"]
+  },
+  "lifecycle_aliases": {
+    "UserPromptSubmit": ["UserPromptSubmit", "userPromptSubmitted"],
+    "SessionStart": ["SessionStart"],
+    "SessionEnd": ["SessionEnd"],
+    "SubagentStart": ["SubagentStart"],
+    "SubagentStop": ["SubagentStop", "subagentEnd"],
+    "Stop": ["Stop"],
+    "Notification": ["Notification"],
+    "TaskStart": ["TaskStart"],
+    "TaskError": ["TaskError"],
+    "SessionShutdown": ["SessionShutdown"],
+    "PermissionDenied": ["PermissionDenied"]
+  },
+  "permission_aliases": ["permissionRequest", "permissionRequestV2", "copilotPermissionRequest"],
+  "setup_requirements": {
+    "normal": ["isolated_store", "effective_policy_allow", "policy_ack_current"],
+    "watch": ["isolated_store", "effective_policy_allow", "policy_ack_current", "watch_observe_config"],
+    "unavailable": ["isolated_store", "policy_ack_current", "native_request_unavailable"],
+    "watch_unavailable": ["isolated_store", "policy_ack_current", "watch_observe_config", "native_request_unavailable"],
+    "expired": ["isolated_store", "expired_resident_authority", "policy_prepare_rejected", "refresh_suspended"],
+    "revoked": ["isolated_store", "revoked_generation", "policy_prepare_rejected", "refresh_suspended"],
+    "off": ["isolated_store", "native_mode_off", "python_oracle_disabled"],
+    "integrity": ["isolated_store", "policy_ack_current", "payload_reference_rejected"],
+    "queue_bytes": ["isolated_store", "policy_ack_current", "byte_reservation_rejected"],
+    "review_queue_failed": ["isolated_store", "effective_policy_allow", "policy_ack_current", "approval_persistence_failed"]
+  },
+  "evidence_sources": [
+    "docs/guard/contracts/hook-data-plane-ownership.v2.json",
+    "rust/crates/guard-command/src/pretool.rs",
+    "rust/crates/guard-runtime/src/edge_tests.rs",
+    "rust/crates/guard-runtime/src/policy_enforcement_tests.rs",
+    "rust/crates/guard-hook-core/src/lib.rs",
+    "tests/test_hook_worker_observe_pretool.py",
+    "tests/test_hook_worker_native_post_tool_watch.py",
+    "tests/test_daemon_session_continuity_edges.py",
+    "tests/test_hook_availability_policy.py",
+    "tests/test_cursor_watch_hook_script.py",
+    "tests/test_cursor_hooks.py",
+    "tests/test_guard_native_slo_ingress.py",
+    "tests/test_native_policy_snapshot_cache_binding.py"
+  ]
+}

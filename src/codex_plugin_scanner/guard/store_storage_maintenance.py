@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Final, Protocol, cast
+
+from .sqlite_recovery import prune_quarantined_store_snapshots
+from .update_staging import prune_stale_update_staging
 
 STORAGE_MAINTENANCE_MIGRATION_VERSION: Final = 20
 STORAGE_QUERY_INDEX_MIGRATION_VERSION: Final = 21
@@ -21,6 +25,8 @@ _MAX_BATCH_SIZE: Final = 10_000
 
 
 class _ConnectionOwner(Protocol):
+    guard_home: Path
+
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
@@ -29,6 +35,7 @@ class StorageMaintenanceResult:
     ran: bool
     completed: bool
     receipts_archived: int
+    native_decision_receipts_deleted: int
     guard_events_deleted: int
     cloud_events_deleted: int
     pages_reclaimed: int
@@ -82,6 +89,12 @@ class StoreStorageMaintenanceMixin:
                 detail_limit=receipt_detail_limit,
                 batch_size=batch_size,
             )
+            native_decision_receipts_deleted = _delete_native_decision_receipt_batch(
+                connection,
+                cutoff=now - timedelta(days=detail_retain_days),
+                detail_limit=receipt_detail_limit,
+                batch_size=batch_size,
+            )
             guard_events_deleted = _delete_guard_event_batch(
                 connection,
                 cutoff=now - timedelta(days=detail_retain_days),
@@ -99,6 +112,7 @@ class StoreStorageMaintenanceMixin:
                 count < batch_size
                 for count in (
                     receipts_archived,
+                    native_decision_receipts_deleted,
                     guard_events_deleted,
                     cloud_events_deleted,
                 )
@@ -125,10 +139,18 @@ class StoreStorageMaintenanceMixin:
             )
         if completed:
             _run_passive_housekeeping(self)
+            # File-level sweeps (not SQL): keep quarantined store snapshots
+            # and stale updater staging from accumulating for the whole life
+            # of the install.
+            with suppress(OSError):
+                prune_quarantined_store_snapshots(self.guard_home)
+            with suppress(OSError):
+                prune_stale_update_staging(self.guard_home)
         return StorageMaintenanceResult(
             ran=True,
             completed=completed,
             receipts_archived=receipts_archived,
+            native_decision_receipts_deleted=native_decision_receipts_deleted,
             guard_events_deleted=guard_events_deleted,
             cloud_events_deleted=cloud_events_deleted,
             pages_reclaimed=pages_reclaimed,
@@ -218,6 +240,34 @@ def _delete_guard_event_batch(
               where transition.event_id = event.event_id
             )
           order by event.occurred_at
+          limit ?
+        )
+        """,
+        (cutoff.isoformat(), boundary, boundary, batch_size),
+    )
+    return max(result.rowcount, 0)
+
+
+def _delete_native_decision_receipt_batch(
+    connection: sqlite3.Connection,
+    *,
+    cutoff: datetime,
+    detail_limit: int,
+    batch_size: int,
+) -> int:
+    boundary = _rowid_boundary(
+        connection,
+        table="native_hook_decision_receipts",
+        detail_limit=detail_limit,
+    )
+    result = connection.execute(
+        """
+        delete from native_hook_decision_receipts
+        where rowid in (
+          select rowid
+          from native_hook_decision_receipts
+          where recorded_at < ? or (? is not null and rowid <= ?)
+          order by recorded_at, rowid
           limit ?
         )
         """,

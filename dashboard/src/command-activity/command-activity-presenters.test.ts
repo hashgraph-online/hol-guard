@@ -7,6 +7,7 @@ import {
   commandExecutionLabel,
   commandHealthCopy,
   commandInteractionLabel,
+  commandInvocationLabel,
   commandMetricSummary,
   commandProofCoveragePercent,
   commandProofLabel,
@@ -43,6 +44,7 @@ const item: CommandActivityItem = {
   persistence_latency_bucket: "le_1_ms",
   feedback_label: null,
   schema_version: "1.0.0",
+  invocation_preview: "git fetch origin main",
   matches: [
     {
       ordinal: 0,
@@ -90,6 +92,8 @@ assert(commandDecisionLabel(item.policy_action) === "Allowed", "decision copy is
 assert(commandExecutionLabel(item.execution_status) === "Allowed; execution not confirmed", "unconfirmed copy is exact");
 assert(commandProofLabel(item.proof_level) === "Pre-execution check only", "proof copy is exact");
 assert(commandInteractionLabel(item) === "No review prompt recorded", "prompt copy stays factual");
+assert(commandInvocationLabel(item.invocation_preview) === "git fetch origin main", "recorded commands stay visible");
+assert(commandInvocationLabel(null) === "Command not recorded", "missing commands stay explicit");
 assert(commandReasonLabel(item.decision_reason_code) === "A command rule controlled the decision", "known reasons map");
 assert(commandReasonLabel("SECRET_REASON_SENTINEL") === "Other recorded reason", "unknown reasons never render raw");
 assert(safeEvidenceId("https://private.example/path") === "Unavailable", "URL-like identifiers do not render");

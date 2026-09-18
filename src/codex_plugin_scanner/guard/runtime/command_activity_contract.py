@@ -329,7 +329,9 @@ def _validate_activity_state(activity: CommandActivity) -> None:
     ):
         raise ValueError("non-exact parse confidence requires a bounded uncertainty class")
     if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST and (
-        activity.policy_action is None or activity.decision_reason_code is None or activity.parse_confidence is None
+        activity.policy_action is None
+        or activity.decision_reason_code is None
+        or (activity.parse_confidence is None and activity.decision_reason_code is not ActivityDecisionReason.POLICY)
     ):
         raise ValueError("pre and confirmed activity requires complete bounded decision facts")
     if activity.match_count == 0 and activity.controlling_rule_id is not None:
@@ -337,10 +339,17 @@ def _validate_activity_state(activity: CommandActivity) -> None:
     if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST:
         if activity.decision_reason_code is ActivityDecisionReason.NO_MATCH and activity.match_count != 0:
             raise ValueError("no-match reason cannot carry activity matches")
-        if activity.match_count == 0 and activity.decision_reason_code not in {
-            ActivityDecisionReason.NO_MATCH,
-            ActivityDecisionReason.CAPABILITY,
-        }:
+        if (
+            activity.match_count == 0
+            and activity.decision_reason_code
+            not in {
+                ActivityDecisionReason.NO_MATCH,
+                ActivityDecisionReason.CAPABILITY,
+            }
+            and not (
+                activity.decision_reason_code is ActivityDecisionReason.POLICY and activity.parse_confidence is None
+            )
+        ):
             raise ValueError("an activity without matches requires a no-match reason or capability reason")
     if activity.receipt_link_status is ReceiptLinkStatus.LINKED and activity.receipt_id is None:
         raise ValueError("linked receipt status requires receipt_id")
@@ -350,6 +359,7 @@ def _validate_activity_state(activity: CommandActivity) -> None:
         activity.policy_action is not None
         and guard_action_severity(activity.policy_action) >= guard_action_severity("review")
         and activity.receipt_link_status is not ReceiptLinkStatus.LINKED
+        and not (activity.decision_reason_code is ActivityDecisionReason.POLICY and activity.parse_confidence is None)
     ):
         raise ValueError("review-or-stronger activity requires a linked receipt")
 

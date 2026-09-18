@@ -4,10 +4,38 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 ReviewedCommandCase = tuple[str, str, str]
+
+
+def enable_local_admin_extension_layer(*extension_ids: str) -> ExtensionControlLayer:
+    """Build a local-admin layer that enables the named command extensions."""
+
+    return ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=tuple(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.EXTENSION, extension_id),
+                state=ControlState.ENABLED,
+            )
+            for extension_id in extension_ids
+        ),
+    )
 
 
 def assert_reviewed_command_cases(cases: tuple[ReviewedCommandCase, ...], tmp_path: Path) -> None:

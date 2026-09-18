@@ -12,8 +12,17 @@ on:
       - "ci/native_runtime/test_command_model_resident.py"
       - "ci/native_runtime/test_command_shadow_activity.py"
       - ".github/workflows/rust-command-shadow.yml"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/runtime/command*.py"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/crates/guard-command/**"
       - "rust/crates/guard-runtime/**"
@@ -24,6 +33,15 @@ on:
       - "ci/native_runtime/test_command_model_resident.py"
       - "ci/native_runtime/test_command_shadow_activity.py"
       - ".github/workflows/rust-command-shadow.yml"
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/runtime/command*.py"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   workflow_dispatch:
 
 permissions:

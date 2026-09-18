@@ -2,23 +2,77 @@ name: Rust runtime recovery
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/**"
       - "ci/native_runtime/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
       - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
+      - "scripts/bench_guard_native_installed_slo.py"
+      - "scripts/native_slo_adapter.py"
+      - "scripts/native_slo_contract.py"
+      - "scripts/stress_guard_daemon.py"
+      - "tests/test_native_slo_contract.py"
+      - "tests/test_guard_native_slo_ingress.py"
+      - "tests/test_guard_daemon_stress_script.py"
+      - "src/codex_plugin_scanner/guard/daemon/server.py"
       - ".github/workflows/rust-runtime-recovery.yml"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/**"
+      - "src/codex_plugin_scanner/guard/config*.py"
+      - "src/codex_plugin_scanner/guard/runtime/**"
+      - "contracts/extensions/**"
+      - "contracts/mcp-servers/**"
+      - "src/codex_plugin_scanner/guard/store*.py"
+      - "src/codex_plugin_scanner/guard/protection_posture.py"
+      - "src/codex_plugin_scanner/guard/adapters/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "src/codex_plugin_scanner/guard/*hook*.py"
+      - "scripts/*native*.py"
+      - "scripts/bench_guard*.py"
+      - "scripts/ci/*native*.py"
+      - "tests/*native*.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/**"
       - "ci/native_runtime/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
       - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
+      - "scripts/bench_guard_native_installed_slo.py"
+      - "scripts/native_slo_adapter.py"
+      - "scripts/native_slo_contract.py"
+      - "scripts/stress_guard_daemon.py"
+      - "tests/test_native_slo_contract.py"
+      - "tests/test_guard_native_slo_ingress.py"
+      - "tests/test_guard_daemon_stress_script.py"
+      - "src/codex_plugin_scanner/guard/daemon/server.py"
       - ".github/workflows/rust-runtime-recovery.yml"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/**"
+      - "src/codex_plugin_scanner/guard/config*.py"
+      - "src/codex_plugin_scanner/guard/runtime/**"
+      - "contracts/extensions/**"
+      - "contracts/mcp-servers/**"
+      - "src/codex_plugin_scanner/guard/store*.py"
+      - "src/codex_plugin_scanner/guard/protection_posture.py"
+      - "src/codex_plugin_scanner/guard/adapters/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "src/codex_plugin_scanner/guard/*hook*.py"
+      - "scripts/*native*.py"
+      - "scripts/bench_guard*.py"
+      - "scripts/ci/*native*.py"
+      - "tests/*native*.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   workflow_dispatch:
 
 permissions:
@@ -61,3 +115,10 @@ jobs:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: uv run --no-sync pytest ci/native_runtime/test_native_runtime_recovery.py --tb=short
+      - name: Run SLO contract and bounded-resource checks
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_native_slo_contract.py \
+            tests/test_guard_native_slo_ingress.py \
+            tests/test_guard_daemon_stress_script.py \
+            --tb=short

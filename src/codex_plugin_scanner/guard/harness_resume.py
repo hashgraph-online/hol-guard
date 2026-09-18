@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
+from pathlib import Path
 
 from .adapters.contracts import contract_for
 from .continuation_runtime import continue_request_after_application
@@ -51,6 +52,7 @@ def resume_harness_operation(
     request_id: str,
     action: str,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
     """Mark a waiting non-Codex operation as resumed or blocked."""
 
@@ -70,6 +72,7 @@ def resume_harness_operation(
             request_row=request,
             action=normalized_action,
             now=now,
+            config_reader=config_reader,
         )
         detail = continuation.get("harnessResume")
         if isinstance(detail, dict):

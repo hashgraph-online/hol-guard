@@ -1,0 +1,73 @@
+{
+  "schema": "guard-claude-python-auth-vectors.v1",
+  "revision": "ae33987d0c8675c36a77375e03419aee920825f6",
+  "module": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_auth.py",
+  "module_sha256": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+  "bridge_modules": {
+    "adapters/claude_daemon_hook_bridge.py": "4a57d7ac27bbd57695e5696b61fcabe5ec07f61af4a148e61aa3483cc70397f5",
+    "adapters/claude_daemon_hook_transport.py": "9a01c09bd0f1ce2f8b0352154a3253fbc070395be18d4f0365406aca4c12253e",
+    "adapters/codex_daemon_hook_auth.py": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+    "adapters/claude_daemon_state.py": "14859cac506d29ced21ea2b6a1609d10279e0d988ef88a54592203cfd719cc7e"
+  },
+  "synthetic_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "vectors": [
+    {
+      "payload": {
+        "z": true,
+        "a": [
+          null,
+          false,
+          0,
+          17,
+          -8
+        ],
+        "name": "plain"
+      },
+      "canonical": "{\"a\":[null,false,0,17,-8],\"name\":\"plain\",\"z\":true}",
+      "mac": "c83074fd69da1b65f465c90239af1c25eeafdbb76562e8e08d8795a1ebab1016"
+    },
+    {
+      "payload": {
+        "path": "/synthetic/\u00e9/\u4e2d\u6587/\ud83d\ude80",
+        "control": "\b\f\n\r\t\u0000\u001f\u007f",
+        "quotes": "\"\\/"
+      },
+      "canonical": "{\"control\":\"\\b\\f\\n\\r\\t\\u0000\\u001f\\u007f\",\"path\":\"/synthetic/\\u00e9/\\u4e2d\\u6587/\\ud83d\\ude80\",\"quotes\":\"\\\"\\\\/\"}",
+      "mac": "09c90f04e29cd1a7b6213590b8610088fd91209998acc8969d9a55feed494a40"
+    },
+    {
+      "payload": {
+        "\uffff": "high",
+        "\ud83d\ude80": "astral",
+        "a": {
+          "z": [
+            1,
+            {
+              "\u03b2": "\u00e9"
+            }
+          ],
+          "a": "nested"
+        }
+      },
+      "canonical": "{\"a\":{\"a\":\"nested\",\"z\":[1,{\"\\u03b2\":\"\\u00e9\"}]},\"\\uffff\":\"high\",\"\\ud83d\\ude80\":\"astral\"}",
+      "mac": "8831e8544911e2b7de5015469e5c7d95cb1ac3f7f443891ea9ab23530cf17dac"
+    },
+    {
+      "payload": {
+        "protocol_version": 1,
+        "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state_id": "synthetic-state",
+        "host": "127.0.0.1",
+        "port": 32123,
+        "pid": 1234,
+        "started_at": "2026-09-17T00:00:00Z",
+        "guard_home": "/synthetic/\u00e9/guard",
+        "hook_event": "PreToolUse",
+        "issued_at_ms": 1789603200000,
+        "expires_at_ms": 1789603205000
+      },
+      "canonical": "{\"expires_at_ms\":1789603205000,\"guard_home\":\"/synthetic/\\u00e9/guard\",\"hook_event\":\"PreToolUse\",\"host\":\"127.0.0.1\",\"issued_at_ms\":1789603200000,\"nonce\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pid\":1234,\"port\":32123,\"protocol_version\":1,\"started_at\":\"2026-09-17T00:00:00Z\",\"state_id\":\"synthetic-state\"}",
+      "mac": "a9d2f583d7c6e465e9c1b257659662229ecca8801e84328efd4d78ade3da97a8"
+    }
+  ]
+}

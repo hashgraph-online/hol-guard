@@ -13,6 +13,7 @@ from ..runtime.extension_control_contract import (
 )
 from ..runtime.extension_control_resolver import resolve_extension_controls
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from ..runtime.extension_trust import extension_is_active
 
 EFFECTIVE_PROJECTION_SCHEMA: Final = "guard.daemon.extension-control-projection.v1"
 _MAX_PROJECTION_EXTENSIONS: Final = 512
@@ -59,10 +60,15 @@ def build_effective_extension_control_projection(
             surface=ControlSurface.COMMAND_EVALUATION,
             authority_failure=snapshot.authority_failure,
         )
+        active = extension_is_active(
+            extension.extension_id,
+            snapshot.layers,
+            required=extension.required,
+        )
         extension_items.append(
             {
                 "extension_id": extension.extension_id,
-                "effective_state": "blocked" if resolution.blocked else "allowed",
+                "effective_state": "blocked" if resolution.blocked or not active else "allowed",
                 "local_state": _explicit_layer_state(
                     snapshot.layers,
                     ControlLayerKind.LOCAL_ADMIN,
@@ -90,11 +96,17 @@ def build_effective_extension_control_projection(
             surface=ControlSurface.COMMAND_EVALUATION,
             authority_failure=snapshot.authority_failure,
         )
+        owner = registry.get(permission.extension_id)
+        active = owner is not None and extension_is_active(
+            permission.extension_id,
+            snapshot.layers,
+            required=owner.required,
+        )
         permission_items.append(
             {
                 "permission_id": permission.permission_id,
                 "extension_id": permission.extension_id,
-                "effective_state": "blocked" if resolution.blocked else "allowed",
+                "effective_state": "blocked" if resolution.blocked or not active else "allowed",
                 "local_state": _explicit_layer_state(
                     snapshot.layers,
                     ControlLayerKind.LOCAL_ADMIN,

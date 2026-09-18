@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.custom_extension_continuity import Custo
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import stub_authenticated_urlopen
 from tests.test_policy_bundle_v2 import _signed_bundle, _verification_key
 
 
@@ -134,7 +135,7 @@ def test_sync_receipts_consumes_signed_custom_extension_continuity_in_production
                 {"syncedAt": "2026-08-25T16:00:00Z", "receiptsStored": 0, "policyBundle": bundle}
             ).encode()
 
-    monkeypatch.setattr(guard_runner.urllib.request, "urlopen", lambda request, timeout: _Response())
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
     monkeypatch.setattr(guard_runner, "sync_pain_signals", lambda _store, auth_context=None: 0)
     monkeypatch.setattr(guard_runner, "sync_guard_events", lambda _store, auth_context=None: 0)
     summary = guard_runner.sync_receipts(
@@ -188,11 +189,7 @@ def test_sync_receipts_consumes_signed_custom_extension_continuity_in_production
                 }
             ).encode()
 
-    monkeypatch.setattr(
-        guard_runner.urllib.request,
-        "urlopen",
-        lambda request, timeout: _ConflictingResponse(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _ConflictingResponse())
     with pytest.raises(CustomExtensionContinuityError, match="revision payload changed"):
         guard_runner.sync_receipts(
             store,
@@ -299,9 +296,10 @@ def test_production_sync_enforces_v2_authority_and_effective_negotiation(
                 payload["managedControlsCapabilities"] = ["custom-extension-continuity.v2"]
             return json.dumps(payload).encode()
 
-    monkeypatch.setattr(guard_runner.urllib.request, "urlopen", lambda request, timeout: _Response())
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
     monkeypatch.setattr(guard_runner, "sync_pain_signals", lambda _store, auth_context=None: 0)
     monkeypatch.setattr(guard_runner, "sync_guard_events", lambda _store, auth_context=None: 0)
+
     def invoke() -> dict[str, object]:
         return guard_runner.sync_receipts(
             store,
@@ -311,6 +309,7 @@ def test_production_sync_enforces_v2_authority_and_effective_negotiation(
                 "dpop_key_material": None,
             },
         )
+
     if expected_error is not None:
         with pytest.raises(CustomExtensionContinuityError, match=expected_error):
             invoke()

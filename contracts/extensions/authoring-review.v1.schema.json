@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "discoveryDigest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "entries": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "evidenceUrl": {
+            "maxLength": 512,
+            "minLength": 0,
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 512,
+            "minLength": 0,
+            "type": "string"
+          },
+          "reviewed": {
+            "type": "boolean"
+          },
+          "riskClasses": {
+            "items": {
+              "enum": [
+                "execution",
+                "destructive_shell",
+                "network_egress",
+                "local_secret_read"
+              ]
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "safeArgv": {
+            "items": {
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": false
+            },
+            "maxItems": 16,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "saferAlternative": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "review",
+              "inherit",
+              "allow",
+              "block"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "reviewed",
+          "rationale",
+          "evidenceUrl",
+          "riskClasses",
+          "saferAlternative",
+          "safeArgv"
+        ],
+        "type": "object"
+      },
+      "maxProperties": 256,
+      "propertyNames": {
+        "maxLength": 21,
+        "minLength": 1,
+        "pattern": "^(?:op|tool)-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "guard.extension-review.v1"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "discoveryDigest",
+    "entries"
+  ],
+  "type": "object"
+}

@@ -125,15 +125,19 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
     return f"{reason} Approve it in HOL Guard, then retry."
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
-    approval_center_url = response_payload.get("approval_center_url")
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
+    review_url = _preferred_approval_review_url(response_payload, harness=harness)
+    if review_url is None:
+        from ..approval_hook_copy import approval_review_url_from_payload
+
+        review_url = approval_review_url_from_payload(response_payload)
+    if review_url is None:
         return None
-    review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",
         "copilot": "Copilot",
+        "cursor": "Cursor",
         "guard-cli": "package install",
         "opencode": "OpenCode",
         "kimi": "Kimi",

@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from hashlib import sha256
+from pathlib import Path
 from typing import Final
 
 from .adapters.contracts import contract_for
@@ -85,6 +86,7 @@ def continue_request_after_application(
     timeout_seconds: float = 5.0,
     cancelled: Callable[[], bool] = lambda: False,
     headless: bool = True,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Continue one locally applied request without taking over Cloud delivery."""
 
@@ -97,6 +99,7 @@ def continue_request_after_application(
         request_id=request_id,
         observed_at=observed_at,
         headless=headless,
+        config_reader=config_reader,
     )
     existing = store.get_request_resume(request_id)
     previous = _previous_result(existing, offer=offer, action=normalized_action)
@@ -182,11 +185,16 @@ def _offer_from_request(
     observed_at: datetime,
     headless: bool,
     operation_override: Mapping[str, object] | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> ContinuationOffer:
     harness = _canonical_harness(request_row.get("harness"))
     operation = operation_override or store.get_guard_operation_for_approval_request(request_id)
     metadata: Mapping[str, object] = _mapping(operation.get("metadata")) if isinstance(operation, Mapping) else {}
-    deadline = codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata) if operation else None
+    deadline = (
+        codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata, config_reader=config_reader)
+        if operation
+        else None
+    )
     original_hook_attached = harness == "codex" and deadline is not None and deadline > observed_at
     raw_target = _first_text(metadata, _SESSION_KEYS)
     session_target_verified = (
@@ -220,6 +228,7 @@ def continuation_offer_payload(
     now: str,
     headless: bool,
     operation: Mapping[str, object] | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Serialize only capability facts that a Cloud reviewer may safely consume."""
 
@@ -231,6 +240,7 @@ def continuation_offer_payload(
         observed_at=_parse_aware_timestamp(now),
         headless=headless,
         operation_override=operation,
+        config_reader=config_reader,
     )
     return {
         "correlationId": offer.correlation_id,
@@ -248,6 +258,7 @@ def record_live_hook_completion(
     action: str,
     now: str,
     approval_decision: Mapping[str, object] | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
     """Record proof that the original browser-waiting Codex hook consumed a decision."""
 
@@ -261,6 +272,7 @@ def record_live_hook_completion(
         request_id=request_id,
         observed_at=_parse_aware_timestamp(now),
         headless=False,
+        config_reader=config_reader,
     )
     if offer.capability != "suspended-response":
         return None
