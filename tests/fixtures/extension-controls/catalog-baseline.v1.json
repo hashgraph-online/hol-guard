@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "7f0b1d227713ebf7c4a4bab2cdd1c914b761bc507da8d6967ad1eaac439f1bfb",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -92,12 +92,13 @@
     "command.storage.google-cloud",
     "command.storage.minio",
     "command.system",
+    "command.vttforge",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 251,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -346,6 +347,9 @@
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
     "command.system.permission.disk-or-power-mutation": "halt",
+    "command.vttforge.permission.init": "vttforge init",
+    "command.vttforge.permission.lint-fix": "vttforge lint --fix",
+    "command.vttforge.permission.migrate-write": "vttforge migrate --write",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
   "permission_families": {
@@ -692,6 +696,9 @@
     "command.storage.minio.permission.mirror",
     "command.storage.minio.permission.mv",
     "command.system.permission.disk-or-power-mutation",
+    "command.vttforge.permission.init",
+    "command.vttforge.permission.lint-fix",
+    "command.vttforge.permission.migrate-write",
     "command.windows.permission.destructive-storage"
   ],
   "preview_shape": [
@@ -704,7 +711,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 237,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -939,6 +946,9 @@
     "command.storage.minio.cat",
     "command.storage.minio.mirror",
     "command.system.disk-or-power-mutation",
+    "command.vttforge.init",
+    "command.vttforge.lint-fix",
+    "command.vttforge.migrate-write",
     "command.windows.destructive-storage"
   ],
   "schema_version": "guard.extension-control-center.baseline.v1"
