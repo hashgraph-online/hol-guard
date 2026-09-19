@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.omarchy-mcp",
+  "version": "1.0.0",
+  "name": "Omarchy MCP",
+  "description": "Remote AI agent dispatch to Omarchy VM — Claude Code, Codex CLI, Hermes Agent, Grok CLI, plus file ops and whitelisted shell. Conservative defaults: dispatch and write tools blocked, reads inherited.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.jpeetz",
+    "displayName": "JPeetz",
+    "url": "https://github.com/JPeetz/omarchy-mcp"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniServerStack", "background": "#1E3A5F" },
+  "homepage": "https://github.com/JPeetz/omarchy-mcp",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "service-launcher",
+    "command": "systemctl",
+    "arguments": ["start", "omarchy-mcp"]
+  },
+  "riskClasses": ["remote-execution", "ai-agent-dispatch", "filesystem-write"],
+  "tools": [
+    { "name": "system_run", "state": "block" },
+    { "name": "file_write", "state": "block" },
+    { "name": "claude_execute", "state": "block" },
+    { "name": "codex_execute", "state": "block" },
+    { "name": "file_read", "state": "inherit" },
+    { "name": "file_list", "state": "inherit" },
+    { "name": "status", "state": "inherit" },
+    { "name": "hermes_execute", "state": "inherit" },
+    { "name": "grok_execute", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/JPeetz/omarchy-mcp",
+    "https://github.com/NousResearch/hermes-agent/pull/111710"
+  ],
+  "saferAlternatives": [
+    "Use per-category Bearer tokens (OMARCHY_MCP_TOKEN_DISPATCH/FS/SHELL/READ) to scope blast radius independently of Guard policy.",
+    "claude_execute and codex_execute are opt-in — only enable when remote dispatch is needed.",
+    "For read-only access, set only OMARCHY_MCP_TOKEN_READ and leave dispatch/shell tokens unconfigured."
+  ]
+}
