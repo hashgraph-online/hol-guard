@@ -10,12 +10,14 @@ on:
         type: choice
         options:
           - alpha
+          - stable
       release_train:
         description: "Authorized release train"
         required: true
         type: choice
         options:
           - "3.0"
+          - main
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -46,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Enforce alpha release authority
+      - name: Enforce release authority
         if: github.event_name == 'workflow_dispatch'
         env:
           GITHUB_ACTOR_ID: ${{ github.actor_id }}
@@ -65,14 +67,14 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "3.0" ]]; then
-            echo "Only the release/3.0 alpha train is authorized" >&2
-            exit 1
-          fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/3.0" ]]; then
-            echo "Alpha releases must run from refs/heads/release/3.0" >&2
-            exit 1
-          fi
+          case "${RELEASE_CHANNEL}:${RELEASE_TRAIN}:${GITHUB_REF}" in
+            alpha:3.0:refs/heads/release/3.0) ;;
+            stable:main:refs/heads/main) ;;
+            *)
+              echo "Release channel, train, and source branch are not an authorized combination" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
             echo "Expected source SHA does not match the dispatch source" >&2
             exit 1
@@ -158,42 +160,61 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "3.0" ]]; then
-              echo "Unsupported release train: ${TRAIN}" >&2
-              exit 1
-            fi
-            TRAIN_REF="refs/heads/release/${TRAIN}"
+            if [[ "$CHANNEL" == "alpha" && "$TRAIN" == "3.0" ]]; then
+              TRAIN_REF="refs/heads/release/${TRAIN}"
+              if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
+                echo "Alpha releases must run from ${TRAIN_REF}" >&2
+                exit 1
+              fi
 
-            if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The release/3.0 train is alpha-only" >&2
+              EXISTING_VERSION_FILE=$(mktemp)
+              uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
+              uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry testpypi | jq -r '.[]' >> "$EXISTING_VERSION_FILE"
+              git tag --list 'alpha/v*' | sed 's#^alpha/v##' >> "$EXISTING_VERSION_FILE"
+              mapfile -t EXISTING_VERSIONS < <(
+                awk -v candidate="$RELEASE_VERSION" '$0 != candidate' "$EXISTING_VERSION_FILE"
+              )
+              VALIDATOR_ARGS=(
+                --channel "$CHANNEL"
+                --version "$RELEASE_VERSION"
+                --git-ref "$TRAIN_REF"
+                --actual-ref "$GITHUB_REF"
+                --github-sha "$SOURCE_SHA"
+                --expected-sha "$EXPECTED_SHA"
+              )
+              for existing_version in "${EXISTING_VERSIONS[@]}"; do
+                VALIDATOR_ARGS+=(--existing-version "$existing_version")
+              done
+              VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
+            elif [[ "$CHANNEL" == "stable" && "$TRAIN" == "main" ]]; then
+              if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+                echo "Stable releases must run from refs/heads/main" >&2
+                exit 1
+              fi
+              PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry pypi)
+              TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry testpypi)
+              TAG_VERSIONS=$(git tag --list 'v*' | sed 's/^v//' | jq -R -s \
+                'split("\n") | map(select(length > 0))')
+              VERSIONS=$(jq -n \
+                --argjson pypi "$PYPI_VERSIONS" \
+                --argjson testpypi "$TESTPYPI_VERSIONS" \
+                --argjson tags "$TAG_VERSIONS" \
+                '$pypi + $testpypi + $tags | unique')
+              EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+                --base-version "$BASE_VERSION" <<< "$VERSIONS")
+              if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]; then
+                echo "Stable release version must match the next registry-derived version: ${EXPECTED_VERSION}" >&2
+                exit 1
+              fi
+              VERSION="$RELEASE_VERSION"
+            else
+              echo "Unsupported release channel and train: ${CHANNEL}:${TRAIN}" >&2
               exit 1
             fi
-            if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
-              echo "Alpha releases must run from ${TRAIN_REF}" >&2
-              exit 1
-            fi
-
-            EXISTING_VERSION_FILE=$(mktemp)
-            uv run --no-sync python scripts/verify_release_registry.py \
-              list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
-            uv run --no-sync python scripts/verify_release_registry.py \
-              list-versions --registry testpypi | jq -r '.[]' >> "$EXISTING_VERSION_FILE"
-            git tag --list 'alpha/v*' | sed 's#^alpha/v##' >> "$EXISTING_VERSION_FILE"
-            mapfile -t EXISTING_VERSIONS < <(
-              awk -v candidate="$RELEASE_VERSION" '$0 != candidate' "$EXISTING_VERSION_FILE"
-            )
-            VALIDATOR_ARGS=(
-              --channel "$CHANNEL"
-              --version "$RELEASE_VERSION"
-              --git-ref "$TRAIN_REF"
-              --actual-ref "$GITHUB_REF"
-              --github-sha "$SOURCE_SHA"
-              --expected-sha "$EXPECTED_SHA"
-            )
-            for existing_version in "${EXISTING_VERSIONS[@]}"; do
-              VALIDATOR_ARGS+=(--existing-version "$existing_version")
-            done
-            VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
@@ -263,21 +284,6 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
-            CHANNEL="stable"
-            PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
-              list-versions --registry pypi)
-            TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
-              list-versions --registry testpypi)
-            TAG_VERSIONS=$(git tag --list 'v*' | sed 's/^v//' | jq -R -s \
-              'split("\n") | map(select(length > 0))')
-            VERSIONS=$(jq -n \
-              --argjson pypi "$PYPI_VERSIONS" \
-              --argjson testpypi "$TESTPYPI_VERSIONS" \
-              --argjson tags "$TAG_VERSIONS" \
-              '$pypi + $testpypi + $tags | unique')
-            VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
-              --base-version "$BASE_VERSION" <<< "$VERSIONS")
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
@@ -415,8 +421,11 @@ jobs:
         ) ||
         (
           needs.build.outputs.channel == 'stable' &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          github.ref == 'refs/heads/main' &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
         )
       )
     needs: build
@@ -1088,9 +1097,11 @@ jobs:
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       vars.MAIN_TESTPYPI_ENABLED == 'true' &&
-      github.event_name == 'push' &&
+      github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
+      github.event.inputs.release_channel == 'stable' &&
+      github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'stable'
@@ -1182,9 +1193,11 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'push' &&
+      github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
+      github.event.inputs.release_channel == 'stable' &&
+      github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'stable'
@@ -1229,9 +1242,11 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'push' &&
+      github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
+      github.event.inputs.release_channel == 'stable' &&
+      github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.reserve-main-tag.result == 'success' &&
@@ -1393,9 +1408,11 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'push' &&
+      github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
+      github.event.inputs.release_channel == 'stable' &&
+      github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.publish-main-pypi.result == 'success' &&
@@ -1618,9 +1635,11 @@ jobs:
           needs.release-alpha.result == 'success'
         ) ||
         (
-          github.event_name == 'push' &&
+          github.event_name == 'workflow_dispatch' &&
           github.run_attempt == 1 &&
           github.ref == 'refs/heads/main' &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main' &&
           needs.build.outputs.channel == 'stable' &&
           needs.publish-main-pypi.result == 'success' &&
           needs.release-main.result == 'success'
