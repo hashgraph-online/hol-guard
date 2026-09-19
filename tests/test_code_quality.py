@@ -46,6 +46,64 @@ class TestCheckNoEval:
             r = check_no_eval(root)
             assert r.passed is True
 
+    def test_ignores_puppeteer_page_eval_member_calls(self):
+        """Reproduces issue #2913's exact bug-report fixture verbatim:
+        page.$eval()/page.$$eval() and an arbitrary object's own `eval`
+        method are not dynamic code execution and must not be flagged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "fixture.js").write_text(
+                "export async function inspect(page) {\n"
+                '  const status = await page.$eval("#status", (node) => node.textContent);\n'
+                '  const count = await page.$$eval(".item", (nodes) => nodes.length);\n'
+                "\n"
+                '  const object = { eval: () => "ordinary method" };\n'
+                "  object.eval();\n"
+                "\n"
+                "  return { status, count };\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            r = check_no_eval(root)
+            assert r.passed is True
+            assert r.points == 5
+
+    def test_still_flags_bare_eval_alongside_puppeteer_style_calls(self):
+        """A real bare eval() in the same file as safe $eval() calls must
+        still be caught — the fix narrows the regex, it doesn't disable it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "mixed.js").write_text(
+                'const status = await page.$eval("#status", (n) => n.textContent);\neval(userInput);\n',
+                encoding="utf-8",
+            )
+            r = check_no_eval(root)
+            assert r.passed is False
+            assert r.points == 0
+
+    @pytest.mark.parametrize("receiver", ("window", "globalThis", "self", "global"))
+    def test_still_flags_global_object_eval(self, receiver: str):
+        """window.eval()/globalThis.eval()/etc. are real dynamic-execution
+        risks (a common way to evade a naive bare-eval() filter) and must
+        stay flagged even though the fix stops flagging arbitrary member
+        calls named eval in general."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "evasion.js").write_text(f"{receiver}.eval(userInput);\n", encoding="utf-8")
+            r = check_no_eval(root)
+            assert r.passed is False
+            assert r.points == 0
+
+    def test_ignores_arbitrary_member_named_eval(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "handler.py").write_text(
+                "obj.eval = lambda expr: expr\nobj.eval('1+1')\n",
+                encoding="utf-8",
+            )
+            r = check_no_eval(root)
+            assert r.passed is True
+
 
 class TestCheckNoShellInjection:
     def test_passes_clean_dir(self):
@@ -65,11 +123,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "dispatcher.ts").write_text(
-                "const message = `failed ${reason}`;\n"
-                "switch (kind) {\n"
-                "  case 'spawn':\n"
-                "    return message;\n"
-                "}\n",
+                "const message = `failed ${reason}`;\nswitch (kind) {\n  case 'spawn':\n    return message;\n}\n",
                 encoding="utf-8",
             )
 
@@ -137,8 +191,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.js").write_text(
-                "const cmd = `echo ${userInput}`;\n"
-                'require("node:child_process").exec(cmd);\n',
+                'const cmd = `echo ${userInput}`;\nrequire("node:child_process").exec(cmd);\n',
                 encoding="utf-8",
             )
 
@@ -152,8 +205,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                "export const command: string = `echo ${userInput}`;\n"
-                "child_process.exec(command);\n",
+                "export const command: string = `echo ${userInput}`;\nchild_process.exec(command);\n",
                 encoding="utf-8",
             )
 
@@ -168,8 +220,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                f"const cmd = `echo ${{userInput}}` {suffix};\n"
-                "child_process.exec(cmd);\n",
+                f"const cmd = `echo ${{userInput}}` {suffix};\nchild_process.exec(cmd);\n",
                 encoding="utf-8",
             )
 
