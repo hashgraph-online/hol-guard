@@ -9,6 +9,7 @@ from .command_ollama_extensions import OLLAMA_ACTION_RISK_CLASSES
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "local secret read shell command": ("local_secret_read",),
     "local script execution shell command": ("execution",),
+    "dispat release command": ("execution", "network_egress"),
     "credential exfiltration shell command": (
         "data_flow_exfiltration",
         "credential_exfiltration",
