@@ -20,9 +20,13 @@ if TYPE_CHECKING:
 
 
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
+from . import protect_output as _protect_output
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .network_status_command import load_network_status_payload
+
+_EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER = _protect_output._EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER
+_protect_payload_for_human_output = _protect_output._protect_payload_for_human_output
 
 _PACKAGE_SHIM_PENDING_APPROVAL_STATUS = "HOL Guard: package approval pending; review it in Guard Inbox."
 
@@ -367,7 +371,9 @@ def _run_guard_protect_command(
                     fresh_payload["approval_wait"] = wait_result
                     payload, exit_code = fresh_payload, 0
     if not _suppress_package_shim_allow_output(args, payload):
-        _emit("protect", payload, getattr(args, "json", False))
+        as_json = bool(getattr(args, "json", False))
+        output_payload = payload if as_json else _protect_payload_for_human_output(payload, guard_home=guard_home)
+        _emit("protect", output_payload, as_json)
     return exit_code
 
 

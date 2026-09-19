@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..approval_link_output import native_review_reason
 from .hook_availability_policy import hook_action_is_emergency_safe
 
 
@@ -204,6 +205,7 @@ def harness_json_from_native_pre_tool_review(
 
     reason = str(response.get("reason") or "HOL Guard requires review before this action can execute.")
     reason_code = str(response.get("reason_code") or "native_pre_tool_review")
+    canonical = _canonical_hook_harness(harness)
     approval_url = None
     approval_request_id = None
     if approval is not None:
@@ -211,17 +213,15 @@ def harness_json_from_native_pre_tool_review(
         raw_request_id = approval.get("request_id")
         if isinstance(raw_url, str) and raw_url.strip():
             approval_url = raw_url.strip()
-            from ..approval_hook_copy import with_approval_review_url
-
-            reason = with_approval_review_url(
+            reason = _native_review_reason(
+                canonical,
                 reason,
-                {"approval_url": approval_url},
+                approval_url,
                 guard_home=guard_home,
             )
         if isinstance(raw_request_id, str) and raw_request_id.strip():
             approval_request_id = raw_request_id.strip()
     permission_decision = _native_review_permission_decision(harness)
-    canonical = _canonical_hook_harness(harness)
     if canonical in {"pi", "omp"}:
         output: dict[str, object] = {
             "decision": "deny",
@@ -256,6 +256,21 @@ def harness_json_from_native_pre_tool_review(
         rendered["approval_request_id"] = approval_request_id
     _attach_native_review_approval_aliases(rendered, approval_request_id, approval_url)
     return rendered
+
+
+def _native_review_reason(
+    canonical_harness: str,
+    reason: str,
+    approval_url: str,
+    *,
+    guard_home: Path | None,
+) -> str:
+    return native_review_reason(
+        canonical_harness,
+        reason,
+        approval_url,
+        guard_home=guard_home,
+    )
 
 
 def _attach_native_review_approval_aliases(
