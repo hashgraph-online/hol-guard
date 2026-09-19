@@ -136,6 +136,7 @@ Protection model meanings:
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
+| `command.promptbranch` | Reviews PromptBranch CLI sharing operations and persistent agent-written library records while leaving read, search, and suggestion listing commands automatic. | 6 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
