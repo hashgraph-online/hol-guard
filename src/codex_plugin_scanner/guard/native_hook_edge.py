@@ -8,8 +8,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+from .native_approval_errors import FINITE_FAILURE_CODES
 from .native_decision_receipt import receipt_matches_edge
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_request, record_native_resident_client_failure_code
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
@@ -183,6 +184,16 @@ def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
     return decision == ("allow" if minimum_action in {"allow", "warn"} else "deny")
 
 
+def _native_error_code(payload: object) -> str | None:
+    """Accept only the resident's finite error envelope for local diagnostics."""
+    if not isinstance(payload, dict) or set(payload) != {"error", "retryable"}:
+        return None
+    code = payload.get("error")
+    if type(payload.get("retryable")) is not bool or not isinstance(code, str):
+        return None
+    return code if code in FINITE_FAILURE_CODES else None
+
+
 def _decode_edge(payload: object) -> dict[str, Any] | None:
     required = {
         "schema",
@@ -341,7 +352,11 @@ def review_raw_hook_native(
         )
         return record_native_hook_result("native_fail_safe", None)
     try:
-        decoded = _decode_edge(json.loads(output))
+        response_payload = json.loads(output)
+        error_code = _native_error_code(response_payload)
+        if error_code is not None:
+            record_native_resident_client_failure_code(error_code)
+        decoded = _decode_edge(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
         decoded = None
     if decoded is None:
