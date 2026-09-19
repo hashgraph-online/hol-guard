@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.apex",
+  "version": "1.0.0",
+  "name": "apex command protection",
+  "description": "Reviews apex commands that can overwrite files during compression, decompression, or archive repair.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.apex",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniArchiveBox", "background": "#4338CA" },
+  "license": "MIT",
+  "executables": ["apex", "apexcompress"],
+  "ecosystemIds": ["apex"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "apex compress command",
+    "apex decompress command",
+    "apex repair command"
+  ],
+  "saferAlternatives": [
+    "Check destinations before compressing or decompressing.",
+    "Backup archives before attempting to repair them."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_apex_extensions"
+  }
+}
