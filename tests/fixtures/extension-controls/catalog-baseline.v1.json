@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7e0b77350bbf50331ce2c622ff1aaa92fa7147769ff48a2a2f305a4c7b5182ae",
+  "catalog_digest": "82172b87894211a04ceb7df8e1ffcdc4ab77085d645ae71f86b886609c82abf0",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -98,7 +98,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 252,
+  "permission_count": 254,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -300,6 +300,8 @@
     "command.promptbranch.permission.import": "promptbranch import",
     "command.promptbranch.permission.publish": "promptbranch publish",
     "command.promptbranch.permission.report-run": "promptbranch report-run",
+    "command.promptbranch.permission.suggest": "promptbranch suggest",
+    "command.promptbranch.permission.suggest-file": "promptbranch suggest --file prompt.md",
     "command.remote.essh.permission.cache-removal": "essh keys remove deploy-key",
     "command.remote.essh.permission.group-execution": "essh run web -- sudo systemctl restart api",
     "command.remote.rsync.permission.deletion": "rsync --del",
@@ -650,6 +652,8 @@
     "command.promptbranch.permission.import",
     "command.promptbranch.permission.publish",
     "command.promptbranch.permission.report-run",
+    "command.promptbranch.permission.suggest",
+    "command.promptbranch.permission.suggest-file",
     "command.remote.essh.permission.cache-removal",
     "command.remote.essh.permission.group-execution",
     "command.remote.rsync.permission.deletion",
@@ -713,7 +717,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 238,
+  "rule_count": 240,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -901,6 +905,8 @@
     "command.promptbranch.import",
     "command.promptbranch.add-note",
     "command.promptbranch.report-run",
+    "command.promptbranch.suggest",
+    "command.promptbranch.suggest-file",
     "command.remote.essh.group-execution",
     "command.remote.essh.cache-removal",
     "command.remote.rsync.remote-shell",

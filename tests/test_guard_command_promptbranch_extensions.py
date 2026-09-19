@@ -20,11 +20,22 @@ _PUBLISH_ACTION = "PromptBranch prompt publication command"
 _IMPORT_ACTION = "PromptBranch shared prompt import command"
 _ADD_NOTE_ACTION = "PromptBranch prompt note write command"
 _REPORT_RUN_ACTION = "PromptBranch prompt run report command"
+_SUGGEST_ACTION = "PromptBranch prompt suggestion write command"
+_SUGGEST_FILE_ACTION = "PromptBranch prompt suggestion local file read command"
 _PUBLISH_RULE = "command.promptbranch.publish"
 _IMPORT_RULE = "command.promptbranch.import"
 _ADD_NOTE_RULE = "command.promptbranch.add-note"
 _REPORT_RUN_RULE = "command.promptbranch.report-run"
-_SENSITIVE_TOKENS = ("security-audit", "works well", "found 2 issues", "example.test")
+_SUGGEST_RULE = "command.promptbranch.suggest"
+_SUGGEST_FILE_RULE = "command.promptbranch.suggest-file"
+_SENSITIVE_TOKENS = (
+    "security-audit",
+    "works well",
+    "found 2 issues",
+    "example.test",
+    "rewritten secret prompt",
+    "private rewrite.md",
+)
 
 PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ('promptbranch publish "security-audit"', _PUBLISH_ACTION, _PUBLISH_RULE),
@@ -124,6 +135,43 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _REPORT_RUN_ACTION,
         _REPORT_RUN_RULE,
     ),
+    (
+        'promptbranch suggest --prompt "security-audit" --content "rewritten prompt" --rationale "reduce ambiguity"',
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "npx -y @promptbranch/cli@latest suggest --content rewritten --prompt security-audit",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "bunx @promptbranch/cli suggest --prompt security-audit --content rewritten --json",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "zsh -lc 'promptbranch suggest --prompt security-audit --content rewritten'",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    ("promptbranch suggest --prompt security-audit", _SUGGEST_ACTION, _SUGGEST_RULE),
+    (
+        "promptbranch suggest --prompt security-audit --unknown-option",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+)
+
+PROMPTBRANCH_SUGGEST_FILE_CASES: tuple[str, ...] = (
+    'promptbranch suggest --prompt "security-audit" --file "private rewrite.md"',
+    "promptbranch.exe suggest --file rewrite.md --prompt security-audit --json",
+    "npx -y @promptbranch/cli suggest --prompt security-audit --file rewrite.md",
+    "bunx @promptbranch/cli@latest suggest --file rewrite.md --prompt security-audit",
+    "zsh -lc 'promptbranch suggest --prompt security-audit --file rewrite.md'",
+    "exec promptbranch suggest --prompt security-audit --file rewrite.md",
+    "promptbranch suggest --prompt security-audit --file",
+    "promptbranch suggest --prompt security-audit --file rewrite.md --content rewritten",
 )
 
 
@@ -152,6 +200,28 @@ def test_enabled_promptbranch_write_and_sharing_commands_reach_review(tmp_path: 
         assert any(item.match.action_class == action_class for item in evaluation.matches)
 
 
+def test_enabled_promptbranch_file_suggestions_review_the_read_and_write(tmp_path: Path) -> None:
+    for command in PROMPTBRANCH_SUGGEST_FILE_CASES:
+        evaluation = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
+        )
+        matched_rules = {
+            item.rule.rule_id
+            for item in evaluation.extension_observations
+            if item.extension.extension_id == "command.promptbranch"
+        }
+        matched_actions = {
+            item.match.action_class
+            for item in evaluation.matches
+            if item.extension.extension_id == "command.promptbranch"
+        }
+        assert {_SUGGEST_RULE, _SUGGEST_FILE_RULE} <= matched_rules, command
+        assert {_SUGGEST_ACTION, _SUGGEST_FILE_ACTION} <= matched_actions, command
+
+
 def test_registry_observations_attribute_promptbranch_operations(tmp_path: Path) -> None:
     for command, _action_class, expected_rule in PROMPTBRANCH_REVIEW_CASES:
         observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
@@ -170,6 +240,9 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
     "promptbranch search audit --limit 5",
     "promptbranch suggestions",
     "promptbranch suggestions --json",
+    "npx -y @promptbranch/cli@latest suggestions --json",
+    "promptbranch help",
+    "npx @promptbranch/cli help",
     'promptbranch publish "security-audit" --preview',
     'promptbranch publish "security-audit" --full-history --preview --json',
     "npx @promptbranch/cli publish security-audit --preview",
@@ -179,13 +252,18 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
     "notpromptbranch publish security-audit",
 )
 
+PROMPTBRANCH_EXTENSION_SAFE_COMMANDS = (
+    *PROMPTBRANCH_SAFE_COMMANDS,
+    "zsh -lc 'promptbranch suggestions --json'",
+)
+
 
 def test_promptbranch_read_and_preview_commands_remain_safe(tmp_path: Path) -> None:
     assert_safe_command_cases(PROMPTBRANCH_SAFE_COMMANDS, tmp_path)
 
 
 def test_enabled_promptbranch_read_and_preview_commands_do_not_review(tmp_path: Path) -> None:
-    for command in PROMPTBRANCH_SAFE_COMMANDS:
+    for command in PROMPTBRANCH_EXTENSION_SAFE_COMMANDS:
         evaluation = evaluate_command(
             command,
             cwd=tmp_path,
@@ -200,30 +278,35 @@ def test_enabled_promptbranch_read_and_preview_commands_do_not_review(tmp_path: 
 
 
 def test_promptbranch_evidence_omits_prompt_names_notes_and_raw_arguments(tmp_path: Path) -> None:
-    command = 'promptbranch add-note --prompt "security-audit" --body "works well"'
-    evaluation = evaluate_command(
-        command,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
+    commands = (
+        'promptbranch add-note --prompt "security-audit" --body "works well"',
+        'promptbranch suggest --prompt "security-audit" --content "rewritten secret prompt"',
+        'promptbranch suggest --prompt "security-audit" --file "private rewrite.md"',
     )
-    promptbranch_matches = [
-        item.match for item in evaluation.matches if item.extension.extension_id == "command.promptbranch"
-    ]
-    assert promptbranch_matches
-    serialized = json.dumps(
-        [
-            {
-                "rule_id": match.rule.rule_id,
-                "reason": match.reason,
-                "action_class": match.action_class,
-                "evidence": [item.to_dict() for item in match.matcher_evidence],
-            }
-            for match in promptbranch_matches
+    for command in commands:
+        evaluation = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
+        )
+        promptbranch_matches = [
+            item.match for item in evaluation.matches if item.extension.extension_id == "command.promptbranch"
         ]
-    )
-    for token in _SENSITIVE_TOKENS:
-        assert token not in serialized
+        assert promptbranch_matches
+        serialized = json.dumps(
+            [
+                {
+                    "rule_id": match.rule.rule_id,
+                    "reason": match.reason,
+                    "action_class": match.action_class,
+                    "evidence": [item.to_dict() for item in match.matcher_evidence],
+                }
+                for match in promptbranch_matches
+            ]
+        )
+        for token in _SENSITIVE_TOKENS:
+            assert token not in serialized
 
 
 def test_promptbranch_extension_publishes_references_and_action_risks() -> None:
@@ -234,6 +317,8 @@ def test_promptbranch_extension_publishes_references_and_action_risks() -> None:
     assert risk_classes_for_command_action(_IMPORT_ACTION) == ("network_egress",)
     assert risk_classes_for_command_action(_ADD_NOTE_ACTION) == ("destructive_shell",)
     assert risk_classes_for_command_action(_REPORT_RUN_ACTION) == ("destructive_shell",)
+    assert risk_classes_for_command_action(_SUGGEST_ACTION) == ("destructive_shell",)
+    assert risk_classes_for_command_action(_SUGGEST_FILE_ACTION) == ("local_secret_read",)
     payload = extension.to_dict()
     assert payload["enabled"] is False
     assert payload["trust_class"] == "external"

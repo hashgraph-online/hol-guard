@@ -20,17 +20,20 @@
   "license": "MIT",
   "executables": ["promptbranch", "npx", "bunx"],
   "ecosystemIds": ["promptbranch"],
-  "riskClasses": ["network_egress", "destructive_shell"],
+  "riskClasses": ["network_egress", "destructive_shell", "local_secret_read"],
   "actionClasses": [
     "PromptBranch prompt publication command",
     "PromptBranch shared prompt import command",
     "PromptBranch prompt note write command",
-    "PromptBranch prompt run report command"
+    "PromptBranch prompt run report command",
+    "PromptBranch prompt suggestion write command",
+    "PromptBranch prompt suggestion local file read command"
   ],
   "referenceUrls": ["https://promptbranch.app/docs/integrations/cli"],
   "saferAlternatives": [
     "Use promptbranch publish --preview to inspect the exact payload and destination first.",
-    "Review imported prompts and agent-written notes before saving them to the shared local library."
+    "Review imported prompts and agent-written notes before saving them to the shared local library.",
+    "Review suggestion content and any selected local file before creating a pending version."
   ],
   "detector": {
     "kind": "python-module",

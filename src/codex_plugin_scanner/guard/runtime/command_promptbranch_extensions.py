@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant, with_required_flag
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, ExecutableMatcher
 
 # CLI surface verified against PromptBranch CLI 0.2.x (apps/cli/src/index.ts):
-# publish, import, add-note, and report-run mutate local records or exchange data
-# with the sharing portal. `publish --preview` is the documented side-effect-free
-# counterpart. Read, search, and suggestion-listing commands intentionally have
-# no rules. The public npx/bunx launch forms cover the documented package name
-# and @latest alias; other version pins remain outside this v1 boundary.
+# publish, import, add-note, report-run, and suggest mutate local records or
+# exchange data with the sharing portal. Suggest's --file form additionally
+# reads caller-selected local content. `publish --preview` is the documented
+# side-effect-free counterpart. Read, search, and suggestion-listing commands
+# intentionally have no rules. The public npx/bunx launch forms cover the
+# documented package name and @latest alias; other version pins remain outside
+# this v1 boundary.
 
 _COMMON_FLAGS = frozenset({"--json"})
 _NO_FLAGS: frozenset[str] = frozenset()
@@ -20,6 +22,9 @@ _IMPORT_OPTIONS_WITH_VALUES = frozenset({"--portal"})
 _ADD_NOTE_OPTIONS_WITH_VALUES = frozenset({"--prompt", "--body", "--version-id"})
 _REPORT_RUN_OPTIONS_WITH_VALUES = frozenset(
     {"--prompt", "--version-id", "--version", "--tool", "--model", "--outcome", "--summary"}
+)
+_SUGGEST_OPTIONS_WITH_VALUES = frozenset(
+    {"--prompt", "--file", "--content", "--rationale", "--base-version-id", "--base-version"}
 )
 _PUBLISH_FLAGS = frozenset({"--full-history", "--preview", "--yes"})
 _NPX_LEADING_FLAGS = frozenset({"-y", "--yes"})
@@ -63,6 +68,7 @@ def _promptbranch_matcher(
             executable_matcher(
                 "promptbranch",
                 subcommand,
+                global_options_with_values=options_with_values,
                 global_flags=command_flags,
                 fail_secure_unknown_options=True,
             ),
@@ -86,12 +92,16 @@ _PROMPTBRANCH_PUBLISH = _promptbranch_matcher("publish", _PUBLISH_OPTIONS_WITH_V
 _PROMPTBRANCH_IMPORT = _promptbranch_matcher("import", _IMPORT_OPTIONS_WITH_VALUES)
 _PROMPTBRANCH_ADD_NOTE = _promptbranch_matcher("add-note", _ADD_NOTE_OPTIONS_WITH_VALUES)
 _PROMPTBRANCH_REPORT_RUN = _promptbranch_matcher("report-run", _REPORT_RUN_OPTIONS_WITH_VALUES)
+_PROMPTBRANCH_SUGGEST = _promptbranch_matcher("suggest", _SUGGEST_OPTIONS_WITH_VALUES)
+_PROMPTBRANCH_SUGGEST_FILE = with_required_flag(_PROMPTBRANCH_SUGGEST, "--file")
 
 PROMPTBRANCH_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "promptbranch prompt publication command": ("network_egress",),
     "promptbranch shared prompt import command": ("network_egress",),
     "promptbranch prompt note write command": ("destructive_shell",),
     "promptbranch prompt run report command": ("destructive_shell",),
+    "promptbranch prompt suggestion write command": ("destructive_shell",),
+    "promptbranch prompt suggestion local file read command": ("local_secret_read",),
 }
 
 PROMPTBRANCH_COMMAND_RULES = (
@@ -169,6 +179,38 @@ PROMPTBRANCH_COMMAND_RULES = (
         default_mode="review",
         example_command="promptbranch report-run",
     ),
+    CommandSafetyRule(
+        rule_id="command.promptbranch.suggest",
+        title="PromptBranch prompt suggestion write",
+        description=(
+            "Identifies PromptBranch CLI suggest, which creates a local branch and pending prompt version "
+            "for later human review."
+        ),
+        severity="medium",
+        risk_classes=("destructive_shell",),
+        action_classes=("PromptBranch prompt suggestion write command",),
+        safer_alternatives=(
+            "Review the target prompt, complete rewritten content, and rationale before creating the suggestion.",
+        ),
+        matcher=_PROMPTBRANCH_SUGGEST,
+        default_mode="review",
+        example_command="promptbranch suggest",
+    ),
+    CommandSafetyRule(
+        rule_id="command.promptbranch.suggest-file",
+        title="PromptBranch prompt suggestion file read",
+        description=(
+            "Identifies PromptBranch CLI suggest --file, which reads caller-selected local file content "
+            "before storing it in a pending prompt version."
+        ),
+        severity="medium",
+        risk_classes=("local_secret_read",),
+        action_classes=("PromptBranch prompt suggestion local file read command",),
+        safer_alternatives=("Review the selected file path and its complete contents before creating the suggestion.",),
+        matcher=_PROMPTBRANCH_SUGGEST_FILE,
+        default_mode="review",
+        example_command="promptbranch suggest --file prompt.md",
+    ),
 )
 
 PROMPTBRANCH_COMMAND_EXTENSION_SPECS = (
@@ -184,11 +226,14 @@ PROMPTBRANCH_COMMAND_EXTENSION_SPECS = (
             "PromptBranch shared prompt import command",
             "PromptBranch prompt note write command",
             "PromptBranch prompt run report command",
+            "PromptBranch prompt suggestion write command",
+            "PromptBranch prompt suggestion local file read command",
         ),
-        risk_classes=("network_egress", "destructive_shell"),
+        risk_classes=("network_egress", "destructive_shell", "local_secret_read"),
         safer_alternatives=(
             "Use promptbranch publish --preview to inspect the exact payload and destination first.",
             "Review imported prompts and agent-written notes before saving them to the shared local library.",
+            "Review suggestion content and any selected local file before creating a pending version.",
         ),
         reference_urls=("https://promptbranch.app/docs/integrations/cli",),
         executables=("promptbranch", "npx", "bunx"),
