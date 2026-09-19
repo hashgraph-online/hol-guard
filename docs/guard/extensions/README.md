@@ -137,6 +137,7 @@ Protection model meanings:
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.repopy` | Reviews repopy CLI operations across repository cloning, installations with build hooks and remote git linkage. | 2 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
