@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.aparta",
+  "version": "1.0.0",
+  "name": "aparta",
+  "description": "Reviews aparta commands that rewrite identity files, run with another profile's credentials, or export the GitHub token into the environment.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.lucascarvalhal",
+    "displayName": "Lucas Carvalhal",
+    "url": "https://github.com/lucascarvalhal"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniFolder",
+    "background": "#0F766E"
+  },
+  "homepage": "https://github.com/lucascarvalhal/aparta",
+  "license": "MIT",
+  "executables": [
+    "aparta"
+  ],
+  "ecosystemIds": [
+    "aparta"
+  ],
+  "riskClasses": [
+    "destructive_shell",
+    "execution",
+    "local_secret_read"
+  ],
+  "actionClasses": [
+    "aparta identity write command",
+    "aparta identity scope crossing command",
+    "aparta credential export command"
+  ],
+  "referenceUrls": [
+    "https://github.com/lucascarvalhal/aparta"
+  ],
+  "saferAlternatives": [
+    "Preview writes with --dry-run, keep commands inside the folder of the intended profile, and avoid materializing tokens into the environment."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_aparta_extensions"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.aparta",
+  "tagline": "Keeps unattended agents from rewriting identity files or crossing aparta profile scopes silently.",
+  "category": "other",
+  "limitations": [
+    "v1 reviews apply, remove, fallback --secure/--restore, run --profile and --with-gh-token only; read-only and preview commands are never reviewed.",
+    "This listing is maintained by the aparta author and reflects aparta 0.9.x; new aparta commands need a rule update here."
+  ],
+  "documentationUrl": "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extensions/README.md",
+  "tags": [
+    "aparta",
+    "identity",
+    "git",
+    "gcloud",
+    "github",
+    "aws",
+    "ai-agents",
+    "cli"
+  ],
+  "maintainerGithubIds": [
+    "97261310"
+  ]
+}
