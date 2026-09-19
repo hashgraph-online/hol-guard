@@ -38,7 +38,7 @@ The projection contains only bounded product state needed to render the native s
 The projection must not contain:
 
 - Guard root credentials or daemon authentication material
-- Browser or Desktop session tokens
+- Daemon root tokens or reusable OAuth credentials
 - OAuth access or refresh tokens
 - Authorization headers
 - Raw prompts, command text, tool payloads, or file contents
@@ -46,7 +46,7 @@ The projection must not contain:
 - Raw approval risk summaries that may contain commands, hosts, or paths
 - Raw receipt evidence or action envelopes
 
-The Desktop native process invokes the contract with fixed arguments and a bounded timeout. Browser JavaScript receives only the already-projected response and never receives Core credentials.
+The Desktop native process invokes the contract with fixed arguments and a bounded timeout. The startup response may include `dashboard.sessionUrl`, a Core-issued scoped dashboard capability used only for the local handoff. The startup WebView receives that URL through the native bridge. Keep it out of logs, diagnostics and exports; it is distinct from daemon root credentials and OAuth tokens.
 
 ## Runtime adoption
 
@@ -64,3 +64,15 @@ Desktop must display an unavailable or attention-required state when:
 - Core reports that its local runtime is unavailable.
 
 No failure path may be converted into a green or protected state.
+
+## Operational refresh
+
+`hol-guard desktop status --json` uses the same versioned projection and adds no policy authority. It reads current local operational state without calling the dashboard session launcher or starting/adopting a daemon. Its `dashboard` object never contains a session URL. `observedAt` records when this projection was collected; `statusReadSupported: true` advertises this additive command on both bootstrap and status results. Older supported Core versions may omit these fields. Desktop must keep their last known sample age and show unavailable live detail, rather than mark a reused startup sample freshly checked.
+
+Status opens the existing SQLite store in a single read-only transaction. It does not initialize or recover the database, reconcile receipt rollups, create a local device identity, repair OAuth storage, promote secrets, or prompt for Keychain access. Missing or damaged storage fails with a bounded setup/recovery instruction. Startup and explicit account actions retain their existing repair behavior. The connection and policy evidence share the same database snapshot, so a concurrent account switch becomes visible on the next sample.
+
+Passive OAuth health validates the existing current-format local credential vault. A missing, inaccessible, mismatched or legacy-only vault needs the normal foreground account check; status does not migrate it. Receipt summaries reuse clean rows and project missing or dirty rows through Core's existing canonical decision helper without modifying them. Dashboard availability follows the authenticated local endpoint observation; a live process without a usable authentication token is unavailable.
+
+The optional Cloud fields `policyBundleVersion`, `policyBundleHash` and `policyRolloutState` describe the currently validated cached bundle. `appliedRevision` and `policyLastAckAt` are present only for a validated `applied` acknowledgement matching that bundle's hash, version, current workspace and current runtime device identity using the existing strict generic ACK contract. The revision comes from the matched signed payload metadata. Managed Controls application remains unknown until exact delivery and the current protected resident projection can both be proved. The current canonical enforcement lane must also be enabled; a historical ACK remains historical after a flag change. They describe Core's local application evidence, not a new Cloud acknowledgement or remote fleet proof. Missing, legacy, unrelated, invalid or received-only acknowledgement data leaves application unknown. No connection or transport timestamp becomes application evidence.
+
+The approval preview remains bounded to 20 generic local request rows. The exact request IDs support Desktop notification deduplication; the preview does not represent the separate Cloud exact-review queue. Desktop must not log those IDs or private request data.

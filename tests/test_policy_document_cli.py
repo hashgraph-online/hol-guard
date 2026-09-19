@@ -34,7 +34,8 @@ def test_policy_capabilities_advertise_command_expression_runtime(
     payload = json.loads(capsys.readouterr().out)
 
     assert return_code == 0
-    assert payload["capabilities"] == ["command-pattern-expressions.v1"]
+    assert payload["capabilities"] == ["command-pattern-expressions.v1", "generic-matchers.v1"]
+    assert payload["generic_matchers"]["capability"] == "generic-matchers.v1"
     assert payload["command_pattern_expressions"]["combinators"] == ["all", "any"]
     assert payload["command_pattern_expressions"]["operators"] == [
         "exact",

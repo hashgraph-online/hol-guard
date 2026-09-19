@@ -234,6 +234,18 @@ def _exercise_installed_routes(
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):
                 reason_codes[reason] = reason_codes.get(reason, 0) + 1
+            expected = len(route_receipts) + 1
+            observed = wait_for_route_corpus(daemon._server.hook_worker.metrics, expected=expected)
+            _require(
+                observed.get("routes") == {"native_resident": expected},
+                {
+                    "harness": harness,
+                    "event": event,
+                    "reason_code": reason,
+                    "expected_native_routes": expected,
+                    "observed_routes": observed.get("routes"),
+                },
+            )
             route_receipts.append({"harness": harness, "event": event, "route": "native_resident"})
 
 

@@ -181,8 +181,8 @@ def test_accepted_memory_bundle_rolls_back_rows_and_state_on_transaction_failure
     before_policies = store.list_policy_decisions()
     original = StorePolicyMixin._replace_remote_policy_rows_locked
 
-    def replace_then_fail(connection, rows) -> None:
-        original(connection, rows)
+    def replace_then_fail(connection, rows, **kwargs) -> None:
+        original(connection, rows, **kwargs)
         raise RuntimeError("injected policy-memory transaction failure")
 
     monkeypatch.setattr(StorePolicyMixin, "_replace_remote_policy_rows_locked", staticmethod(replace_then_fail))

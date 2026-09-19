@@ -138,6 +138,59 @@ def test_wait_for_route_corpus_observes_completion_before_snapshot() -> None:
     assert complete["routes"] == {"native_resident": 21}
 
 
+@pytest.mark.parametrize(
+    ("observed_routes", "reason", "accepted"),
+    [
+        ({"native_resident": 1}, "native_exact_safe_command", True),
+        ({}, "harness_not_managed", False),
+        ({"native_degraded": 1}, "native_degraded_emergency_safe", False),
+    ],
+)
+def test_installed_route_requires_observed_native_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    observed_routes: dict[str, int],
+    reason: str,
+    accepted: bool,
+) -> None:
+    from ci.native_runtime import probe_native_default_auto as probe
+    from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+
+    metrics = HookMetricsRecorder()
+    for route, count in observed_routes.items():
+        for _ in range(count):
+            metrics.record_route(route)
+    daemon = SimpleNamespace(_server=SimpleNamespace(hook_worker=SimpleNamespace(metrics=metrics)))
+    monkeypatch.setattr(
+        probe,
+        "_installed_hook_request",
+        lambda *args: {
+            "continue": True,
+            "policy_action": "allow",
+            "reason_code": reason,
+            "hookSpecificOutput": {"permissionDecision": "allow"},
+        },
+    )
+    monkeypatch.setattr(
+        probe,
+        "wait_for_route_corpus",
+        lambda recorder, **kwargs: wait_for_route_corpus(recorder, **kwargs, timeout_seconds=0),
+    )
+    routes = {"claude-code": {"pre_tool_use": "installed_canonical", "post_tool_use": "unavailable"}}
+    receipts: list[dict[str, str]] = []
+    reasons: dict[str, int] = {}
+    if accepted:
+        probe._exercise_installed_routes(daemon, tmp_path, tmp_path, routes, receipts, reasons)
+        assert receipts == [{"harness": "claude-code", "event": "PreToolUse", "route": "native_resident"}]
+    else:
+        with pytest.raises(RuntimeError, match=reason) as error:
+            probe._exercise_installed_routes(daemon, tmp_path, tmp_path, routes, receipts, reasons)
+        assert "expected_native_routes" in str(error.value)
+        assert "claude-code" in str(error.value)
+        assert receipts == []
+    assert reasons == {reason: 1}
+
+
 def test_wait_for_route_corpus_does_not_hide_a_wrong_route() -> None:
     class FakeMetrics:
         def snapshot(self) -> Mapping[str, object]:

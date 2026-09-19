@@ -8,6 +8,7 @@ from ..action_lattice import guard_action_severity as guard_action_severity
 from ..action_lattice import normalize_guard_action
 from ..config import GuardConfig
 from ..models import GUARD_ACTION_VALUES, GuardAction
+from ..policy_rule_identity import PolicyRuleIdentity
 from ..runtime.decisions import GuardDecisionV2, decision_from_legacy_policy_action
 from ..runtime.signals import RiskSignalV2
 
@@ -44,8 +45,11 @@ def build_decision_v2(
     *,
     reason: str,
     signals: Sequence[RiskSignalV2] = (),
+    policy_rule_identity: PolicyRuleIdentity | None = None,
 ) -> GuardDecisionV2:
-    return decision_from_legacy_policy_action(policy_action, reason=reason, signals=signals)
+    return decision_from_legacy_policy_action(
+        policy_action, reason=reason, signals=signals, policy_rule_identity=policy_rule_identity
+    )
 
 
 def decide_action_with_v2(

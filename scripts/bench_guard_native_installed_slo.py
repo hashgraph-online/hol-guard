@@ -231,7 +231,15 @@ def _measure_slo(
         serialized_warmup = session.observe(warmup_harness, warmup_event, "1k")
         _require(
             serialized_warmup.allowed and serialized_warmup.route == "native_resident",
-            "serialized resident pool warmup did not stay on the allowed native route",
+            {
+                "stage": "serialized_resident_warmup",
+                "harness": serialized_warmup.harness,
+                "event": serialized_warmup.event,
+                "allowed": serialized_warmup.allowed,
+                "route": serialized_warmup.route,
+                "overloaded": serialized_warmup.overloaded,
+                "reason_code": serialized_warmup.reason_code,
+            },
         )
         capacity = measure_capacity(session, routes, include_capacity=include_capacity)
         readiness = [session.readiness_ms]

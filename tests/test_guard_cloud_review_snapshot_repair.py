@@ -11,9 +11,9 @@ from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
 
-@pytest.mark.parametrize("repaired_server", [True, False])
+@pytest.mark.parametrize("accepts_snapshot", [True, False])
 def test_source_gap_recovery_is_automatic_bounded_and_preserves_event_identity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repaired_server: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, accepts_snapshot: bool
 ) -> None:
     store = connected_exact_review_store(tmp_path)
     add_review_request(store, review_request("gap-request"))
@@ -21,10 +21,11 @@ def test_source_gap_recovery_is_automatic_bounded_and_preserves_event_identity(
     assert binding is not None
     auth = {"sync_url": "https://guard.example", **binding}
     snapshot_seen = False
+    acknowledged_through = 0
     deliveries: list[tuple[str, str]] = []
 
     def post(_auth: dict[str, object], *, path: str, payload: dict[str, object]) -> dict[str, object]:
-        nonlocal snapshot_seen
+        nonlocal snapshot_seen, acknowledged_through
         del path
         events = payload["events"]
         assert isinstance(events, list)
@@ -34,9 +35,9 @@ def test_source_gap_recovery_is_automatic_bounded_and_preserves_event_identity(
             deliveries.append((event["eventId"], event_type))
             if event_type == "review.request.snapshot_requeued":
                 snapshot_seen = True
-                status = "accepted"
-            elif snapshot_seen and repaired_server:
-                status = "stale"
+                status = "accepted" if accepts_snapshot else "quarantined"
+                if accepts_snapshot:
+                    acknowledged_through = max(acknowledged_through, event["localStreamSequence"])
             else:
                 status = "quarantined"
             results.append(
@@ -49,25 +50,33 @@ def test_source_gap_recovery_is_automatic_bounded_and_preserves_event_identity(
         accepted = sum(row["status"] != "quarantined" for row in results)
         return {
             "protocolVersion": 2,
-            "acknowledgedThrough": 100,
+            "acknowledgedThrough": acknowledged_through,
             "accepted": accepted,
             "rejected": len(events) - accepted,
             "results": results,
         }
 
     monkeypatch.setattr(delivery, "_post_json", post)
-    cloud_review_sync.sync_cloud_review_events_once(store, auth)
+    first = cloud_review_sync.sync_cloud_review_events_once(store, auth)
     assert snapshot_seen
     original_id = deliveries[0][0]
+    first_deliveries = list(deliveries)
+    assert first["outbox"]["depth"] == (0 if accepts_snapshot else 2)
     with store._connect() as connection:
         connection.execute("update guard_review_outbox_events set next_attempt_at = null where acknowledged_at is null")
     result = cloud_review_sync.sync_cloud_review_events_once(store, auth)
-    assert sum(kind == "review.request.snapshot_requeued" for _, kind in deliveries) == 1
-    assert deliveries[-1][0] == original_id
+    snapshot_ids = {event_id for event_id, kind in deliveries if kind == "review.request.snapshot_requeued"}
+    assert len(snapshot_ids) == 1
+    original_ids = {event_id for event_id, kind in deliveries if kind != "review.request.snapshot_requeued"}
+    assert original_ids == {original_id}
+    if accepts_snapshot:
+        assert deliveries == first_deliveries
+    else:
+        assert len(deliveries) > len(first_deliveries)
     status = store.get_sync_payload("guard_cloud_review_sync_state")
     assert isinstance(status, dict)
-    assert status["state"] == ("idle" if repaired_server else "error")
-    assert result["outbox"]["depth"] == (0 if repaired_server else 1)
+    assert status["state"] == ("idle" if accepts_snapshot else "error")
+    assert result["outbox"]["depth"] == (0 if accepts_snapshot else 2)
 
 
 def test_snapshot_repair_does_not_upload_other_identity_or_mint_consent(tmp_path: Path) -> None:

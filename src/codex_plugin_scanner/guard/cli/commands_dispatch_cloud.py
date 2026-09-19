@@ -333,6 +333,12 @@ def _run_guard_sync_command(
         else:
             print(str(error), file=sys.stderr)
         return 1
+    receipts = payload.get("receipts")
+    if isinstance(receipts, dict):
+        payload.setdefault("receipt_upload_status", receipts.get("receipt_upload_status"))
+        payload.setdefault("policy_validation_status", receipts.get("policy_validation_status"))
+        payload.setdefault("policy_application_status", receipts.get("policy_application_status"))
+        payload.setdefault("policy_rejection_reason", receipts.get("policy_rejection_reason"))
     _emit("sync", payload, getattr(args, "json", False))
     return 0
 

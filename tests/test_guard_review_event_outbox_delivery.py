@@ -82,6 +82,7 @@ def _accepting_transport(captured: list[dict[str, object]]) -> Callable[..., dic
         captured.extend(events)
         return {
             "accepted": len(events),
+            "acknowledgedThrough": max(int(event["localStreamSequence"]) for event in events),
             "rejected": 0,
             "perEventResults": [{"index": index, "accepted": True} for index, _event in enumerate(events)],
         }

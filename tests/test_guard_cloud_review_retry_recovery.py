@@ -62,7 +62,14 @@ def test_rejected_retry_refresh_is_recovered_only_with_canonical_server_identity
         rejected_count = sum(result["status"] == "quarantined" for result in results)
         return {
             "protocolVersion": 2,
-            "acknowledgedThrough": 100,
+            "acknowledgedThrough": max(
+                (
+                    event["localStreamSequence"]
+                    for event, result in zip(events, results, strict=True)
+                    if result["status"] == "accepted"
+                ),
+                default=0,
+            ),
             "accepted": len(events) - rejected_count,
             "rejected": rejected_count,
             "results": results,
@@ -104,7 +111,7 @@ def test_last_activity_delivery_does_not_advance_for_heartbeat_or_discarded_even
         assert isinstance(events, list)
         return {
             "protocolVersion": 2,
-            "acknowledgedThrough": 100,
+            "acknowledgedThrough": max(event["localStreamSequence"] for event in events),
             "accepted": len(events),
             "rejected": 0,
             "results": [{"eventId": event["eventId"], "status": status, "code": None} for event in events],

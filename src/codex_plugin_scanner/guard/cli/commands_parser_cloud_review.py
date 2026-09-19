@@ -34,7 +34,12 @@ def configure_guard_cloud_review_parser(
         "--expires-in-days",
         type=int,
         default=30,
-        help="Consent lifetime from 1 through 365 days (default: 30)",
+        help="Lifetime for new or renewed consent, from 1 through 365 days (default: 30)",
+    )
+    enable.add_argument(
+        "--renew",
+        action="store_true",
+        help="Replace existing consent and start a new expiry period; ordinary retries keep valid consent",
     )
     enable.add_argument("--json", action="store_true")
 

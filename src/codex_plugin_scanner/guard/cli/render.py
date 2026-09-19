@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .render_sync import render_sync_summary
 from .render_uninstall import render_self_uninstall
 
 try:
@@ -1692,22 +1693,7 @@ def _render_dashboard(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_sync(console: Console, payload: dict[str, object]) -> None:
-    body = Table.grid(padding=(0, 1))
-    body.add_row("Synced at", str(payload.get("synced_at") or "unknown"))
-    body.add_row("Receipts sent", str(payload.get("receipts") or 0))
-    body.add_row("Inventory tracked", str(payload.get("inventory_tracked", payload.get("inventory")) or 0))
-    body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
-    body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
-    remote_policies_stored = payload.get("remote_policies_stored")
-    exceptions_stored = payload.get("exceptions_stored")
-    pain_signals_uploaded = payload.get("pain_signals_uploaded")
-    if remote_policies_stored is not None:
-        body.add_row("Remote policies", str(remote_policies_stored or 0))
-    if exceptions_stored is not None:
-        body.add_row("Exceptions stored", str(exceptions_stored or 0))
-    if pain_signals_uploaded is not None:
-        body.add_row("Pain signals uploaded", str(pain_signals_uploaded or 0))
-    console.print(Panel(body, title="Guard sync complete", border_style="green"))
+    render_sync_summary(console, payload)
     ecosystem_support = _coerce_dict_list(payload.get("ecosystem_support"))
     if ecosystem_support:
         console.print(_build_ecosystem_support_table(ecosystem_support))

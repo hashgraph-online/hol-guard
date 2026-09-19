@@ -2520,7 +2520,7 @@ function cloudReviewStatusCopy(status) {
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
   if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
-  if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
+  if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are waiting to upload.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
 }
 function CloudReviewSettings() {
@@ -2594,10 +2594,11 @@ function CloudReviewSettings() {
     setError(null);
     try {
       const result = await changeCloudReviewSettings({
-        action,
+        action: action === "renew" ? "enable" : action,
         workspace_id: status.workspace_id,
         source: status.source,
-        include_held_requests: action === "enable" && includeHeld,
+        include_held_requests: action !== "disable" && includeHeld,
+        ...action === "renew" ? { renew_consent: true } : {},
         ...password ? { approval_password: password } : {},
         ...totp ? { approval_totp_code: totp } : {}
       });
@@ -2620,7 +2621,18 @@ function CloudReviewSettings() {
   ));
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
+  if (action === "renew") confirmLabel = "Renew for 30 days";
   if (pending) confirmLabel = "Saving...";
+  let dialogTitle = "Turn off Cloud Review?";
+  let dialogCopy = "Cloud decisions will stop on this device. You can still review requests locally; Cloud sync stays connected.";
+  if (action === "enable") {
+    dialogTitle = "Authorize Cloud Review";
+    dialogCopy = status?.enabled ? "Retry delivery using the existing authorization and expiry. Existing pending requests will be refreshed automatically. Local protection stays on." : "Allow signed cloud decisions for exact requests from this device for 30 days. Existing pending requests will be refreshed automatically. Local protection stays on.";
+  }
+  if (action === "renew") {
+    dialogTitle = "Renew Cloud Review authorization?";
+    dialogCopy = "Renew authorization for 30 days. Cloud decisions using the previous authorization must refresh before they can apply. Local protection stays on.";
+  }
   let statusCopy = error;
   if (status) statusCopy = cloudReviewStatusCopy(status);
   if (loading) statusCopy = "Checking device authorization...";
@@ -2687,6 +2699,16 @@ function CloudReviewSettings() {
         {
           type: "button",
           disabled: loading || pending,
+          onClick: () => openConfirmation("renew"),
+          className: "min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50",
+          children: "Renew authorization"
+        }
+      ) : null,
+      status.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: loading || pending,
           onClick: () => openConfirmation("disable"),
           className: "min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50",
           children: "Turn off Cloud Review"
@@ -2711,7 +2733,7 @@ function CloudReviewSettings() {
             className: "max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cloud-review-confirm-title", className: "text-base font-semibold text-brand-dark", children: action === "enable" ? "Authorize Cloud Review" : "Turn off Cloud Review?" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cloud-review-confirm-title", className: "text-base font-semibold text-brand-dark", children: dialogTitle }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
@@ -2724,8 +2746,8 @@ function CloudReviewSettings() {
                   }
                 )
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: action === "enable" ? "Allow signed cloud decisions for exact requests from this device for 30 days. Existing pending requests will be refreshed automatically. Local protection stays on." : "Cloud decisions will stop on this device. You can still review requests locally; Cloud sync stays connected." }),
-              action === "enable" && status.held_events > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: dialogCopy }),
+              action !== "disable" && status.held_events > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: includeHeld, onChange: (event) => setIncludeHeld(event.target.checked), disabled: pending, className: "mt-1" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
                   "Also send ",

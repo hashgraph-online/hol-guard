@@ -147,6 +147,7 @@ def test_authenticated_batch_cap_persists_across_worker_rounds(
         return (
             {
                 "accepted": len(events),
+                "acknowledgedThrough": max(int(event["localStreamSequence"]) for event in events),
                 "rejected": 0,
                 "perEventResults": [{"index": index, "accepted": True} for index, _event_payload in enumerate(events)],
                 "maxBatchEvents": 2,
@@ -212,6 +213,7 @@ def test_oversized_oldest_event_is_quarantined_without_starving_following_event(
         return (
             {
                 "accepted": len(events),
+                "acknowledgedThrough": max(int(event["localStreamSequence"]) for event in events),
                 "rejected": 0,
                 "perEventResults": [{"index": index, "accepted": True} for index, _event_payload in enumerate(events)],
             },
@@ -291,6 +293,7 @@ def test_retryable_rejection_exposes_next_attempt_deadline(
         return (
             {
                 "accepted": 0,
+                "acknowledgedThrough": 0,
                 "rejected": len(events),
                 "perEventResults": [
                     {"index": index, "accepted": False, "code": "retry_later"}

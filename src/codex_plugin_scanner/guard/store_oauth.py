@@ -140,6 +140,8 @@ class StoreOAuthConnectMixin:
         now: str | None = None,
         managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
     ) -> None:
+        with self.hold_oauth_credential_lock():
+            self.clear_review_policy_memory_state()
         self.clear_policy_bundle_authority(
             now or _now(),
             policy_bundle_last_error={},
@@ -245,6 +247,11 @@ class StoreOAuthConnectMixin:
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self._remember_oauth_secret_payload(self._oauth_local_credentials_ref, secret_hash, secret_json)
+        binding_keys = ("issuer", "client_id", "grant_id", "device_id", "machine_id", "workspace_id", "runtime_id")
+        if isinstance(existing_payload, dict) and any(
+            existing_payload.get(key) != payload.get(key) for key in binding_keys
+        ):
+            self.clear_review_policy_memory_state()
         self.set_sync_payload(self._oauth_local_credentials_state_key, payload, now)
 
     set_oauth_local_credentials = _with_oauth_credential_lock(_set_oauth_local_credentials_unlocked)
@@ -294,6 +301,7 @@ class StoreOAuthConnectMixin:
                         with suppress(OSError):
                             legacy_path.unlink()
             self.delete_sync_payload(self._oauth_local_credentials_state_key)
+            self.clear_review_policy_memory_state()
             # A capability bound to one OAuth grant must not survive disconnect for a later grant.
             self.delete_sync_payloads(list(_GUARD_CLOUD_COMMAND_STATE_KEYS))
 

@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from ..runtime.review_decision_projection import runtime_review_decision_payload
 from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
 
 bootstrap_compatibility_module(globals())
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import (
-    GuardActionNormalization,
+    _requested_policy_action_normalization,
     coerce_guard_action,
     guard_action_severity,
     most_restrictive_guard_action,
@@ -58,6 +59,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_REAPPROVAL_REQUIRED,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    bind_saved_policy_identity,
     evaluate_approval_reuse,
 )
 from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
@@ -95,20 +97,6 @@ from .commands_support_runtime_policy import (
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
     return coerce_guard_action(value) or fallback
-
-
-def _requested_policy_action_normalization(
-    cli_action: object | None,
-    stored_action: object | None,
-    payload: Mapping[str, object],
-) -> GuardActionNormalization | None:
-    if cli_action is not None:
-        return normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
-    if stored_action is not None:
-        return normalize_guard_action_result(stored_action, unknown_action="require-reapproval")
-    if "policy_action" in payload:
-        return normalize_guard_action_result(payload.get("policy_action"), unknown_action="require-reapproval")
-    return None
 
 
 def _cursor_native_saved_approval_hash(
@@ -886,6 +874,13 @@ def _evaluate_runtime_artifact_hook(
                 "block",
                 saved_decision_present=True,
             )
+            approval_reuse = bind_saved_policy_identity(
+                approval_reuse,
+                stored_policy_decision,
+                validation_reason="approval_reuse_integrity_failure"
+                if policy_lookup.get("ignored_local_integrity")
+                else None,
+            )
             policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
             approval_reuse_source = approval_reuse_source or "saved_policy_decision"
             if not package_reuse_applied:
@@ -952,6 +947,9 @@ def _evaluate_runtime_artifact_hook(
             saved_action,
             saved_decision_present=saved_present,
             validation_reason=validation_reason,
+        )
+        approval_reuse = bind_saved_policy_identity(
+            approval_reuse, stored_policy_decision, validation_reason=validation_reason
         )
         workflow_request_id = (
             claimed_approval_request_id(stored_policy_decision) if stored_policy_decision is not None else None
@@ -1143,21 +1141,13 @@ def _evaluate_runtime_artifact_hook(
     )
     if action_envelope is not None:
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
-    decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
-    decision_v2_payload = decision_v2.to_dict()
-    if package_evaluation is not None:
-        cloud_reason_codes = {
-            str(reason.get("code") or "") for reason in package_evaluation.reasons if isinstance(reason, Mapping)
-        }
-        for cloud_reason_code in (
-            "cloud_auth_error",
-            "cloud_validation_error",
-            "cloud_http_error",
-            "cloud_timeout",
-        ):
-            if cloud_reason_code in cloud_reason_codes:
-                decision_v2_payload["package_review_cloud_reason_code"] = cloud_reason_code
-                break
+    decision_v2_payload = runtime_review_decision_payload(
+        policy_action,
+        decision_signals=decision_signals,
+        approval_reuse=approval_reuse,
+        trusted_request_override=trusted_request_override_applied,
+        package_evaluation=package_evaluation,
+    )
     package_only_decision = not has_compound_findings
     if package_evaluation is not None and package_policy_action == policy_action and package_only_decision:
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title

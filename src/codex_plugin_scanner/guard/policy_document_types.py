@@ -12,9 +12,18 @@ from .models import PolicyDecision
 class PolicyCompilationError(ValueError):
     """Raised when a canonical rule cannot map to local PolicyDecision rows."""
 
-    def __init__(self, code: str, rule_id: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        rule_id: str,
+        *,
+        field_path: str | None = None,
+        remediation: str | None = None,
+    ) -> None:
         self.code = code
         self.rule_id = rule_id
+        self.field_path = field_path
+        self.remediation = remediation
         super().__init__(f"{code}: {rule_id}")
 
 
