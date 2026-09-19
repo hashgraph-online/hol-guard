@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "a9dfe889c3530e81ad4d35e85e00c9708db75216d1e5536d4cfcb424814c74b0",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -48,6 +48,7 @@
     "command.dns.gcp",
     "command.email",
     "command.encoded-execution",
+    "command.errand",
     "command.feature-flags",
     "command.filesystem",
     "command.framework.laravel",
@@ -97,7 +98,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 250,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -165,6 +166,8 @@
     "command.dns.gcp.permission.zone-deletion": "gcloud dns managed-zones delete public",
     "command.email.permission.delete": "aws ses delete-configuration-set",
     "command.encoded-execution.permission.decode-and-execute": "echo <base64> | base64 --decode | sh",
+    "command.errand.permission.fetch-apply": "errand fetch --apply linux/job",
+    "command.errand.permission.run": "errand --on linux -- make test",
     "command.feature-flags.permission.delete": "ldcli flags delete",
     "command.filesystem.permission.recursive-delete": "rm -r build/",
     "command.filesystem.permission.recursive-permission-change": "chmod -R go-w vendor/",
@@ -511,6 +514,8 @@
     "command.dns.gcp.permission.zone-deletion",
     "command.email.permission.delete",
     "command.encoded-execution.permission.decode-and-execute",
+    "command.errand.permission.fetch-apply",
+    "command.errand.permission.run",
     "command.feature-flags.permission.delete",
     "command.filesystem.permission.recursive-delete",
     "command.filesystem.permission.recursive-permission-change",
@@ -704,7 +709,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 236,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -772,6 +777,8 @@
     "command.dns.gcp.response-policy-deletion",
     "command.email.delete",
     "command.encoded-execution.decode-and-execute",
+    "command.errand.run",
+    "command.errand.fetch-apply",
     "command.feature-flags.delete",
     "command.filesystem.recursive-delete",
     "command.filesystem.recursive-permission-change",

@@ -31,8 +31,8 @@ _VECTOR_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
-_GUARD_RELEASE_CATALOG_DIGEST = "f3074633d2da6847bdd083249a87dceec89fbad7945e16dc28518d22c9188fae"
-_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:50d3134db675e4cd85af7725b963797429fe33fbca9cb875840aba3021499e0c"
+_GUARD_RELEASE_CATALOG_DIGEST = "9d5f6c795db84e9ed8798ad7bb11d045302576666692c3efa9b74a45ec9aafa9"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:e44f07f0248fc005b9736f50e18466c61362ddb196aa9fa150fe575c76b7b14a"
 
 
 class _Response:
