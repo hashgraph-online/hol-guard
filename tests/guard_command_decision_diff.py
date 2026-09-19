@@ -176,7 +176,8 @@ def framed_sha256(payload: bytes) -> str:
 def source_binding_id(repo_relative_path: str) -> str:
     """Return a stable opaque identifier for one repository source path."""
 
-    return f"source-{hashlib.sha256(repo_relative_path.encode()).hexdigest()[:24]}"
+    normalized = repo_relative_path.replace("\\", "/")
+    return f"source-{hashlib.sha256(normalized.encode()).hexdigest()[:24]}"
 
 
 def report_framed_sha256(report: Mapping[str, object] | None = None) -> str:
