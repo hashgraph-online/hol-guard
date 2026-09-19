@@ -10,7 +10,7 @@
     "id": "community.apex",
     "displayName": "Community"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniArchiveBox", "background": "#4338CA" },
+  "icon": { "kind": "none" },
   "license": "MIT",
   "executables": ["apex", "apexcompress"],
   "ecosystemIds": ["apex"],
