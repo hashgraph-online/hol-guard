@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_matcher_contracts import MatcherEvidence
-from .command_model import CanonicalCommand
 from .command_rules import (
     AnyMatcher,
     CommandSafetyRule,
-    _after_leading_options,
-    _segment_matches_executable,
 )
 
 _APEX_LAUNCHERS: tuple[tuple[str, ...], ...] = (
@@ -48,7 +42,6 @@ _APEX_OPTIONS_WITH_VALUES = frozenset({
 })
 
 _WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
-_EXPANSION_MARKERS: frozenset[str] = frozenset({"$", "`"})
 
 _APEX_COMPRESS = AnyMatcher(
     matchers=tuple(
@@ -101,89 +94,21 @@ _APEX_REPAIR = AnyMatcher(
     )
 )
 
-
-@dataclass(frozen=True, slots=True)
-class ApexUnresolvedExpansionMatcher:
-    """Match apex commands whose flags may be supplied by shell expansion."""
-
-    subcommands: tuple[str, ...]
-    launchers: tuple[tuple[str, ...], ...] = _APEX_LAUNCHERS
-    leading_options_with_values: frozenset[str] = _WRAPPER_LEADING_OPTIONS_WITH_VALUES
-    expansion_markers: frozenset[str] = _EXPANSION_MARKERS
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if segment.executable is None:
-                continue
-            lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
-            for launcher in self.launchers:
-                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
-                    continue
-                candidate_arguments = lowered_arguments
-                if launcher[0] in ("exec", "xargs"):
-                    candidate_arguments = _after_leading_options(
-                        candidate_arguments,
-                        self.leading_options_with_values,
-                        frozenset(),
-                    )
-                for subcmd in self.subcommands:
-                    prefix = (*launcher[1:], subcmd)
-                    if candidate_arguments[: len(prefix)] == prefix:
-                        remaining_arguments = candidate_arguments[len(prefix) :]
-                        if any(
-                            any(marker in argument for marker in self.expansion_markers)
-                            for argument in remaining_arguments
-                        ):
-                            evidence.append(
-                                MatcherEvidence(
-                                    segment_index=index,
-                                    executable=segment.executable,
-                                    detail="Matched apex arguments that may expand to destructive flags.",
-                                )
-                            )
-                        break
-        return tuple(evidence)
-
-
-_APEX_COMPRESS_WITH_EXPANSIONS = AnyMatcher(
-    matchers=(
-        *_APEX_COMPRESS.matchers,
-        ApexUnresolvedExpansionMatcher(subcommands=("compress", "c")),
-    ),
-)
-
-_APEX_DECOMPRESS_WITH_EXPANSIONS = AnyMatcher(
-    matchers=(
-        *_APEX_DECOMPRESS.matchers,
-        ApexUnresolvedExpansionMatcher(subcommands=("decompress", "x", "extract")),
-    ),
-)
-
-_APEX_REPAIR_WITH_EXPANSIONS = AnyMatcher(
-    matchers=(
-        *_APEX_REPAIR.matchers,
-        ApexUnresolvedExpansionMatcher(subcommands=("repair", "fix", "heal")),
-    ),
-)
-
 APEX_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.apex.compress",
         title="apex file compression",
         description=(
             "Identifies `apex compress` commands, which can overwrite existing "
-            "files or archives. Invocations carrying unresolved shell expansions "
-            "are reviewed because they cannot prove destructive flags absent."
+            "files or archives."
         ),
         severity="high",
         risk_classes=("destructive_shell",),
         action_classes=("apex compress command",),
         safer_alternatives=(
             "Confirm the destination path is not an existing critical file.",
-            "Expand shell variables and command substitutions before running apex compress.",
         ),
-        matcher=_APEX_COMPRESS_WITH_EXPANSIONS,
+        matcher=_APEX_COMPRESS,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(
@@ -205,17 +130,15 @@ APEX_COMMAND_RULES = (
         title="apex archive decompression",
         description=(
             "Identifies `apex decompress` commands, which can extract files and "
-            "potentially overwrite existing contents in the destination directory. "
-            "Invocations carrying unresolved shell expansions are reviewed."
+            "potentially overwrite existing contents in the destination directory."
         ),
         severity="high",
         risk_classes=("destructive_shell",),
         action_classes=("apex decompress command",),
         safer_alternatives=(
             "Confirm the destination directory is safe for extraction.",
-            "Expand shell variables and command substitutions before running apex decompress.",
         ),
-        matcher=_APEX_DECOMPRESS_WITH_EXPANSIONS,
+        matcher=_APEX_DECOMPRESS,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(
@@ -237,17 +160,15 @@ APEX_COMMAND_RULES = (
         title="apex archive repair",
         description=(
             "Identifies `apex repair` commands, which can modify or overwrite "
-            "existing archives during the repair process. Invocations carrying "
-            "unresolved shell expansions are reviewed."
+            "existing archives during the repair process."
         ),
         severity="medium",
         risk_classes=("destructive_shell",),
         action_classes=("apex repair command",),
         safer_alternatives=(
             "Ensure you have a backup of the archive before repairing.",
-            "Expand shell variables and command substitutions before running apex repair.",
         ),
-        matcher=_APEX_REPAIR_WITH_EXPANSIONS,
+        matcher=_APEX_REPAIR,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(
