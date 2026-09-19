@@ -88,6 +88,7 @@ dev = [
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.3",
+    "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
     "fastapi==0.137.1",
