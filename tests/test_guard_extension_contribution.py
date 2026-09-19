@@ -77,6 +77,9 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
         repo / "contributions" / "extensions" / "command.noodle.json", contributions / "command.noodle.json"
     )
     shutil.copyfile(
+        repo / "contributions" / "extensions" / "command.apex.json", contributions / "command.apex.json"
+    )
+    shutil.copyfile(
         repo / "contracts" / "extensions" / "contribution.v1.schema.json",
         dest / "contribution.v1.schema.json",
     )
@@ -91,6 +94,7 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
     try:
         payloads = contribution_module._load_packaged_payloads()
         assert any(item.get("id") == "command.noodle" for item in payloads)
+        assert any(item.get("id") == "command.apex" for item in payloads)
     finally:
         contribution_module.reset_contribution_cache()
 
@@ -123,6 +127,11 @@ def test_frozen_bind_detector_accepts_importable_module_without_source(
         "codex_plugin_scanner.guard.runtime.command_noodle_extensions",
         "command.noodle.json",
     )
+    contribution_module._bind_detector(
+        "command.apex",
+        "codex_plugin_scanner.guard.runtime.command_apex_extensions",
+        "command.apex.json",
+    )
 
 
 def test_frozen_bind_detector_fails_when_module_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +144,7 @@ def test_frozen_bind_detector_fails_when_module_is_missing(tmp_path: Path, monke
     monkeypatch.setattr(contribution_module.importlib.util, "find_spec", lambda _name: None)
     with pytest.raises(ValueError, match="missing"):
         contribution_module._bind_detector(
-            "command.noodle",
-            "codex_plugin_scanner.guard.runtime.command_noodle_extensions",
-            "command.noodle.json",
+            "command.apex",
+            "codex_plugin_scanner.guard.runtime.command_apex_extensions",
+            "command.apex.json",
         )

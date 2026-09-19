@@ -337,6 +337,7 @@ def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch
     try:
         assert trust_class_for("command.noodle") == "external"
         assert trust_class_for("command.remote.essh") == "external"
+        assert trust_class_for("command.apex") == "external"
     finally:
         extension_trust_module._trust_map.cache_clear()
 
@@ -352,6 +353,6 @@ def test_frozen_trust_map_fails_closed_without_package_data(tmp_path: Path, monk
     extension_trust_module._trust_map.cache_clear()
     try:
         with pytest.raises(FileNotFoundError, match="trust-class map"):
-            trust_class_for("command.noodle")
+            trust_class_for("command.apex")
     finally:
         extension_trust_module._trust_map.cache_clear()
