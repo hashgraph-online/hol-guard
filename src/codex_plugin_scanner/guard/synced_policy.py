@@ -90,31 +90,99 @@ def synced_policy_payload(store: SyncPayloadReader) -> dict[str, object] | None:
     cached_policy_bundle = store.get_sync_payload("policy_bundle")
     policy_bundle, _rejection_reason = cached_policy_bundle_validation(store, cached_policy_bundle)
     if policy_bundle is not None:
-        policy_defaults = policy_bundle.get("policyDefaults")
-        if isinstance(policy_defaults, dict):
-            payload = dict(policy_defaults)
-            issued_at = _optional_string(policy_bundle.get("issuedAt"))
-            bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
-            bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
-            if issued_at is not None:
-                payload["updatedAt"] = issued_at
-            if bundle_hash is not None:
-                payload["bundleHash"] = bundle_hash
-            if bundle_version is not None:
-                payload["bundleVersion"] = bundle_version
-            receipt_redaction_level = _optional_string(policy_bundle.get("receiptRedactionLevel"))
-            if receipt_redaction_level is not None:
-                payload["receiptRedactionLevel"] = receipt_redaction_level
-            return payload
+        return policy_defaults_from_validated_bundle(policy_bundle)
     # The legacy top-level ``policy`` sync field is not covered by the policy
     # bundle signature. It must not become enforcement authority whether the
     # signed bundle is absent, malformed, expired, or explicitly cleared.
     return None
 
 
+def policy_defaults_from_validated_bundle(policy_bundle: dict[str, object]) -> dict[str, object] | None:
+    """Project defaults after the caller has authenticated the complete bundle."""
+
+    policy_defaults = policy_bundle.get("policyDefaults")
+    if policy_bundle.get("contractVersion") == "guard-policy-bundle.v2":
+        document = policy_bundle.get("payload")
+        spec = document.get("spec") if isinstance(document, dict) else None
+        policy_defaults = spec.get("defaults") if isinstance(spec, dict) else None
+    if not isinstance(policy_defaults, dict):
+        return None
+    payload = dict(policy_defaults)
+    for source, target in (("issuedAt", "updatedAt"), ("bundleHash", "bundleHash")):
+        value = _optional_string(policy_bundle.get(source))
+        if value is not None:
+            payload[target] = value
+    bundle_version = policy_bundle.get("bundleVersion")
+    if type(bundle_version) is int and bundle_version > 0:
+        payload["bundleVersion"] = bundle_version
+    elif (version_text := _optional_string(bundle_version)) is not None:
+        payload["bundleVersion"] = version_text
+    receipt_redaction_level = _optional_string(policy_bundle.get("receiptRedactionLevel"))
+    if receipt_redaction_level is not None:
+        payload["receiptRedactionLevel"] = receipt_redaction_level
+    return payload
+
+
+def offline_policy_lifetime(
+    store: SyncPayloadReader,
+    *,
+    now: float | None = None,
+) -> dict[str, object]:
+    """Describe current vs last-good lifetime without authorizing expired grants."""
+
+    current, current_error = cached_policy_bundle_validation(
+        store,
+        store.get_sync_payload("policy_bundle"),
+        now=now,
+    )
+    last_good, last_good_error = cached_policy_bundle_validation(
+        store,
+        store.get_sync_payload("policy_bundle_last_good"),
+        now=now,
+    )
+    revoked = current_error == "signing_key_revoked" or last_good_error == "signing_key_revoked"
+    if current is not None:
+        return {
+            "state": "current-valid",
+            "active": True,
+            "retained": False,
+            "expired": False,
+            "recovery": False,
+        }
+    if last_good is not None:
+        return {
+            "state": "last-good-valid",
+            "active": True,
+            "retained": True,
+            "expired": current_error == "bundle_expired",
+            "currentError": current_error,
+            "recovery": False,
+        }
+    errors = (current_error, last_good_error)
+    if revoked:
+        state = "recovery"
+    elif any(error is not None and error != "bundle_expired" for error in errors):
+        state = "rejected"
+    elif "bundle_expired" in errors:
+        state = "expired"
+    else:
+        state = "absent"
+    return {
+        "state": state,
+        "active": False,
+        "retained": False,
+        "expired": state == "expired",
+        "recovery": revoked,
+        "currentError": current_error,
+        "lastGoodError": last_good_error,
+    }
+
+
 __all__ = [
     "SyncPayloadReader",
     "cached_policy_bundle_validation",
+    "offline_policy_lifetime",
+    "policy_defaults_from_validated_bundle",
     "synced_policy_bundle_validation",
     "synced_policy_payload",
     "validated_synced_policy_bundle",

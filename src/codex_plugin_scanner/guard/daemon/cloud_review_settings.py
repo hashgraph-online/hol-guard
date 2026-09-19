@@ -7,6 +7,9 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
+from ..runtime.cloud_review_consent import reuse_or_issue_cloud_review_consent
+from ..runtime.cloud_review_status import CLOUD_REVIEW_RECOVERY_KEY, cloud_review_status, review_connection_binding_id
+from ..runtime.cloud_review_worker_readiness import cloud_review_workers_ready
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
@@ -15,7 +18,7 @@ from ..runtime.exact_cloud_review import (
 )
 from ..store import GuardStore
 
-_RECOVERY_KEY = "guard_cloud_review_settings_recovery"
+_RECOVERY_KEY = CLOUD_REVIEW_RECOVERY_KEY
 
 
 class CloudReviewSettingsError(ValueError):
@@ -24,40 +27,16 @@ class CloudReviewSettingsError(ValueError):
         self.code: str = code
 
 
-def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
-    status = exact_cloud_review_status(store)
-    binding = store.get_review_event_oauth_binding()
-    profile = store.get_cloud_sync_profile()
-    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
-    outbox = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(delivery_binding or {}),
-    )
-    sync_key = "guard_cloud_review_sync_state"
-    if store.guard_source != "default":
-        sync_key += f":{store.guard_source}"
-    sync = store.get_sync_payload(sync_key)
-    sync = sync if isinstance(sync, dict) else {}
-    recovery = store.get_sync_payload(_RECOVERY_KEY)
-    recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+def cloud_review_settings_status(store: GuardStore, *, worker_observation: object = None) -> dict[str, object]:
     return {
-        "enabled": status.get("enabled") is True,
-        "connected": profile is not None and binding is not None,
-        "reason": status.get("reason"),
-        "expires_at": status.get("expires_at"),
-        "workspace_id": binding["workspace_id"] if binding else None,
-        "source": binding["oauth_source"] if binding else None,
-        "pending_uploads": outbox.get("depth", 0) if binding else 0,
-        "held_events": store.count_recoverable_unbound_review_events(),
-        "isolated_events": outbox.get("quarantined_depth", 0),
-        "activation_error": recovery.get("error"),
-        "last_synced_at": (
-            sync.get("last_delivery_at")
-            if delivery_binding is not None and sync.get("last_delivery_binding") == delivery_binding
-            else None
-        ),
-        "delivery_state": sync.get("state", "idle"),
+        **cloud_review_status(store, worker_observation=worker_observation),
         "approval_gate": public_config(store.guard_home).to_dict(),
+        "personal_consent_required_for_managed_admin_review": False,
+        "managed_admin_authority": "workspace_admin_mfa",
+        "recovery_actions": {
+            "retry_delivery": "cloud-review.retry_delivery",
+            "renew_consent": "cloud-review.renew_consent",
+        },
     }
 
 
@@ -68,12 +47,17 @@ def change_cloud_review_settings(
     refresh_workers: Callable[[], dict[str, object]],
 ) -> dict[str, object]:
     action = payload.get("action")
-    if action not in {"enable", "disable"}:
-        raise CloudReviewSettingsError("invalid_action", "Choose Enable Cloud Review or Turn off Cloud Review.")
+    if action not in {"enable", "disable", "retry_delivery", "renew_consent"}:
+        raise CloudReviewSettingsError(
+            "invalid_action",
+            "Choose Enable Cloud Review, retry delivery, renew consent, or Turn off Cloud Review.",
+        )
     if payload.get("confirm") != f"cloud-review.{action}":
         raise CloudReviewSettingsError("confirmation_required", "Confirm this Cloud Review change.")
     if type(payload.get("include_held_requests", False)) is not bool:
         raise CloudReviewSettingsError("invalid_recovery_scope", "Choose whether to include held requests.")
+    if type(payload.get("renew_consent", False)) is not bool:
+        raise CloudReviewSettingsError("invalid_consent_renewal", "Choose whether to renew Cloud Review consent.")
     _ = require_high_risk(
         store.guard_home,
         purpose="protection_lifecycle",
@@ -87,7 +71,7 @@ def change_cloud_review_settings(
     activation_error = None
     with store.hold_oauth_credential_lock():
         binding = store.get_review_event_oauth_binding()
-        if action == "enable":
+        if action in {"enable", "retry_delivery", "renew_consent"}:
             if binding is None or store.get_cloud_sync_profile() is None:
                 raise CloudReviewSettingsError("cloud_not_connected", "Connect Guard Cloud on this device first.")
             if (
@@ -97,7 +81,27 @@ def change_cloud_review_settings(
                 raise CloudReviewSettingsError(
                     "connection_changed", "The connected workspace changed. Refresh before confirming."
                 )
-            _ = enable_exact_cloud_review(store, issuer="local-dashboard")
+            if action == "retry_delivery" and exact_cloud_review_status(store).get("enabled") is not True:
+                raise CloudReviewSettingsError(
+                    "cloud_review_consent_required", "Enable or renew Cloud Review consent before retrying delivery."
+                )
+            if action == "retry_delivery" and payload.get("renew_consent") is True:
+                raise CloudReviewSettingsError("invalid_consent_renewal", "Choose renew consent explicitly.")
+
+            def issue_consent() -> dict[str, object]:
+                # Retry can reuse consent, but cannot replace it after a later expiry.
+                if action == "retry_delivery":
+                    raise CloudReviewSettingsError(
+                        "cloud_review_consent_required",
+                        "Enable or renew Cloud Review consent before retrying delivery.",
+                    )
+                return enable_exact_cloud_review(store, issuer="local-dashboard")
+
+            _ = reuse_or_issue_cloud_review_consent(
+                store,
+                issue=issue_consent,
+                renew=action == "renew_consent" or payload.get("renew_consent") is True,
+            )
             store.set_sync_payload(
                 _RECOVERY_KEY,
                 {"binding": binding, "error": "pending_request_requeue_failed"},
@@ -124,7 +128,7 @@ def change_cloud_review_settings(
         )
         try:
             worker = refresh_workers()
-            if action == "enable" and (worker.get("running") is not True or worker.get("sync_running") is not True):
+            if action != "disable" and not cloud_review_workers_ready(worker):
                 activation_error = activation_error or "worker_refresh_failed"
         except (OSError, RuntimeError, ValueError):
             worker = {"running": False, "sync_running": False}
@@ -133,7 +137,15 @@ def change_cloud_review_settings(
             _RECOVERY_KEY, {"binding": binding, "error": activation_error}, datetime.now(timezone.utc).isoformat()
         )
     return {
-        **cloud_review_settings_status(store),
+        **cloud_review_settings_status(
+            store,
+            worker_observation={
+                **worker,
+                "source": store.guard_source,
+                "connection_binding_id": review_connection_binding_id(binding),
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        ),
         "pending_requests_requeued": requeued,
         "held_events_recovered": adopted,
         "activation_error": activation_error,

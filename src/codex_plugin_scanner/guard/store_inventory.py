@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from .action_lattice import normalize_guard_action_result
 from .models import GuardAction
+from .native_policy_snapshot_rotation_entry import rotate_installation_with_native_retirement
+from .policy_bundle_materialization import POLICY_BUNDLE_MATERIALIZATION_KEY
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 
 # ruff: noqa: F403,F405
@@ -412,18 +414,40 @@ class StoreInventoryMixin:
         return self.get_device_metadata()
 
     def rotate_installation_id(self, now: str) -> dict[str, str]:
-        new_installation_id = uuid4().hex
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            connection.execute(
-                """
-                update guard_devices
-                set installation_id = ?, updated_at = ?
-                where device_key = ?
-                """,
-                (new_installation_id, now, _DEVICE_ROW_KEY),
-            )
-        return self.get_device_metadata()
+        def mutate(new_installation_id: str) -> dict[str, str]:
+            with self._connect() as connection:
+                # The scoped connection owns BEGIN IMMEDIATE and finalization.
+                self._ensure_local_device(connection)
+                connection.execute(
+                    """
+                    update guard_devices
+                    set installation_id = ?, updated_at = ?
+                    where device_key = ?
+                    """,
+                    (new_installation_id, now, _DEVICE_ROW_KEY),
+                )
+                # Retain signed sources and trust checkpoints. Derived proofs
+                # must be rebuilt for the new installation by authenticated sync.
+                self._replace_remote_policy_rows_locked(connection, ())
+                connection.execute(
+                    "delete from sync_state where state_key in (?, ?, ?)",
+                    ("policy_bundle_ack", POLICY_BUNDLE_MATERIALIZATION_KEY, "native_policy_bundle_ack_acceptance"),
+                )
+                row = connection.execute(
+                    "select installation_id, device_label from guard_devices where device_key = ?",
+                    (_DEVICE_ROW_KEY,),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError("Guard local device metadata is unavailable.")
+                result = {"installation_id": str(row["installation_id"]), "device_label": str(row["device_label"])}
+            return result
+
+        return rotate_installation_with_native_retirement(
+            guard_home=self.guard_home,
+            database_path=self.path,
+            read_existing_key=lambda: self._policy_integrity_secret_material(create=False),
+            mutation=mutate,
+        )
 
     def get_device_metadata(self) -> dict[str, str]:
         with self._connect() as connection:

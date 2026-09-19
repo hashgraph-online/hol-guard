@@ -27,7 +27,15 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.native_runtime import native_runtime_health
 from codex_plugin_scanner.guard.store import GuardStore
-from scripts.native_slo_adapter import Observation, is_allowed, payload, route_counts, route_delta
+from scripts.native_publication_diagnostic import cleanup_after_failure, observe_publication, report_publication_failure
+from scripts.native_slo_adapter import (
+    Observation,
+    is_allowed,
+    observation_reason_code,
+    payload,
+    route_counts,
+    route_delta,
+)
 from scripts.native_slo_contract import MAX_READINESS_P95_MS
 
 _MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -316,7 +324,7 @@ class AdapterSession:
         try:
             self.start()
         except BaseException:
-            self.close()
+            cleanup_after_failure(self.close)
             raise
         return self
 
@@ -328,22 +336,35 @@ class AdapterSession:
         self.daemon.start()
         self._connection = HTTPConnection("127.0.0.1", self.daemon.port, timeout=5)
         self._owner_thread_id = threading.get_ident()
-        started = time.perf_counter()
-        deadline = time.monotonic() + (MAX_READINESS_P95_MS / 1_000.0)
-        prepared = None
-        while True:
-            prepared = self.daemon._server.hook_worker.prepare_workspace_policy(
-                self.workspace,
-                deadline=deadline,
-            )
-            if prepared is not None or time.monotonic() >= deadline:
-                break
-            time.sleep(0.01)
-        self.readiness_ms = (time.perf_counter() - started) * 1_000.0
-        if prepared is None:
-            raise RuntimeError("native_installed_slo_failed: native policy was not ready")
-        if self.readiness_ms > MAX_READINESS_P95_MS:
-            raise RuntimeError("native_installed_slo_failed: native readiness exceeded budget")
+        publisher = self.daemon._server.hook_worker.policy_snapshot_publisher
+        with observe_publication(publisher) as observation:
+            started = time.perf_counter()
+            deadline = time.monotonic() + (MAX_READINESS_P95_MS / 1_000.0)
+            # Registration queues real source capture and resident publication.
+            # Include that work in the unchanged readiness budget.
+            register_workspace = getattr(publisher, "register_workspace", None)
+            if not callable(register_workspace):
+                raise RuntimeError("native_installed_slo_failed: workspace policy registration unavailable")
+            _ = register_workspace(self.workspace)
+            prepared = None
+            while True:
+                prepared = self.daemon._server.hook_worker.prepare_workspace_policy(
+                    self.workspace,
+                    deadline=deadline,
+                )
+                if prepared is not None or time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
+            self.readiness_ms = (time.perf_counter() - started) * 1_000.0
+            if prepared is None:
+                report_publication_failure(observation, publisher)
+                raise RuntimeError(
+                    "native_installed_slo_failed: native policy was not ready; "
+                    + observation.describe(getattr(publisher, "last_error", None))
+                )
+            if self.readiness_ms > MAX_READINESS_P95_MS:
+                report_publication_failure(observation, publisher)
+                raise RuntimeError("native_installed_slo_failed: native readiness exceeded budget")
 
     def observe(
         self,
@@ -373,12 +394,28 @@ class AdapterSession:
             route_delta(before, after),
             is_allowed(event, response),
             _is_explicit_capacity_response(response),
+            observation_reason_code(response),
         )
 
     def native_overload_count(self) -> int:
         """Return the process-local native overload counter for this session."""
 
         return native_runtime_health(self.guard_home).overloads
+
+    def rearm_policy_after_resident_stop(self) -> None:
+        """Invalidate the ACK barrier after this proof deliberately retires the resident.
+
+        The recovery measurement still requires the first post-stop hook to
+        return through the native resident. This only replaces nondeterministic
+        background-poll detection with the control-plane fact the proof itself
+        just established.
+        """
+
+        publisher = self.daemon._server.hook_worker.policy_snapshot_publisher
+        request_publish = getattr(publisher, "request_publish", None)
+        if not callable(request_publish):
+            raise RuntimeError("native_installed_slo_failed: policy rearm unavailable")
+        request_publish()
 
     def close(self) -> None:
         try:

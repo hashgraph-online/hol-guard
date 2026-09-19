@@ -46,6 +46,11 @@ from scripts.native_probe_receipts import (
     wait_for_receipt_corpus,
     wait_for_route_corpus,
 )
+from scripts.native_publication_diagnostic import (
+    cleanup_preserving_failure,
+    observe_publication,
+    report_publication_failure,
+)
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
 
@@ -234,6 +239,18 @@ def _exercise_installed_routes(
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):
                 reason_codes[reason] = reason_codes.get(reason, 0) + 1
+            expected = len(route_receipts) + 1
+            observed = wait_for_route_corpus(daemon._server.hook_worker.metrics, expected=expected)
+            _require(
+                observed.get("routes") == {"native_resident": expected},
+                {
+                    "harness": harness,
+                    "event": event,
+                    "reason_code": reason,
+                    "expected_native_routes": expected,
+                    "observed_routes": observed.get("routes"),
+                },
+            )
             route_receipts.append({"harness": harness, "event": event, "route": "native_resident"})
 
 
@@ -303,60 +320,66 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     mode_invariants: dict[str, dict[str, object]] = {}
     worker_stats = evidence_stats = None
     readiness_budget_seconds = MAX_READINESS_P95_MS / 1_000.0
-    try:
-        readiness_started = time.monotonic()
-        prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
-            workspace,
-            deadline=readiness_started + readiness_budget_seconds,
-        )
-        readiness_elapsed = time.monotonic() - readiness_started
-        _require(
-            prepared_policy is not None and readiness_elapsed <= readiness_budget_seconds,
-            {
-                "elapsed_ms": round(readiness_elapsed * 1_000, 2),
-                "policy_ready": prepared_policy is not None,
-            },
-        )
-        _exercise_installed_routes(daemon, guard_home, workspace, routes, route_receipts, reason_codes)
-        worker_stats = wait_for_route_corpus(
-            daemon._server.hook_worker.metrics,
-            expected=len(route_receipts),
-        )
-        writer = daemon._server.runtime_hook_evidence_writer
-        mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
-    finally:
-        daemon.stop()
-    if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
-        raise RuntimeError("native_default_auto_probe_failed: hook corpus stats missing")
-    expected = len(route_receipts)
-    observed_routes_raw = worker_stats["routes"]
-    if not isinstance(observed_routes_raw, dict):
-        raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
-    observed_routes = cast(dict[str, int], observed_routes_raw)
-    _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
-    _require(sum(observed_routes.values()) == expected, worker_stats)
-    _require(observed_routes.get("native_resident") == expected, worker_stats)
-    _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
-    return {
-        "routes": route_receipts,
-        "route_count": expected,
-        "native_resident_decisions": observed_routes.get("native_resident", 0),
-        "native_oneshot_decisions": observed_routes.get("native_oneshot", 0),
-        "python_semantic_decisions": observed_routes.get("python_semantic", 0),
-        "fail_safe_decisions": observed_routes.get("native_fail_safe", 0),
-        "reason_code_counts": reason_codes,
-        "receipt_metrics": {
-            "accepted": evidence_stats["receipt_accepted"],
-            "processed": evidence_stats["receipt_processed"],
-            "deduped": evidence_stats["receipt_deduped"],
-            "dropped": evidence_stats["receipt_dropped"],
-            "failures": evidence_stats["receipt_failures"],
-            "durable_pending": evidence_stats["receipt_durable_pending"],
-        },
-        "mode_invariants": mode_invariants,
-    }
+    publisher = daemon._server.hook_worker.policy_snapshot_publisher
+    with observe_publication(publisher) as observation:
+        try:
+            with cleanup_preserving_failure(daemon.stop):
+                readiness_started = time.monotonic()
+                prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
+                    workspace,
+                    deadline=readiness_started + readiness_budget_seconds,
+                )
+                readiness_elapsed = time.monotonic() - readiness_started
+                _require(
+                    prepared_policy is not None and readiness_elapsed <= readiness_budget_seconds,
+                    {
+                        "elapsed_ms": round(readiness_elapsed * 1_000, 2),
+                        "policy_ready": prepared_policy is not None,
+                        "publication": observation.describe(getattr(publisher, "last_error", None)),
+                    },
+                )
+                _exercise_installed_routes(daemon, guard_home, workspace, routes, route_receipts, reason_codes)
+                worker_stats = wait_for_route_corpus(
+                    daemon._server.hook_worker.metrics,
+                    expected=len(route_receipts),
+                )
+                writer = daemon._server.runtime_hook_evidence_writer
+                mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
+                evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
+            if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
+                raise RuntimeError("native_default_auto_probe_failed: hook corpus stats missing")
+            expected = len(route_receipts)
+            observed_routes_raw = worker_stats["routes"]
+            if not isinstance(observed_routes_raw, dict):
+                raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
+            observed_routes = cast(dict[str, int], observed_routes_raw)
+            _require(expected > 0, "installed hook corpus is empty")
+            _require(expected == 21, {"expected": expected, "routes": routes})
+            _require(sum(observed_routes.values()) == expected, worker_stats)
+            _require(observed_routes.get("native_resident") == expected, worker_stats)
+            _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
+            return {
+                "routes": route_receipts,
+                "route_count": expected,
+                "native_resident_decisions": observed_routes.get("native_resident", 0),
+                "native_oneshot_decisions": observed_routes.get("native_oneshot", 0),
+                "python_semantic_decisions": observed_routes.get("python_semantic", 0),
+                "fail_safe_decisions": observed_routes.get("native_fail_safe", 0),
+                "reason_code_counts": reason_codes,
+                "receipt_metrics": {
+                    "accepted": evidence_stats["receipt_accepted"],
+                    "processed": evidence_stats["receipt_processed"],
+                    "deduped": evidence_stats["receipt_deduped"],
+                    "dropped": evidence_stats["receipt_dropped"],
+                    "failures": evidence_stats["receipt_failures"],
+                    "durable_pending": evidence_stats["receipt_durable_pending"],
+                },
+                "mode_invariants": mode_invariants,
+            }
+
+        except BaseException:
+            report_publication_failure(observation, publisher)
+            raise
 
 
 def _require_clean_probe_environment() -> None:
@@ -437,7 +460,7 @@ def _run_native_smoke(root: Path) -> None:
 
 def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="hg-auto-", dir=_short_temp_parent()) as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         completed = False
         try:
             _run_native_smoke(root)

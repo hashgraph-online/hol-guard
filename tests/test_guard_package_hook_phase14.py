@@ -456,6 +456,7 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
 def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(tmp_path: Path) -> None:
     """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+    from tests.guard_package_hook_subprocess import expired_cloud_authorization
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -481,14 +482,16 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "tool_input": {"command": "npm install minimist@1.2.8"},
         "cwd": str(workspace_dir),
     }
-    result = subprocess.run(
-        fallback_command,
-        input=json.dumps(event),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
+    with expired_cloud_authorization(WORKSPACE_ID) as environment:
+        result = subprocess.run(
+            fallback_command,
+            input=json.dumps(event),
+            text=True,
+            capture_output=True,
+            timeout=40,
+            check=False,
+            env=environment,
+        )
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0

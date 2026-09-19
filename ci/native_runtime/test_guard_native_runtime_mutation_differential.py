@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot, native_review_diagnostic
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
@@ -166,7 +166,7 @@ def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path,
                         observe_mode=False,
                         policy_snapshot=snapshot,
                     )
-                    assert native_response is not None, (seed, case_index)
+                    assert native_response is not None, (seed, case_index, native_review_diagnostic(guard_home))
                     try:
                         _assert_native_security_floor(native_response, python_response)
                     except AssertionError:

@@ -12,27 +12,26 @@ import tempfile
 import threading
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import tomllib
-else:  # pragma: no cover - runtime compatibility
-    tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .config_action_resolution import (
+    resolve_artifact_or_publisher_action,
+    resolve_configured_action,
+    resolve_configured_risk_action,
+)
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .config_preset_support import apply_named_posture_harness_policy
 from .guard_home_state import database_has_custom_extension_state
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
+from .native_policy_publication_lock import hold_policy_publication_mutation
 from .presentation_mode import (
     PRESENTATION_SCHEMA_VERSION,
-    coerce_persisted_presentation_mode,
     coerce_presentation_mode_write,
 )
 from .protection_posture import (
@@ -40,11 +39,13 @@ from .protection_posture import (
     DEFAULT_WATCH_AUTO_REVERT_HOURS,
     coerce_loaded_protection_posture,
     coerce_protection_posture,
-    coerce_watch_auto_revert_hours,
     derive_protection_posture,
     dual_write_from_posture,
     resolve_posture_defaults,
 )
+from .workspace_config_io import WORKSPACE_CONFIG_FILENAMES, read_workspace_toml
+
+tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 VALID_UPDATE_CHANNELS = frozenset({"stable", "alpha"})
@@ -112,7 +113,6 @@ GUARD_HOME_METADATA_FILES = frozenset(
 )
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
-WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 
 # Hook review controls. The resident worker is the safe production default;
@@ -427,6 +427,7 @@ class GuardConfig:
     managed_locked_settings: tuple[str, ...] = ()
     install_owner: str = "user"
     managed_policy: ManagedPolicy | None = None
+    local_policy_origin: GuardConfig | None = field(default=None, repr=False)
 
     def resolve_action_override(
         self,
@@ -434,26 +435,14 @@ class GuardConfig:
         artifact_id: str | None,
         publisher: str | None,
     ) -> GuardAction | None:
-        narrow_override = self.resolve_artifact_or_publisher_action_override(
-            artifact_id,
-            publisher,
-        )
-        if narrow_override is not None:
-            return narrow_override
-        if self.harness_actions is not None and harness in self.harness_actions:
-            return self.harness_actions[harness]
-        return None
+        return resolve_configured_action(self, harness, artifact_id, publisher)
 
     def resolve_artifact_or_publisher_action_override(
         self,
         artifact_id: str | None,
         publisher: str | None,
     ) -> GuardAction | None:
-        if artifact_id is not None and self.artifact_actions is not None and artifact_id in self.artifact_actions:
-            return self.artifact_actions[artifact_id]
-        if publisher is not None and self.publisher_actions is not None and publisher in self.publisher_actions:
-            return self.publisher_actions[publisher]
-        return None
+        return resolve_artifact_or_publisher_action(self, artifact_id, publisher)
 
 
 def resolve_guard_home(override: str | None = None) -> Path:
@@ -513,123 +502,23 @@ def load_guard_config(
     home_config = _read_toml(guard_home / "config.toml")
     workspace_config = _load_workspace_guard_config(workspace)
 
-    merged = _merge_config_payload(home_config, workspace_config)
+    local_payload = _merge_config_payload(home_config, workspace_config)
+    merged = local_payload
     managed_state = managed_policy_state or load_managed_policy()
     effective_managed_policy = managed_state.policy
     if effective_managed_policy is None and managed_state.status in {"invalid", "inaccessible", "tampered"}:
         effective_managed_policy = fail_closed_managed_policy()
     if effective_managed_policy is not None:
         merged = apply_managed_policy(merged, effective_managed_policy)
-    loaded_mode = _coerce_loaded_guard_mode(merged.get("mode"), "prompt")
-    loaded_security_level = _coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL))
-    explicit_posture = coerce_loaded_protection_posture(merged.get("protection_posture"))
-    managed_locks_level = (
-        effective_managed_policy is not None and "security_level" in effective_managed_policy.locked_settings
+    from .config_payload import guard_config_from_payload
+
+    config = guard_config_from_payload(guard_home, workspace, merged, managed_state, effective_managed_policy)
+    if effective_managed_policy is None:
+        return config
+    local_origin = guard_config_from_payload(
+        guard_home, workspace, local_payload, ManagedPolicyState("absent", "local-origin"), None
     )
-    if managed_locks_level:
-        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
-        posture_explicit = False
-    elif explicit_posture is not None:
-        loaded_posture = explicit_posture
-        posture_explicit = True
-    else:
-        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
-        posture_explicit = False
-    legacy_presentation_value = next(
-        (
-            merged.get(key)
-            for key in ("presentation_mode", "presentation_density", "display_density", "density")
-            if merged.get(key) is not None
-        ),
-        None,
-    )
-    persisted_presentation = coerce_persisted_presentation_mode(
-        legacy_presentation_value,
-        explicit=merged.get("presentation_mode_explicit", legacy_presentation_value is not None),
-        schema_version=merged.get("presentation_schema_version", PRESENTATION_SCHEMA_VERSION),
-    )
-    presentation_revision = _coerce_loaded_non_negative_int(merged.get("presentation_revision"), 0)
-    return GuardConfig(
-        guard_home=guard_home,
-        workspace=workspace,
-        mode=("observe" if loaded_posture == "watch" else loaded_mode),
-        presentation_mode=persisted_presentation.value,
-        presentation_mode_explicit=persisted_presentation.explicit,
-        presentation_schema_version=persisted_presentation.schema_version,
-        presentation_revision=presentation_revision,
-        presentation_source=persisted_presentation.source,
-        presentation_diagnostic=persisted_presentation.diagnostic,
-        protection_posture=loaded_posture,
-        protection_posture_explicit=posture_explicit,
-        watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
-        watch_entered_at=_coerce_watch_entered_at(merged.get("watch_entered_at")),
-        default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
-        unknown_publisher_action=_coerce_loaded_guard_action_or_default(
-            merged.get("unknown_publisher_action"),
-            "review",
-        ),
-        changed_hash_action=_coerce_loaded_guard_action_or_default(
-            merged.get("changed_hash_action"),
-            "require-reapproval",
-        ),
-        new_network_domain_action=_coerce_loaded_guard_action_or_default(
-            merged.get("new_network_domain_action"),
-            "warn",
-        ),
-        subprocess_action=_coerce_loaded_guard_action_or_default(merged.get("subprocess_action"), "warn"),
-        approval_wait_timeout_seconds=_coerce_loaded_non_negative_int(
-            merged.get("approval_wait_timeout_seconds"),
-            120,
-        ),
-        approval_surface_policy=_coerce_loaded_approval_surface_policy(merged.get("approval_surface_policy")),
-        approval_browser_delay_seconds=_coerce_loaded_bounded_int(
-            merged.get("approval_browser_delay_seconds"),
-            default=20,
-            maximum=300,
-        ),
-        approval_browser_immediate_severity=_coerce_loaded_approval_browser_severity(
-            merged.get("approval_browser_immediate_severity")
-        ),
-        desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
-        update_channel=_coerce_loaded_update_channel(merged.get("update_channel")),
-        telemetry=bool(merged.get("telemetry", False)),
-        sync=bool(merged.get("sync", False)),
-        billing=bool(merged.get("billing", False)),
-        runtime_detector_registry=_coerce_loaded_bool(merged.get("runtime_detector_registry", False)),
-        runtime_detector_timeout_ms=_coerce_loaded_positive_int(merged.get("runtime_detector_timeout_ms", 50), 50),
-        runtime_detector_debug_trace=_coerce_loaded_bool(merged.get("runtime_detector_debug_trace", False)),
-        runtime_detector_disabled_ids=_coerce_loaded_string_tuple(merged.get("runtime_detector_disabled_ids")),
-        sandbox_analysis=_coerce_sandbox_analysis(merged.get("sandbox_analysis", "off")),
-        harness_actions=_coerce_action_map(merged.get("harnesses")),
-        publisher_actions=_coerce_action_map(merged.get("publishers")),
-        artifact_actions=_coerce_action_map(merged.get("artifacts")),
-        security_level=loaded_security_level,
-        risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
-        harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
-        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
-            merged.get("receipt_redaction_level"),
-        ),
-        evidence_retain_days=_coerce_loaded_bounded_positive_int(
-            merged.get("evidence_retain_days"),
-            default=90,
-            maximum=3_650,
-        ),
-        receipt_detail_limit=_coerce_loaded_optional_bounded_positive_int(
-            merged.get("receipt_detail_limit"),
-            maximum=1_000_000,
-        ),
-        guard_event_limit=_coerce_loaded_optional_bounded_positive_int(
-            merged.get("guard_event_limit"),
-            maximum=1_000_000,
-        ),
-        managed_policy_status=managed_state.status,
-        managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
-        managed_locked_settings=tuple(sorted(effective_managed_policy.locked_settings))
-        if effective_managed_policy is not None
-        else (),
-        install_owner=effective_managed_policy.install_owner if effective_managed_policy is not None else "user",
-        managed_policy=effective_managed_policy,
-    )
+    return replace(config, local_policy_origin=local_origin)
 
 
 def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
@@ -698,7 +587,7 @@ def update_guard_settings(
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
 
-    with _GUARD_SETTINGS_WRITE_LOCK:
+    with _GUARD_SETTINGS_WRITE_LOCK, hold_policy_publication_mutation(guard_home):
         return _update_guard_settings_locked(
             guard_home,
             payload,
@@ -807,7 +696,6 @@ def _update_guard_settings_locked(
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
-    notify_native_policy_mutation(guard_home)
     record_posture_change_if_needed(
         guard_home,
         previous=current_config.protection_posture,
@@ -831,14 +719,14 @@ def update_guard_update_channel(
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     if not isinstance(update_channel, str) or update_channel not in VALID_UPDATE_CHANNELS:
         raise ValueError("Update channel must be stable or alpha.")
-    current_config = load_guard_config(guard_home)
-    if "update_channel" in current_config.managed_locked_settings:
-        raise ValueError("Managed policy locks the update channel.")
-    current = _read_toml(guard_home / "config.toml")
-    current["update_channel"] = update_channel
-    _write_guard_config(guard_home / "config.toml", current)
-    updated = load_guard_config(guard_home)
-    notify_native_policy_mutation(guard_home)
+    with hold_policy_publication_mutation(guard_home):
+        current_config = load_guard_config(guard_home)
+        if "update_channel" in current_config.managed_locked_settings:
+            raise ValueError("Managed policy locks the update channel.")
+        current = _read_toml(guard_home / "config.toml")
+        current["update_channel"] = update_channel
+        _write_guard_config(guard_home / "config.toml", current)
+        updated = load_guard_config(guard_home)
     return updated
 
 
@@ -850,11 +738,11 @@ def reset_guard_settings(
     """Reset editable local Guard settings while preserving non-dashboard config."""
 
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
-    current = _read_toml(guard_home / "config.toml")
-    next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
-    _write_guard_config(guard_home / "config.toml", next_payload)
-    updated = load_guard_config(guard_home)
-    notify_native_policy_mutation(guard_home)
+    with hold_policy_publication_mutation(guard_home):
+        current = _read_toml(guard_home / "config.toml")
+        next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
+        _write_guard_config(guard_home / "config.toml", next_payload)
+        updated = load_guard_config(guard_home)
     return updated
 
 
@@ -1069,13 +957,8 @@ def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness:
 
     if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    if isinstance(harness, str) and config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return _posture_or_level_defaults(config).get(risk_class)
+    configured = resolve_configured_risk_action(config, risk_class, harness=harness)
+    return configured if configured is not None else _posture_or_level_defaults(config).get(risk_class)
 
 
 def _sync_protection_posture_payload(
@@ -1156,7 +1039,12 @@ def _incoming_selects_protection_posture(
 def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = _toml_lines_for_table(payload, ())
-    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    try:
+        path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    finally:
+        # All supported callers hold the publication mutation lock through this
+        # write and notification, including a write that fails after truncation.
+        notify_native_policy_mutation(path.parent)
 
 
 def _toml_lines_for_table(payload: Mapping[str, object], path: tuple[str, ...]) -> list[str]:
@@ -1242,6 +1130,11 @@ def overlay_synced_guard_policy(
     cloud_redaction_level = payload.get("receiptRedactionLevel")
     overlaid = replace(
         config,
+        local_policy_origin=(
+            overlay_synced_guard_policy(config.local_policy_origin, payload)
+            if config.local_policy_origin is not None
+            else None
+        ),
         mode=next_mode,
         default_action=default_action,
         unknown_publisher_action=unknown_publisher_action,
@@ -1439,7 +1332,9 @@ def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
         return {}
     merged: dict[str, object] = {}
     for filename in WORKSPACE_CONFIG_FILENAMES:
-        merged = _merge_config_payload(merged, _sanitize_workspace_guard_config(_read_toml(workspace / filename)))
+        merged = _merge_config_payload(
+            merged, _sanitize_workspace_guard_config(read_workspace_toml(workspace, filename))
+        )
     return merged
 
 

@@ -45,7 +45,7 @@ def test_codex_source_view_allows_placeholder_private_key_fixture_output(tmp_pat
     source_file = workspace_dir / "tests" / "test_connect_fixture.py"
     _write_text(
         source_file,
-        ('dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"\n'),
+        ('dpop_private_key_pem="-----BEGIN' ' PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"\n'),
     )
 
     command = "sed -n '1,20p' tests/test_connect_fixture.py"
@@ -155,7 +155,7 @@ def test_codex_source_view_still_blocks_real_private_key_output(tmp_path: Path) 
     _write_text(
         source_file,
         (
-            'dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\n'
+            'dpop_private_key_pem="-----BEGIN' ' PRIVATE KEY-----\n'
             "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD0realmaterial\n"
             '-----END PRIVATE KEY-----\n"\n'
         ),

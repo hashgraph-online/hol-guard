@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.product_model import (
     SUPPORTED_HARNESS_VALUES,
     export_product_model_v1,
 )
+from tests.guard_review_authority_fixtures import enroll_review_authority
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -279,6 +280,7 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
 
 def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) -> None:
     context = _context(tmp_path)
+    enroll_review_authority(context.guard_home)
     secret_path = context.workspace_dir / ".env"
     secret_name = "OPENAI_" + "API_KEY"
     secret_value = "HOL_GUARD_CLINE_" + "TEST_ONLY"

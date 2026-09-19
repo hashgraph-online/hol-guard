@@ -14,7 +14,7 @@ import math
 import os
 import stat
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -24,6 +24,8 @@ from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
 from .native_route_receipt import record_native_hook_result
+from .native_runtime_capabilities import NativeRuntimeCapabilities
+from .native_runtime_capabilities import decode_native_runtime_capabilities as _decode_capabilities
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
     native_record_integrity_failure,
@@ -32,6 +34,7 @@ from .native_runtime_resilience import (
     native_record_resident_success,
     native_runtime_health_snapshot,
 )
+from .native_runtime_selection import select_native_runtime
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 
 NativeMode = Literal["off", "shadow", "auto", "force"]
@@ -65,16 +68,6 @@ class NativeRuntimeIdentity:
     size: int
     mtime_ns: int
     sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class NativeRuntimeCapabilities:
-    protocol_version: int
-    runtime_version: str
-    rule_digest: str
-    build_sha: str
-    target: str
-    features: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,8 +153,12 @@ def _runtime_candidates() -> tuple[Path, ...]:
     return tuple(unique)
 
 
-def _validate_binary(path: Path) -> NativeRuntimeIdentity | None:
+def _validate_binary(
+    path: Path, *, check_continuation: Callable[[], None] | None = None
+) -> NativeRuntimeIdentity | None:
     try:
+        if check_continuation is not None:
+            check_continuation()
         lexical = path.expanduser()
         metadata = lexical.lstat()
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
@@ -180,6 +177,8 @@ def _validate_binary(path: Path) -> NativeRuntimeIdentity | None:
         digest = hashlib.sha256()
         with resolved.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                if check_continuation is not None:
+                    check_continuation()
                 digest.update(chunk)
         return NativeRuntimeIdentity(
             path=resolved,
@@ -334,35 +333,6 @@ def _run_native_process(
     return result.stdout
 
 
-def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
-    if not isinstance(payload, dict):
-        return None
-    protocol_version = payload.get("protocol_version")
-    runtime_version = payload.get("runtime_version")
-    rule_digest = payload.get("rule_digest")
-    build_sha = payload.get("build_sha")
-    target = payload.get("target")
-    features = payload.get("features")
-    if (
-        not isinstance(protocol_version, int)
-        or not isinstance(runtime_version, str)
-        or not isinstance(rule_digest, str)
-        or not isinstance(build_sha, str)
-        or not isinstance(target, str)
-        or not isinstance(features, list)
-        or not all(isinstance(feature, str) for feature in features)
-    ):
-        return None
-    return NativeRuntimeCapabilities(
-        protocol_version=protocol_version,
-        runtime_version=runtime_version,
-        rule_digest=rule_digest,
-        build_sha=build_sha,
-        target=target,
-        features=tuple(features),
-    )
-
-
 @functools.lru_cache(maxsize=16)
 def _capabilities_for_identity(
     path: str,
@@ -394,83 +364,17 @@ def _python_package_version() -> str | None:
 
 
 def native_runtime_status() -> NativeRuntimeStatus:
-    mode = native_mode()
-    if mode == "off":
-        return NativeRuntimeStatus(
-            mode=mode,
-            available=False,
-            compatible=False,
-            reason="native_disabled",
-        )
-    for candidate in _runtime_candidates():
-        _restore_bundled_runtime_execute_bit(candidate)
-        identity = _validate_binary(candidate)
-        if identity is None:
-            continue
-        manifest: NativeRuntimeManifest | None = None
-        if _is_bundled_candidate(candidate):
-            manifest, manifest_error = _manifest_for_bundled_identity(identity)
-            if manifest_error is not None:
-                return NativeRuntimeStatus(
-                    mode=mode,
-                    available=True,
-                    compatible=False,
-                    reason=manifest_error,
-                    identity=identity,
-                )
-        capabilities = _capabilities_for_identity(
-            str(identity.path),
-            identity.size,
-            identity.mtime_ns,
-            identity.sha256,
-        )
-        if capabilities is None:
-            continue
-        if capabilities.protocol_version != _NATIVE_PROTOCOL_VERSION:
-            return NativeRuntimeStatus(
-                mode=mode,
-                available=True,
-                compatible=False,
-                reason="native_protocol_mismatch",
-                identity=identity,
-                capabilities=capabilities,
-            )
-        if manifest is not None:
-            if capabilities.protocol_version != manifest.protocol_version:
-                reason = "native_manifest_protocol_mismatch"
-            elif capabilities.runtime_version != manifest.package_version:
-                reason = "native_manifest_version_mismatch"
-            elif capabilities.rule_digest != manifest.rule_digest:
-                reason = "native_manifest_rule_mismatch"
-            elif capabilities.build_sha != manifest.source_sha:
-                reason = "native_manifest_build_mismatch"
-            else:
-                reason = None
-            if reason is not None:
-                return NativeRuntimeStatus(
-                    mode=mode,
-                    available=True,
-                    compatible=False,
-                    reason=reason,
-                    identity=identity,
-                    capabilities=capabilities,
-                )
-        expected_version = _python_package_version()
-        version_compatible = expected_version is None or capabilities.runtime_version == expected_version
-        compatible = version_compatible or mode in {"shadow", "force"}
-        return NativeRuntimeStatus(
-            mode=mode,
-            available=True,
-            compatible=compatible,
-            reason="native_ready" if compatible else "native_version_mismatch",
-            identity=identity,
-            capabilities=capabilities,
-        )
-    return NativeRuntimeStatus(
-        mode=mode,
-        available=False,
-        compatible=False,
-        reason="native_unavailable",
+    return _native_runtime_status_with_setup()
+
+
+def _native_runtime_status_with_setup(
+    *,
+    check_continuation: Callable[[], None] | None = None,
+    capability_provider: Callable[[NativeRuntimeIdentity], NativeRuntimeCapabilities | None] | None = None,
+) -> NativeRuntimeStatus:
+    return select_native_runtime(
+        check_continuation=check_continuation,
+        capability_provider=capability_provider,
     )
 
 

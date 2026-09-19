@@ -34,19 +34,12 @@ from ..mdm.user_health import (
     user_health_report_due,
     user_health_status,
 )
-from ..runtime.command_capability import (
-    READ_ONLY_COMMAND_OPERATIONS,
-    CommandCapabilityError,
-    approve_pending_command,
-    issue_command_capability,
-    revoke_command_capability,
-)
-from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
-from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
+from .commands_cloud_consent import _run_guard_commands_command
 from .commands_dispatch_cloud_review import apply_connect_time_cloud_review_consent
 from .commands_parser_helpers import *
 from .commands_support_service import _dispatch_guard_daemon_command
+from .commands_sync_output import sync_failure_payload, sync_success_payload
 
 
 def _cloud_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
@@ -323,17 +316,17 @@ def _run_guard_sync_command(
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
         if getattr(args, "json", False):
-            _emit("sync", {"synced": False, "error": message}, True)
+            _emit("sync", sync_failure_payload(error, message=message), True)
         else:
             print(message, file=sys.stderr)
         return 1
     except RuntimeError as error:
         if getattr(args, "json", False):
-            _emit("sync", {"synced": False, "error": str(error)}, True)
+            _emit("sync", sync_failure_payload(error), True)
         else:
             print(str(error), file=sys.stderr)
         return 1
-    _emit("sync", payload, getattr(args, "json", False))
+    _emit("sync", sync_success_payload(payload), getattr(args, "json", False))
     return 0
 
 
@@ -609,88 +602,6 @@ def _run_guard_daemon_command(
         context=context,
         store=store,
     )
-
-
-def _run_guard_commands_command(
-    args: argparse.Namespace,
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    context: HarnessContext | None = None,
-    store: GuardStore | None = None,
-    config: GuardConfig | None = None,
-    input_text: str | None = None,
-    output_stream: TextIO | None = None,
-) -> int:
-    store = _require_guard_store(store)
-    commands_command = getattr(args, "commands_command", None)
-    if commands_command == "status":
-        _emit("commands", command_queue_status(store), getattr(args, "json", False))
-        return 0
-    if commands_command == "enable":
-        operations: list[str] = []
-        for value in getattr(args, "operations", []):
-            for operation in str(value).split(","):
-                normalized = operation.strip()
-                if normalized == "read-only":
-                    operations.extend(READ_ONLY_COMMAND_OPERATIONS)
-                elif normalized:
-                    operations.append(normalized)
-        try:
-            capability = issue_command_capability(
-                store,
-                operations=tuple(operations),
-                supported_operations=SUPPORTED_COMMAND_OPERATIONS,
-                ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
-            )
-        except CommandCapabilityError as error:
-            _emit(
-                "commands",
-                {"status": "error", "error": error.code},
-                getattr(args, "json", False),
-            )
-            return 2
-        _emit(
-            "commands",
-            {
-                "status": "enabled" if capability.get("enabled") is True else "issued_disabled",
-                "capability": capability,
-                "daemon_restart_required": True,
-                "restart_command": "hol-guard daemon repair",
-            },
-            getattr(args, "json", False),
-        )
-        return 0
-    if commands_command == "approve":
-        job_id = str(getattr(args, "job_id", ""))
-        if getattr(args, "confirm", None) != job_id:
-            _emit(
-                "commands",
-                {"status": "error", "error": "confirmation_mismatch", "job_id": job_id},
-                getattr(args, "json", False),
-            )
-            return 2
-        try:
-            result = approve_pending_command(store, job_id)
-        except CommandCapabilityError as error:
-            _emit(
-                "commands",
-                {"status": "error", "error": error.code, "job_id": job_id},
-                getattr(args, "json", False),
-            )
-            return 2
-        _emit("commands", {"status": "approved", **result}, getattr(args, "json", False))
-        return 0
-    if commands_command == "revoke":
-        capability = revoke_command_capability(store)
-        _emit(
-            "commands",
-            {"status": "revoked", "capability": capability},
-            getattr(args, "json", False),
-        )
-        return 0
-    print("commands subcommand is required", file=sys.stderr)
-    return 2
 
 
 __all__ = [

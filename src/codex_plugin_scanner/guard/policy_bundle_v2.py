@@ -15,11 +15,13 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 from .contract_validation import canonical_uuid, positive_integer
-from .policy_bundle_trusted_keys import (
-    PolicyBundleVerificationKey,
-    resolve_policy_bundle_signing_key,
-    signing_key_is_current,
-    signing_key_is_trusted,
+from .policy_bundle_ack_contract import GENERIC_ACK_KEYS, validated_generic_policy_acknowledgement
+from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
+from .policy_bundle_v2_key_authority import authorized_v2_signing_key
+from .policy_bundle_validity import (
+    comparison_unix_seconds,
+    expires_at_validity_error,
+    issued_at_validity_error,
 )
 from .policy_document import JsonValue, canonical_json_bytes, canonical_policy_document_bytes
 from .policy_document_yaml import PolicyDocumentError, parse_policy_document_yaml
@@ -89,7 +91,7 @@ _ALLOWED_ACK_KEYS = frozenset(
     }
 )
 _ALLOWED_ACK_TRANSITIONS = {
-    "received": frozenset({"received", "validated", "failed", "offline"}),
+    "received": frozenset({"received", "validated", "applied", "failed", "offline"}),
     "validated": frozenset({"validated", "applied", "failed", "offline"}),
     "applied": frozenset({"applied", "offline"}),
     "failed": frozenset({"failed", "received", "offline"}),
@@ -242,6 +244,7 @@ def _verify_signature(
     *,
     trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
     anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+    now: float | None = None,
 ) -> str | None:
     verifier = policy_bundle.get("verifier")
     if not _is_object_mapping(verifier) or not _validate_keys(verifier, _ALLOWED_VERIFIER_KEYS):
@@ -252,12 +255,14 @@ def _verify_signature(
     signature = _non_empty_string(verifier.get("signature"))
     if key_id is None or signature is None:
         return "invalid_verifier"
-    signing_key = resolve_policy_bundle_signing_key(key_id, trusted_verification_keys)
+    signing_key = authorized_v2_signing_key(
+        key_id,
+        trusted_keys=trusted_verification_keys,
+        anchored_keys=anchored_verification_keys,
+        workspace_id=policy_bundle.get("workspaceId"),
+        now=now,
+    )
     if signing_key is None:
-        return "untrusted_signing_key"
-    if not signing_key_is_trusted(signing_key, anchored_verification_keys):
-        return "untrusted_signing_key"
-    if not signing_key_is_current(signing_key):
         return "untrusted_signing_key"
     key_fingerprint = verifier.get("keyFingerprint")
     if key_fingerprint is not None and key_fingerprint != signing_key.fingerprint_sha256:
@@ -293,7 +298,7 @@ def validated_policy_bundle_v2_payload(
     *,
     trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
     anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
-    now: datetime | None = None,
+    now: datetime | float | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate one bounded signed v2 envelope and its canonical policy document."""
 
@@ -329,9 +334,16 @@ def validated_policy_bundle_v2_payload(
         return None, "invalid_expires_at"
     if expires_at is not None and expires_at <= issued_at:
         return None, "invalid_expires_at"
-    comparison_time = now or datetime.now(timezone.utc)
-    if expires_at is not None and expires_at <= comparison_time:
-        return None, "bundle_expired"
+    comparison_time = comparison_unix_seconds(now, default=datetime.now(timezone.utc).timestamp())
+    issued_error = issued_at_validity_error(issued_at.timestamp(), current_time=comparison_time)
+    if issued_error is not None:
+        return None, issued_error
+    expired_error = expires_at_validity_error(
+        None if expires_at is None else expires_at.timestamp(),
+        current_time=comparison_time,
+    )
+    if expired_error is not None:
+        return None, expired_error
     rollback_error = _validate_rollback(policy_bundle.get("rollback"))
     if rollback_error is not None:
         return None, rollback_error
@@ -351,6 +363,7 @@ def validated_policy_bundle_v2_payload(
         policy_bundle,
         trusted_verification_keys=trusted_verification_keys,
         anchored_verification_keys=anchored_verification_keys,
+        now=comparison_time,
     )
     if signature_error is not None:
         return None, signature_error
@@ -417,6 +430,8 @@ def validated_policy_bundle_v2_acknowledgement(
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate a monotonic explicit device acknowledgement transition."""
 
+    if set(acknowledgement) <= GENERIC_ACK_KEYS:
+        return validated_generic_policy_acknowledgement(acknowledgement, previous=previous)
     required = _ALLOWED_ACK_KEYS - {"errorCode"}
     error = _policy_bundle_v2_acknowledgement_error(acknowledgement, required=required)
     if error is not None:

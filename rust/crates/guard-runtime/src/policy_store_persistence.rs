@@ -12,6 +12,10 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "policy_store_control_persistence.rs"]
+mod control_persistence;
+pub(super) use control_persistence::{persist_authority, persist_authority_with_control_floor};
+
 /// Recover a crash mid-replacement; POSIX rename is already one syscall.
 pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
     let parent = path
@@ -140,69 +144,6 @@ pub(super) fn read_generation_floor(
         return Err("native_policy_snapshot_floor_invalid".to_owned());
     }
     Ok(Some(floor))
-}
-
-pub(super) fn persist_authority(
-    path: &Path,
-    generation_floor: u64,
-    policy_digest: &str,
-    snapshot: Option<&PolicySnapshotV3>,
-    verifier_key: &[u8; VERIFIER_KEY_BYTES],
-) -> Result<(), String> {
-    let floor = super::policy_store_command_floor::snapshot_floor(snapshot);
-    persist_authority_with_control_floor(
-        path,
-        generation_floor,
-        policy_digest,
-        snapshot,
-        verifier_key,
-        floor.as_ref(),
-    )
-}
-
-pub(super) fn persist_authority_with_control_floor(
-    path: &Path,
-    generation_floor: u64,
-    policy_digest: &str,
-    snapshot: Option<&PolicySnapshotV3>,
-    verifier_key: &[u8; VERIFIER_KEY_BYTES],
-    command_control_floor: Option<&super::policy_store_command_floor::CommandControlFloor>,
-) -> Result<(), String> {
-    let private_root = path
-        .parent()
-        .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
-        .and_then(crate::resident_state::private_root_for_state_base)?;
-    if generation_floor == 0
-        || !is_lower_hex(policy_digest, 64)
-        || snapshot.is_some_and(|candidate| {
-            candidate.generation != generation_floor || candidate.policy_digest != policy_digest
-        })
-    {
-        return Err("native_policy_snapshot_authority_invalid".to_owned());
-    }
-    let record = PolicyAuthorityRecordV3 {
-        schema: AUTHORITY_RECORD_SCHEMA.to_owned(),
-        generation_floor,
-        policy_digest: policy_digest.to_owned(),
-        snapshot: snapshot.cloned(),
-        floor_mac: super::policy_store_command_floor::authority_floor_mac(
-            generation_floor,
-            policy_digest,
-            command_control_floor,
-            verifier_key,
-        )?,
-        command_control_floor: command_control_floor.cloned(),
-    };
-    let value = serde_json::to_value(record)
-        .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;
-    let bytes = canonical_json_bytes(&value).map_err(snapshot_error)?;
-    persist_private_bytes(
-        path,
-        &bytes,
-        AUTHORITY_RECORD_MAX_BYTES,
-        "authority",
-        &private_root,
-    )
 }
 
 pub(super) fn is_lower_hex(value: &str, length: usize) -> bool {

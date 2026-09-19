@@ -115,6 +115,7 @@ class StorePortableProjectMemoryMixin:
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
         consume_one_shot: bool = True,
+        exact_command_sha256: str | None = None,
     ) -> PolicyDecisionLookupResult:
         portable_workspace = self._portable_project_workspace(workspace)
         if portable_workspace is None:
@@ -127,6 +128,7 @@ class StorePortableProjectMemoryMixin:
                 now=now,
                 runtime_exact_match_context=runtime_exact_match_context,
                 consume_one_shot=consume_one_shot,
+                exact_command_sha256=exact_command_sha256,
             )
 
         # Portable Git metadata is classification, not authentication. Always
@@ -144,6 +146,7 @@ class StorePortableProjectMemoryMixin:
                 now=now,
                 runtime_exact_match_context=runtime_exact_match_context,
                 consume_one_shot=False,
+                exact_command_sha256=exact_command_sha256,
             )
         )
         normalized_workspace = workspace.strip() if isinstance(workspace, str) else None
@@ -161,6 +164,7 @@ class StorePortableProjectMemoryMixin:
             now=now,
             runtime_exact_match_context=runtime_exact_match_context,
             consume_one_shot=False,
+            exact_command_sha256=exact_command_sha256,
         )
         effective_preview = _most_restrictive_policy_lookup([local_preview, portable_preview])
         if not consume_one_shot:
@@ -189,6 +193,7 @@ class StorePortableProjectMemoryMixin:
             now=now,
             runtime_exact_match_context=runtime_exact_match_context,
             consume_one_shot=False,
+            exact_command_sha256=exact_command_sha256,
         )
         return _restrictive_only_lookup(refreshed)
 

@@ -125,45 +125,43 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
-    _ = blocker.execute("begin exclusive")
-    endpoint = (
-        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?guard-home={store.guard_home}&home={tmp_path}&workspace={tmp_path}"
-    )
-
-    def review(index: int) -> tuple[dict[str, object], float]:
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": f"echo bounded-{index}"},
-                }
-            ).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": daemon._server.auth_token,  # pyright: ignore[reportPrivateUsage]
-            },
-            method="POST",
-        )
-        return _open_json(request, timeout_seconds=1.75)
-
     try:
-        with ThreadPoolExecutor(max_workers=24) as executor:
-            futures = [executor.submit(review, index) for index in range(24)]
-            health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
-            results = [future.result(timeout=2) for future in futures]
-        assert health["ok"] is True
-        assert health_elapsed < 0.5
-        assert max(elapsed for _payload, elapsed in results) < 1.6
-        assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
-        assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
-    finally:
-        blocker.rollback()
-        blocker.close()
+        blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
+        _ = blocker.execute("begin exclusive")
+        endpoint = f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?guard-home={store.guard_home}&home={tmp_path}&workspace={tmp_path}"
 
-    try:
+        def review(index: int) -> tuple[dict[str, object], float]:
+            request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": f"echo bounded-{index}"},
+                    }
+                ).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,  # pyright: ignore[reportPrivateUsage]
+                },
+                method="POST",
+            )
+            return _open_json(request, timeout_seconds=1.75)
+
+        try:
+            with ThreadPoolExecutor(max_workers=24) as executor:
+                futures = [executor.submit(review, index) for index in range(24)]
+                health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
+                results = [future.result(timeout=2) for future in futures]
+            assert health["ok"] is True
+            assert health_elapsed < 0.5
+            assert max(elapsed for _payload, elapsed in results) < 1.6
+            assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
+            assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
+        finally:
+            blocker.rollback()
+            blocker.close()
+
         assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
             minimum_workers=1,
             timeout_seconds=15,

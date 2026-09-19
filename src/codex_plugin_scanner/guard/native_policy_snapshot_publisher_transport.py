@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
 from typing import Any
 
+from .native_cloud_policy_inputs import NativeCloudPolicyInputs
+from .native_policy_authority_read import NativeVerifiedPolicyInputs
 from .native_policy_snapshot_codec import _strict_json_loads_v3, _valid_digest_v3
 from .native_policy_snapshot_constants import (
     _MAX_ACK_BYTES,
     _PUBLISH_TIMEOUT_SECONDS,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
+    POLICY_SNAPSHOT_MAX_EXPIRY_MS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
 from .native_policy_snapshot_generation import native_policy_snapshot_v3
+from .native_policy_snapshot_publisher_context import PublicationContext, capture_for_reservation
 
 
 def _decode_ack_v3(output: bytes | None) -> dict[str, object] | None:
@@ -73,14 +76,10 @@ def _ack_from_resident_output(output: bytes | None) -> dict[str, object] | None:
 def _publish_snapshot_v3(
     *,
     publisher: Any,
-    identity: Any,
-    capabilities: Any,
-    config: Mapping[str, object],
-    command_extensions: Mapping[str, object],
-    master_key: bytes,
-    client: Callable[..., bytes | None],
+    context: PublicationContext,
+    publish_epoch: int,
     renew_after_generation: int | None,
-) -> tuple[dict[str, object], int]:
+) -> tuple[dict[str, object], int, NativeCloudPolicyInputs]:
     """Materialize, push, and authenticate a snapshot, including one recovery retry."""
 
     from .native_resident_client import native_resident_client_failure_code
@@ -88,17 +87,39 @@ def _publish_snapshot_v3(
 
     recovery_attempted = False
     while True:
-        snapshot = native_policy_snapshot_v3(
-            config=config,
-            guard_home=publisher.guard_home,
-            runtime_identity=identity.sha256,
-            rule_digest=capabilities.rule_digest,
-            policy_integrity_key=master_key,
-            issued_at_ms=int(publisher._wall_clock() * 1_000),
-            deadline_monotonic=publisher._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS,
-            renew_after_generation=renew_after_generation,
-            command_extensions=command_extensions,
-        )
+        reservation_deadline = time.monotonic() + _PUBLISH_TIMEOUT_SECONDS
+        with capture_for_reservation(
+            publisher,
+            expected=context,
+            publish_epoch=publish_epoch,
+            deadline_monotonic=reservation_deadline,
+        ) as captured:
+            identity, capabilities, master_key, config, client, inputs, command_extensions = captured
+            if isinstance(inputs, NativeVerifiedPolicyInputs):
+                raise NativePolicySnapshotError("native_policy_snapshot_inputs_changed")
+            try:
+                issued_at_ms = int(publisher._wall_clock() * 1_000)
+                expires_at_ms = (
+                    None
+                    if inputs.expires_at_ms is None
+                    else min(inputs.expires_at_ms, issued_at_ms + POLICY_SNAPSHOT_MAX_EXPIRY_MS)
+                )
+                snapshot = native_policy_snapshot_v3(
+                    config=config,
+                    guard_home=publisher.guard_home,
+                    runtime_identity=identity.sha256,
+                    rule_digest=capabilities.rule_digest,
+                    policy_integrity_key=master_key,
+                    issued_at_ms=issued_at_ms,
+                    expires_at_ms=expires_at_ms,
+                    deadline_monotonic=reservation_deadline,
+                    renew_after_generation=renew_after_generation,
+                    allow_superseded_cache=True,
+                    command_extensions=command_extensions,
+                )
+            finally:
+                master_key = b""
+        captured = None
         encoded = _policy_snapshot_push_bytes_v3(snapshot)
         output = client(
             executable=identity.path,
@@ -136,4 +157,4 @@ def _publish_snapshot_v3(
             or resident_generation <= 0
         ):
             raise NativePolicySnapshotError("native_policy_snapshot_ack_mismatch")
-        return snapshot, resident_generation
+        return snapshot, resident_generation, inputs

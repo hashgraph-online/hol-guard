@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import os
 import secrets
 from collections.abc import Mapping
@@ -15,6 +14,8 @@ from ..portable_command import portable_command_argument, render_portable_comman
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..stable_digest import sha256_content_digest
 from ..store import GuardStore
+from .command_capability_encoding import canonical_bytes as _canonical_bytes
+from .command_capability_encoding import state_items as _state_items
 from .command_operation_classification import (
     LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
     POLICY_MEMORY_COMMAND_OPERATIONS,
@@ -22,7 +23,7 @@ from .command_operation_classification import (
     REMOTE_STEP_UP_COMMAND_OPERATIONS,
     STATE_CHANGING_COMMAND_OPERATIONS,
 )
-from .time_support import parse_utc_timestamp
+from .time_support import parse_utc_timestamp as _parse_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
 COMMAND_PENDING_APPROVALS_STATE_KEY = "guard_command_pending_approvals_v1"
@@ -70,22 +71,6 @@ def command_environment_allows_queue(environ: Mapping[str, str] | None = None) -
     if value is None:
         return True
     return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-_parse_timestamp = parse_utc_timestamp
-
-
-def _canonical_bytes(payload: Mapping[str, object]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-
-
-def _state_items(payload: object) -> list[dict[str, object]]:
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items")
-    if not isinstance(raw_items, list):
-        return []
-    return [{str(key): value for key, value in item.items()} for item in raw_items if isinstance(item, dict)]
 
 
 def _signing_material(store: GuardStore, *, create: bool) -> tuple[bytes, str]:
@@ -145,6 +130,7 @@ def issue_command_capability(
     issuer: str = "local-cli",
     ttl_seconds: int = COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS,
     now: str | None = None,
+    share_policy_source: bool = False,
 ) -> dict[str, object]:
     """Issue and persist an exact local command capability."""
 
@@ -161,6 +147,10 @@ def issue_command_capability(
         raise CommandCapabilityError("unsupported_capability_operation")
     if POLICY_MEMORY_COMMAND_OPERATIONS & set(normalized_operations) and len(normalized_operations) != 1:
         raise CommandCapabilityError("policy_memory_capability_must_be_isolated")
+    if type(share_policy_source) is not bool or (
+        share_policy_source and set(normalized_operations) != POLICY_MEMORY_COMMAND_OPERATIONS
+    ):
+        raise CommandCapabilityError("policy_source_disclosure_requires_isolated_memory_capability")
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
         store,
@@ -169,6 +159,7 @@ def issue_command_capability(
             "deviceId": device_id,
             "workspaceId": workspace_id,
             "operations": list(normalized_operations),
+            "sharePolicySource": share_policy_source,
             "issuer": issuer,
             "issuedAt": issued_at.isoformat(),
             "expiresAt": (issued_at + timedelta(seconds=ttl_seconds)).isoformat(),
@@ -201,6 +192,8 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     capability = _verify_signed_payload(store, store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY))
     if capability.get("version") != COMMAND_CAPABILITY_VERSION:
         raise CommandCapabilityError("capability_version_unsupported")
+    if type(capability.get("sharePolicySource", False)) is not bool:
+        raise CommandCapabilityError("policy_source_disclosure_invalid")
     issuer = capability.get("issuer")
     if not isinstance(issuer, str) or not issuer.strip():
         raise CommandCapabilityError("capability_issuer_invalid")
@@ -274,6 +267,7 @@ def command_capability_status(store: GuardStore, *, now: str | None = None) -> d
     return {
         "enabled": environment_allows_queue,
         "capability_valid": True,
+        "policy_source_disclosure": capability.get("sharePolicySource") is True,
         "reason": None if environment_allows_queue else "command_queue_environment_disabled",
         "issuer": capability.get("issuer"),
         "issued_at": capability.get("issuedAt"),

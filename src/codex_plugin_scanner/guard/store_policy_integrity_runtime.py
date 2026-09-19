@@ -42,7 +42,7 @@ class StorePolicyIntegrityAdminMixin:
 
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
-            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
+            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher, exact_command_sha256,
                    action, reason, owner, source, expires_at, updated_at,
                    policy_document_schema_version, policy_document_id, policy_document_digest,
                    policy_rule_id, policy_provenance_json, integrity_version, integrity_generation,
@@ -148,10 +148,8 @@ class StorePolicyIntegrityAdminMixin:
             "artifact_id": artifact_id,
             "artifact_hash": artifact_hash,
             "workspace": workspace,
-            "publisher": row["publisher"],
+            **{field: row[field] for field in ("publisher", "exact_command_sha256", "reason", "owner")},
             "action": str(row["action"]),
-            "reason": row["reason"],
-            "owner": row["owner"],
             "source": str(row["source"]),
             "expires_at": row["expires_at"],
             "updated_at": str(row["updated_at"]),
@@ -185,7 +183,7 @@ class StorePolicyIntegrityAdminMixin:
         harness: str | None = None,
     ) -> list[sqlite3.Row]:
         query = f"""
-            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
+            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher, exact_command_sha256,
                    action, reason, owner, source, expires_at, updated_at, integrity_version,
                    integrity_generation,
                    payload_hash, payload_mac, integrity_key_id, signed_at

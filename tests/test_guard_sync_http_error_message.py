@@ -1,7 +1,9 @@
 import io
 import json
+import time
 import urllib.error
 import urllib.request
+from types import SimpleNamespace
 
 import pytest
 
@@ -44,6 +46,12 @@ class _EmptyResponse:
 
     def __exit__(self, *_args: object) -> None:
         return None
+
+
+def _record_retry_sleeps(monkeypatch: pytest.MonkeyPatch, calls: list[int]) -> None:
+    clock = SimpleNamespace(**vars(time))
+    clock.sleep = calls.append
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time", clock)
 
 
 def test_sync_http_error_message_reads_guard_cloud_err_field() -> None:
@@ -131,7 +139,7 @@ def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
         return _JsonResponse({"syncedAt": "2026-06-30T21:02:46Z"})
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", slept.append)
+    _record_retry_sleeps(monkeypatch, slept)
 
     payload = _urlopen_json_with_timeout_retry(
         request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
@@ -164,7 +172,7 @@ def test_urlopen_retries_cloudflare_524_with_retry_after_header(
         return _EmptyResponse()
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", slept.append)
+    _record_retry_sleeps(monkeypatch, slept)
 
     _urlopen_with_timeout_retry(
         request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),

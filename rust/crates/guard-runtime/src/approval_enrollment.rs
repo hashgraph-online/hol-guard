@@ -42,6 +42,14 @@ pub(crate) struct TransitionLock {
     _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
+#[cfg(unix)]
+impl Drop for TransitionLock {
+    fn drop(&mut self) {
+        // Release the operation even if a duplicated descriptor remains open.
+        let _ = fs2::FileExt::unlock(&self._file);
+    }
+}
+
 struct OpenedTransitionLock {
     file: File,
     #[cfg(windows)]
@@ -477,3 +485,7 @@ mod tests {
         with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "approval_enrollment_lock_tests.rs"]
+mod descriptor_tests;

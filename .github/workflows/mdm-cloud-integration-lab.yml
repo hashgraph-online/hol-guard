@@ -20,6 +20,7 @@ on:
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -29,6 +30,108 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-policy-activation:
+    name: Native policy activation assertions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          save-cache: false
+      - name: Install locked test dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Build native candidate from the selected source
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          export HOL_GUARD_BUILD_SHA="$GITHUB_SHA"
+          export HOL_GUARD_PACKAGE_VERSION="$(uv run --no-sync python scripts/sync_repo_version.py --check)"
+          cd rust
+          cargo build --locked --release -p hol-guard-runtime
+      - name: Require native publication and first admission assertions
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          PYTHONPATH: src
+        run: |
+          test -x "$HOL_GUARD_NATIVE_BINARY"
+          mkdir -p artifacts/native-policy-activation
+          uv run --no-sync pytest -q -m slow \
+            tests/test_native_cloud_policy_resident.py \
+            tests/test_native_scoped_policy_resident.py \
+            --junitxml=artifacts/native-policy-activation/results.xml
+      - name: Validate bounded native assertion evidence
+        if: always()
+        run: |
+          uv run --no-sync python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          directory = Path('artifacts/native-policy-activation')
+          directory.mkdir(parents=True, exist_ok=True)
+          result = directory / 'results.xml'
+          cases = list(ET.parse(result).getroot().iter('testcase')) if result.is_file() else []
+          expected = {
+              'test_first_action_after_publish_uses_the_signed_default[1]',
+              'test_first_action_after_publish_uses_the_signed_default[2]',
+              'test_signed_exact_policy_is_consumed_by_actual_resident[canonical]',
+              'test_signed_exact_policy_is_consumed_by_actual_resident[memory]',
+          }
+          passed = len(cases) == len(expected) and {case.get('name') for case in cases} == expected and all(
+              all(case.find(tag) is None for tag in ('skipped', 'failure', 'error'))
+              for case in cases
+          )
+          clean = subprocess.run(
+              ['git', 'status', '--porcelain', '--untracked-files=no'],
+              check=True, capture_output=True, text=True,
+          ).stdout.strip() == ''
+          source = subprocess.run(
+              ['git', 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True,
+          ).stdout.strip()
+          clean = clean and source == os.environ['GITHUB_SHA']
+          binary = Path('rust/target/release/hol-guard-runtime')
+          passed = passed and clean and binary.is_file()
+          report = {
+              'schema': 'native-policy-activation-proof.v1',
+              'sourceSha': os.environ['GITHUB_SHA'],
+              'runtime': 'github-hosted-linux',
+              'boundary': 'built native runtime with source integration tests',
+              'installedWheelCertification': 'not-evaluated',
+              'scopedFeatureNegotiation': 'test-only; production advertisement not evaluated',
+              'status': 'pass' if passed else 'fail',
+              'assertionCount': len(cases),
+              'allAssertionsPassed': passed,
+              'exactCleanSourceVerified': clean,
+              'binarySha256': hashlib.sha256(binary.read_bytes()).hexdigest() if binary.is_file() else None,
+          }
+          (directory / 'proof.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report))
+          assert passed, 'Native activation requires all four expected assertions to execute and pass against exact clean source.'
+          PY
+      - name: Retain native assertion evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-policy-activation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/native-policy-activation/proof.json
+          if-no-files-found: error
+          retention-days: 30
+
   integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -71,7 +174,7 @@ jobs:
           echo "HOL_MDM_LAB_ADMIN_TOKEN=$token" >> "$GITHUB_ENV"
       - name: Run focused contracts, persistence, and real-HTTP restart tests
         run: |
-          uv run --no-sync pytest -q \
+          uv run --no-sync pytest -q -ra --override-ini="addopts=" \
             tests/test_guard_mdm_cloud_control.py \
             tests/test_guard_mdm_cloud_hardening.py \
             tests/test_guard_mdm_cloud_schemas.py \

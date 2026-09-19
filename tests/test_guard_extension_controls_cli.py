@@ -74,6 +74,7 @@ def test_status_without_daemon_is_read_only(tmp_path: Path) -> None:
     assert result == 2
     assert not guard_home.exists()
 
+
 @pytest.mark.parametrize("program_name", ["hol-guard", "plugin-scanner", "plugin-guard", "plugin-ecosystem-scanner"])
 def test_controls_help_is_available_from_every_installed_alias(
     program_name: str,
@@ -115,7 +116,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
 ) -> None:
     calls: list[str] = []
     view = SimpleNamespace(
-        health=SimpleNamespace(value="tampered"),
+        health=extension_controls_commands.AuthorityHealth.TAMPERED,
         revision=7,
         catalog_digest="catalog",
     )
@@ -137,6 +138,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
             assert catalog_digest
             assert migration_registry
             calls.append("recover")
+            view.health = extension_controls_commands.AuthorityHealth.PROTECTED
             return view
 
     class FakeClient:

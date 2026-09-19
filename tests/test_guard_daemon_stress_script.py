@@ -191,9 +191,7 @@ def test_wait_until_health_ready_retries_until_ready(monkeypatch: pytest.MonkeyP
     stress_runtime.wait_until_health_ready("http://127.0.0.1:1")
 
 
-def test_wait_until_daemon_lifecycle_ready_retries_until_ready(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_wait_until_daemon_lifecycle_ready_retries_until_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     states = iter((False, True))
 
     monkeypatch.setattr(stress_script, "_daemon_lifecycle_is_ready", lambda _home: next(states))
@@ -316,6 +314,13 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
         rss_peak_bytes=109,
         rss_growth=0.09,
         transient_health_failures=0,
+        native_route_delta={
+            "native_resident": 100_000,
+            "native_oneshot": 0,
+            "native_fail_safe": 0,
+            "native_degraded": 0,
+            "python_semantic": 0,
+        },
     )
     assert result.soak_passed
     assert replace(result, rss_growth=0.385).soak_passed
@@ -324,6 +329,8 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
     assert not replace(result, rss_growth=0.51).soak_passed
     assert not replace(result, requests=99_999).soak_passed
     assert not replace(result, receipts=249_999).soak_passed
+    assert not replace(result, native_route_delta=None).soak_passed
+    assert not replace(result, native_route_delta={}).soak_passed
     isolated_probe_timeouts = replace(result, health_checks=18_932, transient_health_failures=30)
     assert isolated_probe_timeouts.passed
     assert isolated_probe_timeouts.soak_passed

@@ -368,6 +368,7 @@ pub(crate) fn validate_approval(
     let policy_fence = crate::policy_store::ApprovalPolicyFence {
         generation: context.policy_generation,
         policy_digest: &context.policy_digest,
+        source_input_digest: context.source_input_digest.as_deref(),
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };
@@ -428,6 +429,7 @@ pub(crate) fn consume_approval(
     let policy_fence = crate::policy_store::ApprovalPolicyFence {
         generation: context.policy_generation,
         policy_digest: &context.policy_digest,
+        source_input_digest: context.source_input_digest.as_deref(),
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };

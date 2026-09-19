@@ -25,16 +25,26 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use super::normalize_scope_text;
 
+#[path = "policy_store_admission_tests.rs"]
+mod admission_tests;
+#[path = "policy_client_currentness_tests.rs"]
+mod client_currentness_tests;
 #[path = "policy_store_command_authority_tests.rs"]
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]
 mod command_floor_tests;
+#[path = "policy_store_control_tests.rs"]
+mod control_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
 #[path = "policy_store_fixture_tests.rs"]
 mod fixture_tests;
 #[path = "policy_store_migration_tests.rs"]
 mod migration_tests;
+#[path = "policy_store_v4_tests.rs"]
+mod v4_tests;
+#[path = "policy_store_withdrawal_tests.rs"]
+mod withdrawal_tests;
 
 fn policy() -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
@@ -189,6 +199,59 @@ fn missing_snapshot_is_not_ready_but_push_can_install_it() {
 }
 
 #[test]
+fn retry_ack_requires_unchanged_durable_authority() {
+    for replaced in [false, true] {
+        let root = test_root(if replaced {
+            "retry-replaced"
+        } else {
+            "retry-removed"
+        });
+        let key = install_test_key(&root, 25);
+        let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+        let request = serde_json::json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": signed_snapshot(12, &key, &root),
+        });
+        store.push(&request).unwrap();
+        let file = root.join(SNAPSHOT_FILE_NAME);
+        if replaced {
+            fs::write(&file, b"{}").unwrap();
+        } else {
+            fs::remove_file(&file).unwrap();
+        }
+        assert_eq!(
+            store.push(&request).unwrap_err(),
+            "native_policy_snapshot_context_mismatch"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn new_generation_ack_requires_unchanged_approval_authority() {
+    let root = test_root("push-approval-replaced");
+    let key = install_test_key(&root, 26);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let request = |generation| {
+        serde_json::json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": signed_snapshot(generation, &key, &root),
+        })
+    };
+    store.push(&request(1)).unwrap();
+    fixture_file(
+        &root.join(super::approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+        b"{}",
+    );
+    assert_eq!(
+        store.push(&request(2)).unwrap_err(),
+        "native_policy_snapshot_context_mismatch"
+    );
+    assert!(store.current_snapshot().is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn generation_rollback_and_same_generation_mutation_are_rejected() {
     let root = test_root("rollback");
     let key = install_test_key(&root, 8);
@@ -218,106 +281,6 @@ fn generation_rollback_and_same_generation_mutation_are_rejected() {
         store.push(&mutated_request).unwrap_err(),
         "snapshot_digest_mismatch"
     );
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
-    let root = test_root("restart");
-    let key = install_test_key(&root, 9);
-    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    let snapshot = signed_snapshot(4, &key, &root);
-    let request = serde_json::json!({
-        "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
-        "snapshot": snapshot,
-    });
-    store.push(&request).unwrap();
-    let restored = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    assert_eq!(restored.current_generation(), Some(4));
-    let snapshot_value = request["snapshot"].clone();
-    assert!(restored
-        .validate_request_snapshot(&snapshot_value, root.to_string_lossy().as_ref(), 4,)
-        .is_ok());
-    let compact_reference = serde_json::json!({
-        "generation": snapshot.generation,
-        "policy_digest": snapshot.policy_digest.clone(),
-        "runtime_identity": snapshot.runtime_identity.clone(),
-    });
-    assert!(restored
-        .validate_request_snapshot(&compact_reference, root.to_string_lossy().as_ref(), 4,)
-        .is_ok());
-    fs::remove_file(root.join(SNAPSHOT_FILE_NAME)).unwrap();
-    assert_eq!(
-        restored
-            .validate_request_snapshot(&snapshot_value, root.to_string_lossy().as_ref(), 4,)
-            .unwrap_err(),
-        "native_policy_snapshot_context_mismatch"
-    );
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn compiled_generations_share_one_immutable_snapshot_and_reject_conflicts_before_publish() {
-    use std::sync::Arc;
-    let root = test_root("compiled-generations");
-    let key = install_test_key(&root, 21);
-    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    let mut effective = policy();
-    effective
-        .harness_actions
-        .insert("Claude".into(), "block".into());
-    effective
-        .harness_actions
-        .insert("claude-code".into(), "block".into());
-    let first = signed_snapshot_with_policy(1, &key, &root, effective.clone());
-    let first_value = serde_json::to_value(&first).unwrap();
-    store
-        .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": first}))
-        .unwrap();
-    let get_first = || {
-        store
-            .validate_request_snapshot(&first_value, root.to_string_lossy().as_ref(), 1)
-            .unwrap()
-    };
-    let retained = get_first();
-    assert!(Arc::ptr_eq(&retained, &get_first()));
-    assert_eq!(retained.snapshot(), &first);
-
-    effective
-        .harness_actions
-        .insert("claude-code".into(), "allow".into());
-    let invalid = signed_snapshot_with_policy(2, &key, &root, effective);
-    let authority_before = fs::read(root.join(SNAPSHOT_FILE_NAME)).unwrap();
-    assert_eq!(
-        store
-            .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": invalid}))
-            .unwrap_err(),
-        "snapshot_policy_invalid"
-    );
-    assert_eq!(
-        fs::read(root.join(SNAPSHOT_FILE_NAME)).unwrap(),
-        authority_before
-    );
-    assert!(Arc::ptr_eq(&retained, &get_first()));
-
-    let second = signed_snapshot_with_policy(2, &key, &root, policy_with_default("allow"));
-    let second_value = serde_json::to_value(&second).unwrap();
-    store
-        .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": second}))
-        .unwrap();
-    let current = store
-        .validate_request_snapshot(&second_value, root.to_string_lossy().as_ref(), 2)
-        .unwrap();
-    assert!(!Arc::ptr_eq(&retained, &current));
-    assert_eq!(retained.snapshot(), &first);
-    assert_eq!(
-        store
-            .validate_request_snapshot(&first_value, root.to_string_lossy().as_ref(), 1)
-            .unwrap_err(),
-        "native_policy_snapshot_not_current"
-    );
-    let restored = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    assert_eq!(restored.current_snapshot().unwrap(), second);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -498,3 +461,9 @@ fn authority_fingerprint_detects_same_size_in_place_rewrite() {
     assert!(!store.test_authorities_unchanged());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[path = "policy_store_durable_writer_tests.rs"]
+mod durable_writer_tests;
+
+#[path = "policy_store_edge_fence_tests.rs"]
+mod edge_fence_tests;

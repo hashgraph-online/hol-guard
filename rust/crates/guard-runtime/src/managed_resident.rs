@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 mod client_stream;
 #[path = "managed_resident_containment.rs"]
 mod containment;
+#[path = "managed_resident_currentness.rs"]
+pub(crate) mod currentness;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 #[path = "managed_resident_transport.rs"]
@@ -157,14 +159,16 @@ fn try_home_states(
             start_marker: &state.process_start_marker,
             digest: (!same_runtime).then_some(&state.runtime_sha256),
         };
-        match crate::resident_client::send_request_for_digest_detailed(
-            &state.transport,
-            &state.endpoint,
-            &token,
-            payload,
-            timeout,
-            &identity,
-        ) {
+        match currentness::request(state_base, payload, deadline, |remaining| {
+            crate::resident_client::send_request_for_digest_detailed(
+                &state.transport,
+                &state.endpoint,
+                &token,
+                payload,
+                remaining,
+                &identity,
+            )
+        })? {
             Ok(response) => return Ok(Some(response)),
             Err(error)
                 if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
@@ -469,17 +473,14 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
-pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
-    let budget = crate::strict_json_value(payload)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("deadline_budget_ms")
-                .and_then(serde_json::Value::as_u64)
-        })
+pub(crate) fn client_timeout(payload: &[u8]) -> Result<Duration, String> {
+    let value = crate::strict_json_value(payload)?;
+    let budget = value
+        .get("deadline_budget_ms")
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(750)
         .clamp(1, 9_000);
-    Duration::from_millis(budget)
+    Ok(Duration::from_millis(budget))
 }
 
 #[cfg(test)]

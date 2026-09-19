@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from scripts.native_slo_adapter import Observation
 from scripts.native_slo_contract import (
@@ -35,6 +35,7 @@ class SloMeasurements:
     readiness: list[float]
     rss_baseline: int
     rss_peak: int
+    rearmed_recovery: list[float] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -199,7 +200,13 @@ def slo_gates(
         python_fallback_decisions=summary.route_counts["python_semantic"],
         installed_python_fallback_decisions=installed_corpus["python_semantic_decisions"],
     )
-    gates["recovery_latency"] = summarize(measurements.recovery)["p95_ms"] <= MAX_INSTALLED_ADAPTER_P95_MS
+    gates["recovery_latency"] = (
+        bool(measurements.recovery) and summarize(measurements.recovery)["p95_ms"] <= MAX_INSTALLED_ADAPTER_P95_MS
+    )
+    gates["rearmed_recovery_latency"] = (
+        bool(measurements.rearmed_recovery)
+        and summarize(measurements.rearmed_recovery)["p95_ms"] <= MAX_INSTALLED_ADAPTER_P95_MS
+    )
     gates["concurrency"] = gates["concurrency"] and _concurrent_observations_are_bounded(
         measurements.concurrent_16,
         allow_overload=False,
@@ -272,6 +279,7 @@ def slo_result(
             "size_classes": {size_class: summarize(values) for size_class, values in summary.size_values.items()},
             "cold_native_oneshot": summarize(measurements.cold),
             "resident_recovery": summarize(measurements.recovery),
+            "resident_recovery_rearmed": summarize(measurements.rearmed_recovery),
             "readiness": summarize(measurements.readiness),
         },
         "thresholds": {

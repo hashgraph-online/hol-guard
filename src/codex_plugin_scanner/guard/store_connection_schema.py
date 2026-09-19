@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import ClassVar
 from uuid import uuid4
 
-from . import store_native_decision_receipts, store_review_event_outbox_schema
+from . import store_native_decision_receipts, store_review_event_outbox_schema, store_sync_locks
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
@@ -29,6 +29,8 @@ from .sqlite_recovery import (
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_base import _CLOUD_SYNC_LOCK_POLL_SECONDS as _CLOUD_SYNC_LOCK_POLL_SECONDS
+from .store_base import _OAUTH_REFRESH_LOCK_POLL_SECONDS as _OAUTH_REFRESH_LOCK_POLL_SECONDS
 from .store_command_activity_api_schema import ensure_command_activity_api_schema
 from .store_command_activity_display_schema import (
     COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
@@ -40,9 +42,11 @@ from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_policy_schema import ensure_generic_policy_columns
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
+from .store_storage_lock import hold_storage_file_lock
 from .store_storage_maintenance import (
     STORAGE_MAINTENANCE_MIGRATION_VERSION,
     STORAGE_QUERY_INDEX_MIGRATION_VERSION,
@@ -206,6 +210,10 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
+        # A reentrant gate does not wait, but cannot escape its caller deadline.
+        from .sqlite_deadline import sqlite_deadline_monotonic, sqlite_deadline_timeout
+
+        sqlite_deadline_timeout(0.0)
         local = self._storage_gate_local
         if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
             if exclusive and getattr(local, "exclusive", False) is False:
@@ -217,30 +225,15 @@ class StoreConnectionSchemaMixin:
                 local.depth -= 1
             return
         path = self.guard_home / "storage-access.lock"
-        deadline = time.monotonic() + sqlite_connect_timeout_seconds()
-        with path.open("a+b") as handle:
-            while True:
-                try:
-                    if os.name == "nt":
-                        import msvcrt
-
-                        handle.seek(0)
-                        if not handle.read(1):
-                            handle.write(b"0")
-                            handle.flush()
-                        handle.seek(0)
-                        mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-                        msvcrt.locking(handle.fileno(), mode, 1)
-                    else:
-                        import fcntl
-
-                        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                        fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard storage access.") from None
-                    time.sleep(0.01)
+        deadline = sqlite_deadline_monotonic()
+        lock = (
+            hold_storage_file_lock(path, exclusive=exclusive, timeout_seconds=sqlite_connect_timeout_seconds())
+            if deadline is None
+            else hold_storage_file_lock(
+                path, exclusive=exclusive, timeout_seconds=sqlite_connect_timeout_seconds(), deadline_monotonic=deadline
+            )
+        )
+        with lock:
             local.owner = id(self)
             local.depth = 1
             local.exclusive = exclusive
@@ -250,15 +243,6 @@ class StoreConnectionSchemaMixin:
                 local.owner = None
                 local.depth = 0
                 local.exclusive = False
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _store_is_proven_unusable(self, error: BaseException) -> bool:
         return sqlite_store_is_proven_unusable(
@@ -393,11 +377,19 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _connect_once(self) -> Iterator[sqlite3.Connection]:
+        from .store_maintenance import maintenance_lookup
+
+        bounded_lookup = maintenance_lookup(self.path)
         connect_timeout_seconds = sqlite_connect_timeout_seconds()
         profiler = self._sqlite_profiler()
         connect_started = time.monotonic()
         try:
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+            from .sqlite_deadline import DeadlineConnection, sqlite_deadline_monotonic
+
+            if sqlite_deadline_monotonic() is None:
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+            else:
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds, factory=DeadlineConnection)
         except sqlite3.OperationalError as error:
             profiler.record_connect((time.monotonic() - connect_started) * 1000)
             if sqlite_error_is_busy_locked(error):
@@ -409,7 +401,8 @@ class StoreConnectionSchemaMixin:
         notification: dict[str, object] | None = None
         database_failed = False
         try:
-            connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+            if not isinstance(connection, DeadlineConnection):
+                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
             # WAL can use synchronous=NORMAL; rollback-journal and schema-init stay FULL.
             journal_mode_row = connection.execute("pragma journal_mode").fetchone()
             if journal_mode_row is not None and str(journal_mode_row[0]).lower() == "wal":
@@ -419,6 +412,10 @@ class StoreConnectionSchemaMixin:
             connection.execute(f"pragma cache_size=-{SQLITE_CACHE_SIZE_KIB}")
             connection.execute(f"pragma mmap_size={SQLITE_MMAP_SIZE_BYTES}")
             initial_changes = connection.total_changes
+            if bounded_lookup is not None:
+                if not isinstance(connection, DeadlineConnection):
+                    raise RuntimeError("Store maintenance requires its deadline connection")
+                connection.begin_immediate()
             yield connection
             store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
             outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
@@ -446,7 +443,15 @@ class StoreConnectionSchemaMixin:
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
-        store_review_event_outbox_schema.notify_review_event_wake(self.path, outbox_generation)
+        if bounded_lookup is None:
+            store_review_event_outbox_schema.notify_review_event_wake(self.path, outbox_generation)
+        else:
+            from .store_maintenance import notify_maintenance_outbox_wake
+
+            deadline = sqlite_deadline_monotonic()
+            if deadline is None:
+                raise RuntimeError("Store maintenance deadline is unavailable")
+            notify_maintenance_outbox_wake(self.path, outbox_generation, deadline_monotonic=deadline)
         if notification is not None:
             self._publish_policy_integrity_state_notification(notification)
 
@@ -456,13 +461,7 @@ class StoreConnectionSchemaMixin:
         *,
         timeout_seconds: float = _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS,
     ) -> Iterator[None]:
-        with self._hold_advisory_file_lock(
-            path=self.guard_home / "oauth-refresh.lock",
-            timeout_seconds=timeout_seconds,
-            poll_seconds=_OAUTH_REFRESH_LOCK_POLL_SECONDS,
-            timeout_message="Timed out waiting for Guard OAuth refresh lock.",
-        ):
-            yield
+        yield from store_sync_locks.oauth_refresh(self, timeout_seconds)
 
     @contextmanager
     def hold_cloud_sync_lock(
@@ -470,13 +469,16 @@ class StoreConnectionSchemaMixin:
         *,
         timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
     ) -> Iterator[None]:
-        with self._hold_advisory_file_lock(
-            path=self.guard_home / "cloud-sync.lock",
-            timeout_seconds=timeout_seconds,
-            poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
-            timeout_message="Timed out waiting for Guard Cloud sync lock.",
-        ):
-            yield
+        yield from store_sync_locks.cloud_sync(self, timeout_seconds)
+
+    @contextmanager
+    def hold_aibom_sync_lock(
+        self,
+        *,
+        timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        """Serialize inventory operations independently of receipt synchronization."""
+        yield from store_sync_locks.aibom_sync(self, timeout_seconds)
 
     @contextmanager
     def hold_oauth_credential_lock(
@@ -695,6 +697,7 @@ class StoreConnectionSchemaMixin:
               owner text,
               source text not null default 'local',
               expires_at text,
+              exact_command_sha256 text,
               policy_document_schema_version text,
               policy_document_id text,
               policy_document_digest text,
@@ -1027,22 +1030,7 @@ class StoreConnectionSchemaMixin:
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():
                 connection.execute(idx_stmt)
-            self._ensure_policy_column(connection, "publisher", "text")
-            self._ensure_policy_column(connection, "artifact_hash", "text")
-            self._ensure_policy_column(connection, "owner", "text")
-            self._ensure_policy_column(connection, "source", "text not null default 'local'")
-            self._ensure_policy_column(connection, "expires_at", "text")
-            self._ensure_policy_column(connection, "integrity_version", "integer")
-            self._ensure_policy_column(connection, "integrity_generation", "integer")
-            self._ensure_policy_column(connection, "payload_hash", "text")
-            self._ensure_policy_column(connection, "payload_mac", "text")
-            self._ensure_policy_column(connection, "integrity_key_id", "text")
-            self._ensure_policy_column(connection, "signed_at", "text")
-            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
-            self._ensure_policy_column(connection, "policy_document_id", "text")
-            self._ensure_policy_column(connection, "policy_document_digest", "text")
-            self._ensure_policy_column(connection, "policy_rule_id", "text")
-            self._ensure_policy_column(connection, "policy_provenance_json", "text")
+            ensure_generic_policy_columns(connection)
             for index_statement in _POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")

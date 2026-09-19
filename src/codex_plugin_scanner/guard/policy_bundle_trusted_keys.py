@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import importlib
-import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, cast
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from . import policy_bundle_keyring_loading as _keyring_loading
+from .policy_bundle_key_validity import signing_key_is_current as signing_key_is_current
 from .runtime.supply_chain_bundle_base import SupplyChainBundleMalformedError, _parse_iso_timestamp
 from .stable_digest import sha256_content_digest
 
@@ -138,6 +140,7 @@ class _PolicyBundleV2Module(Protocol):
         *,
         trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
         anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+        now: datetime | float | None = None,
     ) -> tuple[dict[str, object] | None, str | None]: ...
 
 
@@ -186,61 +189,10 @@ def load_policy_bundle_verification_keys(
     that is present is still authoritative and must be valid.
     """
 
-    raw_keys = raw
-    wrapper_purpose: str | None = None
-    wrapper_workspace_id: str | None = None
-    if require_keyring_contract and not isinstance(raw, dict):
-        raise ValueError("invalid_policy_bundle_verification_keyring:wrapper")
-    if isinstance(raw, dict):
-        wrapper_fields_present = any(field in raw for field in ("contractVersion", "purpose", "workspaceId"))
-        validate_wrapper = require_keyring_contract or wrapper_fields_present
-        if validate_wrapper and raw.get("contractVersion") != POLICY_BUNDLE_KEYRING_CONTRACT_VERSION:
-            raise ValueError("invalid_policy_bundle_verification_keyring:contractVersion")
-        if validate_wrapper:
-            if raw.get("purpose") != POLICY_BUNDLE_KEY_PURPOSE:
-                raise ValueError("invalid_policy_bundle_verification_keyring:purpose")
-            wrapper_purpose = POLICY_BUNDLE_KEY_PURPOSE
-            workspace_id = raw.get("workspaceId")
-            if not isinstance(workspace_id, str) or not workspace_id.strip() or workspace_id != workspace_id.strip():
-                raise ValueError("invalid_policy_bundle_verification_keyring:workspaceId")
-            wrapper_workspace_id = workspace_id
-        raw_keys = raw.get("keys")
-        if validate_wrapper and not isinstance(raw_keys, list):
-            raise ValueError("invalid_policy_bundle_verification_keyring:keys")
-        if validate_wrapper and set(raw) != _POLICY_BUNDLE_KEYRING_FIELDS:
-            raise ValueError("invalid_policy_bundle_verification_keyring:fields")
-    if not isinstance(raw_keys, list):
-        return ()
-    parsed: list[PolicyBundleVerificationKey] = []
-    seen_key_ids: set[str] = set()
-    for item in raw_keys:
-        if not isinstance(item, dict):
-            raise ValueError("invalid_policy_bundle_verification_keys")
-        if require_keyring_contract and not set(item).issubset(_POLICY_BUNDLE_KEY_FIELDS):
-            raise ValueError("invalid_policy_bundle_verification_keyring:key_fields")
-        if require_keyring_contract and not {
-            "fingerprintSha256",
-            "keyId",
-            "publicKeyPem",
-            "state",
-            "purpose",
-            "workspaceId",
-        }.issubset(item):
-            raise ValueError("invalid_policy_bundle_verification_keyring:key_fields")
-        parsed_key = PolicyBundleVerificationKey.from_dict(item)
-        if wrapper_purpose is not None and (
-            item.get("purpose") != wrapper_purpose or parsed_key.purpose != wrapper_purpose
-        ):
-            raise ValueError("invalid_policy_bundle_verification_keyring:key_purpose_mismatch")
-        if wrapper_workspace_id is not None and (
-            item.get("workspaceId") != wrapper_workspace_id or parsed_key.workspace_id != wrapper_workspace_id
-        ):
-            raise ValueError("invalid_policy_bundle_verification_keyring:key_workspace_mismatch")
-        if parsed_key.key_id in seen_key_ids:
-            raise ValueError("invalid_policy_bundle_verification_keys:duplicate_key_id")
-        seen_key_ids.add(parsed_key.key_id)
-        parsed.append(parsed_key)
-    return tuple(parsed)
+    return _keyring_loading.load_policy_bundle_verification_keys(
+        raw,
+        require_keyring_contract=require_keyring_contract,
+    )
 
 
 def safe_load_policy_bundle_verification_keys(
@@ -353,31 +305,6 @@ def signing_key_is_trusted(
     )
 
 
-def signing_key_is_current(
-    signing_key: PolicyBundleVerificationKey,
-    *,
-    now: float | None = None,
-    require_active: bool = False,
-) -> bool:
-    if signing_key.state == "revoked" or (require_active and signing_key.state != "active"):
-        return False
-    current_time = now if now is not None else time.time()
-    if signing_key.valid_from is not None:
-        try:
-            valid_from = _parse_iso_timestamp(signing_key.valid_from, field_name="validFrom")
-        except (SupplyChainBundleMalformedError, TypeError, ValueError):
-            return False
-        if current_time < valid_from:
-            return False
-    if signing_key.valid_until is None:
-        return True
-    try:
-        expiry = _parse_iso_timestamp(signing_key.valid_until, field_name="validUntil")
-    except (SupplyChainBundleMalformedError, TypeError, ValueError):
-        return False
-    return current_time <= expiry
-
-
 def resolve_authorized_policy_bundle_signing_key(
     key_id: str,
     *,
@@ -432,68 +359,11 @@ def migrate_legacy_policy_bundle_anchors(
     local anchor when Cloud advertises the same key for the same workspace.
     """
 
-    if not isinstance(stored_keyring, dict) or set(stored_keyring) != {"keys", "workspace_id"}:
-        return ()
-    legacy_workspace_id = stored_keyring.get("workspace_id")
-    if (
-        not isinstance(expected_workspace_id, str)
-        or not expected_workspace_id
-        or legacy_workspace_id != expected_workspace_id
-    ):
-        return ()
-    raw_keys = stored_keyring.get("keys")
-    if not isinstance(raw_keys, list):
-        return ()
-    legacy_keys = safe_load_policy_bundle_verification_keys(stored_keyring)
-    if not legacy_keys or any(key.purpose != "unscoped" or key.workspace_id is not None for key in legacy_keys):
-        return ()
-    migrated: list[PolicyBundleVerificationKey] = []
-    for legacy_key in legacy_keys:
-        advertised_key = next(
-            (
-                key
-                for key in sync_keys
-                if key.key_id == legacy_key.key_id
-                and key.fingerprint_sha256 == legacy_key.fingerprint_sha256
-                and key.purpose == POLICY_BUNDLE_KEY_PURPOSE
-                and key.workspace_id == expected_workspace_id
-            ),
-            None,
-        )
-        if advertised_key is not None:
-            states = {legacy_key.state, advertised_key.state}
-            restrictive_state = "active"
-            if "revoked" in states:
-                restrictive_state = "revoked"
-            elif "grace" in states:
-                restrictive_state = "grace"
-            valid_from_candidates = [
-                value for value in (legacy_key.valid_from, advertised_key.valid_from) if value is not None
-            ]
-            valid_until_candidates = [
-                value for value in (legacy_key.valid_until, advertised_key.valid_until) if value is not None
-            ]
-            migrated.append(
-                PolicyBundleVerificationKey(
-                    key_id=legacy_key.key_id,
-                    public_key_pem=legacy_key.public_key_pem,
-                    fingerprint_sha256=legacy_key.fingerprint_sha256,
-                    state=restrictive_state,
-                    purpose=POLICY_BUNDLE_KEY_PURPOSE,
-                    workspace_id=expected_workspace_id,
-                    valid_from=max(
-                        valid_from_candidates,
-                        key=lambda value: _parse_iso_timestamp(value, field_name="validFrom"),
-                        default=None,
-                    ),
-                    valid_until=min(
-                        valid_until_candidates,
-                        key=lambda value: _parse_iso_timestamp(value, field_name="validUntil"),
-                        default=None,
-                    ),
-                )
-            )
-    return tuple(migrated)
+    return _keyring_loading.migrate_legacy_policy_bundle_anchors(
+        stored_keyring=stored_keyring,
+        sync_keys=sync_keys,
+        expected_workspace_id=expected_workspace_id,
+    )
 
 
 def policy_bundle_keyring_payload(
@@ -598,6 +468,7 @@ def validate_synced_policy_bundle(
             policy_bundle,
             trusted_verification_keys=trusted_keys,
             anchored_verification_keys=anchored_keys,
+            now=now,
         )
         if validated_bundle is not None and expected_workspace_id is not None:
             workspace_id = validated_bundle.get("workspaceId")

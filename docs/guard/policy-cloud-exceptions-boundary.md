@@ -1,222 +1,46 @@
-# Local Policy + Cloud Exceptions — Implementation Boundary
+# Policy delivery and recovery
 
-Date: 2026-06-13
+Create and approve policy changes in Guard Cloud for the intended workspace.
+Keep unpublished changes in draft until approval is complete. A valid signature
+alone does not make a draft active.
 
-This note defines how local `./hol-guard` Policy work relates to Review/Decision
-Memory, Evidence, and Guard Cloud exceptions. It is the source of truth for
-implementation boundaries in this slice.
+## Verify application
 
-## Product split
+Sync the device and inspect the reported policy status. Publication, delivery,
+application, and runtime readiness are distinct states; a pending or failed
+state must remain visible. Wrong-workspace, stale, expired, or invalid updates
+are refused. A still-current verified policy remains effective after a refused
+refresh.
 
-| Surface | Question it answers | Owns |
-| --- | --- | --- |
-| **Review / Inbox** | What is blocked right now? Decide so the agent can continue. | Live approvals, scoped memory writes from review, fast reusable allow/block |
-| **Evidence** | What happened? Show proof. | Receipts, commands, envelopes, export, history |
-| **Policy → Remembered rules** | What will Guard do next time? | Local remembered allow/block rules, read-only Cloud-managed rules |
-| **Policy → Cloud exceptions** | Which governed risk acceptances apply here? | Read-only synced Cloud exceptions, request flow, ack status |
-| **Policy → Strict config** | What is the local fallback when nothing else matches? | Strict-mode tuning on this device |
+Cloud exceptions are governed risk acceptances. The current runtime recognizes
+artifact, publisher, harness, workspace, and global scopes. Availability in a
+particular workflow is limited to the targets it advertises. Do not infer an
+unsupported scope or target from a display label.
 
-Local Review keeps fast reusable approvals. That flow is **not** removed or
-redesigned in this slice.
+Remembered rules, Cloud exceptions, and strict settings have separate
+purposes. Remembered rules apply only within their recorded scope. Evidence
+records observations and outcomes; it does not grant policy authority. Exact
+Cloud Review resolves one pending request. It does not create
+reusable policy. Immutable blocks cannot be approved remotely. Check the
+returned continuation result separately from approval; manual retry or an
+unsupported continuation must not be presented as successful resumption.
 
-Cloud exceptions are separate governed risk acceptances: owner, approver, reason,
-expiry, source receipt, blast radius, signed bundle, and local daemon ack.
+## Recover delivery
 
-Local Policy must **not** author broad local exceptions directly.
+1. Confirm that the intended change was published and that the device is
+   connected to the correct workspace.
+2. Sync again and retain the exact rejection or delivery status.
+3. For a stale revision, fetch the current signed revision. Avoid copying
+   cached policy material between devices.
+4. Retry delivery with valid existing consent. Enable or renew consent
+   explicitly when required.
+5. Restore an unavailable runtime through the supported installation flow,
+   then verify application and readiness again.
 
-## Current code map (Phase 0 audit)
+A well-formed, authenticated generic v2 document may omit its rollout state
+for compatibility with already-published bundles. Explicit null, malformed
+containers, and unpublished states do not use that compatibility rule.
 
-### Local dashboard (Policy UI)
-
-| File | Role today | Gap vs target |
-| --- | --- | --- |
-| `dashboard/src/policy-workspace-page.tsx` | Page shell + header | Header copy still mentions "add custom exceptions here" |
-| `dashboard/src/policy-workspace.tsx` | Tab host: rules / exceptions / strict | Tab 2 labeled `Exceptions`; hosts local `PolicyExceptionForm` |
-| `dashboard/src/policy-workspace-views.tsx` | Rule cards, grouped sections | Remembered rules OK structurally; lacks M1 right-rail helper |
-| `dashboard/src/policy-exception-form.tsx` | Local broad exception authoring via `savePolicyDecision` | **Must be replaced** by Cloud request flow; violates Cloud-only exceptions |
-| `dashboard/src/policy-workspace-helpers.ts` | Plain-language display, Cloud bundle copy | Abstracts commands; links to Evidence via "See approval record" |
-| `dashboard/src/approval-center-primitives.tsx` | Sidebar + shared UI | Sidebar IA correct; no Policy changes needed in Phase 0 |
-| `dashboard/src/guard-api.ts` | `fetchPolicies`, `savePolicyDecision`, `clearPolicy` | No Cloud exception DTO yet |
-| `dashboard/src/workspace-page-header.tsx` | Optional header tabs | Policy page uses header without tabs (fixed in #820) |
-
-### Local daemon / store
-
-| Endpoint / module | Role today |
-| --- | --- |
-| `GET /v1/policy` | Lists local `GuardPolicyDecision` rows plus `cloud_exceptions` DTO field |
-| `POST /v1/policy/decisions` | Saves local policy decision (used by exception form today) |
-| `POST /v1/policy/clear` | Clears local remembered rules |
-| `GET /v1/policy/cloud-exceptions` | Lists active Cloud exception DTO rows |
-| `POST /v1/policy/sync` | Syncs Cloud policy bundle |
-| `policy_bundle_parser.py` | Schema validation, bundle hash, payload hash, RSA signature verify |
-| `policy_bundle_trusted_keys.py` | Trusted signing keys, key expiry |
-| `store_approvals.py` | Local decision persistence substrate |
-
-Bundle authority is fail-closed. `bundleHash` and `payloadHash` are independent
-integrity checks, never signatures. The canonical payload—including rules,
-Cloud exceptions, acknowledgements, workspace binding, and optional fields—must
-have an RSA-PSS/SHA-256 signature from an active, workspace-bound
-`policy_bundle` key in the pinned local or machine-managed keyring. Embedded or
-sync-advertised public keys cannot bootstrap trust. See
-`mdm-deployment.md#policy-bundle-signing-trust` for managed first-install
-provisioning.
-
-Digest-only bundles and malformed or untrusted refreshes are rejected without
-applying rules. A still-current, previously verified bundle remains effective;
-otherwise remote materialized rows and Cloud exceptions are cleared. Legacy
-top-level `policy`, `teamPolicyPack`, and `exceptions` response fields are not
-covered by the bundle signature and are ignored as enforcement authority even
-when co-delivered with a valid bundle.
-
-The monotonic acceptance checkpoint records both `bundleHash` and the broader
-signed `payloadHash`. Cached current/LKG consumers re-check that checkpoint, and
-an alternate payload at the same issue time/version is rejected as unordered.
-Cloud exception or acknowledgement changes therefore require a newer signed
-bundle identity and cannot be replayed under an unchanged core hash.
-
-### Guard Cloud (read-only audit for this slice)
-
-| Route / module | Role today | Gap |
-| --- | --- | --- |
-| `app/api/guard/exceptions/route.ts` | List/upsert exceptions | No cwd/project/team scope in API |
-| `app/api/guard/exceptions/requests/route.ts` | Create/list exception requests | Scope limited to `artifact \| publisher \| harness` |
-| `app/api/guard/exceptions/requests/[requestId]/resolve/route.ts` | Resolve pending request | Exists |
-| `src/lib/guard/service/exception-service.ts` | DB persistence, owner isolation | No source receipt field on create; no owner avatar metadata |
-| `src/types/registry/guard/core.ts` | `GuardExceptionScope` | Only `artifact \| publisher \| harness` |
-| `src/lib/guard/policy/policy-compiler.ts` | Bundle compilation | Exceptions may need richer metadata in bundle |
-| `src/lib/guard/policy/policy-sync-ack-service.ts` | Daemon ack path | Reuse for exception bundle ack |
-
-**Portal worktree decision (HGLP002):** Not required for Phase 0. Portal backend
-changes deferred until Phase 4 unless Cloud exception request UX cannot be made
-truthful with existing APIs.
-
-## Sidebar IA (must not change)
-
-Actual sidebar labels from `approval-center-primitives.tsx`:
-
-1. Home
-2. Inbox
-3. Protect
-4. Evidence
-5. Supply chain
-6. Policy
-7. Settings
-8. About
-
-## Target Policy tabs
-
-Visible tabs (internal `PolicyPageView` may keep `exceptions` alias):
-
-1. **Remembered rules** — local + read-only Cloud-managed remembered decisions
-2. **Cloud exceptions** — read-only governed risk acceptances + request CTA
-3. **Strict config** — local fallback tuning only
-
-## Review / Inbox non-touch rule
-
-Implementation PRs in this slice **must not** modify Review/Inbox product IA or
-decision-memory flows except through documented integration contracts:
-
-- Consume remembered decisions as `GuardPolicyDecision` / future Cloud exception DTO
-- Link to source receipts from Policy cards
-- Prefill Cloud exception requests from receipt/approval ids
-
-### File allowlist (Policy slice may edit)
-
-```
-dashboard/src/policy-workspace*.tsx
-dashboard/src/policy-exception-form.tsx
-dashboard/src/policy-cloud-exception*.tsx
-dashboard/src/guard-api.ts
-dashboard/src/guard-types.ts
-dashboard/src/workspace-page-header.tsx
-dashboard/src/app.tsx                    # policy route wiring only
-src/codex_plugin_scanner/guard/daemon/server.py
-src/codex_plugin_scanner/guard/policy_bundle_*.py
-src/codex_plugin_scanner/guard/store_approvals.py
-docs/guard/policy-cloud-exceptions*.md
-dashboard/src/policy-cloud-exceptions*.test.ts
-```
-
-### File denylist (do not edit without explicit cross-PR link)
-
-```
-dashboard/src/approval-center-layout.tsx
-dashboard/src/approval-center-utils.tsx
-dashboard/src/queue-state.tsx
-dashboard/src/inbox*.tsx
-dashboard/src/approval-gate*.tsx
-hol-points-portal/src/lib/guard/triage/**
-hol-points-portal/src/lib/guard/review/**
-```
-
-## No-fixture scan plan (HGLP013)
-
-Run before each Policy frontend PR merge:
-
-```bash
-cd dashboard
-pnpm exec tsx src/policy-cloud-exceptions-boundary.test.ts
-rg -n 'Acme|Jane Doe|john@example|policy-2026|receipt_[a-f0-9]{8}|exception_request_' \
-  src/policy-workspace*.tsx src/policy-exception-form.tsx src/policy-cloud-exception*.tsx \
-  && exit 1 || true
-```
-
-Production Policy UI must use real API/local store data or honest empty states.
-Mockup filenames and fixture rows are forbidden in shipped components.
-
-## Mockup delta summary (HGLP011)
-
-Compared current code structure to mockup contracts M1–M4 (layout references only):
-
-| Mockup | Current delta |
-| --- | --- |
-| M1 Remembered rules | Missing right-rail helper; cards lack concrete trigger from receipt; tab IA OK |
-| M2 Cloud exceptions | Tab still named `Exceptions`; local `New exception` form; no summary cards, grouping, or detail panel |
-| M3 Request Cloud exception | `PolicyExceptionForm` saves locally via `/v1/policy/decisions`; no Cloud request API, owner, expiry, blast radius |
-| M4 Strict config | Tab exists but minimal; no evaluation order diagram, simulator, or ack display |
-
-Browser screenshot proof (HGLP010) requires a running local daemon; capture paths
-will be added in Phase 1+ browser proof tasks.
-
-## Integration with Review/Decision Memory
-
-Review/Decision Memory owns live queue, scope ladder, signed memory bundle, and
-Review UI. This Policy slice consumes its outputs:
-
-- Remembered local rules → `Remembered rules` tab
-- Source receipt id → Cloud exception request prefill
-- Scope identifiers → request scope cards (when backend exposes them)
-
-Do not rewrite Review/Inbox components to implement Policy features.
-
-## Phase 0 completion
-
-Phase 0 delivers this boundary doc, audit notes, and automated boundary tests.
-Phase 3 adds the local Cloud exception DTO (`cloud_exceptions.py`), separate sync
-storage, and `/v1/policy` + `/v1/policy/cloud-exceptions` API fields.
-
-## Final architecture (2026-06-14)
-
-Implementation is complete across local dashboard, daemon, and Guard Cloud bundle
-delivery:
-
-| Layer | Delivered behavior |
-| --- | --- |
-| **Policy tabs** | Remembered rules, Cloud exceptions, Strict config |
-| **Cloud exceptions UI** | Summary cards, grouped lists, detail panel, in-dashboard request flow, disconnected/error/loading states |
-| **Strict config** | Local fallback controls, simulator, evaluation order, bundle ack copy |
-| **Local daemon** | Validates signed bundles, persists active Cloud exceptions, rejects tampered/wrong-workspace payloads |
-| **Guard Cloud bundle** | Active exceptions compiled into `cloudExceptions` on receipt sync; expired/revoked rows omitted |
-| **Integrity** | The signed canonical payload and its `payloadHash` include `cloudExceptions`; `bundleHash` remains the portal's narrower core projection. Pinned-key signature verification precedes storage or enforcement. |
-
-Release audit command:
-
-```bash
-./scripts/run-policy-cloud-exceptions-release-audit.sh
-```
-
-Focused portal contract proof:
-
-```bash
-pnpm test -- __tests__/guard-policy-cloud-exceptions-sync.test.ts
-```
+Do not edit protected local state to recover a failed delivery. Current
+precedence rules still apply: a broad Cloud rule does not silently override
+an eligible, more-specific local decision.

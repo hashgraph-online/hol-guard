@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import shutil
+import subprocess
 import threading
+from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -34,6 +38,7 @@ from ci.native_runtime.probe_installed_pi_output import (
     _run_probe,
     _start_installed_daemon,
     _text_digest,
+    _write_cli_wrapper,
 )
 from codex_plugin_scanner.guard import store as store_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server
@@ -41,7 +46,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 
 def _record(
     case: dict[str, object],
-    response: dict[str, object] | None,
+    response: Mapping[str, object] | None,
     *,
     returncode: int = 0,
 ) -> dict[str, object]:
@@ -61,7 +66,7 @@ def _record(
 
 
 def _preserved_result(case: dict[str, object]) -> dict[str, object]:
-    digest = _canonical_content_digest(case["content"])
+    digest = _canonical_content_digest(cast(list[dict[str, Any]], case["content"]))
     return {
         "id": case["id"],
         "preserved": True,
@@ -70,6 +75,17 @@ def _preserved_result(case: dict[str, object]) -> dict[str, object]:
         "input_content_after_sha256": digest,
         "input_content_unchanged": True,
     }
+
+
+def test_negative_cli_wrapper_binds_probe_python_shebang(tmp_path: Path) -> None:
+    python_path = tmp_path / "probe-python"
+    python_path.write_text("", encoding="utf-8")
+    wrapper = tmp_path / "hol-guard"
+    _write_cli_wrapper(wrapper, python_path=python_path, log_path=tmp_path / "negative-cli.jsonl", negative=True)
+    text = wrapper.read_text(encoding="utf-8")
+    assert text.startswith(f"#!{python_path}\n")
+    assert "#!/usr/bin/env python3" not in text
+    assert "negative-mismatch-proof" in text
 
 
 def test_installed_origin_guard_rejects_checkout_package_only(tmp_path: Path) -> None:
@@ -356,7 +372,7 @@ def test_large_non_source_accepts_only_bounded_reviewed_excerpt() -> None:
     assert fetch_status == 200
 
     arbitrary_excerpt = deepcopy(result)
-    arbitrary_excerpt["result"]["content"][0]["text"] = "x" * len(excerpt)
+    cast(dict[str, list[dict[str, str]]], arbitrary_excerpt["result"])["content"][0]["text"] = "x" * len(excerpt)
     with pytest.raises(ProbeError, match="exact bounded reviewed excerpt"):
         _assert_real_results([arbitrary_excerpt], [case])
 
@@ -406,6 +422,111 @@ def test_fetch_evidence_correlates_case_ids_instead_of_position() -> None:
     ]
     with pytest.raises(ProbeError, match="exactly one response"):
         _assert_fetch_evidence(fetches, results, cases)
+
+
+@pytest.mark.parametrize("category", ["isolated_worker", "policy_authority", "native_edge", "daemon_admission"])
+def test_fetch_failure_reports_finite_stage_without_accepting_missing_proof(category: str) -> None:
+    case = _cases()[0]
+    fetch = {
+        "case_id": case["id"],
+        "method": "POST",
+        "pathname": "/v1/hooks/omp",
+        "status": 200,
+        "decision": "allow",
+        "reason_category": category,
+    }
+    with pytest.raises(ProbeError, match="model_output_action") as caught:
+        _assert_fetch_evidence([fetch], [_preserved_result(case)], [case])
+    assert f'"reason_category": "{category}"' in str(caught.value)
+    assert '"action": "missing"' in str(caught.value)
+    assert '"digest": "missing"' in str(caught.value)
+    fetch.update(model_output_action="allow_original", reviewed_output_sha256=_text_digest(case["content"])[0])
+    assert _assert_fetch_evidence([fetch], [_preserved_result(case)], [case])[str(case["id"])]["preserved"] is True
+
+
+def test_fetch_failure_summary_does_not_copy_arbitrary_values() -> None:
+    private = "/synthetic/private/path?token=synthetic-private-value"
+    summary = probe._fetch_failure_summary(
+        {
+            key: private
+            for key in ("decision", "model_output_action", "reviewed_output_sha256", "observe_mode", "reason_category")
+        },
+        "a" * 64,
+    )
+    assert private not in json.dumps(summary)
+    assert summary == {
+        "decision": "invalid",
+        "action": "invalid",
+        "digest": "mismatch",
+        "observe": "missing_or_invalid",
+        "reason_category": "invalid",
+    }
+
+
+def test_fetch_failure_summary_keeps_mismatch_and_observation_distinct() -> None:
+    assert probe._fetch_failure_summary(
+        {
+            "decision": "allow",
+            "model_output_action": "replace_with_reviewed_excerpt",
+            "reviewed_output_sha256": "a" * 64,
+            "observe_mode": True,
+            "reason_category": "review_result",
+        },
+        "a" * 64,
+    ) == {
+        "decision": "allow",
+        "action": "replace_with_reviewed_excerpt",
+        "digest": "match",
+        "observe": "true",
+        "reason_category": "review_result",
+    }
+
+
+def test_node_fetch_diagnostic_categories_execute_without_copying_reason_text(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the generated fetch diagnostic contract")
+    reasons = [
+        "daemon_hook_process_deadline_exhausted",
+        "native_scoped_authority_unavailable",
+        "native_post_tool_unavailable",
+        "daemon_hook_queue_full",
+        "output_scan_allow",
+        "/synthetic/private/path?token=synthetic-private-value",
+        None,
+    ]
+    runner, extension, cases, launcher = (
+        tmp_path / name for name in ("runner.mjs", "extension.mjs", "cases.json", "launch.mjs")
+    )
+    probe._write_node_runner(runner)
+    extension.write_text(
+        'export default function(pi) { pi.on("tool_result", async () => { '
+        'await fetch("http://127.0.0.1/v1/hooks/omp", {method:"POST"}); return undefined; }); }',
+        encoding="utf-8",
+    )
+    cases.write_text(json.dumps([{"id": str(i), "content": []} for i in range(len(reasons))]), encoding="utf-8")
+    launcher.write_text(
+        'import {pathToFileURL} from "node:url";\n'
+        f"const reasons = {json.dumps(reasons)}; let index = 0;\n"
+        "globalThis.fetch = async () => new Response(JSON.stringify("
+        '{decision:"allow", reason_code:reasons[index++]}));\n'
+        f"process.argv = [process.argv[0], {json.dumps(str(runner))}, {json.dumps(str(extension))}, "
+        f"{json.dumps(str(cases))}, {json.dumps(str(tmp_path))}];\n"
+        "await import(pathToFileURL(process.argv[1]).href);\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run([node, str(launcher)], capture_output=True, text=True, timeout=5, check=True)
+    assert "synthetic-private-value" not in completed.stdout + completed.stderr
+    observed = json.loads(completed.stdout)
+    assert [row["reason_category"] for row in observed["fetches"]] == [
+        "isolated_worker",
+        "policy_authority",
+        "native_edge",
+        "daemon_admission",
+        "review_result",
+        "other",
+        "missing",
+    ]
 
 
 def test_installed_daemon_readiness_requires_workspace_policy() -> None:
@@ -730,6 +851,40 @@ def test_cleanup_scrub_failure_is_redacted_and_fails_closed(tmp_path: Path, monk
     assert marker["remaining_nonretry_paths"] == 1
     assert "secret-capture" not in marker_text
     assert raw_capture.exists()
+
+
+def test_probe_path_construction_failure_still_removes_created_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "probe-root"
+    root.mkdir()
+    failure = MemoryError("synthetic path construction failure")
+    operations: list[str] = []
+
+    class FailingPath:
+        def __fspath__(self) -> str:
+            return str(root)
+
+        def __truediv__(self, name: str) -> Path:
+            operations.append(name)
+            if name == "guard-home":
+                raise failure
+            return root / name
+
+    monkeypatch.setattr(probe, "_installed_package_path", lambda _: root)
+    monkeypatch.setattr(probe, "_probe_native_identity", lambda: (None, None, None))
+    monkeypatch.setattr(probe, "_node_command", lambda: "synthetic-node")
+    monkeypatch.setattr(probe, "_probe_python_path", lambda: tmp_path / "synthetic-python")
+    monkeypatch.setattr(probe, "_short_temp_parent", lambda: None)
+    monkeypatch.setattr(probe.tempfile, "mkdtemp", lambda **_: str(root))
+    monkeypatch.setattr(probe, "Path", lambda _: FailingPath())
+
+    with pytest.raises(MemoryError) as error:
+        _run_probe()
+
+    assert error.value is failure
+    assert operations == ["home", "guard-home"]
+    assert not root.exists()
 
 
 def test_cleanup_failure_does_not_write_success_receipt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

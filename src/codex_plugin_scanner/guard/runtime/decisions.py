@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Literal, TypeGuard
+from typing import TypeGuard
 
 from codex_plugin_scanner.guard.action_lattice import (
     guard_action_severity,
@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.action_lattice import (
     most_restrictive_guard_action,
 )
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
+from codex_plugin_scanner.guard.policy_rule_identity import POLICY_RULE_IDENTITY_FIELDS, PolicyRuleIdentity
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.signals import (
     RiskConfidenceLabel,
@@ -21,9 +22,9 @@ from codex_plugin_scanner.guard.runtime.signals import (
 )
 
 from .data_flow_sink import data_flow_sink_type
+from .decision_messages import _ACTION_MESSAGES
+from .decision_messages import GuardDecisionAction as GuardDecisionAction
 from .payload_coercion import optional_string, required_string
-
-GuardDecisionAction = Literal["allow", "warn", "ask", "block"]
 
 AUTHORITATIVE_DECISION_SCHEMA_VERSION = 1
 AUTHORITATIVE_DECISION_INCONSISTENT = "authoritative_decision_inconsistent"
@@ -92,45 +93,6 @@ _ACTION_ENVELOPE_ACTION_FIELDS = frozenset(
     }
 )
 
-_ACTION_MESSAGES: dict[GuardAction, tuple[GuardDecisionAction, str, str, str]] = {
-    "allow": (
-        "allow",
-        "Allowed by policy",
-        "Policy allows this action.",
-        "HOL Guard allowed this action because policy already trusts it.",
-    ),
-    "warn": (
-        "warn",
-        "Risk signals found",
-        "HOL Guard noticed risk signals, but policy allows the harness to continue.",
-        "Review the warning if this action was unexpected.",
-    ),
-    "review": (
-        "ask",
-        "Approval required",
-        "HOL Guard needs your approval before this action can run.",
-        "Choose an approval scope, then retry in the harness.",
-    ),
-    "sandbox-required": (
-        "ask",
-        "Sandbox review required",
-        "HOL Guard wants this action reviewed and run in a sandboxed path.",
-        "Run this action in an approved sandbox, then retry.",
-    ),
-    "require-reapproval": (
-        "ask",
-        "Fresh approval required",
-        "HOL Guard needs a fresh approval because this action changed.",
-        "Choose the smallest approval scope that matches your intent, then retry.",
-    ),
-    "block": (
-        "block",
-        "Blocked by policy",
-        "HOL Guard blocked this action.",
-        "Review the details before changing policy or retrying.",
-    ),
-}
-
 
 @dataclass(frozen=True, slots=True)
 class GuardDecisionV2:
@@ -148,6 +110,7 @@ class GuardDecisionV2:
     signals: tuple[RiskSignalV2, ...]
     confidence: RiskConfidenceLabel
     package_review_cloud_reason_code: str | None = None
+    policy_rule_identity: PolicyRuleIdentity | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -165,6 +128,8 @@ class GuardDecisionV2:
         }
         if self.package_review_cloud_reason_code is not None:
             payload["package_review_cloud_reason_code"] = self.package_review_cloud_reason_code
+        if self.policy_rule_identity is not None:
+            payload.update(self.policy_rule_identity.to_dict())
         return payload
 
     @classmethod
@@ -191,6 +156,7 @@ class GuardDecisionV2:
             signals=_parse_signals(payload.get("signals")),
             confidence=_parse_confidence(payload.get("confidence")),
             package_review_cloud_reason_code=optional_string(payload, "package_review_cloud_reason_code"),
+            policy_rule_identity=PolicyRuleIdentity.from_mapping(payload),
         )
 
 
@@ -291,7 +257,9 @@ class AuthoritativeGuardDecision:
         raw_decision_v2 = payload.get("decision_v2")
         if not isinstance(raw_decision_v2, Mapping):
             raise ValueError("decision_v2 must be an object")
-        _require_exact_fields(raw_decision_v2, _DECISION_V2_FIELDS, "decision_v2")
+        identity = PolicyRuleIdentity.from_mapping(raw_decision_v2)
+        fields = _DECISION_V2_FIELDS | (POLICY_RULE_IDENTITY_FIELDS if identity is not None else frozenset())
+        _require_exact_fields(raw_decision_v2, fields, "decision_v2")
         decision_v2 = GuardDecisionV2.from_dict(raw_decision_v2)
         decision = cls(
             schema_version=AUTHORITATIVE_DECISION_SCHEMA_VERSION,
@@ -340,7 +308,9 @@ def build_authoritative_decision(
         composition_trace=MappingProxyType(trace),
         signals=signal_tuple,
         enforcement=enforcement,
-        decision_v2=decision_from_legacy_policy_action(action, reason=reason, signals=signal_tuple),
+        decision_v2=decision_from_legacy_policy_action(
+            action, reason=reason, signals=signal_tuple, policy_rule_identity=PolicyRuleIdentity.from_mapping(trace)
+        ),
     )
     _validate_authoritative_decision(decision)
     return decision
@@ -487,6 +457,7 @@ def decision_from_legacy_policy_action(
     *,
     reason: str,
     signals: Sequence[RiskSignalV2] = (),
+    policy_rule_identity: PolicyRuleIdentity | None = None,
 ) -> GuardDecisionV2:
     action, user_title, harness_message, retry_instruction = _ACTION_MESSAGES[policy_action]
     signal_tuple = tuple(signals)
@@ -509,6 +480,7 @@ def decision_from_legacy_policy_action(
         retry_instruction=None if action in {"allow", "warn"} else retry_instruction,
         signals=signal_tuple,
         confidence=confidence,
+        policy_rule_identity=policy_rule_identity,
     )
 
 
@@ -649,6 +621,7 @@ def _validate_authoritative_decision(decision: AuthoritativeGuardDecision) -> No
         decision.action,
         reason=decision.reason,
         signals=decision.signals,
+        policy_rule_identity=PolicyRuleIdentity.from_mapping(decision.composition_trace),
     )
     if decision.decision_v2 != expected_decision_v2:
         raise ValueError("decision_v2 must derive entirely from action, reason, and signals")

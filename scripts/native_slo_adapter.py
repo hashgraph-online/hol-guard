@@ -23,6 +23,22 @@ _SIZE_BYTES = {"1k": 1 * 1024, "250k": 250 * 1024, "1m": 1 * 1024 * 1024, "5m": 
 # native decision rather than an intentionally expired scheduler admission.
 _SLO_REMAINING_MS = 4_000
 _OWNERSHIP_CONTRACT = Path(__file__).resolve().parents[1] / "docs/guard/contracts/hook-data-plane-ownership.v2.json"
+_DIAGNOSTIC_REASON_CODES = frozenset({
+    "daemon_capacity", "daemon_overloaded", "daemon_hook_queue_capacity", "daemon_hook_queue_bytes",
+    "daemon_hook_deadline_exhausted", "daemon_worker_exception", "invalid_hook_payload_reference",
+    "harness_not_managed", "native_overloaded", "native_policy_not_ready", "native_pre_tool_unavailable",
+    "native_post_tool_unavailable", "native_hook_worker_unavailable", "native_hook_worker_unsupported",
+    "native_hook_compatibility_disabled", "native_hook_disabled", "native_shadow_diagnostic_disabled",
+    "native_hook_event_unavailable", "native_hook_edge_invalid_response", "native_degraded_emergency_safe",
+    "native_exact_safe_command", "native_command_review_required", "native_policy_block", "native_policy_review",
+    "native_policy_warn", "native_file_read_review", "output_secret_match", "output_clean",
+})
+
+
+def observation_reason_code(response: Mapping[str, object]) -> str:
+    """Keep only enumerated product outcomes; never copy response text."""
+    value = response.get("reason_code")
+    return value if isinstance(value, str) and value in _DIAGNOSTIC_REASON_CODES else "other"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +52,7 @@ class Observation:
     # True only when the adapter returned an explicit bounded-capacity result;
     # a generic native fail-safe must not be mistaken for accepted overload.
     overloaded: bool = False
+    reason_code: str = "other"
 
 
 @dataclass(frozen=True, slots=True)

@@ -169,29 +169,30 @@ def _http_json_response(
     deadline: float,
     authenticated: bool,
 ) -> dict[str, object]:
-    body = bytearray()
-    while len(body) <= _MAX_DAEMON_RESPONSE_BYTES:
-        remaining = _remaining_seconds(deadline)
-        if remaining < _MINIMUM_OPERATION_SECONDS:
-            raise TimeoutError(f"{label} exceeded the hook deadline")
-        if connection.sock is not None:
-            connection.sock.settimeout(remaining)
-        chunk = response.read1(min(64 * 1024, _MAX_DAEMON_RESPONSE_BYTES + 1 - len(body)))
-        if not chunk:
-            break
-        body.extend(chunk)
-    if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
-        raise ValueError(f"{label} response is too large")
-    if response.status != 200:
-        raise _DaemonResponseError(
-            response.status,
-            body.decode("utf-8", errors="replace").strip(),
-            authenticated=authenticated,
-        )
-    payload = _json_object(bytes(body).decode("utf-8", errors="replace").strip())
-    if payload is None:
-        raise ValueError(f"{label} returned malformed JSON")
-    return payload
+    with response:
+        body = bytearray()
+        while len(body) <= _MAX_DAEMON_RESPONSE_BYTES:
+            remaining = _remaining_seconds(deadline)
+            if remaining < _MINIMUM_OPERATION_SECONDS:
+                raise TimeoutError(f"{label} exceeded the hook deadline")
+            if connection.sock is not None:
+                connection.sock.settimeout(remaining)
+            chunk = response.read1(min(64 * 1024, _MAX_DAEMON_RESPONSE_BYTES + 1 - len(body)))
+            if not chunk:
+                break
+            body.extend(chunk)
+        if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
+            raise ValueError(f"{label} response is too large")
+        if response.status != 200:
+            raise _DaemonResponseError(
+                response.status,
+                body.decode("utf-8", errors="replace").strip(),
+                authenticated=authenticated,
+            )
+        payload = _json_object(bytes(body).decode("utf-8", errors="replace").strip())
+        if payload is None:
+            raise ValueError(f"{label} returned malformed JSON")
+        return payload
 
 
 def _verify_challenge_response(

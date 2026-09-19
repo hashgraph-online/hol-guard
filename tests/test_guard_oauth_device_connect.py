@@ -21,6 +21,39 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
 
+def _bound_connected_fixture(store: GuardStore, monkeypatch, payload: dict[str, object]) -> dict[str, object]:
+    """Keep routing/copy fixtures honest about the credential commit they replace."""
+    from codex_plugin_scanner.guard.cli import commands_support_connect
+    from codex_plugin_scanner.guard.cli.connect_completion import CONNECT_CONNECTION_KEY
+
+    key = generate_dpop_key_pair()
+    committed = store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="synthetic-routing-refresh",
+        dpop_private_key_pem=key.private_key_pem,
+        dpop_public_jwk=key.public_jwk,
+        dpop_public_jwk_thumbprint=key.public_jwk_thumbprint,
+        workspace_id="synthetic-routing-team",
+        grant_id="synthetic-routing-grant",
+        machine_id="synthetic-routing-machine",
+        now="2026-09-19T00:00:00+00:00",
+        expected_attempt=store.begin_oauth_connect_attempt(),
+    )
+    assert committed is not None
+    monkeypatch.setattr(commands_support_connect, "sync_local_guard_cloud_proof", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(commands_support_connect, "sync_supply_chain_cloud_state", lambda *_args, **_kwargs: {})
+    return {
+        **payload,
+        CONNECT_CONNECTION_KEY: committed,
+        connect_flow.CONNECT_SYNC_AUTH_CONTEXT_KEY: connect_flow._build_sync_auth_context(
+            access_token="synthetic-routing-access",
+            dpop_key_material=key,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+        ),
+    }
+
+
 def _decode_connect_flow_jwt_segment(segment: str) -> dict[str, object]:
     padding = "=" * (-len(segment) % 4)
     return json.loads(base64.urlsafe_b64decode(f"{segment}{padding}".encode("ascii")).decode("utf-8"))
@@ -1218,16 +1251,20 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
                     "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
                 }
             )
-        return {
-            "status": "connected",
-            "connect_mode": "device_code",
-            "user_code": "ABCD-EFGH",
-            "verification_uri": "https://hol.org/guard/oauth/device",
-            "next_action": {
-                "command": "open",
-                "target": "https://hol.org/guard/oauth/device",
+        return _bound_connected_fixture(
+            store,
+            monkeypatch,
+            {
+                "status": "connected",
+                "connect_mode": "device_code",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "next_action": {
+                    "command": "open",
+                    "target": "https://hol.org/guard/oauth/device",
+                },
             },
-        }
+        )
 
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
 
@@ -1369,17 +1406,21 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
         opened.append("before-poll")
         browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
         opened.append("after-open")
-        return {
-            "status": "connected",
-            "connect_mode": "device_code",
-            "browser_opened": browser_opened,
-            "user_code": "ABCD-EFGH",
-            "verification_uri": "https://hol.org/guard/oauth/device",
-            "next_action": {
-                "command": "open",
-                "target": "https://hol.org/guard/oauth/device",
+        return _bound_connected_fixture(
+            store,
+            monkeypatch,
+            {
+                "status": "connected",
+                "connect_mode": "device_code",
+                "browser_opened": browser_opened,
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "next_action": {
+                    "command": "open",
+                    "target": "https://hol.org/guard/oauth/device",
+                },
             },
-        }
+        )
 
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
     monkeypatch.setattr(
@@ -1407,15 +1448,18 @@ def test_connect_default_uses_browser_oauth_flow(tmp_path: Path, capsys, monkeyp
     args.wait_timeout_seconds = 5
 
     def fake_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
-        del store
         assert connect_url == "https://hol.org/guard/connect"
         assert wait_timeout_seconds == 5
-        return {
-            "status": "connected",
-            "connect_mode": "browser_oauth",
-            "browser_opened": True,
-            "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-123",
-        }
+        return _bound_connected_fixture(
+            store,
+            monkeypatch,
+            {
+                "status": "connected",
+                "connect_mode": "browser_oauth",
+                "browser_opened": True,
+                "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-123",
+            },
+        )
 
     def fake_device_flow(
         *,
@@ -1427,7 +1471,7 @@ def test_connect_default_uses_browser_oauth_flow(tmp_path: Path, capsys, monkeyp
         ci_safe: bool = False,
         machine_label: str | None = None,
     ) -> dict[str, object]:
-        del store, connect_url, wait_timeout_seconds, announce_copy, open_browser, ci_safe, machine_label
+        del connect_url, wait_timeout_seconds, announce_copy, open_browser, ci_safe, machine_label
         raise AssertionError("default connect should not use device code")
 
     monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
@@ -1453,15 +1497,18 @@ def test_connect_default_browser_flow_respects_wait_timeout_seconds(tmp_path: Pa
     args.wait_timeout_seconds = 7
 
     def fake_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
-        del store
         assert connect_url == "https://hol.org/guard/connect"
         assert wait_timeout_seconds == 7
-        return {
-            "status": "connected",
-            "connect_mode": "browser_oauth",
-            "browser_opened": True,
-            "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-456",
-        }
+        return _bound_connected_fixture(
+            store,
+            monkeypatch,
+            {
+                "status": "connected",
+                "connect_mode": "browser_oauth",
+                "browser_opened": True,
+                "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-456",
+            },
+        )
 
     monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
 
@@ -1479,13 +1526,17 @@ def test_connect_default_non_json_skips_device_copy_on_stderr(tmp_path: Path, ca
     args.json = False
 
     def fake_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
-        del store, connect_url, wait_timeout_seconds
-        return {
-            "status": "connected",
-            "connect_mode": "browser_oauth",
-            "browser_opened": True,
-            "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-789",
-        }
+        del connect_url, wait_timeout_seconds
+        return _bound_connected_fixture(
+            store,
+            monkeypatch,
+            {
+                "status": "connected",
+                "connect_mode": "browser_oauth",
+                "browser_opened": True,
+                "authorize_url": "https://hol.org/guard/oauth/authorize?request_id=req-789",
+            },
+        )
 
     monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
 

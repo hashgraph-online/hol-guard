@@ -15,6 +15,10 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
+mod scoped_tests {
+    include!("approval_v4_scoped_tests.rs");
+}
+
 mod negative_tests {
     include!("approval_v4_negative_tests.rs");
 }

@@ -25,6 +25,7 @@ TARGETS: Final[dict[str, MutationTarget]] = {
             "tests/test_guard_command_model.py",
             "tests/test_guard_command_critical_floors.py",
             "tests/test_guard_command_corpus.py",
+            "tests/test_guard_shell_read_syntax_fidelity.py::test_raw_parser_keeps_invalid_execution_prefix",
         ),
     ),
     "secret-flow": MutationTarget(

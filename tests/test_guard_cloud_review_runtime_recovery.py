@@ -35,13 +35,13 @@ def test_event_upload_refreshes_oauth_once_without_requeueing(tmp_path: Path, mo
     refreshes: list[bool] = []
 
     def upload(auth_context: dict[str, object], *, events: list[dict[str, object]]) -> dict[str, object]:
-        del events
         token = str(auth_context["access_token"])
         uploads.append(token)
         if token == "expired-token":
             raise _unauthorized("/api/guard/review/v2/events:batch")
         return {
             "accepted": 1,
+            "acknowledgedThrough": events[0]["localStreamSequence"],
             "rejected": 0,
             "perEventResults": [{"index": 0, "accepted": True, "code": None, "error": None}],
         }

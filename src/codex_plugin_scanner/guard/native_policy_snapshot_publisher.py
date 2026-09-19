@@ -2,30 +2,56 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import threading
 import time
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack as ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .native_policy_snapshot_codec import _digest_v3
+from .mdm.policy import managed_policy_cache_read_only as managed_policy_cache_read_only
+from .native_cloud_policy_inputs import NativeCloudPolicyInputs
+from .native_cloud_policy_inputs import read_native_cloud_policy_inputs as read_native_cloud_policy_inputs
+from .native_policy_authority_read import NativeVerifiedPolicyInputs as NativeVerifiedPolicyInputs
+from .native_policy_decision_context import NativePolicyDecisionContext
+from .native_policy_snapshot_codec import _digest_v3 as _digest_v3
 from .native_policy_snapshot_constants import (
-    _PUBLISH_RETRY_MAX_SECONDS,
     _PUBLISH_RETRY_SECONDS,
     _PUBLISH_TIMEOUT_SECONDS,
-    _RENEWAL_JITTER_MAX_SECONDS,
-    _RENEWAL_LEAD_SECONDS,
-    _REQUIRED_PUBLISH_FEATURES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_publisher_context import CapturedV3PublicationInputs as CapturedV3PublicationInputs
+from .native_policy_snapshot_publisher_context import PublicationContext, publication_context
+from .native_policy_snapshot_publisher_context import compiled_v3_compatible_policy as compiled_v3_compatible_policy
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
-from .native_policy_snapshot_publisher_transport import _decode_ack_v3, _publish_snapshot_v3
+from .native_policy_snapshot_publisher_scheduling import (
+    mark_expired_locked,
+    record_error,
+    renewal_jitter_seconds,
+    schedule_renewal_locked,
+)
+from .native_policy_snapshot_publisher_scheduling import record_publication_error as record_publication_error
+from .native_policy_snapshot_publisher_scoped import (
+    ScopedSnapshotBinding,
+    capture_scoped_decision,
+    scoped_binding,
+    scoped_result_is_current,
+    scoped_rule_identity,
+)
+from .native_policy_snapshot_publisher_scoped import _capture_metadata_equal as _capture_metadata_equal
+from .native_policy_snapshot_publisher_scoped import _policy_fingerprint as _policy_fingerprint
+from .native_policy_snapshot_publisher_scoped import publish_scoped as publish_scoped
+from .native_policy_snapshot_publisher_transport import _decode_ack_v3
+from .native_policy_snapshot_publisher_transport import _publish_snapshot_v3 as _publish_snapshot_v3
+from .native_policy_snapshot_source_requirement import refresh_source_requirement
+from .native_policy_snapshot_v3_renewal import _external_source_metadata as _external_source_metadata
+from .native_policy_snapshot_v4_transport import NativeV4Publication
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 
 if TYPE_CHECKING:
+    from .policy_rule_identity import PolicyRuleIdentity
     from .store import GuardStore
 
 
@@ -64,24 +90,41 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
         self._acked = False
+        self._published_v3_source_fingerprint: tuple[tuple[str, tuple[int, int, int, int] | None], ...] | None = None
+        self._published_v3_resident_generation: int | None = None
+        self._published_v3_resident_fingerprint: tuple[tuple[str, int, int], ...] | None = None
+        self._scoped_publication_enabled = False
+        self._source_authority_required = True
+        self._source_memory_required = True
+        self._v4_publication: NativeV4Publication | None = None
+        self._v4_epoch: int | None = None
+        self._v4_binding: ScopedSnapshotBinding | None = None
+        self._observed_scoped_digest: str | None = None
         self._epoch = 0
         self._last_error: str | None = None
         self._published_config_digest: str | None = None
-        self._published_policy_fingerprint: tuple[str, str, str] | None = None
-        self._observed_policy_fingerprint: tuple[str, str, str] | None = None
+        self._published_policy_fingerprint: tuple[str, str] | None = None
+        self._observed_policy_fingerprint: tuple[str, str] | None = None
+        self._published_command_control_digest: str | None = None
+        self._observed_command_control_digest: str | None = None
+        self._command_control_runtime = None
+        self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
+        self._published_cloud_inputs = NativeCloudPolicyInputs()
+        self._observed_cloud_inputs = NativeCloudPolicyInputs()
         self._renewal_due_monotonic: float | None = None
         self._renewal_after_generation: int | None = None
         self._retry_not_before_monotonic: float | None = None
         self._failure_count = 0
+        self._initial_database_capture_retry_used = False
+        self._initial_database_capture_retry_epoch: int | None = None
         self._workspace_paths: set[Path] = set()
-        self._command_control_runtime = None
-        self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (
             tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]] | None
         ) = None
         api = _snapshot_api()
         with api._PUBLISHER_LOCK:
             api._PUBLISHERS.setdefault(api._publisher_key(self.guard_home), set()).add(self)
+        refresh_source_requirement(self)
 
     def start(self) -> None:
         with self._condition:
@@ -129,19 +172,37 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 if not publishers:
                     api._PUBLISHERS.pop(api._publisher_key(self.guard_home), None)
 
-    def request_publish(self) -> None:
+    def request_publish(self, *, require_source_authority: bool = False) -> None:
         with self._condition:
             if self._closed:
                 return
+            self._source_authority_required |= require_source_authority
             self._epoch += 1
             self._acked = False
             self._last_error = None
+            self._initial_database_capture_retry_epoch = None
             self._renewal_due_monotonic = None
             self._renewal_after_generation = None
             self._retry_not_before_monotonic = None
             self._failure_count = 0
             self._condition.notify_all()
         self._publish_event.set()
+
+    def request_publish_before_deadline(
+        self, *, deadline_monotonic: float, require_source_authority: bool = False
+    ) -> None:
+        """Bound off-hook admission to the existing reentrant condition."""
+        from .native_policy_snapshot_mutation import _mutation_wait_seconds, _require_mutation_time
+
+        if not self._condition.acquire(timeout=_mutation_wait_seconds(deadline_monotonic)):
+            raise NativePolicySnapshotError("native_policy_snapshot_control_deadline_exceeded")
+        try:
+            # The constructor owns a standard reentrant Condition. Reuse the
+            # unchanged invalidation operation while retaining that ownership.
+            self.request_publish(require_source_authority=require_source_authority)
+        finally:
+            self._condition.release()
+        _require_mutation_time(deadline_monotonic)
 
     notify_policy_changed = request_publish
 
@@ -186,44 +247,14 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             material = None
 
     def _mark_expired_locked(self) -> None:
-        snapshot = self._snapshot
-        if not self._acked or snapshot is None:
-            return
-        expires_at_ms = snapshot.get("expires_at_ms")
-        if not isinstance(expires_at_ms, int) or expires_at_ms > int(self._wall_clock() * 1_000):
-            return
-        generation = snapshot.get("generation")
-        self._acked = False
-        self._last_error = "native_policy_snapshot_expired"
-        self._renewal_due_monotonic = None
-        self._renewal_after_generation = generation if isinstance(generation, int) and generation > 0 else None
-        self._retry_not_before_monotonic = self._monotonic_clock()
-        self._condition.notify_all()
-        self._publish_event.set()
+        mark_expired_locked(self)
 
     @staticmethod
     def _renewal_jitter_seconds(snapshot: Mapping[str, object], remaining_seconds: float) -> float:
-        digest = snapshot.get("policy_digest")
-        generation = snapshot.get("generation")
-        if not isinstance(digest, str) or not isinstance(generation, int) or remaining_seconds <= 0:
-            return 0.0
-        seed = hashlib.sha256(f"{generation}:{digest}".encode("ascii")).digest()
-        fraction = int.from_bytes(seed[:4], "big") / float(1 << 32)
-        return min(_RENEWAL_JITTER_MAX_SECONDS, remaining_seconds * 0.05) * fraction
+        return renewal_jitter_seconds(snapshot, remaining_seconds)
 
     def _schedule_renewal_locked(self, snapshot: Mapping[str, object]) -> None:
-        expires_at_ms = snapshot.get("expires_at_ms")
-        if not isinstance(expires_at_ms, int):
-            self._renewal_due_monotonic = self._monotonic_clock()
-            return
-        remaining_seconds = expires_at_ms / 1_000 - self._wall_clock()
-        if remaining_seconds <= 0:
-            self._renewal_due_monotonic = self._monotonic_clock()
-            return
-        lead_seconds = min(_RENEWAL_LEAD_SECONDS, max(1.0, remaining_seconds * 0.1))
-        jitter_seconds = self._renewal_jitter_seconds(snapshot, remaining_seconds)
-        due_in = max(0.0, remaining_seconds - lead_seconds - jitter_seconds)
-        self._renewal_due_monotonic = self._monotonic_clock() + due_in
+        schedule_renewal_locked(self, snapshot)
 
     def is_ready(self) -> bool:
         with self._condition:
@@ -234,6 +265,17 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
     def closed(self) -> bool:
         with self._condition:
             return self._closed
+
+    @property
+    def requires_scoped_authority(self) -> bool:
+        """A scoped negotiation failure must not become availability fallback."""
+        with self._condition:
+            return self._scoped_publication_enabled
+
+    @property
+    def requires_policy_authority(self) -> bool:
+        with self._condition:
+            return self._source_authority_required or self._scoped_publication_enabled
 
     def current_snapshot(self) -> dict[str, object] | None:
         with self._condition:
@@ -254,6 +296,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if not self._acked or self._snapshot is None or self._closed:
                 return None
             snapshot = self._snapshot
+            if self._v4_publication is not None:
+                return scoped_binding(self)
             binding = {
                 "generation": snapshot.get("generation"),
                 "policy_digest": snapshot.get("policy_digest"),
@@ -263,6 +307,23 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if "command_extensions" in snapshot:
                 binding["command_extensions_bound"] = True
             return binding
+
+    def result_binding_is_current(self, binding: Mapping[str, object]) -> bool:
+        """Fence a V4 response before exposing its decision or receipt."""
+        with self._condition:
+            self._mark_expired_locked()
+            return scoped_result_is_current(self, binding)
+
+    def policy_rule_identity_for_result(self, binding: Mapping[str, object]) -> PolicyRuleIdentity | None:
+        """Resolve only the accepted snapshot's captured canonical identity."""
+        with self._condition:
+            self._mark_expired_locked()
+            return scoped_rule_identity(self, binding)
+
+    def capture_policy_decision_context(
+        self, binding: Mapping[str, object], receipt: object
+    ) -> tuple[bool, NativePolicyDecisionContext | None]:
+        return capture_scoped_decision(self, binding, receipt)
 
     @property
     def last_error(self) -> str | None:
@@ -292,6 +353,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     return
                 self._mark_expired_locked()
             fingerprint = self._current_input_fingerprint()
+            if self._publish_due_initial_retry(fingerprint):
+                continue
             if self._input_fingerprint is None:
                 self._input_fingerprint = fingerprint
             elif fingerprint[1] != self._input_fingerprint[1]:
@@ -356,182 +419,83 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if should_publish:
                 self._publish_once(renew_after_generation=renewal_after_generation)
 
-    def _record_error(self, error: str) -> None:
-        safe = error.strip().lower()
-        if not safe or len(safe) > 128 or not all(character.isalnum() or character in "_-=,:?" for character in safe):
-            safe = "native_policy_snapshot_publish_failed"
+    def _publish_due_initial_retry(
+        self,
+        fingerprint: tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]],
+    ) -> bool:
+        """Take the already scheduled fresh attempt before duplicate observation."""
         with self._condition:
-            self._last_error = safe
-            expires = self._snapshot.get("expires_at_ms") if self._snapshot else None
-            if not (self._acked and isinstance(expires, int) and expires > int(self._wall_clock() * 1_000)):
-                self._acked = False
-            self._failure_count += 1
-            delay = min(
-                _PUBLISH_RETRY_MAX_SECONDS,
-                self._poll_interval_seconds * (2 ** min(self._failure_count - 1, 5)),
-            )
-            retry_seed = hashlib.sha256(f"{self._failure_count}:{safe}".encode("ascii")).digest()
-            retry_fraction = int.from_bytes(retry_seed[:2], "big") / float(1 << 16)
-            self._retry_not_before_monotonic = (
-                self._monotonic_clock()
-                + delay
-                + min(
-                    0.1,
-                    self._poll_interval_seconds * 0.25,
-                )
-                * retry_fraction
-            )
-            self._condition.notify_all()
+            previous = self._input_fingerprint
+            if (
+                self._closed
+                or self._acked
+                or self._renewal_after_generation is not None
+                or self._initial_database_capture_retry_epoch != self._epoch
+                or not self._initial_database_capture_retry_used
+                or self._retry_not_before_monotonic is None
+                or self._monotonic_clock() < self._retry_not_before_monotonic
+                or not self._publish_event.is_set()
+                or previous is None
+                or fingerprint[1] != previous[1]
+            ):
+                return False
+            database = str(self.guard_home / "guard.db")
+            if _external_source_metadata(previous[0], database) != _external_source_metadata(fingerprint[0], database):
+                return False
+            self._initial_database_capture_retry_epoch = None
+            self._publish_event.clear()
+        # Keep the source half of the previous fingerprint. The following
+        # ordinary iteration must observe changes after success or refusal.
+        self._publish_once()
+        return True
+
+    def _record_error(self, error: str) -> None:
+        record_error(self, error)
 
     def _publish_once(self, *, renew_after_generation: int | None = None) -> None:
+        from .native_policy_snapshot_publisher_attempt import publish_once
+
         with self._condition:
-            if self._closed:
+            self._initial_database_capture_retry_epoch = None
+        publish_once(self, renew_after_generation=renew_after_generation)
+
+    def _schedule_initial_database_capture_retry(self, *, publish_epoch: int) -> None:
+        """Allow one fresh full attempt without opening the failed barrier.
+
+        This lifetime allowance is not reset by workspace admission, policy
+        observation, or resident startup files. Later failures retain backoff.
+        The caller's readiness deadline and each publication budget are unchanged.
+        """
+        with self._condition:
+            if (
+                self._closed
+                or self._epoch != publish_epoch
+                or self._acked
+                or self._initial_database_capture_retry_used
+                or self._last_error
+                not in {
+                    "native_policy_authority_changed_during_publish",
+                    "native_policy_authority_capture_changed",
+                }
+            ):
                 return
-            if renew_after_generation is None:
-                renew_after_generation = self._renewal_after_generation
-            publish_epoch = self._epoch
-        try:
-            # A cold verified read may itself migrate authenticated catalog
-            # state and close the mutation barrier. Recapture once before IPC;
-            # accepting its previous epoch would also hide concurrent changes.
-            for _ in range(2):
-                with self._condition:
-                    publish_epoch = self._epoch
-                context = self._publication_context()
-                if context is None:
-                    return
-                with self._condition:
-                    if self._closed:
-                        return
-                    if self._epoch == publish_epoch:
-                        break
-                context = None
-            else:
-                return
-            identity, capabilities, master_key, config, command_extensions, client = context
-            resident_fingerprint_before = self._current_input_fingerprint()[1]
-            try:
-                snapshot, resident_generation = _publish_snapshot_v3(
-                    publisher=self,
-                    identity=identity,
-                    capabilities=capabilities,
-                    config=config,
-                    command_extensions=command_extensions,
-                    master_key=master_key,
-                    client=client,
-                    renew_after_generation=renew_after_generation,
-                )
-            finally:
-                # The master is only an ephemeral input to derivation/signing;
-                # never retain it in publisher state or an exception context.
-                master_key = None
-            resident_fingerprint = self._current_input_fingerprint()[1]
-            resident_directory_fingerprint = self._resident_directory_fingerprint()
-            # A separate process may commit authority while the resident is
-            # acknowledging this candidate. Re-read verified authority outside
-            # the hook barrier and reject an ACK for the earlier controls.
-            if self._compiled_command_extensions() != command_extensions:
-                with self._condition:
-                    self._acked = False
-                raise NativePolicySnapshotError("native_command_control_binding_changed")
-            with self._condition:
-                # A mutation may have invalidated the barrier while this
-                # request was in flight. Do not let an older ACK make that
-                # newer policy appear ready.
-                if self._closed or self._epoch != publish_epoch:
-                    return
-                # Bind the ACK to the resident observed before publication,
-                # after publication, and at the barrier commit point.
-                resident_fingerprint_confirmed = self._confirm_resident_fingerprint(
-                    resident_fingerprint_before,
-                    resident_fingerprint,
-                    resident_generation,
-                    resident_directory_fingerprint,
-                )
-                if resident_fingerprint_confirmed is None:
-                    self._acked = False
-                    raise NativePolicySnapshotError("native_policy_snapshot_resident_changed")
-                # The first client request may create the resident generation
-                # state files. Treat those files as the state of this ACK,
-                # otherwise the observer loop immediately mistakes its own
-                # startup for a resident restart and withdraws the barrier
-                # under a concurrent hook. Keep the policy-input half from
-                # before publication so a config change observed during the
-                # request still forces a republish on the next poll.
-                if self._input_fingerprint is not None:
-                    self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
-                self._snapshot = snapshot
-                self._published_config_digest = cast(str, snapshot["config_digest"])
-                self._published_policy_fingerprint = (
-                    cast(str, snapshot["config_digest"]),
-                    cast(str, snapshot["mode"]),
-                    _digest_v3(command_extensions),
-                )
-                self._observed_policy_fingerprint = self._published_policy_fingerprint
-                self._acked = True
-                self._last_error = None
-                self._renewal_after_generation = None
-                self._failure_count = 0
-                self._retry_not_before_monotonic = None
-                self._schedule_renewal_locked(snapshot)
-                self._condition.notify_all()
-        except NativePolicySnapshotError as error:
-            self._record_error(str(error))
-        except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:
-            self._record_error(type(error).__name__)
+            self._initial_database_capture_retry_used = True
+            self._initial_database_capture_retry_epoch = publish_epoch
+            self._retry_not_before_monotonic = self._monotonic_clock()
+            self._condition.notify_all()
+        self._publish_event.set()
 
     def _publication_context(
         self,
-    ) -> tuple[Any, Any, bytes, Mapping[str, object], Mapping[str, object], Callable[..., bytes | None]] | None:
-        status_provider = self._status_provider
-        if status_provider is None:
-            from .native_runtime import native_runtime_status
-
-            status_provider = native_runtime_status
-        status = status_provider()
-        if getattr(status, "mode", None) not in {"auto", "force", "shadow"}:
-            self._record_error("native_policy_snapshot_native_disabled")
-            return None
-        identity = getattr(status, "identity", None)
-        capabilities = getattr(status, "capabilities", None)
-        if (
-            not getattr(status, "available", False)
-            or not getattr(status, "compatible", False)
-            or identity is None
-            or capabilities is None
-        ):
-            self._record_error("native_policy_snapshot_runtime_unavailable")
-            return None
-        if not _REQUIRED_PUBLISH_FEATURES.issubset(set(getattr(capabilities, "features", ()))):
-            with self._condition:
-                self._acked = False
-            self._record_error("native_policy_snapshot_protocol_unsupported")
-            return None
-        material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
-        if not callable(material_getter):
-            self._record_error("native_policy_snapshot_integrity_key_unavailable")
-            return None
-        material: object = None
-        try:
-            material = material_getter(create=True)
-            if (
-                not isinstance(material, tuple)
-                or len(material) != 2
-                or not isinstance(material[0], bytes)
-                or not isinstance(material[1], str)
-            ):
-                self._record_error("native_policy_snapshot_integrity_key_unavailable")
-                return None
-            config = self._compiled_effective_policy()
-            command_extensions = self._compiled_command_extensions()
-            client = self._client_request
-            if client is None:
-                from .native_resident_client import native_resident_client_request
-
-                client = native_resident_client_request
-            return identity, capabilities, material[0], config, command_extensions, client
-        finally:
-            material = None
+        *,
+        publish_epoch: int | None = None,
+        prepared_command_extensions: Mapping[str, object] | None = None,
+    ) -> PublicationContext | None:
+        return publication_context(
+            self,
+            publish_epoch=publish_epoch,
+            prepared_command_extensions=prepared_command_extensions,
+        )
 
     @staticmethod
     def _decode_ack(output: bytes | None) -> dict[str, object] | None:

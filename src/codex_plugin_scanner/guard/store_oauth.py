@@ -6,22 +6,35 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
-from typing import Concatenate, ParamSpec
+from typing import Concatenate, ParamSpec, TypeVar
 
+from .oauth_connection_authority import (
+    OAuthConnectAttempt,
+    OAuthConnectionSnapshot,
+    connection_identity,
+)
+from .oauth_connection_authority import (
+    advance_connection_epoch as advance_connection_epoch,
+)
+from .oauth_connection_authority import (
+    capture_connection_epoch as capture_connection_epoch,
+)
 from .oauth_token_claims import oauth_binding_metadata
 from .package_firewall_defaults import build_guard_local_entitlement_defaults
-from .runtime.extension_control_authority import ExtensionControlAuthorityView
+from .runtime.extension_control_authority import ExtensionControlAuthorityView as ExtensionControlAuthorityView
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_oauth_connection_authority import StoreOAuthConnectionAuthorityMixin
 from .store_oauth_metadata import copy_oauth_binding_metadata
 
 _P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 def _with_oauth_credential_lock(
-    unlocked: Callable[Concatenate[StoreOAuthConnectMixin, _P], None],
-) -> Callable[Concatenate[StoreOAuthConnectMixin, _P], None]:
+    unlocked: Callable[Concatenate[StoreOAuthConnectMixin, _P], _R],
+) -> Callable[Concatenate[StoreOAuthConnectMixin, _P], _R]:
     """Bind the OAuth credential lock around an unlocked credential writer."""
 
     @wraps(unlocked)
@@ -30,14 +43,14 @@ def _with_oauth_credential_lock(
         /,
         *args: _P.args,
         **kwargs: _P.kwargs,
-    ) -> None:
+    ) -> _R:
         with self.hold_oauth_credential_lock():
-            getattr(self, unlocked.__name__)(*args, **kwargs)
+            return getattr(self, unlocked.__name__)(*args, **kwargs)
 
     return _locked
 
 
-class StoreOAuthConnectMixin:
+class StoreOAuthConnectMixin(StoreOAuthConnectionAuthorityMixin):
     def legacy_macos_oauth_secret_migration_required(self) -> bool:
         """Return whether authenticated OAuth metadata lacks its local vault copy."""
         if sys.platform != "darwin":
@@ -134,29 +147,6 @@ class StoreOAuthConnectMixin:
             )
         return sources
 
-    def clear_cloud_sync_state_for_reconnect(
-        self,
-        *,
-        now: str | None = None,
-        managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-    ) -> None:
-        self.clear_policy_bundle_authority(
-            now or _now(),
-            policy_bundle_last_error={},
-            managed_controls_publish=managed_controls_publish,
-        )
-        self.delete_sync_payloads(
-            [
-                state_key
-                for state_key in _GUARD_CLOUD_RESET_STATE_KEYS
-                if state_key
-                not in {
-                    "managed_controls_active",
-                    "managed_controls_negotiated_capabilities",
-                }
-            ]
-        )
-
     def _set_oauth_local_credentials_unlocked(
         self,
         *,
@@ -180,7 +170,15 @@ class StoreOAuthConnectMixin:
         access_token: str | None = None,
         access_token_expires_at: str | None = None,
         force_primary_secret_rewrite: bool = False,
-    ) -> None:
+        expected_connection: OAuthConnectionSnapshot | None = None,
+        expected_attempt: OAuthConnectAttempt | None = None,
+    ) -> OAuthConnectionSnapshot | None:
+        if expected_attempt is not None:
+            self._validate_oauth_connect_attempt_unlocked(expected_attempt)
+        if expected_connection is not None:
+            current = self._capture_oauth_connection_unlocked(allow_recoverable=True)
+            if current != expected_connection:
+                raise RuntimeError("The connection changed before credentials could be refreshed.")
         normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
             "refresh_token": refresh_token,
@@ -245,7 +243,27 @@ class StoreOAuthConnectMixin:
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self._remember_oauth_secret_payload(self._oauth_local_credentials_ref, secret_hash, secret_json)
-        self.set_sync_payload(self._oauth_local_credentials_state_key, payload, now)
+        binding_keys = ("issuer", "client_id", "grant_id", "device_id", "machine_id", "workspace_id", "runtime_id")
+        if isinstance(existing_payload, dict) and any(
+            existing_payload.get(key) != payload.get(key) for key in binding_keys
+        ):
+            self.clear_review_policy_memory_state()
+        preserve_epoch = None
+        if expected_connection is not None:
+            next_credentials = {**payload, **secret_payload}
+            if connection_identity(expected_connection.credentials()) == connection_identity(next_credentials):
+                preserve_epoch = expected_connection.epoch
+        self._set_oauth_sync_payload_unlocked(
+            self._oauth_local_credentials_state_key, payload, now, preserve_epoch=preserve_epoch
+        )
+        if expected_connection is not None or expected_attempt is not None:
+            # Return the result before releasing the credential lock, so a caller
+            # cannot mistake a later replacement for its own completed update.
+            current = self._capture_oauth_connection_unlocked(allow_recoverable=True)
+            if current is None:
+                raise RuntimeError("The refreshed connection authority is unavailable.")
+            return current
+        return None
 
     set_oauth_local_credentials = _with_oauth_credential_lock(_set_oauth_local_credentials_unlocked)
 
@@ -276,26 +294,9 @@ class StoreOAuthConnectMixin:
             return None
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
 
-    def clear_oauth_local_credentials(self) -> None:
+    def clear_oauth_local_credentials(self, *, expected_connection: OAuthConnectionSnapshot | None = None) -> None:
         with self.hold_oauth_refresh_lock():
-            self._clear_oauth_local_credentials_locked()
-
-    def _clear_oauth_local_credentials_locked(self) -> None:
-        with self.hold_oauth_credential_lock():
-            self._clear_oauth_secret_payload_cache()
-            payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
-            if isinstance(payload, dict):
-                secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
-                if isinstance(secret_ref, str) and secret_ref:
-                    self._oauth_secret_store.delete_secret(secret_ref)
-                    if sys.platform == "darwin":
-                        legacy_fallback = EncryptedFileSecretStore(self.guard_home)
-                        legacy_path = legacy_fallback._path_for(secret_ref)
-                        with suppress(OSError):
-                            legacy_path.unlink()
-            self.delete_sync_payload(self._oauth_local_credentials_state_key)
-            # A capability bound to one OAuth grant must not survive disconnect for a later grant.
-            self.delete_sync_payloads(list(_GUARD_CLOUD_COMMAND_STATE_KEYS))
+            self._clear_oauth_local_credentials_locked(expected_connection=expected_connection)
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
         payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
@@ -433,7 +434,9 @@ class StoreOAuthConnectMixin:
                 recovered_payload = self._recover_missing_oauth_local_credentials_payload(now=_now())
                 if recovered_payload is None:
                     return False
-                self.set_sync_payload(self._oauth_local_credentials_state_key, recovered_payload, _now())
+                self._set_oauth_sync_payload_unlocked(
+                    self._oauth_local_credentials_state_key, recovered_payload, _now()
+                )
                 return True
             repaired_payload = None
             if self._should_attempt_oauth_storage_repair():

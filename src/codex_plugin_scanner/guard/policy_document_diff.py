@@ -49,6 +49,8 @@ def _semantic_policy_diff(
         if rule is not None
     ]
     impacted_scopes = {field for rule in impacted_rules for field, values in rule.match.fields if values}
+    if any(rule.match.exact_command_sha256 is not None for rule in impacted_rules):
+        impacted_scopes.add("exactCommand")
     impacted_harnesses = {
         value
         for rule in impacted_rules
@@ -83,7 +85,10 @@ def _semantic_policy_diff(
 
 
 def _match_fields(rule: PolicyRule) -> dict[str, frozenset[str]]:
-    return {field: frozenset(values) for field, values in rule.match.fields if values}
+    fields = {field: frozenset(values) for field, values in rule.match.fields if values}
+    if rule.match.exact_command_sha256 is not None:
+        fields["exactCommand"] = frozenset({rule.match.exact_command_sha256})
+    return fields
 
 
 def _match_contains(container: PolicyRule, contained: PolicyRule) -> bool:

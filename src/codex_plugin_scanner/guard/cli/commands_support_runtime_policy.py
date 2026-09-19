@@ -45,7 +45,7 @@ from .commands_support_runtime_artifact_policy import (
 
 # Bump when runtime scanner or action-composition semantics change. Product and
 # approval-surface versions deliberately do not participate in this identity.
-_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION = "runtime-hook-evaluation-v1"
+_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION = "runtime-hook-evaluation-v2"
 _LOCAL_REVIEW_INSTRUCTION_RE = re.compile(
     re.escape("Review this request in HOL Guard, then retry."),
     re.IGNORECASE,
@@ -605,39 +605,9 @@ def _runtime_hook_approval_context_token(
 
 
 def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, object]:
-    """Return effective settings that can change enforcement or risk evidence."""
+    from ..config_approval_context import runtime_hook_effective_policy_config
 
-    return {
-        "artifact_actions": dict(config.artifact_actions or {}),
-        "changed_hash_action": config.changed_hash_action,
-        "default_action": config.default_action,
-        "harness_actions": dict(config.harness_actions or {}),
-        "harness_risk_actions": {
-            harness: dict(actions) for harness, actions in (config.harness_risk_actions or {}).items()
-        },
-        "install_owner": config.install_owner,
-        "managed_locked_settings": list(config.managed_locked_settings),
-        "managed_policy_hash": config.managed_policy_hash,
-        "managed_policy_status": config.managed_policy_status,
-        "mode": config.mode,
-        **(
-            {
-                "protection_posture": config.protection_posture,
-                "protection_posture_explicit": True,
-            }
-            if config.protection_posture_explicit
-            else {}
-        ),
-        "new_network_domain_action": config.new_network_domain_action,
-        "publisher_actions": dict(config.publisher_actions or {}),
-        "risk_actions": dict(config.risk_actions or {}),
-        "runtime_detector_disabled_ids": list(config.runtime_detector_disabled_ids),
-        "runtime_detector_registry": config.runtime_detector_registry,
-        "runtime_detector_timeout_ms": config.runtime_detector_timeout_ms,
-        "security_level": config.security_level,
-        "subprocess_action": config.subprocess_action,
-        "unknown_publisher_action": config.unknown_publisher_action,
-    }
+    return runtime_hook_effective_policy_config(config)
 
 
 def _runtime_hook_action_capabilities(action_envelope: GuardActionEnvelope | None) -> dict[str, object] | None:

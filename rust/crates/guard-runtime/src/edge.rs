@@ -13,6 +13,20 @@ use std::time::{Duration, Instant};
 
 use crate::native_hook_receipt::{receipt_from_post_tool, receipt_from_pre_tool};
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static AFTER_EVALUATION: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn observe_evaluation() {
+    let observer = AFTER_EVALUATION.with(|slot| slot.borrow_mut().take());
+    if let Some(observer) = observer {
+        observer();
+    }
+}
+
 const MAX_HARNESS_BYTES: usize = 64;
 const MAX_EVENT_BYTES: usize = 64;
 const MAX_PATH_BYTES: usize = 32 * 1024;
@@ -139,7 +153,7 @@ fn bounded_nonempty(value: &str, maximum: usize, code: &str) -> Result<(), Strin
     Ok(())
 }
 
-fn canonical_harness(value: &str) -> Result<String, String> {
+pub(crate) fn canonical_harness(value: &str) -> Result<String, String> {
     bounded_nonempty(value, MAX_HARNESS_BYTES, "native_hook_harness_invalid")?;
     let normalized = value.trim().to_ascii_lowercase().replace('_', "-");
     let canonical = match normalized.as_str() {
@@ -226,7 +240,7 @@ fn payload_event(payload: &Value) -> Result<Option<String>, String> {
     Ok(extracted)
 }
 
-fn authoritative_event(envelope: &GuardHookEnvelopeV2) -> Result<String, String> {
+pub(crate) fn authoritative_event(envelope: &GuardHookEnvelopeV2) -> Result<String, String> {
     let declared = canonical_event(&envelope.event)?;
     if let Some(extracted) = payload_event(&envelope.raw_payload)? {
         if extracted != declared {
@@ -237,7 +251,7 @@ fn authoritative_event(envelope: &GuardHookEnvelopeV2) -> Result<String, String>
     Ok(declared)
 }
 
-fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
+pub(crate) fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
@@ -259,7 +273,7 @@ fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
     Ok(GuardHookPayloadKindV2::Inline)
 }
 
-fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
+pub(crate) fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
     if envelope.schema != GUARD_HOOK_ENVELOPE_V2_SCHEMA {
         return Err("native_hook_envelope_schema_mismatch".to_owned());
     }
@@ -416,13 +430,38 @@ pub(crate) fn evaluate_envelope_with_store(
     policy_store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
-    let snapshot = policy_store.validate_request_snapshot(
+    let snapshot = policy_store.validate_versioned_request_snapshot(
         &envelope.policy_snapshot,
         &envelope.source.guard_home,
         envelope.policy_generation,
     )?;
-    let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
-    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
+    let _command_lease =
+        policy_store.command_authority_lease_for_binding(snapshot.command_extensions())?;
+    let result = match snapshot.as_ref() {
+        crate::policy_store::AdmittedVersionedPolicySnapshot::V3(value) => {
+            let result = evaluate_validated_envelope(envelope.clone(), Some(value))?;
+            #[cfg(test)]
+            observe_evaluation();
+            result
+        }
+        crate::policy_store::AdmittedVersionedPolicySnapshot::V4(value) => {
+            let result = crate::edge_v4::evaluate_admitted(
+                envelope.clone(),
+                value,
+                policy_store.resident_generation(),
+            )?;
+            #[cfg(test)]
+            observe_evaluation();
+            result
+        }
+    };
+    // Refuse either result if durable authority changed during evaluation.
+    policy_store.validate_versioned_request_snapshot(
+        &envelope.policy_snapshot,
+        &envelope.source.guard_home,
+        envelope.policy_generation,
+    )?;
+    Ok(result)
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is

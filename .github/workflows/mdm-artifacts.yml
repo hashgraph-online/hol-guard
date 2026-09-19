@@ -74,6 +74,7 @@ jobs:
         run: |
           $binary = 'dist/mdm/windows/runtime/hol-guard/hol-guard.exe'
           & $binary --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $status = Start-Process -FilePath $binary -ArgumentList @(
             'mdm', 'status', '--scope', 'machine',
             '--machine-root', 'dist/mdm/windows/runtime', '--json'

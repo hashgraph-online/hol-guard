@@ -92,6 +92,26 @@ class ExecutableMatcher(_ExecutableContractBase):
             if not _segment_matches_executable(segment, self.executables):
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            if (
+                self.subcommands
+                and lowered_arguments
+                and lowered_arguments[0] != self.subcommands[0]
+                and not lowered_arguments[0].startswith("-")
+                and (
+                    not self.fail_secure_unknown_options
+                    or not matches_subcommands_conservatively(
+                        lowered_arguments,
+                        self.subcommands,
+                        options_with_values=(
+                            self.options_with_values
+                            | self.leading_options_with_values
+                            | self.interspersed_options_with_values
+                        ),
+                        known_flags=self.interspersed_flags,
+                    )
+                )
+            ):
+                continue
             subcommand_arguments = _without_options(
                 lowered_arguments,
                 self.interspersed_options_with_values,

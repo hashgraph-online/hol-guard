@@ -8,10 +8,13 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
+import type { CloudReviewSettingsChange, CloudReviewSettingsStatus } from "./cloud-review-settings-types";
+export type { CloudReviewSettingsStatus } from "./cloud-review-settings-types";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
 import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
+import { assertGuardCloudConnectStatus } from "./guard-cloud-connect-contract";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
   AUTHORITATIVE_DECISION_INCONSISTENT,
@@ -2189,32 +2192,11 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
   return readJson<GuardSettingsPayload>("/v1/settings");
 }
 
-export type CloudReviewSettingsStatus = {
-  enabled: boolean;
-  connected: boolean;
-  reason: string | null;
-  expires_at: string | null;
-  workspace_id: string | null;
-  source: string | null;
-  pending_uploads: number;
-  held_events: number;
-  isolated_events: number;
-  last_synced_at: string | null;
-  delivery_state: string;
-  approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;
-  activation_error?: string | null;
-};
-
 export async function fetchCloudReviewSettings(): Promise<CloudReviewSettingsStatus> {
   return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", { cache: "no-store" });
 }
 
-export async function changeCloudReviewSettings(input: {
-  action: "enable" | "disable";
-  workspace_id: string | null;
-  source: string | null;
-  include_held_requests: boolean;
-} & ApprovalGateWriteProof): Promise<CloudReviewSettingsStatus> {
+export async function changeCloudReviewSettings(input: CloudReviewSettingsChange & ApprovalGateWriteProof): Promise<CloudReviewSettingsStatus> {
   return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2565,11 +2547,9 @@ export async function publishInsightsShare(input: {
 }
 
 function normalizeGuardCloudConnectStatus(value: unknown): GuardCloudConnectStatusResponse {
-  if (!isRecord(value)) {
-    return { connect_required: false, connect_flow: null };
-  }
+  assertGuardCloudConnectStatus(value);
   return {
-    connect_required: value.connect_required === true,
+    connect_required: value.connect_required,
     connect_flow: normalizePackageFirewallConnectFlow(value.connect_flow),
   };
 }

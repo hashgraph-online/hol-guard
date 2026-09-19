@@ -69,11 +69,14 @@ TEMPORARY_PATHS: Final = (
     Path("rust/AUTHORITY_BATCH_2_FINAL"),
     Path("rust/AUTHORITY_FINAL"),
 )
+
+
 def _read(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise RuntimeError(f"required authority source is missing: {path}") from exc
+
 
 def _python_imports_function(path: Path, module_suffix: str, name: str) -> bool:
     tree = ast.parse(_read(path), filename=str(path))
@@ -233,7 +236,7 @@ def _pretool_gate() -> None:
         r'if event_name\s*==\s*"PreToolUse":[\s\S]*?return self\._review_pre_tool_http',
         hook,
     )
-    region = re.search(r'def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)', native_hook)
+    region = re.search(r"def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)", native_hook)
     if route is None or region is None:
         raise RuntimeError("daemon has no Rust PreToolUse authority route")
     if "self.engine.review(" in region.group(0):
@@ -342,7 +345,10 @@ def _workflow_gate() -> None:
     trigger = source.split("permissions:", maxsplit=1)[0]
     if "paths:" in trigger or "paths-ignore:" in trigger:
         raise RuntimeError("authority workflow must be selected for every pull request to main")
-    for required in ("pull_request:\n    branches: [main]", "fetch-depth: 0", "--base-ref"):
+    unconditional_pull_request = re.search(r"(?m)^  pull_request:\n(?=  [a-z_]+:|\Z)", trigger)
+    if "pull_request:\n    branches: [main]" not in trigger and unconditional_pull_request is None:
+        raise RuntimeError("authority workflow must be selected for every pull request to main")
+    for required in ("fetch-depth: 0", "--base-ref"):
         if required not in source:
             raise RuntimeError(f"authority workflow is missing its always-selected diff gate: {required}")
     required_commands = (

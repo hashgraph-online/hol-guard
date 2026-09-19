@@ -17,13 +17,33 @@ use thiserror::Error;
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
 mod crypto;
+mod policy_snapshot_v4;
+
+/// Strict scoped authority values for a future versioned snapshot. This
+/// module does not add scoped authority to the V3 resident protocol.
+pub mod scoped_authority;
+
+/// Strict literal-expression semantics; no snapshot admission or activation.
+pub mod command_expression;
+
+/// Separately resolved MDM origin; only authenticated V4 may carry it.
+pub mod managed_configuration;
+#[cfg(test)]
+mod managed_configuration_tests;
 
 pub use canonical::{canonical_json_bytes, snapshot_bytes, snapshot_signing_bytes};
 pub use crypto::{
     config_digest, derive_verifier_key, digest_bytes, generation_floor_mac, integrity_mac,
     policy_digest, verifier_key_id,
 };
+pub use policy_snapshot_v4::{
+    integrity_mac_v4, policy_digest_v4, snapshot_bytes_v4, snapshot_signing_bytes_v4, validate_v4,
+    PolicySnapshotAckV2, PolicySnapshotPushV2, PolicySnapshotV4, POLICY_SNAPSHOT_V4_ACK_SCHEMA,
+    POLICY_SNAPSHOT_V4_PUSH_SCHEMA, POLICY_SNAPSHOT_V4_SCHEMA,
+};
 
+#[cfg(test)]
+mod policy_snapshot_v4_tests;
 #[cfg(test)]
 #[path = "policy_snapshot_tests.rs"]
 mod tests;

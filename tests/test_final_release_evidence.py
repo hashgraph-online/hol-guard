@@ -24,6 +24,7 @@ TEST_PUBLIC_KEY = base64.b64encode(TEST_PRIVATE_KEY.public_key().public_bytes_ra
 def _payload() -> dict[str, object]:
     return {
         "schema": "hol-guard-final-release-evidence.v1",
+        "evidence_kind": "release-run",
         "release": {
             "version": VERSION,
             "source_sha": SOURCE_SHA,
@@ -35,6 +36,8 @@ def _payload() -> dict[str, object]:
             "artifacts": {"name": "artifacts.json", "sha256": "1" * 64, "status": "pass"},
             "desktop_core": {"name": "desktop-core.json", "sha256": "2" * 64, "status": "pass"},
             "installed_matrix": {"name": "installed-matrix.json", "sha256": "3" * 64, "status": "pass"},
+            "negative_outcomes": {"name": "negative-outcomes.json", "sha256": "4" * 64, "status": "pass"},
+            "required_collection": {"name": "required-collection.json", "sha256": "5" * 64, "status": "pass"},
         },
         "gates": {key: True for key in REQUIRED_GATES},
         "review": {
@@ -200,3 +203,18 @@ def test_final_evidence_signature_matches_normalized_output_projection() -> None
     normalized = _validate(payload, require_signature=True, trusted_public_key=TEST_PUBLIC_KEY)
 
     assert normalized["signature"]["manifest_sha256"] == hashlib.sha256(canonical_bytes(normalized)).hexdigest()
+
+
+@pytest.mark.parametrize("component", ["negative_outcomes", "required_collection"])
+def test_final_evidence_requires_negative_and_collection_components(component: str) -> None:
+    payload = _payload()
+    del payload["evidence"][component]
+    with pytest.raises(FinalEvidenceError, match="evidence must be an object"):
+        _validate(payload)
+
+
+def test_fixture_cannot_authorize_release() -> None:
+    payload = _payload()
+    payload["evidence_kind"] = "contract-fixture"
+    with pytest.raises(FinalEvidenceError, match="fixtures cannot authorize"):
+        _validate(payload, require_signature=True, trusted_public_key=TEST_PUBLIC_KEY)

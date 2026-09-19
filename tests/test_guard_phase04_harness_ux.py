@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_review_authority_fixtures import enroll_review_authority
 
 
 def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
@@ -422,6 +423,7 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     exit_code, output = _run_hook(
         tmp_path,
         harness="claude-code",
@@ -443,6 +445,7 @@ def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
 
 
 def test_gr083_claude_permission_request_routes_to_ask_user_question(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     first_exit_code, _first_output = _run_hook(
         tmp_path,
         harness="claude-code",
@@ -476,6 +479,7 @@ def test_gr083_claude_permission_request_routes_to_ask_user_question(tmp_path: P
 
 
 def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     event = _claude_sensitive_read_event("session-gr084")
 
     first_exit_code, first_output = _run_hook(tmp_path, harness="claude-code", payload=event)
@@ -511,6 +515,7 @@ def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path
 
 
 def test_gr085_claude_allow_once_cannot_lower_current_reapproval(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     event = _claude_sensitive_read_event("session-gr085", "~/.npmrc")
 
     first_exit_code, _first_output = _run_hook(tmp_path, harness="claude-code", payload=event)
@@ -549,6 +554,7 @@ def test_gr085_claude_allow_once_cannot_lower_current_reapproval(tmp_path: Path)
 
 
 def test_gr086_claude_session_allow_cannot_lower_current_reapproval(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     event = _claude_sensitive_read_event("session-gr086", "~/.npmrc")
 
     first_exit_code, _first_output = _run_hook(tmp_path, harness="claude-code", payload=event)

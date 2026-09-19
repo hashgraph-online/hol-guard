@@ -339,7 +339,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         _METRICS.released()
 
     def handle_error(self, request: Any, client_address: Any) -> None:
-        error = cast(BaseException | None, __import__("sys").exception())
+        error = cast(BaseException | None, __import__("sys").exc_info()[1])
         if isinstance(error, socket.timeout):
             _METRICS.timeout()
             return

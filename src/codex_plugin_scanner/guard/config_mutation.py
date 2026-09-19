@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def notify_native_policy_mutation(guard_home: Path) -> None:
+def notify_native_policy_mutation(guard_home: Path, *, require_source_authority: bool = False) -> None:
     """Wake the native policy publisher after a config write succeeds.
 
     The import remains lazy because the policy publisher imports configuration
@@ -14,7 +14,7 @@ def notify_native_policy_mutation(guard_home: Path) -> None:
 
     from .native_policy_snapshot import notify_native_policy_mutation as notify
 
-    notify(guard_home)
+    notify(guard_home, require_source_authority=require_source_authority)
 
 
 def record_posture_change_if_needed(

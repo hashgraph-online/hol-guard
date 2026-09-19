@@ -15,7 +15,7 @@ def get_policy_decision_payload(
 ) -> dict[str, object] | None:
     query = """
         select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-               action, reason, owner, source, expires_at, updated_at, integrity_version,
+               exact_command_sha256, action, reason, owner, source, expires_at, updated_at, integrity_version,
                integrity_generation,
                payload_hash, payload_mac, integrity_key_id, signed_at
         from policy_decisions

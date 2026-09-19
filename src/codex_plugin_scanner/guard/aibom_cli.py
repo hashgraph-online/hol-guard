@@ -34,6 +34,14 @@ from .aibom_models import _AIBOM_MAX_REQUEST_BODY_BYTES as _AIBOM_MAX_REQUEST_BO
 from .aibom_models import _AIBOM_SYNC_BATCH_SIZE as _AIBOM_SYNC_BATCH_SIZE
 from .aibom_models import AibomCliOptions as AibomCliOptions
 from .aibom_models import AibomExportFormat as AibomExportFormat
+from .aibom_operation_authority import (
+    AibomOperation,
+    _aibom_operation_is_current_unlocked,
+    capture_aibom_operation,
+    commit_aibom_results,
+    read_aibom_result,
+    require_current_aibom_operation,
+)
 from .aibom_reporting import _aggregate_redaction_report as _aggregate_redaction_report
 from .aibom_reporting import _aibom_connection_status as _aibom_connection_status
 from .aibom_reporting import _artifact_rows_from_store as _artifact_rows_from_store
@@ -58,6 +66,7 @@ from .inventory_contract import extract_aibom_metadata_extensions as extract_aib
 from .inventory_contract import inventory_snapshot_from_detection as inventory_snapshot_from_detection
 from .inventory_contract import redact_local_path as redact_local_path
 from .inventory_contract import serialize_inventory_snapshot as serialize_inventory_snapshot
+from .runtime.trust_attestation import trust_attestation_v2_enabled
 from .store import GuardStore as GuardStore
 
 
@@ -87,9 +96,10 @@ def _aibom_sync_is_due(
     *,
     generated_at: str,
     min_interval_seconds: int,
+    operation: AibomOperation,
 ) -> bool:
     """Apply freshness and empty-inventory retry intervals to prior sync state."""
-    prior = store.get_sync_payload("aibom_sync_summary")
+    prior = read_aibom_result(store, operation, "aibom_sync_summary")
     if not isinstance(prior, dict):
         return True
     if prior.get("synced") is not True:
@@ -109,9 +119,9 @@ def _aibom_sync_is_due(
     return elapsed >= retry_interval
 
 
-def _aibom_guard_events_endpoint_unavailable_recently(store: Any) -> bool:
+def _aibom_guard_events_endpoint_unavailable_recently(store: Any, *, operation: AibomOperation) -> bool:
     """Respect the recorded missing-endpoint backoff interval."""
-    summary = store.get_sync_payload(_AIBOM_GUARD_EVENTS_BACKOFF_KEY)
+    summary = read_aibom_result(store, operation, _AIBOM_GUARD_EVENTS_BACKOFF_KEY)
     if not isinstance(summary, dict):
         return False
     if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
@@ -145,25 +155,62 @@ def sync_aibom_snapshots(
     auth_context: dict[str, object] | None = None,
     expected_workspace_id: str | None = None,
 ) -> dict[str, object]:
+    """Reserve inventory admission for an explicitly requested synchronization."""
+    with store.hold_aibom_sync_lock():
+        return _sync_aibom_snapshots_admitted(
+            store,
+            context,
+            generated_at=generated_at,
+            options=options,
+            auth_context=auth_context,
+            expected_workspace_id=expected_workspace_id,
+        )
+
+
+def _sync_aibom_snapshots_admitted(
+    store: Any,
+    context: HarnessContext,
+    *,
+    generated_at: str,
+    options: AibomCliOptions | None = None,
+    auth_context: dict[str, object] | None = None,
+    expected_workspace_id: str | None = None,
+    operation: AibomOperation | None = None,
+) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
     runner = _runner_module()
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
+    captured = operation or capture_aibom_operation(
+        store, context, now=generated_at, bind_installation=trust_attestation_v2_enabled()
+    )
+    if captured is None:
+        raise guard_sync_not_configured_error("The inventory connection or context is unavailable.")
+    workspace_id = captured.workspace_id
+    if expected_workspace_id is not None and workspace_id != expected_workspace_id:
+        raise ValueError("Guard Cloud workspace changed before AIBOM inventory sync.")
+    context = captured.context()
+
+    def validate() -> None:
+        require_current_aibom_operation(store, captured)
+
+    def commit(results: dict[str, dict[str, object]], now: str) -> None:
+        if not commit_aibom_results(store, captured, results, now=now):
+            raise RuntimeError("The inventory operation context changed.")
+
     with store.hold_oauth_credential_lock():
-        current_workspace_id = store.get_cloud_workspace_id()
-        if current_workspace_id is None:
-            raise guard_sync_not_configured_error(
-                "Guard Cloud workspace is not configured. Run `hol-guard connect` first."
-            )
-        if expected_workspace_id is not None and current_workspace_id != expected_workspace_id:
-            raise ValueError("Guard Cloud workspace changed before AIBOM inventory sync.")
-        workspace_id = expected_workspace_id or current_workspace_id
+        if not _aibom_operation_is_current_unlocked(store, captured):
+            raise RuntimeError("The inventory operation context changed.")
         trust_attestation_context = _resolve_trust_attestation_context(
             store,
             generated_at=generated_at,
             include_upload_session_bindings=True,
             workspace_id=workspace_id,
         )
+        if trust_attestation_context.get(
+            "deviceId"
+        ) != captured.installation_id or not _aibom_operation_is_current_unlocked(store, captured):
+            raise RuntimeError("The inventory operation context changed.")
 
     resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
     primary_content_sources: list[GuardAibomPrimaryContentSource] = []
@@ -174,6 +221,7 @@ def sync_aibom_snapshots(
         trust_attestation_context=trust_attestation_context,
         primary_content_sources=primary_content_sources,
     )
+    validate()
     snapshots = cloud_syncable_snapshots(snapshots)
     cloud_snapshot_ids = {snapshot.snapshot_id for snapshot in snapshots}
     primary_content_sources = [source for source in primary_content_sources if source.snapshot_id in cloud_snapshot_ids]
@@ -186,10 +234,14 @@ def sync_aibom_snapshots(
             "accepted": 0,
             "message": "No cloud-compatible harness snapshots were available to sync.",
         }
-        store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+        commit({"aibom_sync_summary": summary}, synced_at)
         return summary
 
-    resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
+    # Caller dictionaries carry no authority. Resolve the current token/key from
+    # the captured source, including the cached-token path.
+    resolved_auth_context = runner._resolve_guard_sync_auth_context(
+        store, required_connection=captured.connection, validate_request=validate
+    )
     sync_url = runner._guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(
@@ -229,7 +281,7 @@ def sync_aibom_snapshots(
             "error": "Guard Cloud AIBOM sync failed because an inventory snapshot exceeds the request limit.",
             "content_upload": content_upload_summary,
         }
-        store.set_sync_payload("aibom_sync_summary", failure_summary, generated_at)
+        commit({"aibom_sync_summary": failure_summary}, generated_at)
         return failure_summary
     total_accepted = 0
     total_rejected = len(oversized_events)
@@ -239,53 +291,50 @@ def sync_aibom_snapshots(
     events_sent = 0
     syncable_event_count = sum(len(batch) for batch in event_batches)
 
-    for batch in event_batches:
-        body = _inventory_events_request_body(batch)
-        request = runner._guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
-        auth_refresh_retried = False
-        try:
-            payload = runner._urlopen_json_with_timeout_retry(
+    def send_batch(body: bytes) -> dict[str, object]:
+        nonlocal resolved_auth_context
+
+        def send() -> dict[str, object]:
+            request = runner._guard_sync_request(
+                resolved_auth_context,
+                request_url=sync_url,
+                method="POST",
+                data=body,
+                extra_headers=None,
+            )
+            return runner._urlopen_json_with_timeout_retry(
                 request=request,
                 timeout_seconds=90,
                 retry_timeout_seconds=120,
+                validate_request=validate,
             )
+
+        try:
+            return send()
         except urllib.error.HTTPError as error:
-            if error.code == 401 and not auth_refresh_retried:
-                auth_refresh_retried = True
-                resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
-                request = runner._guard_sync_request(
-                    resolved_auth_context,
-                    request_url=sync_url,
-                    method="POST",
-                    data=body,
-                    extra_headers=None,
-                )
-                payload = runner._urlopen_json_with_timeout_retry(
-                    request=request,
-                    timeout_seconds=90,
-                    retry_timeout_seconds=120,
-                )
-            elif error.code == 404:
+            if error.code != 401:
+                raise
+            resolved_auth_context = runner._resolve_guard_sync_auth_context(
+                store, force_refresh=True, required_connection=captured.connection, validate_request=validate
+            )
+            return send()
+
+    for batch in event_batches:
+        body = _inventory_events_request_body(batch)
+        try:
+            payload = send_batch(body)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
                 synced_at = generated_at
                 remaining_events = syncable_event_count - events_sent
-                store.set_sync_payload(
-                    _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
-                    {
-                        "synced_at": synced_at,
-                        "events": remaining_events,
-                        "accepted": total_accepted,
-                        "skipped": remaining_events,
-                        "sync_skipped": True,
-                        "sync_reason": "guard_events_endpoint_unavailable",
-                    },
-                    synced_at,
-                )
+                backoff: dict[str, object] = {
+                    "synced_at": synced_at,
+                    "events": remaining_events,
+                    "accepted": total_accepted,
+                    "skipped": remaining_events,
+                    "sync_skipped": True,
+                    "sync_reason": "guard_events_endpoint_unavailable",
+                }
                 summary: dict[str, object] = {
                     "synced": False,
                     "synced_at": synced_at,
@@ -299,7 +348,7 @@ def sync_aibom_snapshots(
                 }
                 if batches_sent == 0:
                     summary["skipped"] = True
-                store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+                commit({"aibom_sync_summary": summary, _AIBOM_GUARD_EVENTS_BACKOFF_KEY: backoff}, synced_at)
                 return summary
             failure_summary: dict[str, object] = {
                 "synced": False,
@@ -312,7 +361,7 @@ def sync_aibom_snapshots(
                 "error": "Guard Cloud AIBOM sync failed due to an HTTP error.",
                 "content_upload": content_upload_summary,
             }
-            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            commit({"aibom_sync_summary": failure_summary}, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
         except OSError as error:
             failure_summary = {
@@ -326,7 +375,7 @@ def sync_aibom_snapshots(
                 "error": "Guard Cloud AIBOM sync failed due to a network error.",
                 "content_upload": content_upload_summary,
             }
-            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            commit({"aibom_sync_summary": failure_summary}, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
         batches_sent += 1
         events_sent += len(batch)
@@ -352,7 +401,9 @@ def sync_aibom_snapshots(
                 resolved_auth_context,
                 sources=sources,
                 workspace_id=workspace_id,
+                operation=captured,
             )
+            validate()
             merge_content_upload_summary(content_upload_summary, upload_summary)
             content_uploaded_snapshot_ids.add(snapshot_id)
     content_eligible_value = content_upload_summary.get("eligible")
@@ -376,5 +427,5 @@ def sync_aibom_snapshots(
     if not content_upload_complete:
         summary["partial"] = True
         summary["reason"] = "content_upload_incomplete"
-    store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+    commit({"aibom_sync_summary": summary}, synced_at)
     return summary

@@ -239,6 +239,18 @@ fn read_record(
     Ok(Some((record, bytes)))
 }
 
+// This observation never enters enrollment recovery or changes secure-store state.
+pub(super) fn public_record_fingerprint(state_base: &Path) -> Result<Option<String>, String> {
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    let path = state_base.join(AUTHORITY_FILE_NAME);
+    if read_record(&path, &private_root)?.is_none() {
+        return Ok(None);
+    }
+    super::authority_fingerprint(&path)
+        .map(Some)
+        .ok_or_else(|| "native_approval_v4_authority_invalid".to_owned())
+}
+
 pub(crate) fn load(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String> {
     super::approval_enrollment::with_transition_lock(state_base, || load_locked(state_base))
 }

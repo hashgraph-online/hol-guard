@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import signed_cloud_extension_projection_digest
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.policy_bundle_delivery import effective_projection_digest
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime import runner
@@ -121,6 +122,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_local_commit(
             )
         ),
         name="stale-local-authority-delivery",
+        daemon=True,
     )
     stale_thread.start()
     assert stale_waiting.wait(timeout=5)
@@ -177,3 +179,101 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_local_commit(
     assert runtime.current().revision == durable.revision
     assert runtime.current().layers == durable.layers
     assert stale_store.get_sync_payload("policy_bundle") is None
+
+
+def test_two_bundle_replacements_commit_one_consistent_authority_set(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    first = [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id="command:one",
+            source="policy-bundle",
+        )
+    ]
+    second = [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id="command:two",
+            source="policy-bundle",
+        )
+    ]
+    errors: list[BaseException] = []
+
+    def write(rows: list[PolicyDecision], now: str) -> None:
+        try:
+            store.replace_remote_policies(rows, now, remote_write_authorized=True)
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [
+        threading.Thread(target=write, args=(first, "2026-08-25T12:00:01Z"), daemon=True),
+        threading.Thread(target=write, args=(second, "2026-08-25T12:00:02Z"), daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    remaining = store.list_policy_decisions()
+    ids = {row["artifact_id"] for row in remaining if row["source"] == "policy-bundle"}
+    assert ids in ({"command:one"}, {"command:two"})
+    assert len(ids) == 1
+
+
+def test_concurrent_memory_and_bundle_writes_keep_one_family_each(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.review_policy_memory_executor import execute_review_policy_memory
+    from tests.test_guard_review_policy_memory_command import _bundle as memory_bundle
+    from tests.test_guard_review_policy_memory_command import _store
+
+    store = _store(tmp_path)
+    errors: list[BaseException] = []
+
+    def write_bundle() -> None:
+        try:
+            store.replace_remote_policies(
+                [
+                    PolicyDecision(
+                        harness="codex",
+                        scope="artifact",
+                        action="block",
+                        artifact_id="command:bundle",
+                        source="policy-bundle",
+                    )
+                ],
+                "2026-08-25T12:00:01Z",
+                remote_write_authorized=True,
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    def write_memory() -> None:
+        try:
+            execute_review_policy_memory(
+                {"decisionMemoryBundle": memory_bundle(store)},
+                store=store,
+                generated_at="2026-08-25T12:00:02Z",
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [
+        threading.Thread(target=write_bundle, daemon=True),
+        threading.Thread(target=write_memory, daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    remaining = store.list_policy_decisions()
+    bundle_ids = {row["artifact_id"] for row in remaining if row["source"] == "policy-bundle"}
+    memory_ids = {row["artifact_id"] for row in remaining if row["source"] == "cloud-signed-memory"}
+    assert bundle_ids == {"command:bundle"}
+    assert memory_ids == {"plugin:hol/deploy"}
+    assert len(remaining) == 2

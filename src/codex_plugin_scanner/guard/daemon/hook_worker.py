@@ -36,6 +36,7 @@ from ..cli.commands_support_command_activity import (
 from ..config import load_guard_config
 from ..native_hook_edge import review_raw_hook_native
 from ..native_mode import python_oracle_enabled, python_oracle_surface_enabled
+from ..native_policy_decision_context import NativePolicyDecisionContext
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
@@ -123,6 +124,7 @@ class HookWorker(HookWorkerNativeMixin):
         self.activity_writer = activity_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
+        self._last_native_policy_context: NativePolicyDecisionContext | None = None
         self._python_oracle: Callable[[HookReviewRequest], HookReviewResponse] | None = None
         self._python_oracle_object: PythonOracle | None = None
         from .hook_metrics import HookMetricsRecorder
@@ -242,6 +244,11 @@ class HookWorker(HookWorkerNativeMixin):
             snapshot = current_snapshot_binding()
             if isinstance(snapshot, dict):
                 return snapshot
+        if (
+            getattr(self.policy_snapshot_publisher, "requires_policy_authority", False) is True
+            or getattr(self.policy_snapshot_publisher, "requires_scoped_authority", False) is True
+        ):
+            return None
         current_snapshot = getattr(self.policy_snapshot_publisher, "current_snapshot", None)
         if callable(current_snapshot):
             snapshot = current_snapshot()
@@ -281,7 +288,7 @@ class HookWorker(HookWorkerNativeMixin):
         ``off`` and ``shadow`` can use only an explicit test oracle;
         production requests remain fail-safe.
         """
-        self._last_native_decision_receipt = None
+        self._last_native_decision_receipt, self._last_native_policy_context = None, None
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
         mode = native_mode()

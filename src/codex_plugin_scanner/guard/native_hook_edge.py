@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -96,6 +97,15 @@ _PRE_TOOL_ACTION_KEYS = {
     "bounded",
     "sensitive_target",
 }
+
+
+def _unique_response_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("native_hook_edge_duplicate_field")
+        result[key] = value
+    return result
 
 
 def _capture_deadline(deadline: float | None) -> tuple[float, int]:
@@ -194,7 +204,15 @@ def _native_error_code(payload: object) -> str | None:
     return code if code in FINITE_FAILURE_CODES else None
 
 
-def _decode_edge(payload: object) -> dict[str, Any] | None:
+def _decode_edge(
+    payload: object,
+    *,
+    snapshot_binding: Mapping[str, object] | None = None,
+) -> dict[str, Any] | None:
+    if isinstance(payload, dict) and payload.get("schema") == "guard-hook-edge-result.v3":
+        from .native_scoped_result import decode_scoped_edge
+
+        return decode_scoped_edge(payload, snapshot_binding)
     required = {
         "schema",
         "authority",
@@ -243,10 +261,11 @@ def _encode_hook_envelope(
     source_ref_external_allowed: bool,
     deadline_budget_ms: int,
     snapshot: Mapping[str, object],
+    request_id: str | None = None,
 ) -> bytes | None:
     envelope = {
         "schema": "guard-hook-envelope.v2",
-        "request_id": None,
+        "request_id": request_id,
         "harness": harness,
         "event": event,
         "raw_payload": payload,
@@ -260,6 +279,7 @@ def _encode_hook_envelope(
             "generation": snapshot["generation"],
             "policy_digest": snapshot.get("policy_digest"),
             "runtime_identity": snapshot.get("runtime_identity"),
+            **({"source_input_digest": snapshot["source_input_digest"]} if "source_input_digest" in snapshot else {}),
         },
         "source": {
             "cwd": str(cwd) if cwd is not None else None,
@@ -296,7 +316,12 @@ def review_raw_hook_native(
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
     status = native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
-    required_features = {_EDGE_FEATURE, _CLIENT_FEATURE}
+    scoped = policy_snapshot is not None and "source_input_digest" in policy_snapshot
+    required_features = (
+        {"hook-envelope-v3", "policy-snapshot-v4", "policy-scoped-authority-v1", _CLIENT_FEATURE}
+        if scoped
+        else {_EDGE_FEATURE, _CLIENT_FEATURE}
+    )
     if event_key in {
         "pretool",
         "pretooluse",
@@ -323,6 +348,7 @@ def review_raw_hook_native(
     generation = snapshot.get("generation")
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
+    request_id = secrets.token_hex(16) if scoped else None
     encoded = _encode_hook_envelope(
         payload=payload,
         harness=harness,
@@ -333,6 +359,7 @@ def review_raw_hook_native(
         source_ref_external_allowed=source_ref_external_allowed,
         deadline_budget_ms=deadline_budget_ms,
         snapshot=snapshot,
+        request_id=request_id,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
@@ -352,13 +379,20 @@ def review_raw_hook_native(
         )
         return record_native_hook_result("native_fail_safe", None)
     try:
-        response_payload = json.loads(output)
+        response_payload = json.loads(output, object_pairs_hook=_unique_response_fields)
         error_code = _native_error_code(response_payload)
         if error_code is not None:
             record_native_resident_client_failure_code(error_code)
-        decoded = _decode_edge(response_payload)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        decoded = _decode_edge(response_payload, snapshot_binding=snapshot)
+    except (UnicodeDecodeError, ValueError):
         decoded = None
+    if decoded is not None and scoped:
+        from .native_scoped_result import scoped_invocation_matches
+
+        if not scoped_invocation_matches(
+            decoded, request_id=request_id, harness=harness, rule_digest=status.capabilities.rule_digest, event=event
+        ):
+            decoded = None
     if decoded is None:
         native_record_resident_failure(
             status.identity.sha256,

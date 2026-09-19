@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.cli.update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from tests.support.update_manager_recovery import build_manager_recovery_context
 
 
 def _write_executable(path: Path, body: str = "raise SystemExit(0)\n") -> Path:
@@ -696,11 +697,8 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    context, _manager = _build_manager_context(
-        tmp_path,
-        monkeypatch,
-        "pipx",
-        source_url="https://packages.enterprise.example/simple",
+    context, _manager = build_manager_recovery_context(
+        tmp_path, monkeypatch, source_url="https://packages.enterprise.example/simple",
     )
     display = [str(context.python.launch_path), "-m", "pip", "install", "hol-guard==2.2.3"]
 

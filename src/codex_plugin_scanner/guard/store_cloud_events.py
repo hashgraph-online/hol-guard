@@ -7,12 +7,35 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import cast
 
+from .aibom_operation_authority import (
+    INVENTORY_CONTEXT_KEY as INVENTORY_CONTEXT_KEY,
+)
+from .aibom_operation_authority import (
+    record_inventory_context_mutation as record_inventory_context_mutation,
+)
+from .aibom_operation_authority import (
+    reject_private_inventory_key as reject_private_inventory_key,
+)
+from .oauth_connection_authority import (
+    CONNECTION_AUTHORITY_VERSION_KEY as CONNECTION_AUTHORITY_VERSION_KEY,
+)
+from .oauth_connection_authority import (
+    advance_connection_epoch as advance_connection_epoch,
+)
+from .oauth_connection_authority import (
+    is_oauth_credential_key as is_oauth_credential_key,
+)
+from .oauth_connection_authority import (
+    read_connection_authority as read_connection_authority,
+)
+
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_receipt_rollups import reconcile_dirty_receipt_rollups, reconcile_pending_receipt_events
+from .store_sync_payload_mutations import StoreSyncPayloadMutationsMixin
 
 
-class StoreCloudEventsMixin:
+class StoreCloudEventsMixin(StoreSyncPayloadMutationsMixin):
     def set_managed_install(
         self,
         harness: str,
@@ -187,63 +210,6 @@ class StoreCloudEventsMixin:
                 bundle_version=bundle_version,
             )
 
-    def reserve_sync_sequence(
-        self,
-        state_key: str,
-        field: str,
-        now: str,
-        *,
-        floor: int = 0,
-    ) -> int:
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (state_key,),
-            ).fetchone()
-            payload: dict[str, object] = {}
-            if row is not None:
-                decoded = json.loads(str(row["payload_json"]))
-                if isinstance(decoded, dict):
-                    payload = decoded
-            current = payload.get(field, 0)
-            current_sequence = current if isinstance(current, int) and not isinstance(current, bool) else 0
-            sequence = max(current_sequence, floor) + 1
-            payload[field] = sequence
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (state_key, json.dumps(payload), now),
-            )
-            return sequence
-
-    def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
-        oauth_changed = state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
-            _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
-        )
-        if oauth_changed:
-            self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (state_key, json.dumps(payload), now),
-            )
-        if oauth_changed:
-            from .review_event_wake import review_event_wake_signal
-
-            review_event_wake_signal(self.path).notify()
-
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -285,26 +251,6 @@ class StoreCloudEventsMixin:
         )
         active_items = list_active_cloud_exceptions(dedupe_cloud_exceptions(parsed_items), harness=harness)
         return [cloud_exception_to_dict(item) for item in active_items]
-
-    def delete_sync_payload(self, state_key: str) -> None:
-        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
-            self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                "delete from sync_state where state_key = ?",
-                (state_key,),
-            )
-
-    def delete_sync_payloads(self, state_keys: list[str]) -> int:
-        if not state_keys:
-            return 0
-        placeholders = ",".join("?" for _ in state_keys)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                f"delete from sync_state where state_key in ({placeholders})",
-                tuple(state_keys),
-            )
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         with self._connect() as connection:

@@ -1,0 +1,622 @@
+{
+  "schema": "guard-sensitive-read-producer-fixture.v1",
+  "contentBinding": "request path and tool identity only; no secret file bytes",
+  "cases": [
+    {
+      "name": "codex-0-Read",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": ".npmrc"
+        }
+      },
+      "artifactId": "codex:project:file-read:cf244fa66435db95b78561b60fee7754705e0fb55c7ef2bd1e12012b0e1ae5fc",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "codex-1-read_file",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "file_path": ".env.local"
+        }
+      },
+      "artifactId": "codex:project:file-read:9da95ad6ad893f156001af48dd233e35ccf191f73ce33bf9604ab23eb7541f45",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.env.local",
+      "pathClass": "local .env file"
+    },
+    {
+      "name": "codex-2-open_file",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "file_path": ".pypirc"
+        }
+      },
+      "artifactId": "codex:project:file-read:0c1238ab9fe72c2fe40a19420e7b1138bd438e6ea6a25eb985b6dbebee3807b6",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.pypirc",
+      "pathClass": "Python package credentials"
+    },
+    {
+      "name": "codex-3-View",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "View",
+        "tool_input": {
+          "file_path": ".netrc"
+        }
+      },
+      "artifactId": "codex:project:file-read:9cce603967eb355ae1d0e509979ba2fc268e036114360e162bce7615427e52de",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.netrc",
+      "pathClass": "netrc credentials"
+    },
+    {
+      "name": "codex-4-view_file",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "file_path": ".git-credentials"
+        }
+      },
+      "artifactId": "codex:project:file-read:b86f6d3d624416c74c86490f4bc82f060f2be7a2953c746c797363363a883fd3",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.git-credentials",
+      "pathClass": "Git credential store"
+    },
+    {
+      "name": "codex-5-cat_file",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "cat_file",
+        "tool_input": {
+          "file_path": "terraform.tfvars"
+        }
+      },
+      "artifactId": "codex:project:file-read:866a1f6a82bb0bc437b016eae561804887ddf52161f72d2f20b8ba0d5f14c709",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/terraform.tfvars",
+      "pathClass": "Terraform variable secrets"
+    },
+    {
+      "name": "claude-code-0-Read",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": ".npmrc"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:2f8dfdd37f5d7d0c5c24124333c947353e3bd8cfbb4b665c6b0b9b34a2cd7ac4",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "claude-code-1-read_file",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "file_path": ".env.local"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:c24f89f7d76ee41f45c5a0a739b92eae1148cca026dfc6a9c5e079aa58bae9dc",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.env.local",
+      "pathClass": "local .env file"
+    },
+    {
+      "name": "claude-code-2-open_file",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "file_path": ".pypirc"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:0f70e93f4005763e35493fb174d22ce4f02dc94985a8d6a2c3ace946700dcd90",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.pypirc",
+      "pathClass": "Python package credentials"
+    },
+    {
+      "name": "claude-code-3-View",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "View",
+        "tool_input": {
+          "file_path": ".netrc"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:d700a24cc6e6188e50dac9000a68747edaf7c3b1c6d033cb7e8fcd8aaafae5b9",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.netrc",
+      "pathClass": "netrc credentials"
+    },
+    {
+      "name": "claude-code-4-view_file",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "file_path": ".git-credentials"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:634085049e02723acb838f2e4d008ec49ea83d2b678c30dd7c4b56ccac31cae0",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.git-credentials",
+      "pathClass": "Git credential store"
+    },
+    {
+      "name": "claude-code-5-cat_file",
+      "harness": "claude-code",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "cat_file",
+        "tool_input": {
+          "file_path": "terraform.tfvars"
+        }
+      },
+      "artifactId": "claude-code:project:file-read:b4559c41f45082655b5b91ee73c1a068d330df784b8f01de0e265f49981d77d9",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/terraform.tfvars",
+      "pathClass": "Terraform variable secrets"
+    },
+    {
+      "name": "cline-0-Read",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": ".npmrc"
+        }
+      },
+      "artifactId": "cline:project:file-read:277260d4f03621bf50e1404942804dcfd1a753055118a51193e56bbf4681ab4e",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "cline-1-read_file",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "file_path": ".env.local"
+        }
+      },
+      "artifactId": "cline:project:file-read:37d9ff21276f574649ad3fcee3ecf863fa537159130e854a5d6516bdd11f002b",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.env.local",
+      "pathClass": "local .env file"
+    },
+    {
+      "name": "cline-2-open_file",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "file_path": ".pypirc"
+        }
+      },
+      "artifactId": "cline:project:file-read:3272459774be8476576719aad4c9717bcb418fdc92bea223c7cdf5bcd94bda85",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.pypirc",
+      "pathClass": "Python package credentials"
+    },
+    {
+      "name": "cline-3-Read",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": ".netrc"
+        }
+      },
+      "artifactId": "cline:project:file-read:69d6d61e3f225d4c60c91d6afb40810eadbce6004662c44bf450abccefde06ea",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.netrc",
+      "pathClass": "netrc credentials"
+    },
+    {
+      "name": "cline-4-view_file",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "file_path": ".git-credentials"
+        }
+      },
+      "artifactId": "cline:project:file-read:b4247a23732d7a36f343bcb633bf0317e66b22e0ea83edfbce1d65ca080905cb",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.git-credentials",
+      "pathClass": "Git credential store"
+    },
+    {
+      "name": "cline-5-cat_file",
+      "harness": "cline",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "cat_file",
+        "tool_input": {
+          "file_path": "terraform.tfvars"
+        }
+      },
+      "artifactId": "cline:project:file-read:53d3ed8df9752afbbccc00954fa32eb942761e8106921cf601527fce9259264e",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/terraform.tfvars",
+      "pathClass": "Terraform variable secrets"
+    },
+    {
+      "name": "cursor-0-Read",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": ".npmrc"
+        }
+      },
+      "artifactId": "cursor:project:file-read:f85243853fe08aaca34eed0c6ff62c9e729aeb45df8b8ad4cfbb1d437cceaecd",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "cursor-1-read_file",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "file_path": ".env.local"
+        }
+      },
+      "artifactId": "cursor:project:file-read:8da40233b953905eceda77ee3a5d965c5c713a4ca5912a0241198d5ef633cc5c",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.env.local",
+      "pathClass": "local .env file"
+    },
+    {
+      "name": "cursor-2-open_file",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "file_path": ".pypirc"
+        }
+      },
+      "artifactId": "cursor:project:file-read:bca6b96e6dd7ccdad008e50321e41abbd60c81705922f0ac350a63b870cbacf2",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.pypirc",
+      "pathClass": "Python package credentials"
+    },
+    {
+      "name": "cursor-3-View",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "View",
+        "tool_input": {
+          "file_path": ".netrc"
+        }
+      },
+      "artifactId": "cursor:project:file-read:fb51bd06b587517b6b6d3600294fa8d0f7819e45546e30ab6655edf6cccf9128",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.netrc",
+      "pathClass": "netrc credentials"
+    },
+    {
+      "name": "cursor-4-view_file",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "file_path": ".git-credentials"
+        }
+      },
+      "artifactId": "cursor:project:file-read:3eac8cd88e20851c0dadaf9d56d029403dd023a9104c0993265011a110c47770",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.git-credentials",
+      "pathClass": "Git credential store"
+    },
+    {
+      "name": "cursor-5-cat_file",
+      "harness": "cursor",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "cat_file",
+        "tool_input": {
+          "file_path": "terraform.tfvars"
+        }
+      },
+      "artifactId": "cursor:project:file-read:a4fd873c06a7e851ad7b94ba2b84890a8a952e45d86a911e8bc3a08758fe577c",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/terraform.tfvars",
+      "pathClass": "Terraform variable secrets"
+    },
+    {
+      "name": "original-sensitive-read",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "/workspace/release-gate-project/authorization-recovery/.npmrc"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:f6380ce8f3d05fb44ab0720c56bc24d9a6e1ed1d6a34bae4fefb903411fe9102",
+      "normalizedPath": "/workspace/release-gate-project/authorization-recovery/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "dot-segments",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "./nested/../.npmrc"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:cf244fa66435db95b78561b60fee7754705e0fb55c7ef2bd1e12012b0e1ae5fc",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "parent-path",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "../.npmrc"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:a3d4b8e77034589e2bea040f15011e2466a69b7649653dd95c30666fe3c6c344",
+      "normalizedPath": "/synthetic/native-sensitive/home/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "home-expansion",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "~/.npmrc"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:a3d4b8e77034589e2bea040f15011e2466a69b7649653dd95c30666fe3c6c344",
+      "normalizedPath": "/synthetic/native-sensitive/home/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "absolute-path",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "/synthetic/native-sensitive/home/.npmrc"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:a3d4b8e77034589e2bea040f15011e2466a69b7649653dd95c30666fe3c6c344",
+      "normalizedPath": "/synthetic/native-sensitive/home/.npmrc",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "uppercase-path",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": ".NPMRC"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:beb04b8e9bfcb62bf460e72591b6487302d714a793072d15a57f3744ee80d85c",
+      "normalizedPath": "/synthetic/native-sensitive/home/project/.NPMRC",
+      "pathClass": "npm registry credentials"
+    },
+    {
+      "name": "ssh-key",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "~/.ssh/id_ed25519"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:1777edf696f24d54571923fd77705750cca17838227df5bddedb1cf0e4194f42",
+      "normalizedPath": "/synthetic/native-sensitive/home/.ssh/id_ed25519",
+      "pathClass": "SSH private key"
+    },
+    {
+      "name": "cloud-credentials",
+      "harness": "codex",
+      "source": {
+        "cwd": "/synthetic/native-sensitive/home/project",
+        "home_dir": "/synthetic/native-sensitive/home",
+        "guard_home": "/synthetic/native-sensitive/state"
+      },
+      "payload": {
+        "eventName": "PreToolUse",
+        "toolName": "Read",
+        "arguments": {
+          "path": "~/.aws/credentials"
+        },
+        "sourceScope": "project"
+      },
+      "artifactId": "codex:project:file-read:2763d1d997545c27cc1fb62691710bd5a71f492c6bc58577c9fa345387e1bfb0",
+      "normalizedPath": "/synthetic/native-sensitive/home/.aws/credentials",
+      "pathClass": "AWS shared credentials file"
+    }
+  ]
+}

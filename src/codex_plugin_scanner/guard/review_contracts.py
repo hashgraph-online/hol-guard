@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -31,11 +30,13 @@ from .policy_bundle_trusted_keys import (
 )
 from .project_identity import resolve_portable_project_identity
 from .review_exact_capability_advertisement import attach_exact_review_capability
+from .review_memory_targets import validate_memory_rule_target_exact as _validate_memory_rule_target_exact
 from .review_oauth_binding import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
     guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
 )
+from .review_request_policy_fields import _non_empty_string, _policy_version, _read_json_mapping
 from .review_verification_keyring import REVIEW_VERIFICATION_KEYRING_SYNC_KEY
 from .stable_digest import sha256_content_digest
 from .stable_json import stable_json_serialize
@@ -65,24 +66,6 @@ _stable_serialize = stable_json_serialize
 
 def _sha256_hex(value: str) -> str:
     return sha256_content_digest(value.encode("utf-8"))
-
-
-def _non_empty_string(value: object) -> str | None:
-    return value if isinstance(value, str) and value.strip() else None
-
-
-def _read_json_mapping(value: object) -> dict[str, object] | None:
-    if isinstance(value, dict):
-        return {str(key): item for key, item in value.items()}
-    if value is None:
-        return None
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return {str(key): item for key, item in parsed.items()}
 
 
 def _strip_keys(value: dict[str, object], keys: tuple[str, ...]) -> dict[str, object]:
@@ -275,17 +258,6 @@ def _risk_category(request_row: dict[str, object]) -> str:
     return "unknown"
 
 
-def _policy_version(request_row: dict[str, object]) -> str:
-    decision_v2 = _read_json_mapping(request_row.get("decision_v2_json")) or {}
-    value = _non_empty_string(decision_v2.get("policyVersion"))
-    if value is not None:
-        return value
-    last_seen_at = _non_empty_string(request_row.get("last_seen_at")) or _non_empty_string(
-        request_row.get("created_at")
-    )
-    return f"request:{last_seen_at or request_row['request_id']}"
-
-
 def _claim_expiry(request_row: dict[str, object]) -> str:
     created_at = _parse_iso_timestamp(request_row.get("created_at"), field_name="created_at")
     last_seen_at = _parse_iso_timestamp(
@@ -347,6 +319,16 @@ def build_local_review_request_claim(
         "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
     }
+    from .policy_rule_identity import PolicyRuleIdentity
+
+    identity = PolicyRuleIdentity.from_mapping(_read_json_mapping(request_row.get("decision_v2_json")))
+    if identity is not None:
+        claim.update(identity.to_dict())
+    from .policy_memory_source import verified_request_policy_memory_source
+
+    policy_source = verified_request_policy_memory_source(store, request_row)
+    if policy_source is not None:
+        claim["policyMemorySource"] = policy_source
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
     return attach_exact_review_capability(claim, oauth, store)
 
@@ -570,10 +552,4 @@ def validate_decision_memory_bundle_target(
         target = rule.get("target")
         if not isinstance(target, dict):
             raise GuardReviewContractError("decision_memory_target_invalid")
-        machine_ids = target.get("machineIds")
-        if (
-            isinstance(machine_ids, list)
-            and machine_ids
-            and oauth.installation_id not in {str(item) for item in machine_ids}
-        ):
-            raise GuardReviewContractError("decision_memory_machine_mismatch")
+        _validate_memory_rule_target_exact(target, oauth=oauth, rule=rule)

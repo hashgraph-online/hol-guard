@@ -4,11 +4,71 @@ import {
   startOrRecoverCloudConnect,
   waitForAuthorizeUrl,
 } from "./guard-cloud-connect-flow";
+import { fetchGuardCloudConnectStatus, startGuardCloudConnect } from "./guard-api";
+import { runGuardCloudConnectFlow, type GuardCloudConnectUiState } from "./connect-guard-cloud-button";
+import { createRequire } from "node:module";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+const malformedConnectionStatuses: unknown[] = [
+  null, {}, [], { connect_required: "false" }, { connect_required: 0 },
+  { capability_enabled: true, enabled: false },
+];
+for (const payload of malformedConnectionStatuses) {
+  const states: GuardCloudConnectUiState[] = [];
+  await runGuardCloudConnectFlow(new AbortController().signal, (state) => states.push(state), {
+    start: async () => parseGuardCloudConnectHttp(200, payload),
+    waitAuthorize: async (status) => status,
+    waitConnection: async () => { throw new Error("Unexpected polling after malformed start"); },
+    openAuthorize: () => { throw new Error("Unexpected browser opening after malformed start"); },
+  });
+  assert(states.length === 2 && states[1]?.status === "error",
+    "Malformed successful connection responses must produce an error, never connected");
+}
+
+const originalFetch = globalThis.fetch;
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+const { JSDOM } = createRequire(import.meta.url)("jsdom");
+const dom = new JSDOM("<!doctype html>", { url: "http://127.0.0.1:4781/?guard-token=synthetic-local-token" });
+Object.defineProperty(globalThis, "window", { configurable: true, value: dom.window });
+try {
+  for (const body of [...malformedConnectionStatuses.map((payload) => JSON.stringify(payload)), "not-json"]) {
+    globalThis.fetch = async () => new Response(body, {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+    const states: GuardCloudConnectUiState[] = [];
+    await runGuardCloudConnectFlow(new AbortController().signal, (state) => states.push(state));
+    assert(states.length === 2 && states[1]?.status === "error",
+      "The actual start transport and flow must reject malformed JSON without reporting connected");
+  }
+  for (const payload of malformedConnectionStatuses) {
+    globalThis.fetch = async () => new Response(JSON.stringify(payload), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+    for (const readStatus of [fetchGuardCloudConnectStatus, startGuardCloudConnect]) {
+      let rejected = false;
+      try { await readStatus(); } catch (error: unknown) {
+        rejected = error instanceof Error && error.message === "Guard returned an invalid connection status. Try again.";
+      }
+      assert(rejected, "The real status transport must reject malformed successful connection responses");
+    }
+  }
+  for (const connectRequired of [false, true]) {
+    globalThis.fetch = async () => new Response(JSON.stringify({ connect_required: connectRequired, connect_flow: null }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+    assert((await fetchGuardCloudConnectStatus()).connect_required === connectRequired,
+      "The real status transport must preserve the explicit authoritative boolean");
+  }
+} finally {
+  globalThis.fetch = originalFetch;
+  dom.window.close();
+  if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+  else Reflect.deleteProperty(globalThis, "window");
 }
 
 const alreadyConnected = parseGuardCloudConnectHttp(409, {

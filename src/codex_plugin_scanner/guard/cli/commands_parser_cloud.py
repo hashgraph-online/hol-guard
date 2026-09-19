@@ -204,6 +204,12 @@ def _configure_guard_cloud_parsers(
         help="Capability lifetime from 1 through 365 days (default: 30)",
     )
     commands_enable_parser.add_argument("--json", action="store_true")
+    commands_enable_parser.add_argument(
+        "--share-policy-source",
+        action="store_true",
+        help=("Share complete shell command text for reusable policy; "
+              "requires isolated memory consent and no receipt redaction"),
+    )
     commands_approve_parser = commands_subparsers.add_parser(
         "approve",
         help="Approve one pending state-changing Cloud command on this device",

@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.guard_aibom_authority_support import content_aibom_authority
 
 
 def _sha256(body: bytes) -> str:
@@ -307,12 +308,14 @@ def test_primary_upload_uses_exact_skill_document_not_directory_identity(tmp_pat
         },
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=sources,
         workspace_id="workspace-1",
+        operation=operation,
     )
     payload = json.loads(requests[0])
     uploaded = payload["items"][0]

@@ -81,7 +81,9 @@ def test_lost_ack_retries_identical_payload(tmp_path: Path, monkeypatch: pytest.
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"v" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls: list[bytes] = []
 
     def client_request(**kwargs: object) -> bytes | None:
@@ -109,7 +111,9 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"f" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls: list[bytes] = []
 
     def client_request(**kwargs: object) -> bytes:
@@ -176,7 +180,9 @@ def test_floor_recovery_requires_exact_typed_ack(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"g" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls = 0
 
     def client_request(**_kwargs: object) -> bytes:
@@ -206,7 +212,9 @@ def test_publisher_surfaces_resident_start_timeout(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"s" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
 
     def client_request(**_kwargs: object) -> bytes:
         return b'{"error":"native_resident_start_timeout","retryable":false}'
@@ -232,7 +240,9 @@ def test_publisher_process_restart_reuses_cached_payload(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"w" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     first_calls: list[bytes] = []
 
     def first_client(**kwargs: object) -> bytes:
@@ -278,7 +288,9 @@ def test_renewal_materializes_higher_generation_before_expiry(tmp_path: Path, mo
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"x" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     clock = _DeterministicClock()
     calls: list[bytes] = []
 
@@ -300,6 +312,8 @@ def test_renewal_materializes_higher_generation_before_expiry(tmp_path: Path, mo
         publisher._publish_once()
         first = publisher.current_snapshot()
         assert first is not None
+        assert isinstance(first["generation"], int)
+        assert isinstance(first["expires_at_ms"], int)
         due = publisher._renewal_due_monotonic
         assert due is not None
         assert due < clock.monotonic + 24 * 60 * 60
@@ -309,6 +323,8 @@ def test_renewal_materializes_higher_generation_before_expiry(tmp_path: Path, mo
         publisher._publish_once(renew_after_generation=first["generation"])
         renewed = publisher.current_snapshot()
         assert renewed is not None
+        assert isinstance(renewed["generation"], int)
+        assert isinstance(renewed["expires_at_ms"], int)
         assert renewed["generation"] > first["generation"]
         assert renewed["expires_at_ms"] > first["expires_at_ms"]
         assert len(calls) == 2
@@ -323,7 +339,9 @@ def test_renewal_failure_keeps_barrier_closed_at_expiry(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"y" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     clock = _DeterministicClock()
     calls = 0
 
@@ -346,6 +364,8 @@ def test_renewal_failure_keeps_barrier_closed_at_expiry(
         publisher._publish_once()
         first = publisher.current_snapshot()
         assert first is not None
+        assert isinstance(first["generation"], int)
+        assert isinstance(first["expires_at_ms"], int)
         publisher._publish_once(renew_after_generation=first["generation"])
         assert publisher.is_ready()
         clock.wall = first["expires_at_ms"] / 1_000
@@ -361,7 +381,9 @@ def test_renewal_retry_reuses_candidate_with_bounded_backoff(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"q" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     clock = _DeterministicClock()
     calls: list[bytes] = []
 
@@ -383,6 +405,8 @@ def test_renewal_retry_reuses_candidate_with_bounded_backoff(
         publisher._publish_once()
         first = publisher.current_snapshot()
         assert first is not None
+        assert isinstance(first["generation"], int)
+        assert isinstance(first["expires_at_ms"], int)
         publisher._publish_once(renew_after_generation=first["generation"])
         retry_at = publisher._retry_not_before_monotonic
         assert retry_at is not None
@@ -391,6 +415,8 @@ def test_renewal_retry_reuses_candidate_with_bounded_backoff(
         publisher._publish_once(renew_after_generation=first["generation"])
         renewed = publisher.current_snapshot()
         assert renewed is not None
+        assert isinstance(renewed["generation"], int)
+        assert isinstance(renewed["expires_at_ms"], int)
         assert renewed["generation"] > first["generation"]
         assert len(calls) == 3
         assert calls[2] == calls[1]

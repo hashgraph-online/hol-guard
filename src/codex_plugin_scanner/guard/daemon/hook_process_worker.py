@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from ..codex_hook_windows_job import windows_system_executable_path
+from ..native_policy_decision_context import NativePolicyDecisionContext
 
 _WORKER_RETIRE_JOIN_TIMEOUT_SECONDS = 2.0
 
@@ -53,6 +54,21 @@ class HookProcessReview:
     payload: dict[str, object] | None
     reason_code: str | None
     receipt: dict[str, object] | None = None
+    policy_context: NativePolicyDecisionContext | None = None
+
+    @classmethod
+    def from_result(cls, value: dict[str, object]) -> HookProcessReview:
+        from .hook_native_policy_context import policy_context_from_process_result
+        from .hook_process_protocol import as_string_object_dict
+
+        payload = as_string_object_dict(value.get("payload"))
+        if payload is None:
+            return cls(None, "daemon_hook_process_invalid_json")
+        try:
+            context = policy_context_from_process_result(value)
+        except ValueError:
+            return cls(None, "daemon_hook_process_invalid_json")
+        return cls(payload, None, as_string_object_dict(value.get("receipt")), context)
 
 
 def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> bool:

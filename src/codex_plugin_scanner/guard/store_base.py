@@ -70,6 +70,7 @@ from .sqlite_tuning import (
     SQLITE_WAL_BUSY_TIMEOUT_MS,
     sqlite_connect_timeout_seconds,
 )
+from .store_private_mode import set_private_mode
 from .store_approvals import (
     _json_object,
     _json_object_list,
@@ -1177,13 +1178,7 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 
 
 def _set_private_mode(path: Path, mode: int) -> None:
-    if os.name == "nt":
-        return
-    try:
-        os.chmod(path, mode)
-    except OSError as exc:
-        _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
-        return
+    set_private_mode(path, mode, logger=_store_logger)
 
 
 def _system_keyring_availability_cache_path(guard_home: Path) -> Path:

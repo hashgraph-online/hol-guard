@@ -21,7 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, TypeGuard, cast
+from typing import Any, Literal, TypedDict, TypeGuard, cast
 from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
@@ -35,6 +35,7 @@ from .config import GuardConfig, resolve_risk_action
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
+from .receipts.policy_execution_outcome import persist_completed_package_receipt
 from .redaction import redact_local_path, redact_text
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -52,9 +53,15 @@ from .runtime.approval_reuse import (
     APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    bind_saved_policy_identity,
     evaluate_approval_reuse,
 )
+from .runtime.command_execution_output import _build_command_execution_payload as _build_command_execution_payload
 from .runtime.lockfile_parse_result import LOCKFILE_PARSER_VERSION
+from .runtime.package_current_policy_projection import _package_decision_for_action
+from .runtime.package_current_policy_projection import (
+    _package_evaluation_with_current_policy_action as _package_evaluation_with_current_policy_action,
+)
 from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -2084,12 +2091,15 @@ def build_package_protect_payload(
         returncode=execution.returncode,
         unsafe_raw_output=unsafe_raw_output,
     )
+    persist_completed_package_receipt(
+        store=store,
+        receipt=final_projection.receipt,
+        metadata=final_projection.receipt_policy_metadata,
+        evaluation=final_evaluation,
+        final_action=final_execution_action,
+        returncode=execution.returncode,
+    )
     if execution.returncode == 0:
-        store.add_receipt(final_projection.receipt)
-        store.set_receipt_action_envelope(
-            final_projection.receipt.receipt_id,
-            final_projection.receipt_policy_metadata,
-        )
         store.add_event(
             f"install_time_{verdict_action}",
             _install_time_event_payload(
@@ -2284,6 +2294,9 @@ def _resolve_stored_package_policy_override(
         fresh_local_approval=fresh_local_approval,
         durable_exact_approval=durable_exact_approval,
     )
+    reuse = bind_saved_policy_identity(
+        reuse, decision if isinstance(decision, dict) else None, validation_reason=validation_reason
+    )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
     disposition_resolver = getattr(store, "approval_reuse_claim_disposition", None)
     if fresh_local_approval:
@@ -2452,69 +2465,6 @@ def _is_legacy_package_local_approval(decision: dict[str, object], *, store: Any
     )
 
 
-def _package_evaluation_with_current_policy_action(
-    evaluation: Any,
-    *,
-    current_action: GuardAction,
-) -> Any:
-    """Apply current package policy before consulting remembered user state."""
-
-    if current_action == evaluation.policy_action:
-        return evaluation
-    decision = _package_decision_for_action(current_action)
-    rewritten_packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    action_label = {
-        "block": "blocks",
-        "sandbox-required": "requires sandbox enforcement for",
-        "require-reapproval": "requires fresh approval for",
-        "review": "requires review for",
-        "warn": "warns about",
-        "allow": "allows",
-    }[current_action]
-    package_label = "this package request"
-    package_label_entries = getattr(evaluation, "packages", ())
-    if (
-        isinstance(package_label_entries, tuple)
-        and package_label_entries
-        and isinstance(package_label_entries[0], dict)
-    ):
-        primary_package = package_label_entries[0]
-        package_name = primary_package.get("name")
-        package_version = primary_package.get("requestedVersion") or primary_package.get("resolvedVersion")
-        if isinstance(package_name, str) and package_name:
-            package_ref = (
-                f"{package_name}@{package_version}"
-                if isinstance(package_version, str) and package_version
-                else package_name
-            )
-            package_label = f"`{package_ref}`"
-    summary = f"HOL Guard's current package policy {action_label} {package_label}."
-    reason = {
-        "code": "current_package_policy",
-        "message": summary,
-        "severity": "high" if current_action in {"block", "sandbox-required"} else "medium",
-        "source": "guard-local",
-        "policy_action": current_action,
-    }
-    needs_review = current_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=current_action,
-        reasons=(reason, *tuple(item for item in evaluation.reasons if item.get("code") != reason["code"])),
-        packages=rewritten_packages,
-        risk_summary=summary,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title="Current package policy",
-            summary=summary,
-            next_step="Review the current package request in HOL Guard, then retry." if needs_review else None,
-            dashboard_url=None,
-            harness_message=summary,
-        ),
-        record_monitor_evidence=False,
-    )
-
-
 def _package_evaluation_with_rejected_reuse(
     evaluation: Any,
     reuse: ApprovalReuseDecision,
@@ -2530,7 +2480,7 @@ def _package_evaluation_with_rejected_reuse(
     }
     reasons = (reason, *tuple(item for item in evaluation.reasons if item.get("code") != reuse.reason_code))
     if reuse.action == evaluation.policy_action:
-        return replace(evaluation, reasons=reasons)
+        return replace(evaluation, reasons=reasons, policy_rule_identity=reuse.policy_rule_identity)
     decision = _package_decision_for_action(reuse.action)
     packages = tuple({**package, "decision": decision} for package in evaluation.packages)
     summary = _approval_reuse_reason_message(reuse)
@@ -2538,6 +2488,7 @@ def _package_evaluation_with_rejected_reuse(
         evaluation,
         decision=decision,
         policy_action=reuse.action,
+        policy_rule_identity=reuse.policy_rule_identity,
         reasons=reasons,
         packages=packages,
         risk_summary=summary,
@@ -2586,16 +2537,6 @@ def _approval_reuse_reason_message(reuse: ApprovalReuseDecision) -> str:
         reuse.reason_code,
         f"Saved package policy was not reused ({reuse.reason_code}).",
     )
-
-
-def _package_decision_for_action(action: GuardAction) -> str:
-    if action == "block":
-        return "block"
-    if action in {"review", "require-reapproval", "sandbox-required"}:
-        return "ask"
-    if action == "warn":
-        return "warn"
-    return "allow"
 
 
 def _package_policy_workspace_candidates(
@@ -3094,6 +3035,11 @@ def _package_policy_override_evaluation(
         decision=decision,
         policy_action=policy_action,
         reasons=(reason, *tuple(item for item in evaluation.reasons if item != reason)),
+        policy_rule_identity=(
+            approval_reuse.policy_rule_identity
+            if approval_reuse is not None and approval_reuse.action == policy_action
+            else None
+        ),
         packages=packages,
         risk_summary=harness_message,
         user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
@@ -3109,25 +3055,6 @@ def _package_policy_override_evaluation(
 
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(_redact_command_token(str(token)) for token in command)
-
-
-def _build_command_execution_payload(
-    *,
-    stdout: str,
-    stderr: str,
-    returncode: int,
-    unsafe_raw_output: bool,
-) -> dict[str, object]:
-    redacted_stdout = redact_text(stdout)
-    redacted_stderr = redact_text(stderr)
-    return {
-        "returncode": returncode,
-        "stdout": stdout if unsafe_raw_output else redacted_stdout.text,
-        "stderr": stderr if unsafe_raw_output else redacted_stderr.text,
-        "stdout_redactions": redacted_stdout.to_dict(),
-        "stderr_redactions": redacted_stderr.to_dict(),
-        "raw_output_enabled": unsafe_raw_output,
-    }
 
 
 def _coerce_command_output(value: str | bytes | None) -> str:
@@ -3876,12 +3803,17 @@ def _build_cloud_audit_payload(
     return payload
 
 
+class _AuditRequestValidation(TypedDict, total=False):
+    validate_request: Callable[[], None]
+
+
 def _execute_cloud_workspace_audit_request(
     *,
     auth_context: dict[str, object],
     request_url: str,
     method: str,
     payload: dict[str, object] | None = None,
+    validate_request: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     runner = _runtime_runner_module()
     request = build_cloud_workspace_audit_request(
@@ -3891,6 +3823,8 @@ def _execute_cloud_workspace_audit_request(
         payload=payload,
         build_headers=runner._guard_sync_headers,
     )
+    if validate_request is not None:
+        validate_request()
     try:
         with managed_urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
             response_payload = json.load(response)
@@ -3908,6 +3842,9 @@ def _execute_cloud_workspace_audit_request(
         raise RuntimeError(runner._sync_url_error_message(error)) from error
     except (ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("Guard cloud workspace audit returned an invalid response.") from error
+    finally:
+        if validate_request is not None:
+            validate_request()
     if not isinstance(response_payload, dict):
         raise RuntimeError("Guard cloud workspace audit returned an invalid response.")
     return response_payload
@@ -3941,7 +3878,9 @@ def _enqueue_cloud_workspace_audit_job(
     auth_context: dict[str, object],
     request_payload: dict[str, object],
     workspace_id: str,
+    validate_request: Callable[[], None] | None = None,
 ) -> dict[str, object]:
+    validation: _AuditRequestValidation = {"validate_request": validate_request} if validate_request is not None else {}
     sync_url = str(auth_context["sync_url"])
     request_url = _normalized_supply_chain_batch_url(sync_url, workspace_id)
     response_payload = _execute_cloud_workspace_audit_request(
@@ -3949,6 +3888,7 @@ def _enqueue_cloud_workspace_audit_job(
         request_url=request_url,
         method="POST",
         payload=request_payload,
+        **validation,
     )
     job_id = response_payload.get("jobId")
     if not isinstance(job_id, str) or not job_id.strip():
@@ -3961,7 +3901,9 @@ def _poll_cloud_workspace_audit_job(
     auth_context: dict[str, object],
     job_id: str,
     workspace_id: str,
+    validate_request: Callable[[], None] | None = None,
 ) -> dict[str, object]:
+    validation: _AuditRequestValidation = {"validate_request": validate_request} if validate_request is not None else {}
     sync_url = str(auth_context["sync_url"])
     request_url = _normalized_supply_chain_batch_job_url(
         sync_url,
@@ -3980,6 +3922,7 @@ def _poll_cloud_workspace_audit_job(
             auth_context=auth_context,
             request_url=request_url,
             method="GET",
+            **validation,
         )
         status = str(response_payload.get("status") or "").strip().lower()
         last_response = response_payload
@@ -4147,7 +4090,15 @@ def sync_managed_workspace_audits(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     runner = _runtime_runner_module()
-    resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
+    resolved_auth_context, auth_connection = runner._resolve_optional_upload_auth_context(store, auth_context)
+
+    def validate_connection() -> None:
+        if auth_connection is not None:
+            runner._require_guard_oauth_connection(store, auth_connection)
+
+    validation: _AuditRequestValidation = (
+        {"validate_request": validate_connection} if auth_connection is not None else {}
+    )
     workspace_id = store.get_cloud_workspace_id()
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise runner.GuardSyncNotConfiguredError(
@@ -4162,6 +4113,7 @@ def sync_managed_workspace_audits(
     queued_jobs = 0
     skipped_workspaces = 0
     for candidate in _managed_workspace_audit_candidates(store, workspace_dir=workspace_dir):
+        validate_connection()
         workspace_label = candidate.name or str(candidate)
         try:
             manifest_paths, lockfile_paths, _sbom_paths, inventory = _workspace_audit_inventory(
@@ -4193,12 +4145,14 @@ def sync_managed_workspace_audits(
                 auth_context=resolved_auth_context,
                 request_payload=request_payload,
                 workspace_id=workspace_id,
+                **validation,
             )
             job_id = str(enqueue_response.get("jobId") or "").strip()
             final_response = _poll_cloud_workspace_audit_job(
                 auth_context=resolved_auth_context,
                 job_id=job_id,
                 workspace_id=workspace_id,
+                **validation,
             )
             final_status = (
                 str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
@@ -4246,6 +4200,7 @@ def sync_managed_workspace_audits(
         ):
             raise
         except (OSError, RuntimeError, ValueError) as error:
+            validate_connection()
             failed_jobs += 1
             workspaces_payload.append(
                 {
@@ -4274,8 +4229,11 @@ def sync_managed_workspace_audits(
         "skipped_workspaces": skipped_workspaces,
         "workspaces": workspaces_payload,
     }
-    store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
-    return summary
+    with store.hold_oauth_credential_lock():
+        if auth_connection is not None:
+            store._require_oauth_connection_unlocked(auth_connection)
+        store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
+        return summary
 
 
 def sync_supply_chain_cloud_state(

@@ -447,13 +447,14 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
     from codex_plugin_scanner.guard.aibom_content_upload import empty_content_upload_summary
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner
+    from tests.guard_aibom_authority_support import seed_aibom_credentials
 
     generated = "2026-09-11T00:00:00Z"
     local = GuardAgentInventorySnapshot("paseo:local", "paseo:agent", "paseo", generated)
     native = GuardAgentInventorySnapshot("pi:native", "pi:agent", "pi", generated)
     snapshots = (local, native) if include_native else (local,)
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     sent: list[dict[str, object]] = []
     uploads: list[tuple[object, ...]] = []
 
@@ -466,6 +467,7 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
 
     def request(_auth, *, data, **_kwargs):
         """Capture the outgoing cloud event body without making a network request."""
+        assert _auth["access_token"] == "synthetic-aibom-access"
         sent.append(json.loads(data))
         return object()
 

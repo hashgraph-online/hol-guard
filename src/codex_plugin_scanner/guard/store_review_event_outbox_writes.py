@@ -242,9 +242,9 @@ def requeue_pending_request_events(
         if snapshot_repair_sequences is None:
             snapshot_query += " and acknowledged_at is null"
         else:
-            # A newer durable snapshot already repairs this event. Do not keep
+            # This or a newer snapshot already repairs the event. Do not keep
             # appending snapshots if an older server repeats the rejection.
-            snapshot_query += " and request_sequence > ?"
+            snapshot_query += " and request_sequence >= ?"
             snapshot_parameters.append(snapshot_repair_sequences[request_id])
         existing_snapshot = connection.execute(
             snapshot_query + " order by request_sequence desc limit 1", snapshot_parameters

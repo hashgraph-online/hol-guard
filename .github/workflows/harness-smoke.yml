@@ -105,6 +105,7 @@ jobs:
           $gemini = Get-Command gemini -ErrorAction SilentlyContinue
           if ($null -ne $gemini) {
             gemini --help | Out-Null
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             exit 0
           }
           $opencode = Get-Command opencode -ErrorAction SilentlyContinue
@@ -112,3 +113,4 @@ jobs:
             throw "Expected gemini or opencode on the Windows Guard runner."
           }
           opencode --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

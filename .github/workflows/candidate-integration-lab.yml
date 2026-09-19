@@ -1,0 +1,12 @@
+name: Candidate integration lab
+
+on:
+  push:
+    branches: [hgp/batch-11b-release-gating]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    uses: ./.github/workflows/mdm-cloud-integration-lab.yml

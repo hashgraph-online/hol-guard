@@ -224,6 +224,8 @@ def _cached_guarded_classes(
         return _guarded_classes(content_window)
     encoded_window = content_window.encode()
     cache_key = (len(encoded_window), hashlib.sha256(encoded_window).digest())
+    # Release temporary bytes before classification allocates normalized text.
+    del encoded_window
     cached = cache.get(cache_key)
     if cached is not None:
         return cached

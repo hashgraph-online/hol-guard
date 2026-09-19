@@ -63,6 +63,78 @@ def test_scheduler_dynamic_capacity_wakes_waiter() -> None:
     assert scheduler.stats()["active_limit"] == 1
 
 
+def test_unchanged_capacity_does_not_wake_blocked_reviewers(monkeypatch: pytest.MonkeyPatch) -> None:
+    queued = threading.Event()
+    scheduler = RuntimeHookScheduler(active_limit=1, queue_listener=queued.set)
+    first = scheduler.acquire(
+        harness="pi", client_key="first", lane="decision", payload_bytes=1, deadline=time.monotonic() + 2
+    )
+    assert first.permit is not None
+    notifications = 0
+    condition = scheduler._condition
+    original_notify = condition.notify_all
+
+    def notify() -> None:
+        nonlocal notifications
+        notifications += 1
+        original_notify()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        waiting = executor.submit(
+            scheduler.acquire,
+            harness="pi",
+            client_key="second",
+            lane="decision",
+            payload_bytes=1,
+            deadline=time.monotonic() + 2,
+        )
+        try:
+            assert queued.wait(1)
+            with condition:
+                monkeypatch.setattr(condition, "notify_all", notify)
+                scheduler.set_active_limit(1)
+                # A no-op dispatch must not restart the wait/dispatch/notify
+                # cycle while all usable capacity remains occupied.
+                assert notifications == 0
+                assert not waiting.done()
+        finally:
+            first.permit.release()
+        second = waiting.result(timeout=1)
+
+    assert second.permit is not None
+    second.permit.release()
+    assert notifications > 0
+    assert scheduler.stats()["completed"] == 2
+
+
+def test_permit_release_wakes_byte_reservation_without_queued_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    scheduler = RuntimeHookScheduler(active_limit=1, retained_bytes_limit=1)
+    first = scheduler.acquire(
+        harness="pi", client_key="first", lane="decision", payload_bytes=1, deadline=time.monotonic() + 2
+    )
+    assert first.permit is not None
+    blocked = threading.Event()
+    original_wait = scheduler._condition.wait
+
+    def wait(timeout: float | None = None) -> bool:
+        blocked.set()
+        return original_wait(timeout)
+
+    monkeypatch.setattr(scheduler._condition, "wait", wait)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        waiting = executor.submit(scheduler.reserve_bytes, payload_bytes=1, deadline=time.monotonic() + 2)
+        try:
+            assert blocked.wait(1)
+            assert not waiting.done()
+        finally:
+            first.permit.release()
+        reservation, reason = waiting.result(timeout=0.5)
+    assert reservation is not None
+    assert reason is None
+    reservation.release()
+    assert scheduler.stats()["retained_bytes"] == 0
+
+
 @pytest.mark.skipif(
     UNDER_COVERAGE_TRACING,
     reason="Concurrent scheduler throughput shifts under coverage tracing; run untraced",

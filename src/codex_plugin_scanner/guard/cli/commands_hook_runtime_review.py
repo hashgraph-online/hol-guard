@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..policy_memory_source import CapturedPolicyMemorySource, capture_policy_memory_source_input
 from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
 
 bootstrap_compatibility_module(globals())
@@ -58,6 +59,7 @@ from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
 from ..models import GuardAction
+from ..runtime.sensitive_read_controls import sensitive_read_control_is_terminal
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
     RuntimeArtifactHookState,
@@ -174,6 +176,7 @@ def _review_runtime_artifact_hook(
     payload: Mapping[str, object],
     store: GuardStore,
     workspace: Path | None,
+    _policy_memory_source: CapturedPolicyMemorySource | None = None,
 ) -> int | None:
     payload_map = dict(payload)
     action_envelope = state.action_envelope
@@ -200,7 +203,7 @@ def _review_runtime_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
-    observe_mode = config.mode == "observe"
+    observe_mode = config.mode == "observe" and not sensitive_read_control_is_terminal(runtime_artifact.metadata)
     terminal_action = policy_action in {
         "block",
         "sandbox-required",
@@ -330,6 +333,14 @@ def _review_runtime_artifact_hook(
                 "artifacts": [
                     {
                         "artifact_id": artifact_id,
+                        "_policyMemorySourceInput": capture_policy_memory_source_input(
+                            store,
+                            payload=payload,
+                            artifact_id=artifact_id,
+                            harness=args.harness,
+                            redaction_level=config.receipt_redaction_level,
+                            captured=_policy_memory_source,
+                        ),
                         "artifact_name": artifact_name,
                         "artifact_hash": runtime_artifact_hash,
                         "policy_action": policy_action,

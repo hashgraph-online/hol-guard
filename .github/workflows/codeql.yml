@@ -46,6 +46,12 @@ jobs:
       - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/guard-codeql-results
+      - name: Report bounded public source locations
+        if: ${{ always() }}
+        env:
+          CODEQL_RESULT_DIRECTORY: ${{ runner.temp }}/guard-codeql-results
+        run: python3 scripts/ci/codeql_result_locations.py "$CODEQL_RESULT_DIRECTORY"
 
   codeql:
     name: CodeQL

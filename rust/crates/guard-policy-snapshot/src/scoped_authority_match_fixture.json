@@ -1,0 +1,1436 @@
+{
+  "schema": "guard-native-policy-matcher-fixtures.v1",
+  "proof": "generic-unit-matching-only",
+  "cases": [
+    {
+      "name": "artifact-synthetic-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "workspace-hash-synthetic-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "workspace",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "signed-workspace-hash-synthetic-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "workspace",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "artifact-different-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "different-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "workspace-hash-different-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "different-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "signed-workspace-hash-different-hash",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "different-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "artifact-missing",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": null,
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "workspace-hash-missing",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": null,
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "signed-workspace-hash-missing",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": "synthetic-hash",
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": null,
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "workspace-family",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": null,
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "workspace",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "workspace-family-miss",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:prompt",
+            "artifact_hash": null,
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "workspace-other",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": null,
+            "workspace": "workspace:e5b4c681380b9d91e74d6306fdf0cadd63ce2b3f6ce7c52e52582e8aeb02e634",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "workspace-windows-normalization",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": null,
+            "workspace": "workspace:ce52f816adc54a87b5aeebff3a30f0536b179e65f11dcc97dbaccec4a84d211e",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "c:/synthetic/project",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "workspace",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "publisher",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "publisher",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "synthetic-publisher",
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "publisher",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "publisher-miss",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "publisher",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "different-publisher",
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "harness-miss",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "cursor",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "harness-wildcard",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "*",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "local-family-without-exact-context",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": true,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "local-family-legacy-exact",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": true,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "harness",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "local-family-context-token",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIwY2Y0YTZhYWYzZGVhOGNlOGY5YmVkZDkyZTM1MzNiYWU3MmNkYzU1M2M0OTJhMWZjNzE1YTMzZjUyZjExZWY3IiwiY29udGVudCI6IjU5Y2RmMGFmNzE0ZDI1YjBmODA0MDU0Mjg4ZDIxY2U4MTgxYWU3OTQ2NDM3YjM2ODgxMmJkMGVlNDQyNmYxNjMiLCJpZGVudGl0eSI6Ijk1YjM2MGUwMDVmMDNjMDU1ZjI0YjEzNDVkOTMwMGRhY2QzMGI4NTg2ODE4M2Q4M2ZmZWQzY2MwMWNiYTQ4MTciLCJwb2xpY3kiOiJlOWMzMDU4MTFmM2EzOWI4OWI5MWFhNTc2OGRjYmNlNmNlMTE5ZTkxMWFiOGM0YWRmMmY5ZmQyYzMwYzUyYWU5Iiwic2FuZGJveCI6IjA2NzAyMjBjYjg5ODExNTBkZmFjYzhhMDU2NWNhYzI0ZDFiZmVjODQzYTQ3OTJjNWZiYzhkZTkxNTNjZWQzMjYiLCJ2ZXJzaW9uIjoxfQ",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": true,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIwY2Y0YTZhYWYzZGVhOGNlOGY5YmVkZDkyZTM1MzNiYWU3MmNkYzU1M2M0OTJhMWZjNzE1YTMzZjUyZjExZWY3IiwiY29udGVudCI6IjU5Y2RmMGFmNzE0ZDI1YjBmODA0MDU0Mjg4ZDIxY2U4MTgxYWU3OTQ2NDM3YjM2ODgxMmJkMGVlNDQyNmYxNjMiLCJpZGVudGl0eSI6Ijk1YjM2MGUwMDVmMDNjMDU1ZjI0YjEzNDVkOTMwMGRhY2QzMGI4NTg2ODE4M2Q4M2ZmZWQzY2MwMWNiYTQ4MTciLCJwb2xpY3kiOiJlOWMzMDU4MTFmM2EzOWI4OWI5MWFhNTc2OGRjYmNlNmNlMTE5ZTkxMWFiOGM0YWRmMmY5ZmQyYzMwYzUyYWU5Iiwic2FuZGJveCI6IjA2NzAyMjBjYjg5ODExNTBkZmFjYzhhMDU2NWNhYzI0ZDFiZmVjODQzYTQ3OTJjNWZiYzhkZTkxNTNjZWQzMjYiLCJ2ZXJzaW9uIjoxfQ",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIwY2Y0YTZhYWYzZGVhOGNlOGY5YmVkZDkyZTM1MzNiYWU3MmNkYzU1M2M0OTJhMWZjNzE1YTMzZjUyZjExZWY3IiwiY29udGVudCI6IjU5Y2RmMGFmNzE0ZDI1YjBmODA0MDU0Mjg4ZDIxY2U4MTgxYWU3OTQ2NDM3YjM2ODgxMmJkMGVlNDQyNmYxNjMiLCJpZGVudGl0eSI6Ijk1YjM2MGUwMDVmMDNjMDU1ZjI0YjEzNDVkOTMwMGRhY2QzMGI4NTg2ODE4M2Q4M2ZmZWQzY2MwMWNiYTQ4MTciLCJwb2xpY3kiOiJlOWMzMDU4MTFmM2EzOWI4OWI5MWFhNTc2OGRjYmNlNmNlMTE5ZTkxMWFiOGM0YWRmMmY5ZmQyYzMwYzUyYWU5Iiwic2FuZGJveCI6IjA2NzAyMjBjYjg5ODExNTBkZmFjYzhhMDU2NWNhYzI0ZDFiZmVjODQzYTQ3OTJjNWZiYzhkZTkxNTNjZWQzMjYiLCJ2ZXJzaW9uIjoxfQ"
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "harness",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "local-family-context-miss",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIwY2Y0YTZhYWYzZGVhOGNlOGY5YmVkZDkyZTM1MzNiYWU3MmNkYzU1M2M0OTJhMWZjNzE1YTMzZjUyZjExZWY3IiwiY29udGVudCI6IjU5Y2RmMGFmNzE0ZDI1YjBmODA0MDU0Mjg4ZDIxY2U4MTgxYWU3OTQ2NDM3YjM2ODgxMmJkMGVlNDQyNmYxNjMiLCJpZGVudGl0eSI6Ijk1YjM2MGUwMDVmMDNjMDU1ZjI0YjEzNDVkOTMwMGRhY2QzMGI4NTg2ODE4M2Q4M2ZmZWQzY2MwMWNiYTQ4MTciLCJwb2xpY3kiOiJlOWMzMDU4MTFmM2EzOWI4OWI5MWFhNTc2OGRjYmNlNmNlMTE5ZTkxMWFiOGM0YWRmMmY5ZmQyYzMwYzUyYWU5Iiwic2FuZGJveCI6IjA2NzAyMjBjYjg5ODExNTBkZmFjYzhhMDU2NWNhYzI0ZDFiZmVjODQzYTQ3OTJjNWZiYzhkZTkxNTNjZWQzMjYiLCJ2ZXJzaW9uIjoxfQ",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": true,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": null
+    },
+    {
+      "name": "global-portable-exact",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "global",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "family:tool-action",
+            "artifact_hash": "runtime-exact:9110343253bad1aa1274719dcfddfe59576f16bacd1df5e688b38f897a311db5",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": true,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:7b066bc73e4232dd7daec00619c617fa55b6e1370f442c45e136144c0121e165",
+          "portable": "runtime-exact:edc7bdac91dbd9979a269357c30d2c89734b203a3d6836b79b95f7ea8036cdd8",
+          "global": "runtime-exact:9110343253bad1aa1274719dcfddfe59576f16bacd1df5e688b38f897a311db5",
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "global",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "global-broad",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "global",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "global",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "expired-at-boundary",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:tool-action:synthetic-action",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": 1789603210000,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:tool-action:synthetic-action",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "runtime": "runtime-exact:edca94a5864837d1ff93dcfcc97c6be0e2f232119eeb208b3e8daac2319927a5",
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603210000,
+      "expected": null
+    },
+    {
+      "name": "scope-artifact-over-workspace",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603201000000,
+            "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "block",
+            "source_kind": "local",
+            "updated_at_us": 1789603202000000,
+            "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+            "artifact_hash": null,
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "scope-workspace-over-publisher",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "workspace",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603201000000,
+            "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+            "artifact_hash": null,
+            "workspace": "workspace:963e56ac345cfb66855dff092eed9d995d1d39db9c7b8318dd14547bc09efe4f",
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "publisher",
+            "action": "block",
+            "source_kind": "local",
+            "updated_at_us": 1789603202000000,
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "synthetic-publisher",
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "workspace",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "scope-publisher-over-harness",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "publisher",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603201000000,
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "synthetic-publisher",
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "block",
+            "source_kind": "local",
+            "updated_at_us": 1789603202000000,
+            "artifact_id": "family:prompt-env-read",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "publisher",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "scope-harness-over-global",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603201000000,
+            "artifact_id": "family:prompt-env-read",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "global",
+            "action": "block",
+            "source_kind": "local",
+            "updated_at_us": 1789603202000000,
+            "artifact_id": "family:prompt-env-read",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:prompt-env-read:synthetic-priority",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "harness",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "signed-recency-older",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "block",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603199000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:synthetic-policy-fixture",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "block"
+      }
+    },
+    {
+      "name": "signed-recency-newer",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "block",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603201000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:synthetic-policy-fixture",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "allow"
+      }
+    },
+    {
+      "name": "signed-recency-tied",
+      "authority": {
+        "schema": "guard-native-policy-authority.v1",
+        "generic_precedence": "specificity-recency.v1",
+        "rows": [
+          {
+            "decision_id": 1,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "block",
+            "source_kind": "signed-bundle",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          },
+          {
+            "decision_id": 2,
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "source_kind": "local",
+            "updated_at_us": 1789603200000000,
+            "artifact_id": "codex:project:synthetic-policy-fixture",
+            "artifact_hash": "synthetic-hash",
+            "workspace": null,
+            "publisher": null,
+            "expires_at_ms": null,
+            "requires_exact_context": false,
+            "exact_command_sha256": null
+          }
+        ],
+        "managed": null
+      },
+      "request": {
+        "harness": "codex",
+        "artifact_id": "codex:project:synthetic-policy-fixture",
+        "artifact_hash": "synthetic-hash",
+        "workspace": "synthetic-workspace",
+        "publisher": "synthetic-publisher",
+        "exact": {
+          "artifact_legacy": null,
+          "runtime": null,
+          "portable": null,
+          "global": null,
+          "approval": null
+        }
+      },
+      "now_ms": 1789603203000,
+      "expected": {
+        "scope": "artifact",
+        "action": "block"
+      }
+    }
+  ]
+}

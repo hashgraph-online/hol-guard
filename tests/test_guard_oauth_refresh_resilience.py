@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.parse
+from email.message import Message
+from typing import IO, Any, cast
 
 import pytest
 
@@ -81,8 +83,8 @@ def _invalid_grant_http_error() -> urllib.error.HTTPError:
         "https://hol.org/api/guard/oauth/token",
         400,
         "Bad Request",
-        hdrs=None,
-        fp=_ErrorResponse(),
+        hdrs=cast(Message, cast(object, None)),
+        fp=cast(IO[bytes], cast(object, _ErrorResponse())),
     )
 
 
@@ -193,7 +195,7 @@ def test_invalid_grant_retry_uses_reloaded_credentials(tmp_path, monkeypatch) ->
         refresh_token="refresh-token-1",
         dpop_key_material=guard_runner_module._oauth_dpop_key_material(initial),
         credential_reloader=lambda: (
-            initial["refresh_token"],
+            cast(str, initial["refresh_token"]),
             guard_runner_module._oauth_dpop_key_material(initial),
         ),
     )
@@ -220,32 +222,20 @@ def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path
         form = dict(urllib.parse.parse_qsl(_request.data.decode("utf-8")))
         seen_tokens.append(form["refresh_token"])
         if len(seen_tokens) == 1:
+            store.set_oauth_local_credentials(**rotated, now="2026-06-01T00:01:00+00:00")
             raise _invalid_grant_http_error()
         return _SuccessResponse("access-token-3")
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     _allow_refresh(monkeypatch)
 
-    rotated = dict(initial)
+    rotated: dict[str, Any] = dict(initial)
     rotated["refresh_token"] = "refresh-token-2"
     rotated_dpop_pair = generate_dpop_key_pair()
     rotated["dpop_private_key_pem"] = rotated_dpop_pair.private_key_pem
     rotated["dpop_public_jwk"] = rotated_dpop_pair.public_jwk
     rotated["dpop_public_jwk_thumbprint"] = rotated_dpop_pair.public_jwk_thumbprint
     rotated_dpop = guard_runner_module._oauth_dpop_key_material(rotated)
-    original_get = GuardStore.get_oauth_local_credentials
-    call_count = {"n": 0}
-
-    def _patched_get(self, *args, **kwargs):
-        # The reloader's reads mimic a peer having rotated credentials in the
-        # store between the first (failed) and second (successful) attempts.
-        if self is store:
-            call_count["n"] += 1
-            return rotated
-        return original_get(self, *args, **kwargs)
-
-    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", _patched_get)
-
     context = guard_runner_module._resolve_guard_sync_auth_context_from_oauth_credentials(
         store,
         initial,
@@ -260,8 +250,7 @@ def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path
     assert actual != initial_dpop
 
     # Persistence must record the rotated credentials, not the stale initial.
-    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", original_get)
-    persisted = original_get(store, allow_primary=True)
+    persisted = store.get_oauth_local_credentials(allow_primary=True)
     assert persisted is not None
     # `_persist_rotated_oauth_refresh_token` stamps the new refresh_token from
     # the refresh response over whichever credentials dict it received — so
@@ -271,7 +260,6 @@ def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path
     assert seen_tokens == ["refresh-token-1", "refresh-token-2"]
 
 
-
 def test_profile_fallback_uses_effective_credentials_after_peer_reload(tmp_path, monkeypatch) -> None:
     """Peer-rotated credentials carrying a newer cloud_user_profile must not be
     overwritten by the resolver's stale local snapshot when the refresh
@@ -279,9 +267,12 @@ def test_profile_fallback_uses_effective_credentials_after_peer_reload(tmp_path,
     store = _store_with_oauth_credentials(tmp_path)
     initial = store.get_oauth_local_credentials(allow_primary=True)
     assert initial is not None
-    initial["cloud_user_profile"] = {"name": "stale"}
+    initial_inputs: dict[str, Any] = {**initial, "cloud_user_profile": {"name": "stale"}}
+    store.set_oauth_local_credentials(**initial_inputs, now="2026-06-01T00:00:00+00:00")
+    initial = store.get_oauth_local_credentials(allow_primary=True)
+    assert initial is not None
 
-    rotated = dict(initial)
+    rotated: dict[str, Any] = dict(initial)
     rotated["refresh_token"] = "refresh-token-2"
     rotated["cloud_user_profile"] = {"name": "fresh-peer"}
 
@@ -307,20 +298,12 @@ def test_profile_fallback_uses_effective_credentials_after_peer_reload(tmp_path,
         form = dict(urllib.parse.parse_qsl(_request.data.decode("utf-8")))
         seen_tokens.append(form["refresh_token"])
         if len(seen_tokens) == 1:
+            store.set_oauth_local_credentials(**rotated, now="2026-06-01T00:01:00+00:00")
             raise _invalid_grant_http_error()
         return _ProfileLessResponse()
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     _allow_refresh(monkeypatch)
-
-    original_get = GuardStore.get_oauth_local_credentials
-
-    def _patched_get(self, *args, **kwargs):
-        if self is store:
-            return rotated
-        return original_get(self, *args, **kwargs)
-
-    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", _patched_get)
 
     context = guard_runner_module._resolve_guard_sync_auth_context_from_oauth_credentials(
         store,
@@ -331,8 +314,7 @@ def test_profile_fallback_uses_effective_credentials_after_peer_reload(tmp_path,
 
     assert context["access_token"] == "access-token-9"
 
-    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", original_get)
-    persisted = original_get(store, allow_primary=True)
+    persisted = store.get_oauth_local_credentials(allow_primary=True)
     assert persisted is not None
     assert persisted.get("cloud_user_profile") == {"name": "fresh-peer"}
     assert seen_tokens == ["refresh-token-1", "refresh-token-2"]

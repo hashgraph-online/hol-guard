@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -24,7 +25,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .managed_controls_activation_support import activate_managed_bundle, managed_bundle
+from .native_command_control_signed_support import activate_signed_command_controls
 from .native_policy_snapshot_test_fixtures import _ack, _status
 from .test_guard_extension_control_authority import MemorySecretStore, _commit, _proof, _store
 
@@ -38,7 +39,9 @@ def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client=None) -> NativePolicySnapshotPublisher:
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (b"k" * 32, "test"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (b"k" * 32, "test")
+    )
     return NativePolicySnapshotPublisher(
         store=store,
         status_provider=_status,
@@ -47,12 +50,12 @@ def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client=None) 
     )
 
 
-def _publish_ready(publisher: NativePolicySnapshotPublisher) -> dict:
+def _publish_ready(publisher: NativePolicySnapshotPublisher) -> dict[str, Any]:
     publisher._publish_once()
     assert publisher.is_ready(), publisher.last_error
     snapshot = publisher.current_snapshot()
     assert snapshot is not None
-    return snapshot
+    return cast(dict[str, Any], snapshot)
 
 
 @pytest.mark.parametrize("feature", ["native-command-program-v1", "native-command-control-fence-v1"])
@@ -152,7 +155,8 @@ def test_local_control_commit_invalidates_before_anchor_and_reopens_only_after_c
         assert errors == []
         second = publisher.current_snapshot()
         assert second is not None
-        assert second["command_extensions"]["revision"] == 1
+        second_binding = second["command_extensions"]
+        assert isinstance(second_binding, dict) and second_binding["revision"] == 1
         assert second["generation"] > first["generation"]
         assert pushed_revisions == [0, 1]
     finally:
@@ -245,7 +249,7 @@ def test_managed_activation_and_clear_preserve_local_opt_in_and_independent_revi
             commit()
             assert authority.managed_revision == 1
 
-        assert activate_managed_bundle(store, managed_bundle(), managed_controls_publish=publish_after_commit)
+        assert activate_signed_command_controls(store, managed_controls_publish=publish_after_commit)
         assert not publisher.is_ready()
         assert publisher._compiled_command_extensions() != marker
         second = _publish_ready(publisher)
@@ -294,12 +298,9 @@ def test_rolled_back_managed_activation_can_only_republish_the_previous_committe
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path, MemorySecretStore())
-    assert activate_managed_bundle(store, managed_bundle())
+    assert activate_signed_command_controls(store)
     publisher = _publisher(store, monkeypatch)
     first = _publish_ready(publisher)
-    second_bundle = managed_bundle()
-    second_bundle["bundleVersion"] = 8
-    second_bundle["bundleHash"] = "sha256:" + "e" * 64
 
     def fail_before_commit(_connection, _rows):
         assert not publisher.is_ready()
@@ -308,7 +309,7 @@ def test_rolled_back_managed_activation_can_only_republish_the_previous_committe
     monkeypatch.setattr(store, "_replace_remote_policy_rows_locked", fail_before_commit)
     try:
         with pytest.raises(sqlite3.OperationalError, match="injected activation rollback"):
-            activate_managed_bundle(store, second_bundle)
+            activate_signed_command_controls(store, revision=10)
         assert not publisher.is_ready()
         republished = _publish_ready(publisher)
         assert republished["generation"] > first["generation"]

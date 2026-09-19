@@ -26,6 +26,7 @@ from .memory_decision_event import (
     build_memory_decision_event,
     event_to_cloud_payload,
 )
+from .policy_memory_source import policy_memory_receipt_envelope, source_receipt_matches_request
 from .receipts.manager import build_receipt
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,7 +146,10 @@ def _ensure_source_receipt_id(
     for key in ("source_receipt_id", "sourceReceiptId", "receipt_id", "receiptId"):
         value = request.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            getter = getattr(store, "get_receipt", None)
+            receipt = getter(value.strip()) if callable(getter) else None
+            if source_receipt_matches_request(store, request, receipt):
+                return value.strip()
 
     request_id = _request_string(request, "request_id")
     if request_id is None:
@@ -165,7 +169,7 @@ def _ensure_source_receipt_id(
         except Exception:
             receipt = None
         receipt_id = _receipt_id(receipt)
-        if receipt_id is not None:
+        if receipt_id is not None and source_receipt_matches_request(store, request, receipt):
             return receipt_id
 
     add_receipt = getattr(store, "add_receipt", None)
@@ -195,7 +199,11 @@ def _ensure_source_receipt_id(
         "guard-receipt-memory-" + hashlib.sha256(f"{request_id}:{policy_decision}".encode()).hexdigest()[:32]
     )
     receipt = replace(receipt, receipt_id=deterministic_receipt_id)
-    add_receipt(receipt)
+    source_envelope = policy_memory_receipt_envelope(store, request)
+    if source_envelope is None:
+        add_receipt(receipt)
+    else:
+        add_receipt(receipt, action_envelope=source_envelope)
     _LOGGER.info(
         "Created durable receipt for memory decision",
         extra={"decision_action": decision_action, "scope": scope},

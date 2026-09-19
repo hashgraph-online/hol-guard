@@ -93,7 +93,7 @@ def _normalize_response(
     sequences: list[int],
 ) -> dict[str, object]:
     version = response.get("protocolVersion")
-    if version != CLOUD_REVIEW_EVENT_PROTOCOL_VERSION:
+    if type(version) is not int or version != CLOUD_REVIEW_EVENT_PROTOCOL_VERSION:
         rendered = "missing" if version is None else str(version)
         raise CloudReviewEventProtocolError(
             f"Guard Cloud Review returned unsupported protocol version {rendered}. "
@@ -101,7 +101,12 @@ def _normalize_response(
         )
     results = response.get("results")
     acknowledged_through = response.get("acknowledgedThrough")
-    if not isinstance(results, list) or len(results) != len(events) or type(acknowledged_through) is not int:
+    if (
+        not isinstance(results, list)
+        or len(results) != len(events)
+        or type(acknowledged_through) is not int
+        or acknowledged_through < 0
+    ):
         raise CloudReviewEventProtocolError(
             "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
         )
@@ -132,7 +137,12 @@ def _normalize_response(
             }
         )
     accepted_count = sum(bool(item["accepted"]) for item in normalized)
-    if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
+    if (
+        type(response.get("accepted")) is not int
+        or type(response.get("rejected")) is not int
+        or response.get("accepted") != accepted_count
+        or response.get("rejected") != len(events) - accepted_count
+    ):
         raise CloudReviewEventProtocolError(
             "Guard Cloud Review acknowledgement counts are inconsistent. Retry after updating HOL Guard."
         )

@@ -221,7 +221,7 @@ def test_authority_workflow_is_always_selected() -> None:
     source = (ROOT / ".github" / "workflows" / "rust-authority-ownership.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
 
-    assert "pull_request:\n    branches: [main]" in trigger
+    MODULE._workflow_gate()
     assert "paths:" not in trigger
     assert "paths-ignore:" not in trigger
     assert "--base-ref" in source
@@ -237,3 +237,37 @@ def test_native_wheel_workflow_is_always_selected() -> None:
     assert "paths-ignore:" not in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source
     assert "probe_native_default_auto.py --json native-default-auto.json" in source
+
+
+@pytest.mark.parametrize(
+    "pull_request,accepted",
+    [
+        ("  pull_request:\n", True),
+        ("  pull_request:\n    branches: [main]\n", True),
+        ("  pull_request:\n    branches: [release]\n", False),
+        ("  pull_request:\n    branches-ignore: [main]\n", False),
+        ("  pull_request:\n    types: [closed]\n", False),
+        ("  pull_request:\n    paths: ['rust/**']\n", False),
+        ("  pull_request:\n    paths-ignore: ['src/**']\n", False),
+        ("  pull_request_target:\n", False),
+    ],
+)
+def test_authority_workflow_retains_unconditional_main_coverage(
+    monkeypatch: pytest.MonkeyPatch, pull_request: str, accepted: bool
+) -> None:
+    authority = ROOT / ".github/workflows/rust-authority-ownership.yml"
+    source = authority.read_text(encoding="utf-8")
+    _, body = source.split("permissions:", maxsplit=1)
+    candidate = "on:\n" + pull_request + "  workflow_dispatch:\n\npermissions:" + body
+
+    def read(path: Path) -> str:
+        if path.as_posix() == ".github/workflows/rust-authority-ownership.yml":
+            return candidate
+        return (ROOT / path).read_text(encoding="utf-8")
+
+    monkeypatch.setattr(MODULE, "_read", read)
+    if accepted:
+        MODULE._workflow_gate()
+    else:
+        with pytest.raises(RuntimeError, match="selected for every pull request to main"):
+            MODULE._workflow_gate()

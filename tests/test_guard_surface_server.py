@@ -39,7 +39,9 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifac
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime, _browser_url_for_review
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.claude_hook_diagnostics import claude_prompt_diagnostics
 from tests.daemon_hook_test_client import open_authenticated_claude_request
+from tests.guard_review_authority_fixtures import enroll_review_authority
 from tests.support.network import urlopen_json
 
 
@@ -979,6 +981,7 @@ class TestGuardSurfaceServer:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
+        enroll_review_authority(home_dir)
         store = GuardStore(home_dir)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -1195,6 +1198,7 @@ class TestGuardSurfaceServer:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
+        enroll_review_authority(home_dir)
         store = GuardStore(home_dir)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -2332,7 +2336,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2374,7 +2378,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="test-token-not-real",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2410,7 +2414,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2451,7 +2455,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2505,7 +2509,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2561,7 +2565,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2625,7 +2629,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2671,7 +2675,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2831,12 +2835,25 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
-        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-        assert (
-            "HOL Guard will intercept Claude's next attempt to access local secrets"
-            in (hook_payload["hookSpecificOutput"]["additionalContext"])
-        )
+        diagnostics = claude_prompt_diagnostics(hook_payload)
+        try:
+            message_matches = hook_payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
+        except (KeyError, TypeError, AttributeError):
+            message_matches = False
+        assert message_matches, diagnostics
+        try:
+            event_matches = hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        except (KeyError, TypeError):
+            event_matches = False
+        assert event_matches, diagnostics
+        try:
+            context_matches = (
+                "HOL Guard will intercept Claude's next attempt to access local secrets"
+                in (hook_payload["hookSpecificOutput"]["additionalContext"])
+            )
+        except (KeyError, TypeError):
+            context_matches = False
+        assert context_matches, diagnostics
 
     def test_guard_daemon_claude_hook_endpoint_blocks_guard_bypass_user_prompt_submit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"

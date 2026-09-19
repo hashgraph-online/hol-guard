@@ -1,0 +1,572 @@
+{
+  "schema": "native-typed-artifact-fixtures.v1",
+  "cases": [
+    {
+      "name": "case-00-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "codex:project:package-request:bcbbea48fdb4d73203da4b0d372de45c77b2b9638c4734c5a4f1a57b2b7acd19",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-01-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "codex:project:package-request:1eb1510ce2b1de1cb7d8abae22e06c91c16761fc2e0574d0830d2a508150e4ca",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-02-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "codex:project:tool-action:b620bf7cb258d1e77299158deeda3d71584c599ed7b58e25c459c4b459c3494e",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-03-codex-Shell",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "codex:project:package-request:bcbbea48fdb4d73203da4b0d372de45c77b2b9638c4734c5a4f1a57b2b7acd19",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-04-codex-Shell",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "codex:project:package-request:1eb1510ce2b1de1cb7d8abae22e06c91c16761fc2e0574d0830d2a508150e4ca",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-05-codex-Shell",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "codex:project:tool-action:3a0b8ef4f72dc38067e1eddc579a6f4bafce480f4b05d6747d0068629756af90",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-06-claude-code-Bash",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "claude-code:project:package-request:f657e55a0eab4699212d4cb987e066791c665021118152dbc23a2eee42aa8155",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-07-claude-code-Bash",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "claude-code:project:package-request:e0106dbc3c1bd94a23ea23b9db57c1ad2b01d82691a38c45630f4cc1d2ca5f22",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-08-claude-code-Bash",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "claude-code:project:tool-action:f1c53efbdc8f4b14e5613335b0a89cc6f99e4204da0ddd9c4740190ae9daeb37",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-09-claude-code-Shell",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "claude-code:project:package-request:f657e55a0eab4699212d4cb987e066791c665021118152dbc23a2eee42aa8155",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-10-claude-code-Shell",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "claude-code:project:package-request:e0106dbc3c1bd94a23ea23b9db57c1ad2b01d82691a38c45630f4cc1d2ca5f22",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-11-claude-code-Shell",
+      "harness": "claude-code",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "claude-code:project:tool-action:786b6784b393ffad9fb8b6d4d210f762f5bcb4e732ce981606f9046a624047a1",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-12-cline-Bash",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "cline:project:package-request:365b3414b5bd5362c9221da40746eeec04207cfc0c58760f688d50a42343d2f1",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-13-cline-Bash",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "cline:project:package-request:a16001a100c0569e2fc95b6eaead61eefba7a851885512c618e8416ca31a3bcc",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-14-cline-Bash",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "cline:project:tool-action:4b593054b86ca7c49d10683da96a5fc3bd2f64565e05e73fc459b06111f06b86",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-15-cline-Shell",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "cline:project:package-request:365b3414b5bd5362c9221da40746eeec04207cfc0c58760f688d50a42343d2f1",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-16-cline-Shell",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "cline:project:package-request:a16001a100c0569e2fc95b6eaead61eefba7a851885512c618e8416ca31a3bcc",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-17-cline-Shell",
+      "harness": "cline",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "cline:project:tool-action:71e03eb99f10f5c2bc01b0f0296eac5fd02bc662421a93d4f35403f8bbba829d",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-18-cursor-Bash",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "cursor:project:package-request:4ed2253464d8fa65ac564a864186bc7a9346fc411fb5c2e1b23a5b47cfa12d66",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-19-cursor-Bash",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "cursor:project:package-request:0df65bbae33fe20ad30acde9387d1ae3db161f798ebe9954f7dfd5673bef0e0d",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-20-cursor-Bash",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "cursor:project:tool-action:599d1da3131483382e4df18177844f5744ace8ec7c1bf9735595b15fe65a729a",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-21-cursor-Shell",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm install synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "cursor:project:package-request:4ed2253464d8fa65ac564a864186bc7a9346fc411fb5c2e1b23a5b47cfa12d66",
+      "artifactType": "package_request",
+      "sha256": "1ac8dbf91f26264145ee6f0e96fc82939a67cd81bbb9f17b93752a3af4bf32a6"
+    },
+    {
+      "name": "case-22-cursor-Shell",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "cursor:project:package-request:0df65bbae33fe20ad30acde9387d1ae3db161f798ebe9954f7dfd5673bef0e0d",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-23-cursor-Shell",
+      "harness": "cursor",
+      "workspaceFiles": [
+        "package.json",
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ssh synthetic-host id"
+        }
+      },
+      "artifactId": "cursor:project:tool-action:c71fca9080f88669c03ba481bda729bc8017e31f1daf13c6786127e1e414f64b",
+      "artifactType": "tool_action_request",
+      "sha256": "09a7b1e1119e59c33037d3621033adbdf7b3eb5abdcbd69e3c84277bc5f02784"
+    },
+    {
+      "name": "case-24-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install @synthetic/package@2.3.4"
+        }
+      },
+      "artifactId": "codex:project:package-request:3360807a622047e59502d9102f1b944bcc53fce55498b555d0265bf27abd7a1f",
+      "artifactType": "package_request",
+      "sha256": "bc761d5e9950fa4cf5fda2c4c3526da32754e02eef8acb3676ff05a81f78ff0b"
+    },
+    {
+      "name": "case-25-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "pnpm add synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "codex:project:package-request:c052950b92f104e2acde2328f4ffeb722190147fd5663ab1c518b12c0cd4a158",
+      "artifactType": "package_request",
+      "sha256": "94da75875eabf3abbf516fb1b4483fdb4c83546a0eea6d557c8e297ff0dea88e"
+    },
+    {
+      "name": "case-26-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "yarn.lock"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "yarn add synthetic-package"
+        }
+      },
+      "artifactId": "codex:project:package-request:328baa4159181a91d7bb2865cc8a67e04dda0ef5fc0fe646fb991c4092afd5ad",
+      "artifactType": "package_request",
+      "sha256": "339964f7cb8cc79cd12e5fe6daddc11df29f50629672ed76650ba6a233c1e0b1"
+    },
+    {
+      "name": "case-27-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package.json",
+        "bun.lock",
+        "bun.lockb"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "bun add synthetic-package@1.2.3"
+        }
+      },
+      "artifactId": "codex:project:package-request:7eb16dbb2b9b28e8e16d155c5259d54c22b95e3f43420657c6d48fc56d01aa0e",
+      "artifactType": "package_request",
+      "sha256": "54473fa677d66f26f9d7fea0a22ea5b98bbbaca5e1e945aee0d459e8ef3bd7b2"
+    },
+    {
+      "name": "case-28-codex-BASH",
+      "harness": "codex",
+      "workspaceFiles": [],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "BASH",
+        "tool_input": {
+          "command": "\t npm ci \r\n"
+        }
+      },
+      "artifactId": "codex:project:package-request:5063b8cc632b5cd51990496a2924e405ef8aedb61b095ae103621b04078c904f",
+      "artifactType": "package_request",
+      "sha256": "bb526f57b5335f98d393415e5ed5fb2abaea6fa1ed02ccad49da2db3bfeec2b8"
+    },
+    {
+      "name": "case-29-codex-Shell",
+      "harness": "codex",
+      "workspaceFiles": [
+        "package-lock.json"
+      ],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm ci"
+        }
+      },
+      "artifactId": "codex:project:package-request:6a753723ce99fbbc33966dcc0bbdc63c907c957fe5c71212119b43a0ff7eff29",
+      "artifactType": "package_request",
+      "sha256": "9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628"
+    },
+    {
+      "name": "case-30-codex-Shell",
+      "harness": "codex",
+      "workspaceFiles": [],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ssh synthetic@example.invalid whoami"
+        }
+      },
+      "artifactId": "codex:project:tool-action:f900ac907e60bf71571d0597f6ada3087f1d71fbe942b1550e08d5991207f2bd",
+      "artifactType": "tool_action_request",
+      "sha256": "9e03a5a567c3c0e26d9eda4cb28986f07a157da3ee0f60fa492666d01c3dfc7b"
+    },
+    {
+      "name": "case-31-codex-Bash",
+      "harness": "codex",
+      "workspaceFiles": [],
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "npm install"
+        }
+      },
+      "artifactId": "codex:project:package-request:a5a91b780ccf1621a78e2ab9babc2c107f6a6f00f86d2c035b98dcd8120bf5ad",
+      "artifactType": "package_request",
+      "sha256": "3a2dc0ae21eb56d78a0eb6bbd0f4512da04f9f94f6ee6c6a338c3e4cb1a8ff91"
+    }
+  ]
+}

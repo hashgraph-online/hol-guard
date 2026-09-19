@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .adapters.base import HarnessContext
 from .aibom_models import (
@@ -11,6 +11,9 @@ from .aibom_models import (
     AibomCliOptions,
     AibomExportFormat,
 )
+
+if TYPE_CHECKING:
+    from .aibom_operation_authority import AibomOperation
 
 
 def build_inventory_json_payload(
@@ -152,17 +155,64 @@ def sync_aibom_snapshots_if_due(
     runner = api._runner_module()
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
-    current_workspace_id = store.get_cloud_workspace_id()
-    if current_workspace_id is None:
-        return {"synced": False, "skipped": True, "reason": "not_configured"}
-    if expected_workspace_id is not None and current_workspace_id != expected_workspace_id:
+    with store.hold_aibom_sync_lock():
+        context = api.HarnessContext(
+            home_dir=api._resolve_operator_home_dir(home_dir),
+            workspace_dir=workspace_dir,
+            guard_home=store.guard_home,
+        )
+        operation = api.capture_aibom_operation(
+            store, context, now=generated_at, bind_installation=api.trust_attestation_v2_enabled()
+        )
+        if operation is None:
+            return {"synced": False, "skipped": True, "reason": "not_configured"}
+        skipped = _aibom_sync_preflight(
+            store,
+            operation=operation,
+            generated_at=generated_at,
+            min_interval_seconds=min_interval_seconds,
+            force=force,
+            expected_workspace_id=expected_workspace_id,
+        )
+        if skipped is not None:
+            return skipped
+        try:
+            return api._sync_aibom_snapshots_admitted(
+                store,
+                context,
+                generated_at=generated_at,
+                options=options,
+                auth_context=auth_context,
+                expected_workspace_id=operation.workspace_id,
+                operation=operation,
+            )
+        except guard_sync_not_configured_error:
+            return {"synced": False, "skipped": True, "reason": "not_configured"}
+        except ValueError as error:
+            return {"synced": False, "error": str(error)}
+        except (OSError, RuntimeError) as error:
+            return {"synced": False, "error": str(error)}
+
+
+def _aibom_sync_preflight(
+    store: Any,
+    *,
+    operation: AibomOperation,
+    generated_at: str,
+    min_interval_seconds: int,
+    force: bool,
+    expected_workspace_id: str | None,
+) -> dict[str, object] | None:
+    from . import aibom_cli as api
+
+    if expected_workspace_id is not None and operation.workspace_id != expected_workspace_id:
         return {
             "synced": False,
             "reason": "workspace_changed",
             "error": "Guard Cloud workspace changed before AIBOM inventory sync.",
         }
-    bound_workspace_id = expected_workspace_id or current_workspace_id
-    if api._aibom_guard_events_endpoint_unavailable_recently(store):
+    if api._aibom_guard_events_endpoint_unavailable_recently(store, operation=operation):
+        api.require_current_aibom_operation(store, operation)
         return {
             "synced": False,
             "skipped": True,
@@ -172,31 +222,47 @@ def sync_aibom_snapshots_if_due(
         store,
         generated_at=generated_at,
         min_interval_seconds=min_interval_seconds,
+        operation=operation,
     ):
-        prior = store.get_sync_payload("aibom_sync_summary")
+        prior = api.read_aibom_result(store, operation, "aibom_sync_summary")
+        api.require_current_aibom_operation(store, operation)
         return {
             "synced": False,
             "skipped": True,
             "reason": "recently_synced",
             "last_sync_at": prior.get("synced_at") if isinstance(prior, dict) else None,
         }
-    context = api.HarnessContext(
-        home_dir=api._resolve_operator_home_dir(home_dir),
-        workspace_dir=workspace_dir,
-        guard_home=store.guard_home,
+    return None
+
+
+def _sync_aibom_snapshots_if_due_admitted(
+    store: Any,
+    *,
+    operation: AibomOperation,
+    generated_at: str,
+    min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+) -> dict[str, object]:
+    """Run a captured daemon attempt while its caller retains inventory admission.
+
+    Authentication errors propagate so the daemon can preserve its existing
+    terminal categories without a separate, unbound authentication attempt.
+    """
+    from . import aibom_cli as api
+
+    skipped = _aibom_sync_preflight(
+        store,
+        operation=operation,
+        generated_at=generated_at,
+        min_interval_seconds=min_interval_seconds,
+        force=False,
+        expected_workspace_id=operation.workspace_id,
     )
-    try:
-        return api.sync_aibom_snapshots(
-            store,
-            context,
-            generated_at=generated_at,
-            options=options,
-            auth_context=auth_context,
-            expected_workspace_id=bound_workspace_id,
-        )
-    except guard_sync_not_configured_error:
-        return {"synced": False, "skipped": True, "reason": "not_configured"}
-    except ValueError as error:
-        return {"synced": False, "error": str(error)}
-    except (OSError, RuntimeError) as error:
-        return {"synced": False, "error": str(error)}
+    if skipped is not None:
+        return skipped
+    return api._sync_aibom_snapshots_admitted(
+        store,
+        operation.context(),
+        generated_at=generated_at,
+        expected_workspace_id=operation.workspace_id,
+        operation=operation,
+    )

@@ -17,6 +17,7 @@ from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .local_cli_trust import apply_local_mcp_extension_decision
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .policy_rule_identity import PolicyRuleIdentity
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -29,12 +30,10 @@ from .runtime.approval_reuse import (
     APPROVAL_REUSE_ACCEPTED,
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-    APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN,
     APPROVAL_REUSE_NO_SAVED_DECISION,
-    APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
-    ApprovalReuseDecision,
     ApprovalReuseStatus,
     ApprovalReuseValidationFailure,
+    bind_saved_policy_identity,
     evaluate_approval_reuse,
 )
 from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
@@ -45,6 +44,7 @@ from .runtime.mcp_protection import (
     mcp_tool_identity_metadata,
 )
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
+from .runtime.tool_call_reuse_projection import _tool_call_decision_with_reuse
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -156,6 +156,7 @@ class ToolCallDecision:
     approval_reuse_claim_disposition: ApprovalReuseClaimDisposition | None = None
     post_claim_revalidated: bool = False
     post_claim_authority: ToolCallAuthority | None = None
+    policy_rule_identity: PolicyRuleIdentity | None = None
 
 
 def resolve_tool_call_policy_action(
@@ -518,6 +519,7 @@ def evaluate_tool_call(
         saved_decision_present=True,
         validation_reason=validation_reason,
     )
+    reuse = bind_saved_policy_identity(reuse, saved_decision, validation_reason=validation_reason)
     pending_decision: Mapping[str, object] | None = None
     claim_disposition: ApprovalReuseClaimDisposition | None = None
     if reuse.should_claim and saved_decision is not None:
@@ -580,6 +582,7 @@ def _apply_temporary_mcp_grant(
                 current = replace(
                     current,
                     action="allow",
+                    policy_rule_identity=None,
                     source="temporary-mcp-grant",
                     summary="A time-bounded approval covers this routine MCP capability.",
                 )
@@ -846,50 +849,6 @@ def _routine_browser_call_is_safe_by_default(risk_categories: tuple[str, ...]) -
     informational_categories = {"browser_external_domain"}
     return bool(categories.intersection(routine_categories)) and categories.issubset(
         routine_categories | informational_categories
-    )
-
-
-def _tool_call_decision_with_reuse(
-    current: ToolCallDecision,
-    reuse: ApprovalReuseDecision,
-    *,
-    pending_decision: Mapping[str, object] | None = None,
-    claim_disposition: ApprovalReuseClaimDisposition | None = None,
-) -> ToolCallDecision:
-    normalization_reason_code = reuse.saved_normalization_reason_code or reuse.current_normalization_reason_code
-    original_action = reuse.original_saved_action or reuse.original_current_action
-    if reuse.reason_code == APPROVAL_REUSE_SAVED_ACTION_UNKNOWN:
-        source = "policy-invalid"
-        summary = "Local Guard found an unknown policy action in saved state and requires reapproval."
-    elif reuse.reason_code == APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN:
-        source = "policy-invalid"
-        summary = "Local Guard found an unknown current policy action and blocked the tool call."
-    elif reuse.reason_code == APPROVAL_REUSE_ACCEPTED:
-        source = "policy"
-        summary = "Local Guard reused an exact saved approval for the current reviewable tool call."
-    elif reuse.reason_code == APPROVAL_REUSE_NO_SAVED_DECISION:
-        source = current.source
-        summary = current.summary
-    elif reuse.saved_action == "block":
-        source = "policy"
-        summary = "Local Guard kept this tool call blocked by saved policy."
-    else:
-        source = current.source
-        summary = f"{current.summary} Saved approval was not reused ({reuse.reason_code})."
-    return ToolCallDecision(
-        action=reuse.action,
-        source=source,
-        signals=current.signals,
-        summary=summary,
-        risk_categories=current.risk_categories,
-        normalization_reason_code=normalization_reason_code,
-        original_action=original_action,
-        approval_reuse_status=reuse.status,
-        approval_reuse_reason_code=reuse.reason_code,
-        current_action=reuse.current_action,
-        saved_action=reuse.saved_action,
-        pending_approval_reuse_decision=pending_decision,
-        approval_reuse_claim_disposition=claim_disposition,
     )
 
 

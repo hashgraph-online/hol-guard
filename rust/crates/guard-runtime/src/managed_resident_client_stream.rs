@@ -50,16 +50,12 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
         let Some(payload) = read_frame(&mut input)? else {
             return Ok(());
         };
-        let timeout = super::client_timeout(&payload);
-        let response = match client_lease.as_ref() {
-            Ok(lease) => {
-                match super::client_request_with_lease(state_base, &payload, timeout, lease) {
-                    Ok(response) => response,
-                    Err(error) => crate::resident_protocol::safe_error_response(&error, false),
-                }
-            }
-            Err(error) => crate::resident_protocol::safe_error_response(error, false),
-        };
+        let response = super::client_timeout(&payload).and_then(|timeout| {
+            let lease = client_lease.as_ref().map_err(|error| error.clone())?;
+            super::client_request_with_lease(state_base, &payload, timeout, lease)
+        });
+        let response = response
+            .unwrap_or_else(|error| crate::resident_protocol::safe_error_response(&error, false));
         write_frame(&mut output, &response)?;
     }
 }

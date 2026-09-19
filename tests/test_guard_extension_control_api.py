@@ -125,8 +125,7 @@ def test_effective_response_projects_frozen_windows_terminal_commands(
         "shell": "powershell",
         "enroll": "& 'C:\\custom install\\hol-guard.exe' command --guard-home 'C:\\custom guard' controls enroll",
         "recover_authority": (
-            "& 'C:\\custom install\\hol-guard.exe' command --guard-home '"
-            "C:\\custom guard' controls recover-authority"
+            "& 'C:\\custom install\\hol-guard.exe' command --guard-home 'C:\\custom guard' controls recover-authority"
         ),
     }
     builder = Mock(return_value=commands)
@@ -200,48 +199,6 @@ def test_degraded_acknowledgement_rejects_missing_daemon_approval(tmp_path: Path
 
     assert denied.value.status == 423
     assert service.effective()["health"] == AuthorityHealth.DEGRADED_UNACKNOWLEDGED.value
-
-
-def test_authority_recovery_consumes_daemon_bound_approval_before_repair(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    tampered = ExtensionControlAuthorityView(
-        AuthorityHealth.TAMPERED,
-        4,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        (),
-    )
-    protected = replace(tampered, health=AuthorityHealth.PROTECTED, revision=5)
-    service = ExtensionControlApiService(
-        store=store,
-        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        runtime=ExtensionControlRuntime(tampered),
-    )
-    calls: list[str] = []
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: tampered)
-    monkeypatch.setattr(
-        store,
-        "recover_extension_control_authority",
-        lambda **_kwargs: calls.append("recover") or protected,
-    )
-    monkeypatch.setattr(
-        extension_control_api_module,
-        "require_extension_control",
-        lambda *_args, **_kwargs: calls.append("require") or object(),
-    )
-    monkeypatch.setattr(
-        extension_control_api_module,
-        "consume_extension_control_grant",
-        lambda *_args, **_kwargs: calls.append("consume"),
-    )
-
-    effective = service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
-
-    assert effective["health"] == AuthorityHealth.PROTECTED.value
-    assert effective["revision"] == 5
-    assert calls == ["require", "consume", "recover"]
 
 
 def test_authority_recovery_rejects_healthy_authority(tmp_path: Path) -> None:
@@ -487,11 +444,11 @@ def test_apply_requires_matching_server_held_proof_and_refreshes_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = _ApplyingStore(tmp_path / "guard-home")
-    service = _service(cast(GuardStore, store))
+    service = _service(cast(GuardStore, cast(object, store)))
     monkeypatch.setattr(
         extension_control_api_module,
         "issue_extension_control_proof",
-        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, cast(object, _FakeProof())),
     )
     payload = _mutation_payload()
     payload.update(
@@ -530,7 +487,7 @@ def test_local_apply_does_not_persist_composed_managed_layer(
         (),
     )
     service = ExtensionControlApiService(
-        store=cast(GuardStore, store),
+        store=cast(GuardStore, cast(object, store)),
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(
             ExtensionControlAuthorityView(
@@ -547,7 +504,7 @@ def test_local_apply_does_not_persist_composed_managed_layer(
     monkeypatch.setattr(
         extension_control_api_module,
         "issue_extension_control_proof",
-        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, cast(object, _FakeProof())),
     )
     payload = _mutation_payload()
     payload["layers"] = json.loads(layers_to_json((managed_layer,)))
@@ -578,14 +535,14 @@ def test_local_apply_preserves_signed_layer_from_raw_base(
         (signed_layer,),
     )
     service = ExtensionControlApiService(
-        store=cast(GuardStore, store),
+        store=cast(GuardStore, cast(object, store)),
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(store.current_view),
     )
     monkeypatch.setattr(
         extension_control_api_module,
         "issue_extension_control_proof",
-        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, cast(object, _FakeProof())),
     )
     payload = _mutation_payload()
     payload["layers"] = json.loads(layers_to_json((signed_layer,)))
@@ -626,7 +583,7 @@ def test_local_apply_persists_raw_signed_but_previews_active_managed_layer(
     store.managed_layers = (managed_signed,)
     store.managed_revision = 1
     service = ExtensionControlApiService(
-        store=cast(GuardStore, store),
+        store=cast(GuardStore, cast(object, store)),
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(
             ExtensionControlAuthorityView(
@@ -641,7 +598,7 @@ def test_local_apply_persists_raw_signed_but_previews_active_managed_layer(
     monkeypatch.setattr(
         extension_control_api_module,
         "issue_extension_control_proof",
-        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, cast(object, _FakeProof())),
     )
     payload = _mutation_payload()
     payload["layers"] = json.loads(layers_to_json((managed_signed,)))

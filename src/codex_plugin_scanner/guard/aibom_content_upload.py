@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from ..path_support import resolves_within_root
+from .aibom_operation_authority import AibomOperation, require_current_aibom_operation
 from .inventory_contract import GuardAgentInventoryItem, GuardAgentInventorySnapshot
 
 _CONTENT_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -256,7 +257,14 @@ def upload_primary_content_sources(
     *,
     sources: tuple[GuardAibomPrimaryContentSource, ...],
     workspace_id: str,
+    operation: AibomOperation,
 ) -> tuple[GuardAibomContentUploadSummary, dict[str, object]]:
+    def validate() -> None:
+        require_current_aibom_operation(store, operation)
+
+    validate()
+    if workspace_id != operation.workspace_id:
+        raise RuntimeError("The inventory operation context changed.")
     summary = empty_content_upload_summary()
     summary["eligible"] = len(sources)
     if not sources:
@@ -286,11 +294,14 @@ def upload_primary_content_sources(
                 request=request,
                 timeout_seconds=60,
                 retry_timeout_seconds=90,
+                validate_request=validate,
             )
         except urllib.error.HTTPError as error:
             if error.code == 401:
                 try:
-                    resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
+                    resolved_auth_context = runner._resolve_guard_sync_auth_context(
+                        store, force_refresh=True, required_connection=operation.connection, validate_request=validate
+                    )
                     content_url = _content_upload_url(str(resolved_auth_context["sync_url"]), workspace_id)
                     request = runner._guard_sync_request(
                         resolved_auth_context,
@@ -303,8 +314,10 @@ def upload_primary_content_sources(
                         request=request,
                         timeout_seconds=60,
                         retry_timeout_seconds=90,
+                        validate_request=validate,
                     )
                 except (OSError, RuntimeError, urllib.error.HTTPError):
+                    validate()
                     summary["failed"] += len(batch_items)
                     summary["reason"] = "authorization_failed"
                     return False
@@ -313,6 +326,7 @@ def upload_primary_content_sources(
                 summary["reason"] = "endpoint_unavailable" if error.code == 404 else "http_error"
                 return False
         except (OSError, RuntimeError):
+            validate()
             summary["failed"] += len(batch_items)
             summary["reason"] = "network_error"
             return False
@@ -356,6 +370,7 @@ def upload_primary_content_sources(
         ):
             if not send_batch():
                 summary["failed"] += len(sources) - index
+                validate()
                 return summary, resolved_auth_context
             candidate_items = [item]
             candidate_body = _encoded_batch(items=candidate_items)
@@ -366,4 +381,5 @@ def upload_primary_content_sources(
         batch_raw_bytes += raw_bytes
 
     send_batch()
+    validate()
     return summary, resolved_auth_context

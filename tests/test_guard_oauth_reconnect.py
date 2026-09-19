@@ -6,6 +6,8 @@ import json
 import urllib.error
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from email.message import Message
+from typing import IO, TypedDict, cast
 
 import pytest
 
@@ -16,6 +18,18 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
+
+
+class _ReviewReassignment(TypedDict):
+    approved_source: str
+    approved_workspace_id: str
+
+
+class _ReviewDeliveryBinding(TypedDict):
+    workspace_id: str
+    oauth_subject_hash: str
+    machine_id: str
+    machine_installation_id: str
 
 
 def _store_with_oauth_credentials(
@@ -60,8 +74,8 @@ def _invalid_grant_http_error() -> urllib.error.HTTPError:
         "https://hol.org/api/guard/oauth/token",
         400,
         "Bad Request",
-        hdrs=None,
-        fp=_ErrorResponse(),
+        hdrs=cast(Message, cast(object, None)),
+        fp=cast(IO[bytes], cast(object, _ErrorResponse())),
     )
 
 
@@ -337,9 +351,12 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     binding = store.get_review_event_oauth_binding() or pytest.fail("missing Cloud Review binding")
     late = "9999-12-31T23:59:59+00:00"
     assert store.review_event_outbox_status(now=late)["quarantined_depth"] == 1
-    approved = {"approved_source": "default", "approved_workspace_id": "workspace-1"}
+    approved: _ReviewReassignment = {"approved_source": "default", "approved_workspace_id": "workspace-1"}
     assert store.reassign_quarantined_review_events(**approved) == 1
-    delivery = {key: value for key, value in binding.items() if key != "oauth_source"}
+    delivery = cast(
+        _ReviewDeliveryBinding,
+        cast(object, {key: value for key, value in binding.items() if key != "oauth_source"}),
+    )
     rows = store.list_ready_review_events(now=late, limit=10, **delivery)
     assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
 
@@ -455,7 +472,16 @@ def test_prepare_guard_cloud_connect_authorization_refreshes_under_lock(tmp_path
         finally:
             lock_state["held"] = False
 
-    def _fake_resolve(_store, credentials, *, persist_recovered_secret: bool = False):
+    def _fake_resolve(
+        _store,
+        credentials,
+        *,
+        persist_recovered_secret: bool = False,
+        expected_connection=None,
+        required_connection=None,
+    ):
+        assert expected_connection is not None and expected_connection.credentials() == credentials
+        assert required_connection == expected_connection
         del _store, persist_recovered_secret
         assert lock_state["held"] is True
         assert credentials["refresh_token"] == "refresh-token-1"

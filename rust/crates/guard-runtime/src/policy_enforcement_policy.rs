@@ -118,3 +118,92 @@ pub(super) fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Res
     }
     Ok(())
 }
+
+/// Compute configured policy independently of the intrinsic action and scoped winner.
+pub(crate) fn configured_pre_tool_policy_action(
+    policy: &EffectiveNativePolicyV3,
+    compiled: &CompiledEffectivePolicy,
+    payload: &serde_json::Value,
+    result: &guard_contracts::PreToolResultV1,
+) -> Result<String, String> {
+    let harness = normalized_harness(&result.action.harness);
+    let mut facts = super::payload_facts(payload, result.action.action_type, &result.reason_code)?;
+    facts.sensitive_target |= result.action.sensitive_target;
+    super::policy_floor(
+        policy,
+        compiled,
+        &harness,
+        result.action.action_type,
+        &facts,
+        &result.reason_code,
+    )
+}
+
+pub(super) fn canonical_harness_action(
+    map: &std::collections::BTreeMap<String, String>,
+    harness: &str,
+) -> Result<Option<String>, String> {
+    let mut selected: Option<(&str, &str)> = None;
+    for (configured, action) in map {
+        if !VALID_ACTIONS.contains(&action.as_str()) {
+            return Err("native_policy_action_invalid".to_owned());
+        }
+        let normalized = normalized_harness(configured);
+        if normalized != harness {
+            continue;
+        }
+        if let Some((_, previous_action)) = selected {
+            if previous_action != action {
+                return Err("native_policy_harness_selector_conflict".to_owned());
+            }
+        } else {
+            selected = Some((configured.as_str(), action.as_str()));
+        }
+    }
+    Ok(selected.map(|(_, action)| action.to_owned()))
+}
+
+pub(super) fn canonical_harness_risk_actions<'a>(
+    map: &'a BTreeMap<String, BTreeMap<String, String>>,
+    harness: &str,
+) -> Result<Option<&'a BTreeMap<String, String>>, String> {
+    let mut selected: Option<&'a BTreeMap<String, String>> = None;
+    for (configured, actions) in map {
+        if normalized_harness(configured) != harness {
+            continue;
+        }
+        if let Some(previous) = selected {
+            if previous != actions {
+                return Err("native_policy_harness_selector_conflict".to_owned());
+            }
+        } else {
+            selected = Some(actions);
+        }
+    }
+    Ok(selected)
+}
+
+pub(super) fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
+    match action {
+        "block" => (
+            "native_policy_block",
+            "HOL Guard blocked this hook action under the installed native policy.",
+        ),
+        "sandbox-required" => (
+            "native_policy_sandbox_required",
+            "HOL Guard requires sandbox enforcement under the installed native policy.",
+        ),
+        "require-reapproval" => (
+            "native_policy_reapproval_required",
+            "HOL Guard requires fresh approval under the installed native policy.",
+        ),
+        "review" => (
+            "native_policy_review_required",
+            "HOL Guard requires review under the installed native policy.",
+        ),
+        _ => (
+            "native_policy_warning",
+            "HOL Guard raised this action under the installed native policy.",
+        ),
+    }
+}

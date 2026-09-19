@@ -58,6 +58,7 @@ from ..mcp_tool_calls import (
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
+from ..policy_rule_identity import package_policy_rule_identity
 from ..runtime.approval_context import (
     build_configured_environment_hash,
     build_runtime_launch_identity,
@@ -70,7 +71,8 @@ from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
-from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
+from ..runtime.package_reason_signals import _package_reason_signals
+from ..runtime.package_reason_signals import _package_signal_severity as _package_signal_severity
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -246,6 +248,7 @@ def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: st
         source=source,
         pending_approval_reuse_decision=None,
         approval_reuse_claim_disposition=None,
+        policy_rule_identity=None,
     )
 
 
@@ -1377,6 +1380,7 @@ class RuntimeMcpGuardProxy:
                             params=params,
                             scanner_evidence=decision_scanner_evidence,
                             policy_action=tool_policy_action,
+                            approval_decision=decision,
                         )
                     response, package_event = self._handle_package_request(
                         message=message,
@@ -1437,6 +1441,7 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 scanner_evidence=decision_scanner_evidence,
                 policy_action=tool_policy_action,
+                approval_decision=decision,
             )
             return response, queued_event
         if decision.action in {"allow", "warn"}:
@@ -1591,6 +1596,7 @@ class RuntimeMcpGuardProxy:
             params=params,
             scanner_evidence=decision_scanner_evidence,
             policy_action=tool_policy_action,
+            approval_decision=decision,
         )
         return response, queued_event
 
@@ -1942,6 +1948,7 @@ class RuntimeMcpGuardProxy:
                     params=params,
                     scanner_evidence=fresh_tool_evidence,
                     policy_action=tool_action,
+                    approval_decision=fresh_tool_decision,
                 )
             return self._queue_package_approval_response(
                 message_id=message.get("id"),
@@ -2389,6 +2396,7 @@ class RuntimeMcpGuardProxy:
             policy_action,
             reason=policy_action,
             signals=_package_reason_signals(package_evaluation.reasons),
+            policy_rule_identity=package_policy_rule_identity(package_evaluation, policy_action),
         ).to_dict()
         payload["user_title"] = package_evaluation.user_copy.title
         payload["user_body"] = package_evaluation.user_copy.summary
@@ -3359,6 +3367,7 @@ class RuntimeMcpGuardProxy:
         *,
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
+        approval_decision: ToolCallDecision | None = None,
     ) -> dict[str, Any]:
         """Build the artifact payload for approval center queueing.
 
@@ -3393,6 +3402,12 @@ class RuntimeMcpGuardProxy:
             payload["browser_intent"] = browser_intent_dict
         if scanner_evidence:
             payload["scanner_evidence"] = list(scanner_evidence)
+        if approval_decision is not None and policy_action == resolve_tool_call_policy_action(approval_decision):
+            payload["decision_v2_json"] = build_decision_v2(
+                resolve_tool_call_policy_action(approval_decision),
+                reason=policy_action,
+                policy_rule_identity=approval_decision.policy_rule_identity,
+            ).to_dict()
         return payload
 
     def _queue_approval_center_response(
@@ -3406,6 +3421,7 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
+        approval_decision: ToolCallDecision | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
@@ -3427,6 +3443,7 @@ class RuntimeMcpGuardProxy:
                         signals,
                         policy_action=policy_action,
                         scanner_evidence=scanner_evidence,
+                        approval_decision=approval_decision,
                     ),
                 ]
             },
@@ -3838,51 +3855,6 @@ def _command_argument(arguments: object) -> str | None:
 
 def _has_saved_package_block(reasons: Sequence[object]) -> bool:
     return any(isinstance(reason, Mapping) and reason.get("code") == "saved_package_block" for reason in reasons)
-
-
-def _package_reason_signals(reasons: Sequence[object]) -> tuple[RiskSignalV2, ...]:
-    signals: list[RiskSignalV2] = []
-    for reason in reasons:
-        if not isinstance(reason, Mapping):
-            continue
-        code = _optional_text(reason.get("code")) or "package-risk"
-        message = _optional_text(reason.get("message")) or code.replace("_", " ")
-        severity = _package_signal_severity(_optional_text(reason.get("severity")))
-        signals.append(
-            RiskSignalV2(
-                signal_id=f"supply-chain.{code}",
-                category="supply_chain",
-                severity=severity,
-                confidence="strong" if severity in {"high", "critical"} else "likely",
-                detector=_optional_text(reason.get("source")) or "guard.supply-chain",
-                title=message,
-                plain_reason=message,
-                technical_detail=message,
-                evidence_ref=None,
-                redaction_level="summary",
-                false_positive_hint=(
-                    "Review the package request or add a scoped exception only for a verified false positive."
-                ),
-                advisory_id=None,
-            )
-        )
-    return tuple(signals)
-
-
-def _package_signal_severity(value: str | None) -> RiskSeverityLabel:
-    match value:
-        case "info":
-            return "info"
-        case "low":
-            return "low"
-        case "medium":
-            return "medium"
-        case "high":
-            return "high"
-        case "critical":
-            return "critical"
-        case _:
-            return "medium"
 
 
 def _optional_text(value: object) -> str | None:

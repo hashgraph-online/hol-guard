@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from .policy_decision_model import PolicyDecision as PolicyDecision
+
 GuardAction = Literal["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]
 GuardMode = Literal["observe", "prompt", "enforce"]
 DecisionScope = Literal["global", "harness", "workspace", "artifact", "publisher"]
@@ -115,26 +117,6 @@ class HarnessDetection:
             "artifacts": [artifact.to_dict() for artifact in self.artifacts],
             "warnings": list(self.warnings),
         }
-
-
-@dataclass(frozen=True, slots=True)
-class PolicyDecision:
-    """Persisted policy decision."""
-
-    harness: str
-    scope: DecisionScope
-    action: GuardAction
-    artifact_id: str | None = None
-    artifact_hash: str | None = None
-    workspace: str | None = None
-    publisher: str | None = None
-    reason: str | None = None
-    owner: str | None = None
-    source: str = "local"
-    expires_at: str | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
 
 
 CloudExceptionEffect = Literal["allow"]

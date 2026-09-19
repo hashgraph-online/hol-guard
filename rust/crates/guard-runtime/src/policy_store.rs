@@ -25,8 +25,11 @@ pub(crate) mod approval_v4_authority;
 pub(crate) mod approval_v4_enrollment;
 #[path = "approval_v4_secure_state.rs"]
 pub(crate) mod approval_v4_secure_state;
+#[path = "policy_client_currentness.rs"]
+mod policy_client_currentness;
 #[path = "policy_store_approval.rs"]
 mod policy_store_approval;
+pub(crate) use policy_client_currentness::ClientAuthorityObservation;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
 #[path = "policy_store_command_authority.rs"]
@@ -35,10 +38,20 @@ mod policy_store_command_authority;
 mod policy_store_command_floor;
 #[path = "policy_store_migration.rs"]
 mod policy_store_migration;
+#[path = "policy_store_mutation.rs"]
+mod policy_store_mutation;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
 #[path = "policy_store_request.rs"]
 mod policy_store_request;
+#[path = "policy_store_versioned.rs"]
+mod policy_store_versioned;
+#[path = "policy_store_withdrawal.rs"]
+mod policy_store_withdrawal;
+pub(crate) use policy_store_versioned::{
+    AdmittedVersionedPolicySnapshot, AuthenticatedPolicySnapshot,
+};
+pub(crate) use policy_store_withdrawal::is_control_error;
 #[path = "policy_store_validation.rs"]
 mod policy_store_validation;
 
@@ -61,6 +74,7 @@ const MAX_KEY_FILE_BYTES: u64 = VERIFIER_KEY_BYTES as u64;
 const MAX_FLOOR_BYTES: u64 = 8 * 1024;
 const GENERATION_FLOOR_SCHEMA: &str = "guard-policy-snapshot-generation-floor.v1";
 const AUTHORITY_RECORD_SCHEMA: &str = "guard-policy-snapshot-authority.v3";
+const AUTHORITY_RECORD_V4_SCHEMA: &str = "guard-policy-snapshot-authority.v4";
 const AUTHORITY_RECORD_MAX_BYTES: u64 = POLICY_SNAPSHOT_MAX_BYTES as u64 + 16 * 1024;
 
 #[cfg(test)]
@@ -102,11 +116,11 @@ fn persistence_fault(boundary: PersistBoundary) -> Result<(), String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PolicyAuthorityRecordV3 {
+struct PolicyAuthorityRecord {
     pub(super) schema: String,
     pub(super) generation_floor: u64,
     pub(super) policy_digest: String,
-    pub(super) snapshot: Option<PolicySnapshotV3>,
+    pub(super) snapshot: Option<AuthenticatedPolicySnapshot>,
     pub(super) floor_mac: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
@@ -122,7 +136,7 @@ struct GenerationFloorV1 {
 }
 
 struct PolicyState {
-    pub(super) snapshot: Option<Arc<AdmittedPolicySnapshot>>,
+    pub(super) snapshot: Option<Arc<AdmittedVersionedPolicySnapshot>>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
     pub(super) policy_digest: Option<String>,
@@ -131,7 +145,7 @@ struct PolicyState {
 }
 
 struct LoadedAuthority {
-    pub(super) snapshot: Option<PolicySnapshotV3>,
+    pub(super) snapshot: Option<AuthenticatedPolicySnapshot>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
     pub(super) policy_digest: Option<String>,
@@ -159,6 +173,10 @@ pub(crate) struct PolicySnapshotStore {
 }
 
 impl PolicySnapshotStore {
+    pub(crate) fn resident_generation(&self) -> u64 {
+        self.resident_generation
+    }
+
     #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
         Self::new_with_resident_generation(state_base, runtime_identity, 0)
@@ -169,6 +187,7 @@ impl PolicySnapshotStore {
         resident_generation: u64,
     ) -> Result<Self, String> {
         validate_private_directory(state_base)?;
+        let _writer = policy_store_mutation::acquire_writer(state_base)?;
         let verifier_key = read_verifier_key(state_base)?;
         let authority_path = state_base.join(SNAPSHOT_FILE_NAME);
         recover_authority_replacement(&authority_path)?;
@@ -222,7 +241,7 @@ impl PolicySnapshotStore {
             Arc::downgrade(&authority_changed),
         );
         let (admitted_snapshot, admission_failed) = match loaded.snapshot.as_ref() {
-            Some(snapshot) => match AdmittedPolicySnapshot::new(snapshot.clone()) {
+            Some(snapshot) => match AdmittedVersionedPolicySnapshot::new(snapshot.clone()) {
                 Ok(snapshot) => (Some(Arc::new(snapshot)), false),
                 Err(_) => (None, true),
             },
@@ -254,96 +273,75 @@ impl PolicySnapshotStore {
         })
     }
 
-    /// Migrate legacy policy files only on an explicit upgrade command.
-    pub(crate) fn migrate_legacy_state(
-        state_base: &Path,
-        runtime_identity: &str,
-    ) -> Result<(), String> {
-        validate_private_directory(state_base)?;
-        let verifier_key = read_verifier_key(state_base)?;
-        let authority_path = state_base.join(SNAPSHOT_FILE_NAME);
-        let legacy_floor_path = state_base.join(GENERATION_FLOOR_FILE_NAME);
-        recover_authority_replacement(&authority_path)?;
-        let (_, expected_scope_digest) = scope_binding_for_state_base(state_base);
-        let expected_rule_digest = guard_rule_contract::rule_digest();
-        let loaded = load_authority(
-            &authority_path,
-            &legacy_floor_path,
-            runtime_identity,
-            &expected_rule_digest,
-            &expected_scope_digest,
-            &verifier_key,
-        )?;
-        if loaded.migrate {
-            if let Some(digest) = loaded.policy_digest.as_deref() {
-                persist_authority(
-                    &authority_path,
-                    loaded.generation_floor,
-                    digest,
-                    loaded.snapshot.as_ref(),
-                    &verifier_key,
-                )?;
-            }
-        }
-        Ok(())
-    }
-
     pub(crate) fn push(&self, value: &Value) -> Result<Vec<u8>, String> {
-        let request: PolicySnapshotPushV1 = serde_json::from_value(value.clone())
-            .map_err(|_| "native_policy_snapshot_push_invalid".to_owned())?;
-        if request.schema != POLICY_SNAPSHOT_PUSH_SCHEMA {
-            return Err("native_policy_snapshot_push_schema_mismatch".to_owned());
-        }
-        let _command_lease = self.command_authority_lease(&request.snapshot)?;
-        let snapshot_bytes = snapshot_bytes(&request.snapshot).map_err(snapshot_error)?;
+        let candidate = AuthenticatedPolicySnapshot::from_push(value)?;
+        let snapshot_bytes = candidate.bytes()?;
+        let _command_lease =
+            self.command_authority_lease_for_binding(candidate.command_extensions().as_ref())?;
         let now = now_ms()?;
+        let parent = self
+            .authority_path
+            .parent()
+            .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())?;
+        let _writer = policy_store_mutation::acquire_writer(parent)?;
         let mut state = self
             .state
             .lock()
             .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        // Preserve the original exact-retry currentness predicate before
+        // reconciliation can retire an already changed in-memory snapshot.
+        if state.snapshot.as_ref().is_some_and(|current| {
+            current.generation() == candidate.generation()
+                && snapshot_bytes == state.canonical_bytes
+        }) {
+            policy_store_authority::require_current_authority_for_ack(self)?;
+        }
+        policy_store_mutation::refresh_floor(self, &mut state)?;
         if state.invalid_on_startup && state.generation_floor == 0 {
             return Err("native_policy_snapshot_invalid".to_owned());
         }
         // Validate the candidate before considering authenticated floor recovery.
         let minimum_generation = if state.snapshot.is_none()
             && state.policy_digest.is_some()
-            && request.snapshot.generation <= state.generation_floor
+            && *candidate.generation() <= state.generation_floor
         {
             1
         } else {
             state.generation_floor.max(1)
         };
-        validate_v3(
-            &request.snapshot,
+        candidate.validate(
             minimum_generation,
             &self.expected_runtime_identity,
             &self.expected_rule_digest,
             &self.verifier_key,
             now,
-        )
-        .map_err(snapshot_error)?;
+        )?;
+        if candidate.scope_contract().scope_digest != self.expected_scope_digest {
+            return Err("native_policy_snapshot_scope_mismatch".to_owned());
+        }
         if let Some(current) = state.snapshot.as_ref() {
-            if request.snapshot.generation < current.generation {
+            if *candidate.generation() < *current.generation() {
                 return Err("native_policy_snapshot_generation_downgrade".to_owned());
             }
-            if request.snapshot.generation == current.generation {
+            if *candidate.generation() == *current.generation() {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
-                return encode_ack(current.as_ref(), true, self.resident_generation);
+                policy_store_authority::require_current_authority_for_ack(self)?;
+                return current.encode_ack(true, self.resident_generation);
             }
-        } else if request.snapshot.generation <= state.generation_floor {
+        } else if *candidate.generation() <= state.generation_floor {
             // There is no current snapshot to compare for normal idempotent
             // retry.  The authenticated floor is still authoritative, so
             // equal/older input must force the publisher to allocate a new
             // generation rather than silently reusing the floor.
-            return encode_requires_new_generation(&state, self.resident_generation);
+            return candidate.missing_snapshot_ack(&state, self.resident_generation);
         }
-        let control_floor = policy_store_command_floor::next_floor(
+        let control_floor = policy_store_command_floor::next_floor_for_binding(
             state.command_control_floor.as_ref(),
-            &request.snapshot,
+            candidate.command_extensions().as_ref(),
         )?;
-        let admitted = Arc::new(AdmittedPolicySnapshot::new(request.snapshot)?);
+        let admitted = Arc::new(AdmittedVersionedPolicySnapshot::new(candidate.clone())?);
         let mut observed = match self.authority_observed.lock() {
             Ok(observed) => observed,
             Err(_) => {
@@ -357,32 +355,31 @@ impl PolicySnapshotStore {
         // identity to the watcher.
         persist_authority_with_control_floor(
             &self.authority_path,
-            admitted.generation,
-            &admitted.policy_digest,
-            Some(admitted.snapshot()),
+            *candidate.generation(),
+            candidate.policy_digest(),
+            Some(&candidate),
             &self.verifier_key,
             control_floor.as_ref(),
         )?;
-        state.generation_floor = admitted.generation;
-        state.policy_digest = Some(admitted.policy_digest.clone());
-        state.snapshot = Some(Arc::clone(&admitted));
+        state.generation_floor = *candidate.generation();
+        state.policy_digest = Some(candidate.policy_digest().clone());
+        state.snapshot = Some(admitted);
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
         state.command_control_floor = control_floor;
         *observed = authority_fingerprint(&self.authority_path);
         drop(observed);
-        self.authority_changed.store(
-            !policy_store_authority::authorities_unchanged(self),
-            Ordering::SeqCst,
-        );
-        encode_ack(admitted.snapshot(), false, self.resident_generation)
+        policy_store_authority::refresh_authority_for_ack(self)?;
+        candidate.encode_ack(false, self.resident_generation)
     }
 
     #[cfg(test)]
     pub(crate) fn current_generation(&self) -> Option<u64> {
-        self.state
-            .lock()
-            .ok()
-            .and_then(|state| state.snapshot.as_ref().map(|snapshot| snapshot.generation))
+        self.state.lock().ok().and_then(|state| {
+            state
+                .snapshot
+                .as_ref()
+                .map(|snapshot| *snapshot.generation())
+        })
     }
 }

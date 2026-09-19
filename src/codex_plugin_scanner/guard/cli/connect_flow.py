@@ -25,6 +25,7 @@ from typing_extensions import Unpack
 from ...version import __version__
 from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
+from ..oauth_connection_authority import OAuthConnectionSnapshot
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -36,6 +37,7 @@ from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
+from .connect_completion import CONNECT_CONNECTION_KEY
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -46,6 +48,7 @@ from .oauth_client import (
     resolve_guard_oauth_client_config,
 )
 from .oauth_credential_persistence import OAuthCredentialUpdateParams, persist_oauth_local_credentials
+from .oauth_loopback_callback import GuardOAuthLoopbackCallback, OAuthCallbackState, callback_handler
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
@@ -89,14 +92,6 @@ def _guard_oauth_request_headers(*, dpop: str | None = None) -> dict[str, str]:
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1")
 _LOOPBACK_PORT_MIN = 49152
 _LOOPBACK_PORT_MAX = 65535
-
-
-@dataclass(frozen=True)
-class GuardOAuthLoopbackCallback:
-    code: str | None
-    state: str
-    error: str | None = None
-    error_description: str | None = None
 
 
 class GuardOAuthTargetBinding(TypedDict):
@@ -148,23 +143,13 @@ class GuardOAuthBrowserSession:
     dpop_key_material: GuardDpopKeyMaterial
     _server: http.server.ThreadingHTTPServer
     _thread: threading.Thread
-    _callback_ready: threading.Event
-    _callback: GuardOAuthLoopbackCallback | None = None
+    _terminal: OAuthCallbackState
 
     def wait_for_callback(self, timeout_seconds: float) -> GuardOAuthLoopbackCallback:
-        if timeout_seconds <= 0:
-            raise TimeoutError("Guard OAuth browser callback timed out.")
-        if not self._callback_ready.wait(timeout_seconds):
-            raise TimeoutError("Guard OAuth browser callback timed out.")
-        callback = self._callback or getattr(self._server, "guard_callback", None)
-        if callback is None:
-            raise TimeoutError("Guard OAuth browser callback timed out.")
-        if callback.error is not None:
-            description = callback.error_description or callback.error
-            raise RuntimeError(f"Guard OAuth authorization was denied: {description}")
-        return callback
+        return self._terminal.wait(timeout_seconds)
 
     def close(self) -> None:
+        self._terminal.close()
         self._server.shutdown()
         self._server.server_close()
         self._thread.join(timeout=2)
@@ -335,68 +320,18 @@ def start_guard_loopback_callback_listener(
     dpop_key_material: GuardDpopKeyMaterial | None = None,
     pkce_verifier: str | None = None,
 ) -> GuardOAuthBrowserSession:
-    callback_ready = threading.Event()
+    terminal = OAuthCallbackState()
 
     class _CallbackServer(http.server.ThreadingHTTPServer):
         allow_reuse_address = False
-        guard_callback: GuardOAuthLoopbackCallback | None = None
 
-    class _CallbackHandler(http.server.BaseHTTPRequestHandler):
-        def _callback_server(self) -> _CallbackServer:
-            if not isinstance(self.server, _CallbackServer):
-                raise RuntimeError("Guard OAuth callback server is unavailable.")
-            return self.server
-
-        def do_GET(self) -> None:
-            parsed = urllib.parse.urlparse(self.path)
-            if parsed.path != _LOOPBACK_REDIRECT_PATH:
-                self.send_error(404)
-                return
-            params = urllib.parse.parse_qs(parsed.query)
-            state = str(params.get("state", [""])[0] or "")
-            code = str(params.get("code", [""])[0] or "")
-            error = str(params.get("error", [""])[0] or "")
-            error_description = str(params.get("error_description", [""])[0] or "")
-            if state != expected_state:
-                self.send_response(400)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"Guard OAuth state mismatch.")
-                return
-            if error:
-                self._callback_server().guard_callback = GuardOAuthLoopbackCallback(
-                    code=None,
-                    state=state,
-                    error=error,
-                    error_description=error_description or None,
-                )
-                callback_ready.set()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"HOL Guard authorization was denied. Return to your terminal.")
-                return
-            if not code:
-                self.send_response(400)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"Guard OAuth callback is missing the authorization code.")
-                return
-            self._callback_server().guard_callback = GuardOAuthLoopbackCallback(code=code, state=state)
-            callback_ready.set()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(b"HOL Guard connected. Return to your terminal.")
-
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-            return
+    handler = callback_handler(expected_state, terminal)
 
     for host in _LOOPBACK_HOSTS:
         for _ in range(20):
             port = secrets.randbelow(_LOOPBACK_PORT_MAX - _LOOPBACK_PORT_MIN + 1) + _LOOPBACK_PORT_MIN
             try:
-                server = _CallbackServer((host, port), _CallbackHandler)
+                server = _CallbackServer((host, port), handler)
             except OSError:
                 continue
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -411,7 +346,7 @@ def start_guard_loopback_callback_listener(
                 dpop_key_material=dpop_key_material or generate_dpop_key_pair(),
                 _server=server,
                 _thread=thread,
-                _callback_ready=callback_ready,
+                _terminal=terminal,
             )
     raise RuntimeError("Guard OAuth loopback callback listener could not bind a random high port.")
 
@@ -960,8 +895,8 @@ def _oauth_dpop_key_material_from_credentials(
     )
 
 
-def _persist_oauth_local_credentials(**kwargs: Unpack[OAuthCredentialUpdateParams]) -> None:
-    persist_oauth_local_credentials(
+def _persist_oauth_local_credentials(**kwargs: Unpack[OAuthCredentialUpdateParams]) -> OAuthConnectionSnapshot | None:
+    return persist_oauth_local_credentials(
         reconcile=lambda target: reconcile_connect_state_with_oauth_entitlement(target, now=kwargs["now"]),
         **kwargs,
     )
@@ -975,13 +910,23 @@ def run_guard_disconnect_command(
     urlopen=managed_urlopen,
 ) -> dict[str, object]:
     store.repair_oauth_local_credential_storage_from_primary()
-    credentials = store.get_oauth_local_credentials(allow_primary=True)
-    if credentials is None:
+    connection = store.capture_oauth_connection_for_disconnect()
+    if connection is None:
         return {
             "status": "not_connected",
             "cloud_grant_revoked": False,
             "reconnect_command": CONNECT_COMMAND,
         }
+
+    credentials = connection.credentials()
+
+    def connection_urlopen(request: urllib.request.Request, *, timeout: float):
+        # Recheck each actual refresh/revocation attempt without holding the lock on I/O.
+        with store.hold_oauth_credential_lock():
+            if connection is None:
+                raise RuntimeError("The connection was not captured.")
+            store._require_oauth_connection_unlocked(connection)
+        return urlopen(request, timeout=timeout)
 
     issuer = _require_oauth_credential_string(credentials, "issuer")
     client_id = _require_oauth_credential_string(credentials, "client_id")
@@ -997,13 +942,13 @@ def run_guard_disconnect_command(
             client_id=client_id,
             refresh_token=refresh_token,
             dpop_key_material=dpop_key_material,
-            urlopen=urlopen,
+            urlopen=connection_urlopen,
             now=exchange_now,
         )
     except RuntimeError as error:
         if not _oauth_refresh_error_means_grant_inactive(error):
             raise
-        store.clear_oauth_local_credentials()
+        store.clear_oauth_local_credentials(expected_connection=connection)
         return {
             "status": "disconnected",
             "cloud_grant_revoked": False,
@@ -1016,7 +961,7 @@ def run_guard_disconnect_command(
     if (rotated_refresh_token and rotated_refresh_token != refresh_token) or (
         token_result.device_id and token_result.device_id != persisted_device_id
     ):
-        _persist_oauth_local_credentials(
+        rotated = _persist_oauth_local_credentials(
             store=store,
             issuer=oauth_client.issuer,
             client_id=client_id,
@@ -1033,17 +978,23 @@ def run_guard_disconnect_command(
             access_token=token_result.access_token,
             access_token_expires_at=token_result.access_token_expires_at,
             now=timestamp,
+            expected_connection=connection,
         )
+        if rotated is None:
+            raise RuntimeError("The refreshed connection was not captured.")
+        connection = rotated
+    with store.hold_oauth_credential_lock():
+        store._require_oauth_connection_unlocked(connection)
     revoke_guard_self_oauth_grant(
         oauth_client=oauth_client,
         access_token=token_result.access_token,
         workspace_id=workspace_id,
         revoke_cloud_grant=revoke_cloud_grant,
         dpop_key_material=dpop_key_material,
-        urlopen=urlopen,
+        urlopen=connection_urlopen,
         now=exchange_now,
     )
-    store.clear_oauth_local_credentials()
+    store.clear_oauth_local_credentials(expected_connection=connection)
     return {
         "status": "disconnected",
         "cloud_grant_revoked": revoke_cloud_grant,
@@ -1096,6 +1047,7 @@ def run_guard_device_connect_command(
     _, allowed_origin = resolve_connect_url(connect_url)
     oauth_client = resolve_guard_oauth_client_config(allowed_origin)
     dpop_key_material = generate_dpop_key_pair()
+    attempt = store.begin_oauth_connect_attempt()
     resolved_machine_label = machine_label.strip() if isinstance(machine_label, str) else ""
     request_body = build_device_authorization_request_body(
         machine_id=str(device["installation_id"]),
@@ -1139,7 +1091,7 @@ def run_guard_device_connect_command(
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = now or datetime.now(timezone.utc).isoformat()
-    _persist_oauth_local_credentials(
+    committed = _persist_oauth_local_credentials(
         store=store,
         issuer=oauth_client.issuer,
         client_id=oauth_client.client_id,
@@ -1155,6 +1107,7 @@ def run_guard_device_connect_command(
         access_token=token_result.access_token,
         access_token_expires_at=token_result.access_token_expires_at,
         now=timestamp,
+        expected_attempt=attempt,
     )
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
     payload.update(
@@ -1171,6 +1124,7 @@ def run_guard_device_connect_command(
         }
     )
     if include_sync_auth_context:
+        payload[CONNECT_CONNECTION_KEY] = committed
         payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
             access_token=token_result.access_token,
             dpop_key_material=dpop_key_material,
@@ -1199,6 +1153,7 @@ def run_guard_browser_connect_command(
         _, allowed_origin = resolve_connect_url(connect_url)
         oauth_client = resolve_guard_oauth_client_config(allowed_origin)
         browser_opener = open_browser if open_browser is not None else open_browser_url
+        attempt = store.begin_oauth_connect_attempt()
 
         bar.step("Starting browser session...")
         session = start_browser_session(
@@ -1226,7 +1181,7 @@ def run_guard_browser_connect_command(
             raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
         bar.step("Saving credentials locally...")
         timestamp = now or datetime.now(timezone.utc).isoformat()
-        _persist_oauth_local_credentials(
+        committed = _persist_oauth_local_credentials(
             store=store,
             issuer=oauth_client.issuer,
             client_id=oauth_client.client_id,
@@ -1242,6 +1197,7 @@ def run_guard_browser_connect_command(
             access_token=token_result.access_token,
             access_token_expires_at=token_result.access_token_expires_at,
             now=timestamp,
+            expected_attempt=attempt,
         )
         bar.done("Authorization complete")
 
@@ -1262,6 +1218,7 @@ def run_guard_browser_connect_command(
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
     }
     if include_sync_auth_context:
+        payload[CONNECT_CONNECTION_KEY] = committed
         payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
             access_token=token_result.access_token,
             dpop_key_material=session.dpop_key_material,

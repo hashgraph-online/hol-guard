@@ -109,7 +109,10 @@ const boundaryDoc = readFileSync(
   "utf8",
 );
 assert(
-  boundaryDoc.includes("GuardExceptionScope") && boundaryDoc.includes("artifact"),
+  boundaryDoc.includes("Cloud exceptions are governed risk acceptances") &&
+    ["artifact", "publisher", "harness", "workspace", "global"].every((scope) =>
+      boundaryDoc.includes(scope),
+    ),
   "boundary doc must record Guard Cloud exception scope contract",
 );
 

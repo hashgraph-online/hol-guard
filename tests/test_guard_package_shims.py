@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PRO
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_activation_helpers import activate_signed_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
@@ -898,9 +899,7 @@ def _generated_shim_with_fake_guard(context: HarnessContext, child_code: str) ->
     base_command_line = next(line for line in source.splitlines() if line.startswith("base_command = "))
     fake_command = [sys.executable, "-c", child_code]
     source = source.replace(base_command_line, f"base_command = {fake_command!r}", 1)
-    contained_start = source.index(
-        "try:\n    from codex_plugin_scanner.guard.contained_package_script_execution"
-    )
+    contained_start = source.index("try:\n    from codex_plugin_scanner.guard.contained_package_script_execution")
     guard_env_start = source.index("guard_env = dict(os.environ)", contained_start)
     return source[:contained_start] + "contained_result = None\n" + source[guard_env_start:]
 
@@ -2063,35 +2062,22 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
-            [
-                PolicyDecision(
-                    harness="*",
-                    scope="harness",
-                    action="block",
-                    artifact_id="family:package-request",
-                    source="policy-bundle",
-                    owner="matcher-only-package-block",
-                    reason="Test-only cached package policy.",
-                )
-            ],
-            "2026-05-19T00:00:00Z",
-            remote_write_authorized=True,
-        )
-        store.set_sync_payload(
-            "policy_bundle",
-            _signed_cached_policy_bundle(
-                [
-                    _cached_policy_rule(
-                        "matcher-only-package-block",
-                        matcher_families=["package-request"],
-                        artifact_type="package_request",
-                    )
-                ]
-            ),
-            "2026-05-19T00:00:00Z",
-        )
         _seed_workspace_sync_credentials(home_dir, sync_url)
+        bundle = _signed_cached_policy_bundle(
+            [
+                _cached_policy_rule(
+                    "matcher-only-package-block",
+                    matcher_families=["package-request"],
+                    artifact_type="package_request",
+                )
+            ]
+        )
+        activate_signed_policy_bundle(
+            store,
+            bundle,
+            keyring=policy_bundle_test_keyring(workspace_id=WORKSPACE_ID),
+            now="2026-05-19T00:00:00Z",
+        )
         rc = main(
             [
                 "guard",

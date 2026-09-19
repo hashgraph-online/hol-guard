@@ -197,6 +197,28 @@ def test_adapter_session_stops_before_broadcasting_worker_client_close(
     assert events == ["stop", "close"]
 
 
+def test_adapter_session_rearms_policy_after_known_resident_stop(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    publisher = SimpleNamespace(request_publish=lambda: events.append("rearm"))
+    runner = SimpleNamespace(close_native_resident_clients=lambda: True)
+    daemon = _DaemonStub(
+        SimpleNamespace(
+            hook_process_runner=runner,
+            hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher),
+        )
+    )
+    session = object.__new__(AdapterSession)
+    session.daemon = daemon
+    session.runtime = tmp_path / "runtime"
+    session.guard_home = tmp_path / "home"
+
+    session.rearm_policy_after_resident_stop()
+
+    assert events == ["rearm"]
+
+
 def test_adapter_session_keeps_containment_when_worker_client_cleanup_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

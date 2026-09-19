@@ -1,0 +1,95 @@
+{
+  "source_head": "592e18dc9c75dec582ad30cee87b77bc39888102",
+  "synthetic_verifier_key_hex": "3535353535353535353535353535353535353535353535353535353535353535",
+  "vectors": [
+    {
+      "name": "absent",
+      "operation": "policy_snapshot_observe",
+      "request": {
+        "intent": {
+          "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-observation.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294"
+        },
+        "mac": "6f514476b46495ae812e5d79599daf8d34587a7127c5b56ed067410501de7204"
+      },
+      "response": {
+        "mac": "4db8b5d2e9193afce8b50369d1b4d84539de7c4fd8e38402900dfd89c5c26e41",
+        "response": {
+          "authority": null,
+          "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "request_sha256": "5d9544c5e3918cd3c4abe785aeebd98f55007573f574127b080409b2358f5878",
+          "resident_generation": 13,
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-observation-response.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294"
+        }
+      }
+    },
+    {
+      "name": "present",
+      "operation": "policy_snapshot_observe",
+      "request": {
+        "intent": {
+          "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-observation.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294"
+        },
+        "mac": "6f514476b46495ae812e5d79599daf8d34587a7127c5b56ed067410501de7204"
+      },
+      "response": {
+        "mac": "a93fae7e12e9c7319dbf877624191f4be351a795812ee7109abdd1605a30f265",
+        "response": {
+          "authority": {
+            "fingerprint": "259ddc69640c25f1d7cf41cbe3064dcc39c342cf2dcc35ec4e561cbdb766d1c0",
+            "generation_floor": 1,
+            "policy_digest": "8222b96774384311d4a42c74005cbbd531174fa4ab9a97d9a27495988a10d35f",
+            "usable_snapshot": true
+          },
+          "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "request_sha256": "5d9544c5e3918cd3c4abe785aeebd98f55007573f574127b080409b2358f5878",
+          "resident_generation": 13,
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-observation-response.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294"
+        }
+      }
+    },
+    {
+      "name": "withdrawn",
+      "operation": "policy_snapshot_withdraw",
+      "request": {
+        "intent": {
+          "expected_authority": {
+            "fingerprint": "259ddc69640c25f1d7cf41cbe3064dcc39c342cf2dcc35ec4e561cbdb766d1c0",
+            "generation_floor": 1,
+            "policy_digest": "8222b96774384311d4a42c74005cbbd531174fa4ab9a97d9a27495988a10d35f",
+            "usable_snapshot": true
+          },
+          "resident_generation": 13,
+          "retirement_generation": 10,
+          "retirement_policy_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-withdrawal.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294"
+        },
+        "mac": "b9cab634ad5e32bdef2179356701d778fbe875488f7c458d320cdff59babde8e"
+      },
+      "response": {
+        "mac": "3957aa654f96407e033e471229e44c7ed7636fc82728b370c395b0d06076fa89",
+        "response": {
+          "generation": 10,
+          "policy_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "request_sha256": "6f32fd892d8aad57d158a30bf5c6e9c64193d73e12ed82a28fcc6bf158e67e12",
+          "resident_generation": 13,
+          "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema": "guard-policy-snapshot-withdrawal-response.v1",
+          "scope_digest": "6d3109368a14d3d10f1b90ae14de3d1dac44d8b62cf857198a7f7bac1b20d294",
+          "status": "withdrawn"
+        }
+      }
+    }
+  ]
+}

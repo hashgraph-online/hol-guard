@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1131,10 +1132,16 @@ def test_poll_once_reuses_cached_access_token_across_oauth_polls(
         refresh_token: str,
         dpop_key_material,
         credential_reloader=None,
+        request_validator: Callable[[], None] | None = None,
+        completion_validator: Callable[[], None] | None = None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, dpop_key_material, credential_reloader
+        del token_endpoint, client_id, dpop_key_material, credential_reloader, completion_validator
+        if request_validator is not None:
+            request_validator()
         observed_refresh_tokens.append(refresh_token)
         current_index = len(observed_refresh_tokens)
+        if request_validator is not None:
+            request_validator()
         return {
             "access_token": oauth_binding_access_token("machine-1", "grant-1", "machine-1", "workspace-1"),
             "access_token_expires_at": "2099-07-05T00:00:00+00:00",
@@ -1399,8 +1406,14 @@ def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_sta
         refresh_token: str,
         dpop_key_material,
         credential_reloader=None,
+        request_validator: Callable[[], None] | None = None,
+        completion_validator: Callable[[], None] | None = None,
     ) -> dict[str, object]:
         del token_endpoint, client_id, refresh_token, dpop_key_material, credential_reloader
+        if request_validator is not None:
+            request_validator()
+        if completion_validator is not None:
+            completion_validator()
         raise guard_runner_module.GuardSyncAuthorizationExpiredError(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )

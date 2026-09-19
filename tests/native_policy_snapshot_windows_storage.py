@@ -60,7 +60,11 @@ def test_windows_snapshot_write_holds_parent_binding_across_commit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(storage_module.os, "name", "nt")
+    monkeypatch.setattr(
+        storage_module,
+        "os",
+        types.SimpleNamespace(**{**vars(storage_module.os), "name": "nt"}),
+    )
     monkeypatch.setattr(storage_module, "snapshot_bytes_v3", lambda _snapshot: b"payload")
     binding = types.SimpleNamespace(path=tmp_path, handle=object(), handles=[])
     events: list[tuple[str, object]] = []
@@ -102,7 +106,11 @@ def test_windows_snapshot_cache_read_holds_state_binding(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(storage_module.os, "name", "nt")
+    monkeypatch.setattr(
+        storage_module,
+        "os",
+        types.SimpleNamespace(**{**vars(storage_module.os), "name": "nt"}),
+    )
     binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=object())
     active = False
     observed: list[tuple[Path, bool]] = []
@@ -140,7 +148,11 @@ def test_windows_generation_read_holds_state_binding(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(storage_module.os, "name", "nt")
+    monkeypatch.setattr(
+        storage_module,
+        "os",
+        types.SimpleNamespace(**{**vars(storage_module.os), "name": "nt"}),
+    )
     binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=object())
     active = False
     observed: list[tuple[Path, bool]] = []
@@ -178,7 +190,11 @@ def test_windows_pending_cleanup_uses_bound_file_handle(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(storage_module.os, "name", "nt")
+    monkeypatch.setattr(
+        storage_module,
+        "os",
+        types.SimpleNamespace(**{**vars(storage_module.os), "name": "nt"}),
+    )
     binding = types.SimpleNamespace(path=tmp_path / "guard" / "native-runtime", handle=ctypes.c_void_p(79))
     active = False
     observed: list[tuple[object, object, bool]] = []
@@ -233,7 +249,11 @@ def test_windows_verifier_key_provisioning_holds_state_binding(
         calls.append((path, derived))
         return path
 
-    monkeypatch.setattr(windows_key.os, "name", "nt")
+    monkeypatch.setattr(
+        windows_key,
+        "os",
+        types.SimpleNamespace(**{**vars(windows_key.os), "name": "nt"}),
+    )
     monkeypatch.setattr(windows_key, "_windows_private_state_binding", private_state_binding)
     monkeypatch.setattr(windows_key, "_windows_provision_verifier_key", provision)
 

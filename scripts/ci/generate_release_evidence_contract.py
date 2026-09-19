@@ -21,7 +21,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.ci.final_release_evidence import REQUIRED_GATES  # noqa: E402
+from scripts.ci.release_required_evidence import validate_collection_report  # noqa: E402
 from scripts.ci.verify_installed_release_matrix import ALL_HARNESSES, REQUIRED_SCENARIOS  # noqa: E402
+from scripts.ci.verify_release_negative_outcomes import validate_negative_outcomes  # noqa: E402
 
 _PLATFORMS: Final = ("manylinux-x64", "macos-arm64", "macos-x64")
 _WINDOWS_WAIVER: Final = "contract-fixture"
@@ -46,7 +48,7 @@ def _installed_matrix(version: str, source_sha: str, rule_digest: str) -> dict[s
                 "python_fallback": False,
                 "path_search": False,
                 "download_attempted": False,
-                "outcome": "pass",
+                "outcome": "fail-safe" if scenario == "fault-injection" else "pass",
                 "evidence_count": 1,
                 "harness_count": len(ALL_HARNESSES),
                 "harnesses": list(ALL_HARNESSES),
@@ -70,7 +72,22 @@ def _installed_matrix(version: str, source_sha: str, rule_digest: str) -> dict[s
     }
 
 
-def generate(output_dir: Path, *, version: str, source_sha: str, rule_digest: str) -> None:
+def generate(
+    output_dir: Path,
+    *,
+    version: str,
+    source_sha: str,
+    rule_digest: str,
+    negative_outcomes: Path,
+    required_collection: Path,
+) -> None:
+    negatives = validate_negative_outcomes(json.loads(negative_outcomes.read_text(encoding="utf-8")))
+    collection = json.loads(required_collection.read_text(encoding="utf-8"))
+    if negatives["source_sha"] != source_sha:
+        raise ValueError("required release evidence does not match source")
+    if not isinstance(collection, dict):
+        raise ValueError("required release collection is not an object")
+    validate_collection_report(collection, source_sha=source_sha)
     output_dir.mkdir(parents=True, exist_ok=True)
     matrix_path = output_dir / "installed-release-matrix.json"
     matrix_digest = _write_json(matrix_path, _installed_matrix(version, source_sha, rule_digest))
@@ -88,6 +105,10 @@ def generate(output_dir: Path, *, version: str, source_sha: str, rule_digest: st
             "status": "pass",
         },
     )
+    negative_path = output_dir / "negative-outcomes.json"
+    negative_digest = _write_json(negative_path, negatives)
+    collection_path = output_dir / "release-required-evidence.json"
+    collection_digest = _write_json(collection_path, collection)
     desktop_path = output_dir / "desktop-core-evidence.json"
     desktop_digest = _write_json(
         desktop_path,
@@ -102,6 +123,7 @@ def generate(output_dir: Path, *, version: str, source_sha: str, rule_digest: st
         output_dir / "final-release-evidence.json",
         {
             "schema": "hol-guard-final-release-evidence.v1",
+            "evidence_kind": "contract-fixture",
             "release": {
                 "version": version,
                 "source_sha": source_sha,
@@ -113,6 +135,8 @@ def generate(output_dir: Path, *, version: str, source_sha: str, rule_digest: st
                 "artifacts": {"name": artifact_path.name, "sha256": artifact_digest, "status": "pass"},
                 "desktop_core": {"name": desktop_path.name, "sha256": desktop_digest, "status": "pass"},
                 "installed_matrix": {"name": matrix_path.name, "sha256": matrix_digest, "status": "pass"},
+                "negative_outcomes": {"name": negative_path.name, "sha256": negative_digest, "status": "pass"},
+                "required_collection": {"name": collection_path.name, "sha256": collection_digest, "status": "pass"},
             },
             "gates": {gate: True for gate in REQUIRED_GATES},
             "review": {
@@ -135,6 +159,7 @@ def generate(output_dir: Path, *, version: str, source_sha: str, rule_digest: st
                 "deterministic": True,
                 "commands": [
                     "validate_installed_release_matrix",
+                    "validate_release_negative_outcomes",
                     "validate_final_release_evidence",
                 ],
             },
@@ -148,8 +173,17 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--rule-digest", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--negative-outcomes", type=Path, required=True)
+    parser.add_argument("--required-collection", type=Path, required=True)
     args = parser.parse_args()
-    generate(args.output_dir, version=args.version, source_sha=args.source_sha, rule_digest=args.rule_digest)
+    generate(
+        args.output_dir,
+        version=args.version,
+        source_sha=args.source_sha,
+        rule_digest=args.rule_digest,
+        negative_outcomes=args.negative_outcomes,
+        required_collection=args.required_collection,
+    )
     return 0
 
 

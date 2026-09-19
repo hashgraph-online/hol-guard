@@ -2,7 +2,7 @@
 //! or is quarantined. The optional floor extends the existing authenticated
 //! authority record while retaining the base generation-floor MAC when it is absent.
 
-use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, PolicySnapshotV3};
+use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -17,8 +17,10 @@ pub(super) struct CommandControlFloor {
     previous_floor_digest: Option<String>,
 }
 
-pub(super) fn snapshot_floor(snapshot: Option<&PolicySnapshotV3>) -> Option<CommandControlFloor> {
-    let binding = snapshot?.command_extensions.as_ref()?;
+pub(super) fn floor_for_binding(
+    binding: Option<&guard_contracts::NativeCommandControlBindingV1>,
+) -> Option<CommandControlFloor> {
+    let binding = binding?;
     (binding.health == "protected").then(|| CommandControlFloor {
         revision: binding.revision,
         managed_revision: binding.managed_revision,
@@ -32,24 +34,19 @@ pub(super) fn snapshot_floor(snapshot: Option<&PolicySnapshotV3>) -> Option<Comm
     })
 }
 
-pub(super) fn next_floor(
+pub(super) fn next_floor_for_binding(
     current: Option<&CommandControlFloor>,
-    snapshot: &PolicySnapshotV3,
+    binding: Option<&guard_contracts::NativeCommandControlBindingV1>,
 ) -> Result<Option<CommandControlFloor>, String> {
-    if current.is_some() && snapshot.command_extensions.is_none() {
+    if current.is_some() && binding.is_none() {
         return Err("native_command_control_binding_removed".to_owned());
     }
-    if current.is_some()
-        && snapshot
-            .command_extensions
-            .as_ref()
-            .is_some_and(|binding| binding.health == "unenrolled")
-    {
+    if current.is_some() && binding.is_some_and(|binding| binding.health == "unenrolled") {
         // Losing protected SQL/key state is not a fresh installation. Retained
         // native authority must never downgrade to permissive first-use defaults.
         return Err("native_command_control_authority_downgrade".to_owned());
     }
-    let Some(candidate) = snapshot_floor(Some(snapshot)) else {
+    let Some(candidate) = floor_for_binding(binding) else {
         return Ok(current.cloned());
     };
     let recovery = validate_authority_transition(current, &candidate)?;

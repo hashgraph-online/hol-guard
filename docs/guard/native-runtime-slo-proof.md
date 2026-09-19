@@ -21,6 +21,16 @@ budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
 
+Recovery has two separately reported cases. `resident_recovery` retains the
+autonomous case: after stopping the resident, the first adapter request must
+return a native allowed decision without an explicit publisher notification.
+`resident_recovery_rearmed` measures the same first request after explicitly
+requesting policy publication, with that notification inside the measured
+window. Each case requires nonempty samples and the same 1,000 ms p95 bound.
+They use separate sessions so the additional notification case cannot consume
+the original case's resident restart budget. Neither case retries a refused
+first request or replaces it with a later successful response.
+
 The c16 latency proof uses a dedicated, fully started 16-thread client executor
 so thread creation and a larger benchmark-only client pool cannot distort the
 production contention being measured. RSS is evaluated separately after c16.

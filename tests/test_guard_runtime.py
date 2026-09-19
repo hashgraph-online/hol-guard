@@ -17,6 +17,7 @@ import threading
 import urllib.error
 import urllib.request
 from base64 import urlsafe_b64decode
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -88,12 +89,20 @@ from codex_plugin_scanner.guard.store import (
     runtime_tool_action_exact_match_context,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests.guard_review_authority_fixtures import enroll_review_authority
+from tests.policy_bundle_activation_helpers import activate_signed_policy_bundle
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
 from tests.support.network import stub_authenticated_urlopen
+from tests.support.optional_uploads import (
+    OPTIONAL_UPLOAD_WORKSPACE,
+    confirm_legacy_optional_uploads,
+    enable_optional_upload_settings,
+    prepare_optional_uploads,
+)
 
 COPILOT_NATIVE_DENY_COMMANDS = (
     """node -e "require('fs').unlinkSync('dangerous-marker.json')" """,
@@ -253,6 +262,7 @@ def _cache_signed_test_policy_bundle(
     bundle_version: str = "policy-2026-01-01.1",
     issued_at: str = "2026-01-01T00:00:00Z",
     expires_at: str | None = None,
+    activate: bool = False,
 ) -> None:
     workspace_id = "workspace-1"
     store.set_sync_payload("oauth_local_credentials", {"workspace_id": workspace_id}, "2026-01-01T00:00:00Z")
@@ -261,16 +271,21 @@ def _cache_signed_test_policy_bundle(
         policy_bundle_test_keyring(workspace_id=workspace_id),
         "2026-01-01T00:00:00Z",
     )
-    store.set_sync_payload(
-        "policy_bundle",
-        _signed_test_policy_bundle(
-            rules,
-            bundle_version=bundle_version,
-            issued_at=issued_at,
-            expires_at=expires_at,
-        ),
-        "2026-01-01T00:00:00Z",
+    bundle = _signed_test_policy_bundle(
+        rules,
+        bundle_version=bundle_version,
+        issued_at=issued_at,
+        expires_at=expires_at,
     )
+    if activate:
+        activate_signed_policy_bundle(
+            store,
+            bundle,
+            keyring=policy_bundle_test_keyring(workspace_id=workspace_id),
+            now=issued_at,
+        )
+    else:
+        store.set_sync_payload("policy_bundle", bundle, "2026-01-01T00:00:00Z")
 
 
 def _request_header(request: urllib.request.Request, name: str) -> str | None:
@@ -295,8 +310,10 @@ def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
 
 
-def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
+def _build_guard_fixture(home_dir: Path, workspace_dir: Path, *, review_authority: bool = False) -> None:
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    if review_authority:
+        enroll_review_authority(home_dir)
     _write_text(
         home_dir / ".codex" / "config.toml",
         """
@@ -4027,7 +4044,11 @@ clearer UX and an implementation plan with technical references.
             "dpop_key_material": object(),
         }
 
-        def fake_resolve_guard_sync_auth_context(current_store: GuardStore) -> dict[str, object]:
+        def fake_resolve_guard_sync_auth_context(
+            current_store: GuardStore,
+            *,
+            connection_observer: object | None = None,
+        ) -> dict[str, object]:
             assert current_store is store
             return shared_auth_context
 
@@ -4060,6 +4081,11 @@ clearer UX and an implementation plan with technical references.
                 "policy_document_versions": [
                     "guard.hashgraphonline.com/v1alpha1",
                 ],
+                "selected_enforcement_lane": "legacy",
+                "advertised_canonical_capabilities": [],
+                "effective_canonical_capabilities": [],
+                "canonical_policy_enforcement_enabled": False,
+                "canonical_rollout_percentage": 0,
                 "yaml_import": False,
             }
             return {
@@ -4149,7 +4175,11 @@ clearer UX and an implementation plan with technical references.
             "dpop_key_material": object(),
         }
 
-        def fake_resolve_guard_sync_auth_context(current_store: GuardStore) -> dict[str, object]:
+        def fake_resolve_guard_sync_auth_context(
+            current_store: GuardStore,
+            *,
+            connection_observer: object | None = None,
+        ) -> dict[str, object]:
             assert current_store is store
             return shared_auth_context
 
@@ -4986,7 +5016,7 @@ clearer UX and an implementation plan with technical references.
     def test_guard_hook_uses_copilot_repo_hook_runtime_path(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
         event = {
             "tool_name": "read_file",
             "tool_input": {"path": str(home_dir / ".env")},
@@ -5023,7 +5053,7 @@ clearer UX and an implementation plan with technical references.
     def test_guard_hook_normalizes_copilot_camel_case_payload(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
         event = {
             "toolName": "view",
             "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
@@ -5074,7 +5104,7 @@ clearer UX and an implementation plan with technical references.
     def test_guard_hook_asks_for_planned_secret_file_reads(self, tmp_path, capsys, monkeypatch, path):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
         event = {
             "tool_name": "read_file",
             "tool_input": {"path": path},
@@ -8644,7 +8674,7 @@ def test_guard_hook_emits_copilot_native_deny_response_for_sandbox_required_requ
 def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     event = {
         "tool_name": "Read",
         "tool_input": {"file_path": str(workspace_dir / ".env")},
@@ -8678,7 +8708,7 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
 def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     event = {
         "tool_name": "Read",
         "tool_input": {"file_path": str(workspace_dir / ".env")},
@@ -8720,7 +8750,7 @@ def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, ca
 def test_guard_hook_claude_native_approval_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-approval",
         "hook_event_name": "PreToolUse",
@@ -8819,7 +8849,7 @@ def _load_claude_pending_question_contract(home_dir: Path, session_id: str) -> t
 def test_guard_hook_claude_ask_user_question_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-allow",
         "hook_event_name": "PreToolUse",
@@ -8961,7 +8991,7 @@ def test_guard_hook_claude_docker_saved_allow_does_not_lower_terminal_block(
 def test_guard_hook_claude_notification_saved_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-notification-only",
         "hook_event_name": "PreToolUse",
@@ -9060,7 +9090,7 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lo
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-repeat-notification",
         "hook_event_name": "PreToolUse",
@@ -9169,7 +9199,7 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lo
 def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-block",
         "hook_event_name": "PreToolUse",
@@ -9260,7 +9290,7 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
 def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-no-answer",
         "hook_event_name": "PreToolUse",
@@ -9349,7 +9379,7 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
 def test_guard_hook_claude_ask_user_question_spoofed_prompt_does_not_persist_approval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-spoof",
         "hook_event_name": "PreToolUse",
@@ -9439,7 +9469,7 @@ def test_guard_hook_claude_ask_user_question_multiple_questions_does_not_persist
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-guard-question-multi",
         "hook_event_name": "PreToolUse",
@@ -9976,7 +10006,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
 def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-native-cancel",
         "hook_event_name": "PreToolUse",
@@ -10043,7 +10073,7 @@ def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, c
 def test_guard_hook_claude_alias_saved_allow_does_not_lower_canonical_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-alias-approval",
         "hook_event_name": "PreToolUse",
@@ -10677,7 +10707,7 @@ def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsy
 def test_guard_hook_claude_stop_keeps_native_cancel_transient(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-deny",
         "hook_event_name": "PreToolUse",
@@ -10749,7 +10779,7 @@ def test_guard_hook_claude_stop_does_not_persist_denial_without_visible_prompt(
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     first_event = {
         "session_id": "session-claude-headless",
         "hook_event_name": "PreToolUse",
@@ -10800,7 +10830,7 @@ def test_guard_hook_claude_stop_does_not_persist_denial_without_visible_prompt(
 def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     event = {
         "tool_name": "Read",
         "tool_input": {"file_path": str(workspace_dir / ".env")},
@@ -10908,7 +10938,7 @@ def test_guard_hook_uses_deny_specific_copy_for_blocked_claude_secret_reads(
 def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     event = {
         "tool_name": "Read",
         "tool_input": {"file_path": str(workspace_dir / ".env")},
@@ -11339,7 +11369,7 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
 def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     pre_tool_event = {
         "session_id": "session-claude-1",
         "tool_name": "Read",
@@ -11409,7 +11439,7 @@ def test_guard_hook_emits_claude_permission_request_attribution_without_decision
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     pre_tool_event = {
         "session_id": "session-claude-permission-request",
         "hook_event_name": "PreToolUse",
@@ -12037,7 +12067,7 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     install_rc = main(
         [
             "guard",
@@ -12136,7 +12166,7 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
 def test_guard_hook_claude_notification_notice_is_tool_scoped_and_retained_while_pending(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
@@ -12217,7 +12247,7 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_retained_while
 def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_context(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     session_id = "session-claude-stale-notice"
     pre_tool_event = {
         "session_id": session_id,
@@ -12337,7 +12367,7 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
@@ -14390,7 +14420,7 @@ def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(tmp_path, cap
 def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     _write_text(
         home_dir / "config.toml",
         'approval_wait_timeout_seconds = 0\n[risk_actions]\nlocal_secret_read = "review"\n',
@@ -15171,7 +15201,7 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
 def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
@@ -15502,7 +15532,7 @@ def test_guard_hook_codex_falls_back_to_native_deny_after_daemon_request_failure
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, workspace_dir, review_authority=True)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(
         runtime_review_module,
@@ -20576,6 +20606,7 @@ def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, 
 def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    prepare_optional_uploads(store, monkeypatch)
     for index in range(65):
         store.add_receipt(
             GuardReceipt(
@@ -20636,6 +20667,7 @@ def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
 def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    prepare_optional_uploads(store, monkeypatch)
     for index in range(3):
         store.add_receipt(
             GuardReceipt(
@@ -20726,6 +20758,7 @@ def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch)
 def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    prepare_optional_uploads(store, monkeypatch)
     for index in range(2):
         store.add_receipt(
             GuardReceipt(
@@ -20794,6 +20827,7 @@ def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, mo
 def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    prepare_optional_uploads(store, monkeypatch)
     request_id = "connect-imported-state"
     with store._connect() as connection:
         connection.execute(
@@ -20924,7 +20958,12 @@ def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monke
 def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
-    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
+    prepare_optional_uploads(store, monkeypatch)
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=OPTIONAL_UPLOAD_WORKSPACE),
+        "2026-04-19T00:00:00Z",
+    )
     for index in range(65):
         store.add_receipt(
             GuardReceipt(
@@ -21049,7 +21088,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     sync_payloads_list = list(sync_payloads)
     first_bundle = sync_payloads_list[0]["policyBundle"]
     if isinstance(first_bundle, dict):
-        first_bundle = sign_policy_bundle(first_bundle)
+        first_bundle = sign_policy_bundle(first_bundle, workspace_id=OPTIONAL_UPLOAD_WORKSPACE)
         sync_payloads_list[0]["policyBundle"] = first_bundle
     sync_payloads = iter(sync_payloads_list)
 
@@ -22302,13 +22341,7 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
         ],
     }
 
-    decisions = guard_runner_module._build_policy_bundle_decisions(
-        bundle,
-        device_id=guard_runner_module._guard_device_metadata(store)[0],
-        device_name="MacBook Pro",
-    )
-    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
-    _cache_signed_test_policy_bundle(store, bundle["rules"])
+    _cache_signed_test_policy_bundle(store, bundle["rules"], activate=True)
 
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
     assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
@@ -22360,17 +22393,12 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         ],
     }
 
-    decisions = guard_runner_module._build_policy_bundle_decisions(
-        bundle,
-        device_id=guard_runner_module._guard_device_metadata(store)[0],
-        device_name="MacBook Pro",
-    )
-    store.replace_remote_policies(decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
     _cache_signed_test_policy_bundle(
         store,
         bundle["rules"],
         bundle_version=str(bundle["bundleVersion"]),
         expires_at=str(bundle["expiresAt"]),
+        activate=True,
     )
 
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a) == "allow"
@@ -22653,21 +22681,6 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="harness",
-                action="allow",
-                artifact_id="family:package-request",
-                source="policy-bundle",
-                owner="signed-package-allow",
-                reason="Test-only signed policy decision.",
-            )
-        ],
-        "2026-04-19T00:00:00Z",
-        remote_write_authorized=True,
-    )
     policy_bundle = sign_policy_bundle(
         {
             "contractVersion": "guard-policy-bundle.v1",
@@ -22698,6 +22711,12 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
             ],
             "acknowledgements": [],
         }
+    )
+    activate_signed_policy_bundle(
+        store,
+        policy_bundle,
+        keyring=policy_bundle_test_keyring(),
+        now="2026-04-19T00:00:00Z",
     )
     digest_bundle = dict(policy_bundle)
     digest_bundle["verifier"] = {
@@ -22763,15 +22782,11 @@ def test_policy_bundle_replacement_invalidates_prevalidated_allow_claim(tmp_path
         },
     }
     authorized_bundle = _signed_test_policy_bundle([allow_rule])
-    store.set_sync_payload("policy_bundle", authorized_bundle, "2026-01-01T00:00:00Z")
-    store.replace_remote_policies(
-        guard_runner_module._build_policy_bundle_decisions(
-            authorized_bundle,
-            device_id=guard_runner_module._guard_device_metadata(store)[0],
-            device_name=guard_runner_module._guard_device_metadata(store)[1],
-        ),
-        "2026-01-01T00:00:00Z",
-        remote_write_authorized=True,
+    activate_signed_policy_bundle(
+        store,
+        authorized_bundle,
+        keyring=policy_bundle_test_keyring(workspace_id="workspace-1"),
+        now="2026-01-01T00:00:00Z",
     )
     artifact_id = "codex:project:package-request:claim-race"
     lookup = store.resolve_policy_decision_lookup(
@@ -22812,25 +22827,12 @@ def test_interrupted_policy_bundle_replacement_cannot_reuse_prior_materialized_a
         "matcherFamilies": ["package-request"],
         "scope": {"harnesses": ["codex"], "ecosystems": []},
     }
-    _cache_signed_test_policy_bundle(store, [old_rule])
-    device_metadata = store.get_device_metadata()
-    old_bundle = store.get_sync_payload("policy_bundle")
-    assert isinstance(old_bundle, dict)
-    old_decisions = guard_runner_module._build_policy_bundle_decisions(
-        old_bundle,
-        device_id=device_metadata["installation_id"],
-        device_name=device_metadata["device_label"],
-    )
-    store.replace_remote_policies(
-        old_decisions,
-        "2026-01-01T00:00:00Z",
-        remote_write_authorized=True,
-    )
+    _cache_signed_test_policy_bundle(store, [old_rule], activate=True)
     artifact_id = "codex:project:package-request:test"
     assert store.resolve_policy("codex", artifact_id, "sha256:test") == "allow"
 
-    # Both sync paths persist the newly verified bundle before replacing its
-    # materialized rows. Simulate a process interruption at exactly that point.
+    # Simulate an interrupted legacy cache update. Current publication is atomic,
+    # and a mismatched cached source must never authorize older materialized rows.
     replacement_bundle = _signed_test_policy_bundle(
         [],
         bundle_version="policy-2026-01-02.1",
@@ -23234,7 +23236,9 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
     assert store.get_sync_payload("policy_bundle") == last_good
     assert store.get_sync_payload("policy_bundle_last_good") == last_good
     assert store.get_sync_payload("policy_bundle_last_error") == {
-        "reason": "canonical_compile_unsupported_policy_match"
+        "reason": "canonical_compile_unsupported_policy_match",
+        "ruleId": "rule.unsupported-operation",
+        "remediation": "Remove the unsupported rule clause or choose a supported target consumer.",
     }
     assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
     rollback_events = store.list_events(event_name="policy_bundle/rollback")
@@ -23476,16 +23480,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
             }
         ],
     }
-    store.replace_remote_policies(
-        guard_runner_module._build_policy_bundle_decisions(
-            bundle,
-            device_id=guard_runner_module._guard_device_metadata(store)[0],
-            device_name="MacBook Pro",
-        ),
-        "2026-06-05T13:31:00+00:00",
-        remote_write_authorized=True,
-    )
-    _cache_signed_test_policy_bundle(store, bundle["rules"])
+    _cache_signed_test_policy_bundle(store, bundle["rules"], activate=True)
 
     order: list[str] = []
     original_resolve_policy = store.resolve_policy_decision_lookup_with_memory_pattern
@@ -23890,12 +23885,18 @@ def test_resolve_guard_sync_auth_context_serializes_refresh_token_rotation(tmp_p
         refresh_token: str,
         dpop_key_material,
         credential_reloader=None,
+        request_validator: Callable[[], None] | None = None,
+        completion_validator: Callable[[], None] | None = None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, dpop_key_material, credential_reloader
+        del token_endpoint, client_id, dpop_key_material, credential_reloader, completion_validator
+        if request_validator is not None:
+            request_validator()
         observed_refresh_tokens.append(refresh_token)
         if refresh_token == "refresh-token-1":
             first_refresh_started.set()
             assert allow_first_refresh.wait(timeout=3)
+            if request_validator is not None:
+                request_validator()
             return {
                 "access_token": "access-token-1",
                 "refresh_token": "refresh-token-2",
@@ -23906,6 +23907,8 @@ def test_resolve_guard_sync_auth_context_serializes_refresh_token_rotation(tmp_p
                 },
             }
         if refresh_token == "refresh-token-2":
+            if request_validator is not None:
+                request_validator()
             return {
                 "access_token": "access-token-2",
                 "refresh_token": "refresh-token-3",
@@ -23968,17 +23971,28 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
 def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
+    initial_credentials = {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": "refresh-token-1",
+        "dpop_private_key_pem": dpop_key_material.private_key_pem,
+        "dpop_public_jwk": dpop_key_material.public_jwk,
+        "dpop_public_jwk_thumbprint": dpop_key_material.public_jwk_thumbprint,
+        "grant_id": "grant-1",
+        "machine_id": "machine-1",
+        "workspace_id": OPTIONAL_UPLOAD_WORKSPACE,
+        "now": "2026-06-01T00:00:00+00:00",
+        "access_token": "oauth-access-token-1",
+        "access_token_expires_at": "2099-01-01T00:00:00+00:00",
+    }
+    store.set_oauth_local_credentials(**initial_credentials)
+    monkeypatch.setattr(guard_runner_module, "_test_sync_auth_context_override", None)
+    monkeypatch.delenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", raising=False)
+    enable_optional_upload_settings(store)
+    confirm_legacy_optional_uploads(store)
     store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-01T00:00:00+00:00",
+        **{**initial_credentials, "access_token_expires_at": "2000-01-01T00:00:00+00:00"},
+        expected_connection=store.capture_oauth_connection(),
     )
     for index in range(51):
         store.add_receipt(
@@ -24062,17 +24076,28 @@ def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch
 def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
+    initial_credentials = {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": "refresh-token-1",
+        "dpop_private_key_pem": dpop_key_material.private_key_pem,
+        "dpop_public_jwk": dpop_key_material.public_jwk,
+        "dpop_public_jwk_thumbprint": dpop_key_material.public_jwk_thumbprint,
+        "grant_id": "grant-1",
+        "machine_id": "machine-1",
+        "workspace_id": OPTIONAL_UPLOAD_WORKSPACE,
+        "now": "2026-06-01T00:00:00+00:00",
+        "access_token": "oauth-access-token-1",
+        "access_token_expires_at": "2099-01-01T00:00:00+00:00",
+    }
+    store.set_oauth_local_credentials(**initial_credentials)
+    monkeypatch.setattr(guard_runner_module, "_test_sync_auth_context_override", None)
+    monkeypatch.delenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", raising=False)
+    enable_optional_upload_settings(store)
+    confirm_legacy_optional_uploads(store)
     store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-01T00:00:00+00:00",
+        **{**initial_credentials, "access_token_expires_at": "2000-01-01T00:00:00+00:00"},
+        expected_connection=store.capture_oauth_connection(),
     )
     token_requests: list[urllib.request.Request] = []
     sync_requests: list[urllib.request.Request] = []
@@ -24529,8 +24554,8 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
 
 
 def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    repo_root = tmp_path / "projects" / "example-org"
+    workspace_dir = repo_root / "example-repository" / ".worktrees" / "read-only-fixture"
     source_file = workspace_dir / "src" / "guard-auth.ts"
     live_prefix = "guard" + "_live" + "_"
     _write_text(
@@ -24572,9 +24597,9 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
 
 
 def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
-    outside_dir = tmp_path / "CascadeProjects" / "outside"
+    repo_root = tmp_path / "projects" / "example-org"
+    workspace_dir = repo_root / "example-repository" / ".worktrees" / "read-only-fixture"
+    outside_dir = tmp_path / "projects" / "outside"
     _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
     _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
 
@@ -24591,8 +24616,8 @@ def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Pa
 
 
 def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
+    repo_root = tmp_path / "projects" / "example-org"
+    workspace_dir = repo_root / "example-repository" / ".worktrees" / "tilde-fixture"
     _write_text(
         workspace_dir / "app" / "agent-token-detail.tsx",
         "export type AgentTokenDetail = { tokenId: string };\n",
@@ -24601,8 +24626,8 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
 
     command = (
         'rg -n "onRotated=|onRotated:|onRotated\\)|AgentTokenDetail" '
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
+        "~/projects/example-org/example-repository/.worktrees/tilde-fixture/app "
+        "~/projects/example-org/example-repository/.worktrees/tilde-fixture/__tests__"
     )
 
     assert guard_commands_module._codex_command_is_read_only_source_inspection(
@@ -25324,6 +25349,8 @@ def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkey
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-token-1",
+        access_token="oauth-access-token-1",
+        access_token_expires_at="2099-01-01T00:00:00+00:00",
         dpop_private_key_pem=dpop_key_material.private_key_pem,
         dpop_public_jwk=dpop_key_material.public_jwk,
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
@@ -25449,7 +25476,8 @@ def test_sync_runtime_session_limits_dpop_nonce_retries(tmp_path, monkeypatch):
     assert len(captured_requests) == 4
 
 
-def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):
+@pytest.mark.parametrize("replacement", ["unchanged", "replacement", "disconnect"])
+def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch, replacement):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -25464,6 +25492,8 @@ def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path
         workspace_id="workspace-1",
         now="2026-06-01T00:00:00+00:00",
     )
+    peer = GuardStore(store.guard_home)
+    marker = {"source": "newer-connection"}
     captured_requests: list[urllib.request.Request] = []
     challenge_nonce = "nonce-refresh"
 
@@ -25505,6 +25535,26 @@ def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path
                 }
             )
         assert request.full_url == "https://hol.org/api/guard/runtime/sessions/sync"
+        assert _request_header(request, "Authorization") == "Bearer oauth-access-token-1"
+        refreshed = peer.get_oauth_local_credentials()
+        assert refreshed is not None and refreshed["refresh_token"] == "refresh-token-2"
+        if replacement == "replacement":
+            peer.set_oauth_local_credentials(
+                issuer="https://hol.org",
+                client_id="guard-local-daemon",
+                refresh_token="newer-refresh-token",
+                dpop_private_key_pem=dpop_key_material.private_key_pem,
+                dpop_public_jwk=dpop_key_material.public_jwk,
+                dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+                grant_id="newer-grant",
+                machine_id="machine-1",
+                workspace_id="newer-workspace",
+                now="2026-06-01T00:00:05+00:00",
+            )
+        elif replacement == "disconnect":
+            peer.clear_oauth_local_credentials()
+        if replacement != "unchanged":
+            peer.set_sync_payload("runtime_session_summary", marker, "2026-06-01T00:00:05+00:00")
         return _Response(
             {
                 "generatedAt": "2026-06-01T00:00:10+00:00",
@@ -25514,23 +25564,34 @@ def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    guard_runner_module.sync_runtime_session(
-        store,
-        session={
-            "session_id": "session-oauth",
-            "harness": "codex",
-            "surface": "cli",
-            "status": "active",
-            "client_name": "Codex",
-            "client_title": "Codex CLI",
-            "client_version": "1.0.0",
-            "workspace": "prod",
-            "capabilities": ["chat"],
-            "started_at": "2026-06-01T00:00:00+00:00",
-            "updated_at": "2026-06-01T00:00:00+00:00",
-            "operations": [],
-        },
-    )
+    def sync():
+        guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-oauth",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    if replacement == "unchanged":
+        sync()
+        assert peer.get_sync_payload("runtime_session_summary")["runtime_session_id"] == "session-oauth"
+        assert len(peer.list_guard_events_v1(uploaded=False, limit=10)) == 1
+    else:
+        with pytest.raises(RuntimeError, match="connection changed"):
+            sync()
+        assert peer.get_sync_payload("runtime_session_summary") == marker
+        assert peer.list_guard_events_v1(uploaded=False, limit=10) == []
 
     refresh_requests = [
         request for request in captured_requests if request.full_url == "https://hol.org/api/guard/oauth/token"
@@ -25542,5 +25603,11 @@ def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path
     assert second_claims["nonce"] == challenge_nonce
 
     credentials = store.get_oauth_local_credentials()
-    assert credentials is not None
-    assert credentials["refresh_token"] == "refresh-token-2"
+    if replacement == "disconnect":
+        assert credentials is None
+    else:
+        assert credentials is not None
+        assert credentials["refresh_token"] == (
+            "refresh-token-2" if replacement == "unchanged" else "newer-refresh-token"
+        )
+    assert len(captured_requests) == 3

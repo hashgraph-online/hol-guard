@@ -36,6 +36,7 @@ from tests.guard_command_corpus import (
     load_seed_manifest,
     stable_case_id,
 )
+from tests.guard_command_corpus_diagnostics import CorpusDiagnosticError, corpus_failure_boundary
 from tests.guard_command_corpus_oracle import (
     ADVERSARIAL_ORACLE,
     BENIGN_ORACLE,
@@ -338,15 +339,20 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
         expected[key] = (count, digest)
 
     runner_path = Path(__file__).with_name("guard_command_corpus_runner.py")
-    completed = subprocess.run(
-        [sys.executable, str(runner_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
-        cwd=Path.cwd(),
-    )
-    report_value = cast(object, json.loads(completed.stdout))
+    try:
+        with corpus_failure_boundary("coordinator_process"):
+            completed = subprocess.run(
+                [sys.executable, str(runner_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                cwd=Path.cwd(),
+            )
+        with corpus_failure_boundary("coordinator_report"):
+            report_value = cast(object, json.loads(completed.stdout))
+    except CorpusDiagnosticError as error:
+        pytest.fail(str(error), pytrace=False)
     assert isinstance(report_value, dict)
     report = cast(dict[str, object], report_value)
     actual_value = report["actual"]
@@ -358,7 +364,7 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
     }
     assert actual == expected
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
-        load_seed_manifest()["evaluation_budget_seconds"]
+        cast(int, load_seed_manifest()["evaluation_budget_seconds"])
     )
     assert isinstance(report["rss_mib"], int | float) and report["rss_mib"] < 512
 
@@ -421,6 +427,37 @@ def test_canonical_digests_are_stable_across_process_roots_hash_seed_timezone_an
     assert outputs[0] == outputs[1]
 
 
+def _contains_hashed_marker(text: str, *, marker_size: int, marker_digest: str) -> bool:
+    """Match an exact substring without putting the excluded marker in source."""
+    if marker_size < 1:
+        raise ValueError("marker size must be positive")
+    encoded = text.encode("utf-8")
+    return any(
+        hashlib.sha256(encoded[index : index + marker_size]).hexdigest() == marker_digest
+        for index in range(len(encoded) - marker_size + 1)
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    (
+        ("sensitive-marker", True),
+        ("prefix-sensitive-marker-suffix", True),
+        ("é-sensitive-marker-λ", True),
+        ("Sensitive-marker", False),
+        ("sensitive_markers", False),
+        ("", False),
+        ("sensitive", False),
+    ),
+)
+def test_hashed_corpus_marker_retains_exact_substring_matching(text: str, expected: bool) -> None:
+    marker = b"sensitive-marker"
+    assert (
+        _contains_hashed_marker(text, marker_size=len(marker), marker_digest=hashlib.sha256(marker).hexdigest())
+        is expected
+    )
+
+
 def test_all_corpus_artifacts_and_generated_records_are_secret_and_pii_free() -> None:
     forbidden = (
         "/" + "Users/",
@@ -431,7 +468,7 @@ def test_all_corpus_artifacts_and_generated_records_are_secret_and_pii_free() ->
         "xo" + "xb-",
         "AK" + "IA",
         "BEGIN " + "PRIVATE KEY",
-        "hashgraph-online" + "/points-portal",
+        "synthetic-private-org/private-repository",
     )
     patterns = (
         re.compile(r"\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
@@ -442,5 +479,11 @@ def test_all_corpus_artifacts_and_generated_records_are_secret_and_pii_free() ->
     texts.extend(case.command for case in chain(iter_benign_corpus(), iter_adversarial_corpus()))
     texts.extend(repr(record) for record in chain(iter_benign_oracle(), iter_adversarial_oracle()))
     for text in texts:
+        if _contains_hashed_marker(
+            text,
+            marker_size=30,
+            marker_digest="971586d1aa04a8a2828cf9dc6f02660abd890cddd48ff4c1be8af81e47e3c1aa",
+        ):
+            pytest.fail("Corpus contains an excluded project marker.", pytrace=False)
         assert all(value not in text for value in forbidden)
         assert all(pattern.search(text) is None for pattern in patterns)

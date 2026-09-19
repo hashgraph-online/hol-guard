@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
@@ -420,15 +421,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         authorize_url = "https://hol.org/mock-authorize"
         redirect_uri = "http://127.0.0.1:53111/oauth/callback"
         pkce_verifier = "pkce-verifier"
-        dpop_key_material = type(
-            "KeyMaterial",
-            (),
-            {
-                "private_key_pem": "private-key-new",
-                "public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value-new", "y": "y-value-new"},
-                "public_jwk_thumbprint": "thumbprint-new",
-            },
-        )()
+        dpop_key_material = generate_dpop_key_pair()
 
         def wait_for_callback(self, _timeout_seconds: float):
             assert callback_allowed.wait(timeout=10), "status poll did not observe the active connect flow"

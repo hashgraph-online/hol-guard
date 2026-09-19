@@ -11,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/publish.yml"
+CANARY_WORKFLOW_PATH = ROOT / ".github/workflows/installed-pr-canary.yml"
 MANIFEST_PATH = ROOT / "release-metadata/release-22-installed-evidence.json"
 
 
@@ -41,6 +42,8 @@ def _workflow() -> dict[object, object]:
 
 
 def _job(name: str) -> dict[str, object]:
+    if name == "pr-installed-canary":
+        return _mapping(yaml.safe_load(CANARY_WORKFLOW_PATH.read_text(encoding="utf-8"))["jobs"][name])
     return _mapping(_mapping(_workflow()["jobs"])[name])
 
 
@@ -72,17 +75,26 @@ def test_build_binds_subject_to_exact_pull_request_head_and_artifact() -> None:
 def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() -> None:
     job = _job("pr-installed-canary")
 
-    assert job["needs"] == ["build", "publish-testpypi"]
+    assert job["needs"] == ["resolve-canary"]
     assert "github.event.pull_request.head.repo.full_name == github.repository" in _text(job["if"])
     strategy = _mapping(job["strategy"])
     assert strategy["fail-fast"] is False
     assert _mapping(strategy["matrix"])["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
     steps = _steps(job)
     checkout = _action_step(steps, "actions/checkout")
-    assert _mapping(checkout["with"])["ref"] == "${{ needs.build.outputs.source_sha }}"
+    assert _mapping(checkout["with"])["ref"] == "${{ needs.resolve-canary.outputs.source_sha }}"
     bun = _action_step(steps, "oven-sh/setup-bun")
     assert bun["uses"] == "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
     assert _mapping(bun["with"])["bun-version"] == "1.3.14"
+
+
+def test_installed_pr_canary_has_no_shared_cache_authority() -> None:
+    job = _job("pr-installed-canary")
+
+    # Cache service tokens must refuse writes even from installed code.
+    assert job.get("cache-mode", _workflow().get("cache-mode")) == "none"
+    setup_uv = _action_step(_steps(job), "astral-sh/setup-uv")
+    assert _mapping(setup_uv["with"])["enable-cache"] is False
 
 
 def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
@@ -113,7 +125,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "Prove the harness rejects missing evidence" in names
     assert "Run installed 51k corpus and dashboard smoke" in names
     assert "Upload installed canary evidence" in names
-    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow_text = CANARY_WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
     assert "--download-dir verified-testpypi" in workflow_text
     assert "git rev-parse 'HEAD^{commit}'" in workflow_text

@@ -27,7 +27,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot, native_review_diagnostic
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
@@ -276,7 +276,7 @@ def _bench_native_warm_production(
         if native_hook_route() != "native_resident":
             raise RuntimeError(
                 "Native production warm benchmark did not use the authenticated resident route: "
-                f"sample={index} route={native_hook_route()!r}"
+                f"sample={index} route={native_hook_route()!r}; {native_review_diagnostic(guard_home)}"
             )
         if response is None or response.decision != "allow":
             raise RuntimeError(

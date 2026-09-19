@@ -22,7 +22,10 @@ def test_pr_canary_requires_maintainer_opt_in_for_same_repository_prs() -> None:
     assert "github.event.pull_request.head.repo.full_name == github.repository" in job["if"]
     assert "vars.PR_CANARY_PUBLISHING_ENABLED == 'true'" in job["if"]
     assert "contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary')" in job["if"]
-    installed_job = workflow["jobs"]["pr-installed-canary"]
+    installed = yaml.safe_load((ROOT / ".github/workflows/installed-pr-canary.yml").read_text(encoding="utf-8"))
+    assert set(installed[True]) == {"pull_request"}
+    assert "pr-installed-canary" not in workflow["jobs"]
+    installed_job = installed["jobs"]["pr-installed-canary"]
     assert "vars.PR_CANARY_PUBLISHING_ENABLED == 'true'" in installed_job["if"]
     assert "contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary')" in installed_job["if"]
     assert job["environment"] == "testpypi"

@@ -1,0 +1,111 @@
+{
+  "verifierKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "snapshot": {
+    "schema": "hol-guard-native-policy.v4",
+    "version": 4,
+    "generation": 7,
+    "policy_digest": "0e0e1f5eae914f092e93731ccb068dd929b811797a99dcce2d03beb1124a66e7",
+    "config_digest": "461e7371b4e23f68a2e384062faaa021fcc1e7cb8b789c96f6f124a65487cd07",
+    "rule_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version": 1,
+    "mode": "enforce",
+    "scope_contract": {
+      "schema": "guard-native-scope.v1",
+      "kind": "guard-home",
+      "scope_digest": "f7c27df8ce7ad72369e1b134ef2aa93fb87b8febe712a760dffdaddde6d6f5a8",
+      "workspace_binding": "request-source"
+    },
+    "effective_policy": {
+      "protection_posture": "protected",
+      "security_level": "balanced",
+      "default_action": "warn",
+      "unknown_publisher_action": "review",
+      "changed_hash_action": "require-reapproval",
+      "new_network_domain_action": "warn",
+      "subprocess_action": "warn",
+      "risk_actions": {
+        "prompt_injection": "block"
+      },
+      "harness_risk_actions": {},
+      "harness_actions": {},
+      "publisher_actions": {},
+      "artifact_actions": {},
+      "sandbox_analysis": "off",
+      "receipt_redaction_level": "full"
+    },
+    "issued_at_ms": 1000,
+    "expires_at_ms": 2000,
+    "integrity": {
+      "algorithm": "hmac-sha256",
+      "key_id": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+      "mac": "8cc0a5b80d78bbe9bac5e5df2c940f5452997add3280531fe16e0df8612cbbee"
+    },
+    "scoped_authority": {
+      "schema": "guard-native-policy-authority.v1",
+      "generic_precedence": "specificity-recency.v1",
+      "rows": [
+        {
+          "decision_id": 1,
+          "harness": "codex",
+          "scope": "workspace",
+          "action": "block",
+          "source_kind": "signed-bundle",
+          "updated_at_us": 1789603200000123,
+          "artifact_id": "synthetic-artifact",
+          "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workspace": "synthetic-workspace-\u03b1",
+          "publisher": null,
+          "expires_at_ms": 1789689600000,
+          "exact_command_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "requires_exact_context": false
+        },
+        {
+          "decision_id": 2,
+          "harness": "codex",
+          "scope": "global",
+          "action": "review",
+          "source_kind": "local",
+          "updated_at_us": 1789603201000000,
+          "artifact_id": "family:tool-action",
+          "artifact_hash": "runtime-exact:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "workspace": null,
+          "publisher": null,
+          "expires_at_ms": null,
+          "exact_command_sha256": null,
+          "requires_exact_context": true
+        },
+        {
+          "decision_id": 3,
+          "harness": "*",
+          "scope": "publisher",
+          "action": "allow",
+          "source_kind": "signed-memory",
+          "updated_at_us": 1789603202000000,
+          "artifact_id": null,
+          "artifact_hash": null,
+          "workspace": null,
+          "publisher": "synthetic-publisher",
+          "expires_at_ms": null,
+          "exact_command_sha256": null,
+          "requires_exact_context": false
+        }
+      ],
+      "managed": {
+        "revision": 4,
+        "managed_revision": 8,
+        "catalog_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "global_lockdown": false,
+        "controls": [
+          {
+            "target_kind": "permission",
+            "target_id": "command.synthetic.permission.read",
+            "state": "disabled"
+          }
+        ]
+      }
+    },
+    "source_input_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "signingBytesSha256": "9dbc8b4f69b1447d4f7b417c7a4564f4191de4ee26e6429aa9d4409f739a2576"
+}

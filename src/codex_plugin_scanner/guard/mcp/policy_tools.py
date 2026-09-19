@@ -17,7 +17,7 @@ from ..approval_gate import ApprovalGateGrant
 from ..policy_document import GuardPolicyDocument, policy_document_digest
 from ..policy_document_compile import build_policy_document_from_rows, compile_policy_document
 from ..policy_document_diff import diff_policy_documents
-from ..policy_document_io import CompiledPolicyRow
+from ..policy_document_io import CompiledPolicyRow, PolicyCompilationError
 from ..policy_document_yaml import (
     PolicyDocumentError,
     format_policy_document_yaml,
@@ -99,9 +99,19 @@ def _semantic_diff_summary(
 
 
 def _write_plan_summary(
-    store: GuardStore, compiled: tuple[CompiledPolicyRow, ...], mode: PolicyImportMode
+    store: GuardStore,
+    compiled: tuple[CompiledPolicyRow, ...],
+    mode: PolicyImportMode,
+    document: GuardPolicyDocument,
 ) -> dict[str, list[str]]:
-    plan = store.plan_policy_document_import(compiled, mode=mode)
+    try:
+        plan = store.plan_policy_document_import(compiled, mode=mode, document=document)
+    except PolicyCompilationError as error:
+        raise PolicyToolError(
+            "policy_write_conflict",
+            "Policy rule identities conflict with the current import. "
+            "Use distinct rule IDs or review a replacement import.",
+        ) from error
     return {
         "additions": list(plan.additions),
         "replacements": list(plan.replacements),
@@ -161,7 +171,7 @@ def execute_validate_policy(store: GuardStore, arguments: dict[str, object]) -> 
     current_document = _build_current_document(store)
     current_digest = policy_document_digest(current_document) if current_document else None
     diff_summary = _semantic_diff_summary(current_document, document)
-    plan_summary = _write_plan_summary(store, compiled, parsed.mode)
+    plan_summary = _write_plan_summary(store, compiled, parsed.mode, document)
 
     payload: dict[str, object] = {
         "ok": True,
@@ -222,7 +232,7 @@ def execute_create_policy(
     if not diff_summary["additions"] and not diff_summary["modifications"] and not diff_summary["removals"]:
         raise PolicyToolError("policy_no_changes", "The candidate policy has no semantic changes.")
 
-    plan_summary = _write_plan_summary(store, compiled, parsed.mode)
+    plan_summary = _write_plan_summary(store, compiled, parsed.mode, document)
     canonical_yaml = format_policy_document_yaml(document)
     plan_json = json.dumps(plan_summary, separators=(",", ":"), sort_keys=True)
 

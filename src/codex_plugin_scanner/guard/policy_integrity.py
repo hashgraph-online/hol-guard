@@ -13,9 +13,9 @@ POLICY_INTEGRITY_VERSION = 2
 POLICY_INTEGRITY_MAC_ALGORITHM = "hmac-sha256"
 _LEGACY_POLICY_INTEGRITY_VERSION = 1
 _SUPPORTED_POLICY_INTEGRITY_VERSIONS = frozenset({_LEGACY_POLICY_INTEGRITY_VERSION, POLICY_INTEGRITY_VERSION})
-REMOTE_POLICY_SOURCES = frozenset(
-    {"cloud-sync", "team-policy", "policy-bundle", "policy-bundle-canonical", "cloud-signed-memory"}
-)
+BUNDLE_OWNED_POLICY_SOURCES = frozenset({"cloud-sync", "team-policy", "policy-bundle", "policy-bundle-canonical"})
+MEMORY_POLICY_SOURCES = frozenset({"cloud-signed-memory"})
+REMOTE_POLICY_SOURCES = BUNDLE_OWNED_POLICY_SOURCES | MEMORY_POLICY_SOURCES
 
 PolicyIntegrityStatus = Literal[
     "valid",
@@ -62,6 +62,9 @@ def canonical_policy_payload(
         "updated_at": _string_or_none(_mapping_value(row, "updated_at")),
         "workspace": _string_or_none(_mapping_value(row, "workspace")),
     }
+    exact_command = _mapping_value(row, "exact_command_sha256")
+    if exact_command is not None:
+        payload["exact_command_sha256"] = exact_command
     if resolved_version == POLICY_INTEGRITY_VERSION:
         payload["decision_id"] = _int_or_none(_mapping_value(row, "decision_id"))
         payload["integrity_generation"] = _int_or_none(_mapping_value(row, "integrity_generation"))
