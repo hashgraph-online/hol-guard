@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
+from .command_matcher_contracts import MatcherEvidence
+from .command_model import CanonicalCommand
 from .command_rules import (
     AnyMatcher,
     CommandSafetyRule,
+    _after_leading_options,
+    _segment_matches_executable,
 )
 
 _APEX_LAUNCHERS: tuple[tuple[str, ...], ...] = (
@@ -42,6 +48,56 @@ _APEX_OPTIONS_WITH_VALUES = frozenset({
 })
 
 _WRAPPER_LEADING_OPTIONS_WITH_VALUES = frozenset({"-n", "-P", "-I", "-L", "-s"})
+
+_EXPANSION_MARKERS = frozenset({"$", "`"})
+
+@dataclass(frozen=True, slots=True)
+class ApexUnresolvedExpansionMatcher:
+    """Match apex commands whose action may be supplied by shell expansion.
+
+    A `$VAR`, `${VAR}`, `$(...)`, or backtick token can expand to a mutating
+    subcommand (like `compress`, `decompress`, `repair`) at execution time.
+    """
+
+    launchers: tuple[tuple[str, ...], ...] = _APEX_LAUNCHERS
+    leading_options_with_values: frozenset[str] = _WRAPPER_LEADING_OPTIONS_WITH_VALUES
+    expansion_markers: frozenset[str] = _EXPANSION_MARKERS
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if segment.executable is None:
+                continue
+            lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            for launcher in self.launchers:
+                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
+                    continue
+                candidate_arguments = lowered_arguments
+                if launcher[0] in ("exec", "xargs"):
+                    candidate_arguments = _after_leading_options(
+                        candidate_arguments,
+                        self.leading_options_with_values,
+                        frozenset(),
+                    )
+                prefix_len = len(launcher) - 1
+                if len(candidate_arguments) <= prefix_len:
+                    continue
+                launcher_args = launcher[1:]
+                if candidate_arguments[:prefix_len] != launcher_args:
+                    continue
+                
+                action_token = candidate_arguments[prefix_len]
+                if any(marker in action_token for marker in self.expansion_markers):
+                    evidence.append(
+                        MatcherEvidence(
+                            segment_index=index,
+                            executable=segment.executable,
+                            detail="Matched apex command with unresolved expansion in the subcommand position.",
+                        )
+                    )
+                break
+        return tuple(evidence)
+
 
 _APEX_COMPRESS = AnyMatcher(
     matchers=tuple(
@@ -94,13 +150,19 @@ _APEX_REPAIR = AnyMatcher(
     )
 )
 
+
+_APEX_COMPRESS_WITH_EXPANSIONS = AnyMatcher(
+    matchers=(*_APEX_COMPRESS.matchers, ApexUnresolvedExpansionMatcher()),
+)
+
 APEX_COMMAND_RULES = (
     CommandSafetyRule(
         rule_id="command.apex.compress",
         title="apex file compression",
         description=(
             "Identifies `apex compress` commands, which can overwrite existing "
-            "files or archives."
+            "files or archives. Invocations carrying unresolved shell expansions "
+            "in the action position are reviewed because they cannot prove mutating actions absent."
         ),
         severity="high",
         risk_classes=("destructive_shell",),
@@ -108,7 +170,7 @@ APEX_COMMAND_RULES = (
         safer_alternatives=(
             "Confirm the destination path is not an existing critical file.",
         ),
-        matcher=_APEX_COMPRESS,
+        matcher=_APEX_COMPRESS_WITH_EXPANSIONS,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(

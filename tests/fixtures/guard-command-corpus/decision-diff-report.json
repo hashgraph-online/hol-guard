@@ -573,5 +573,6 @@
     "resource_measurements_included": false
   },
   "proposal_version": "guard.command-shadow-proposal.baseline.v1",
-  "schema_version": "guard.command-decision-diff.v1"
+  "schema_version": "guard.command-decision-diff.v1",
+  "catalogDigest": "d35b338e04e43519c8d3ce3eea9ecfa4f2d2a39214ef2eea4587f4296ab438c2"
 }

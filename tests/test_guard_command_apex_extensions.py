@@ -15,6 +15,46 @@ from tests.command_extension_contracts import (
 
 APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
+        "apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "apex \"$ACTION\" ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "apex ${ACTION} ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "apex $(echo compress) ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "apex `echo compress` ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "python -m apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "exec apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
         "apex compress ./src -o backup.apx",
         "apex compress command",
         "command.apex.compress",

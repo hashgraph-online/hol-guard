@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "a2331872c6f7fa872f8a9e06f919339c78f07b9308b487a051c0652ddaedd377",
+  "catalog_digest": "c4c8307ad81a360d53239bb65775224c2cc79b03d55eaf20f6541332a38cc616",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -951,5 +951,6 @@
     "command.system.disk-or-power-mutation",
     "command.windows.destructive-storage"
   ],
-  "schema_version": "guard.extension-control-center.baseline.v1"
+  "schema_version": "guard.extension-control-center.baseline.v1",
+  "program_digest": "ab90928ed769be5dae321b5d785e24976258fedf155b2c6ad8e5cb1b8932c129"
 }

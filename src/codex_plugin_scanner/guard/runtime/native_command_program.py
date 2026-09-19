@@ -61,6 +61,7 @@ def _reviewed_types() -> dict[type[object], str]:
     from .command_path_set_matcher import ExecutablePathSetMatcher
     from .command_platform_extensions import _ZeroOperandFlagMatcher
     from .command_repo2nb_extensions import Repo2nbUnresolvedExpansionMatcher
+    from .command_apex_extensions import ApexUnresolvedExpansionMatcher
     from .command_reviewed_literal_matcher import ReviewedLiteralCommandMatcher
     from .command_rules import AllMatcher, AnyMatcher, ArgumentMatcher, ExecutableMatcher, PipelineMatcher
     from .command_search_messaging_extensions import CurlElasticsearchDeleteMatcher
@@ -93,6 +94,7 @@ def _reviewed_types() -> dict[type[object], str]:
         PhpArtisanScriptMatcher: "php-artisan-script.v1",
         CurlElasticsearchDeleteMatcher: "curl-elasticsearch-delete.v1",
         Repo2nbUnresolvedExpansionMatcher: "repo2nb-expansion.v1",
+        ApexUnresolvedExpansionMatcher: "apex-expansion.v1",
         ReviewedLiteralCommandMatcher: "reviewed-literal.v1",
     }
 
