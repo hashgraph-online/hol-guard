@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
+from ..path_support import resolves_within_root
+from ..safe_output import write_text_atomic_no_follow
+
 
 class HarnessContextLike(Protocol):
     @property
@@ -14,6 +17,7 @@ class HarnessContextLike(Protocol):
 
 
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
+PACKAGE_SHIM_STATUS_FD_ENV_VAR = "HOL_GUARD_PACKAGE_SHIM_STATUS_FD"
 _MAX_RECOVERABLE_SHIM_BYTES = 512 * 1024
 _PACKAGE_SHIM_SOURCE_MARKERS = (
     "--package-shim-ui",
@@ -50,7 +54,10 @@ def _load_package_shim_manifest(context: HarnessContextLike) -> dict[str, object
 
 
 def _write_package_shim_manifest(context: HarnessContextLike, payload: dict[str, object]) -> None:
-    _package_shim_manifest_path(context).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    manifest_path = _package_shim_manifest_path(context)
+    if not resolves_within_root(context.guard_home, manifest_path):
+        raise ValueError("package shim manifest escapes the Guard home")
+    write_text_atomic_no_follow(manifest_path, json.dumps(payload, sort_keys=True))
 
 
 def _recoverable_package_shim_managers(status: dict[str, object]) -> list[str]:

@@ -58,6 +58,59 @@ def test_managed_extension_uses_official_user_install_not_appimage_mount(
 
 
 @pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_prefers_durable_desktop_shim_over_path_pipx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    official_cli = home / ".local" / "bin" / "hol-guard"
+    official_cli.parent.mkdir(parents=True)
+    official_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    official_cli.chmod(0o755)
+    desktop_shim = home / ".local" / "share" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
+    desktop_shim.parent.mkdir(parents=True)
+    desktop_shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    desktop_shim.chmod(0o755)
+    monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.shutil, "which", lambda _command: str(official_cli))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(desktop_shim))};" in source
+    assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(desktop_shim))};" in source
+    assert str(official_cli) not in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_prefers_macos_desktop_support_shim_over_path_pipx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import stable_guard_cli
+
+    home = tmp_path / "home"
+    official_cli = home / ".local" / "bin" / "hol-guard"
+    official_cli.parent.mkdir(parents=True)
+    official_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    official_cli.chmod(0o755)
+    desktop_shim = (
+        home / "Library" / "Application Support" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
+    )
+    desktop_shim.parent.mkdir(parents=True)
+    desktop_shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    desktop_shim.chmod(0o755)
+    monkeypatch.setattr(stable_guard_cli.sys, "platform", "darwin")
+    monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.shutil, "which", lambda _command: str(official_cli))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(desktop_shim))};" in source
+    assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(desktop_shim))};" in source
+    assert str(official_cli) not in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
 def test_managed_extension_prefers_persistent_desktop_runtime_owner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -71,6 +124,65 @@ def test_managed_extension_prefers_persistent_desktop_runtime_owner(
 
     assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(desktop_owner))};" in source
     assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(desktop_owner))};" in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_maps_versioned_desktop_wrapper_to_stable_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core_root = tmp_path / "core"
+    desktop_owner = core_root / "bundled" / "3.0.63" / "bin" / "hol-guard"
+    desktop_owner.parent.mkdir(parents=True)
+    desktop_owner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    desktop_owner.chmod(0o755)
+    stable_owner = core_root / "current-hol-guard"
+    stable_owner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    stable_owner.chmod(0o755)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(desktop_owner))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(stable_owner))};" in source
+    assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(stable_owner))};" in source
+    assert str(desktop_owner) not in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_uses_stable_launcher_while_versioned_owner_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core_root = tmp_path / "core"
+    desktop_owner = core_root / "bundled" / "3.0.63" / "bin" / "hol-guard"
+    stable_owner = core_root / "current-hol-guard"
+    stable_owner.parent.mkdir(parents=True)
+    stable_owner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    stable_owner.chmod(0o755)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(desktop_owner))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(stable_owner))};" in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_rejects_versioned_owner_without_stable_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    official_cli = home / ".local" / "bin" / "hol-guard"
+    official_cli.parent.mkdir(parents=True)
+    official_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    official_cli.chmod(0o755)
+    desktop_owner = tmp_path / "core" / "bundled" / "3.0.63" / "bin" / "hol-guard"
+    desktop_owner.parent.mkdir(parents=True)
+    desktop_owner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    desktop_owner.chmod(0o755)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(desktop_owner))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(official_cli))};" in source
+    assert str(desktop_owner) not in source
 
 
 @pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")

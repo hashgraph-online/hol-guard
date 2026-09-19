@@ -1130,8 +1130,9 @@ def test_poll_once_reuses_cached_access_token_across_oauth_polls(
         client_id: str,
         refresh_token: str,
         dpop_key_material,
+        credential_reloader=None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, dpop_key_material
+        del token_endpoint, client_id, dpop_key_material, credential_reloader
         observed_refresh_tokens.append(refresh_token)
         current_index = len(observed_refresh_tokens)
         return {
@@ -1397,8 +1398,9 @@ def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_sta
         client_id: str,
         refresh_token: str,
         dpop_key_material,
+        credential_reloader=None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, refresh_token, dpop_key_material
+        del token_endpoint, client_id, refresh_token, dpop_key_material, credential_reloader
         raise guard_runner_module.GuardSyncAuthorizationExpiredError(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )

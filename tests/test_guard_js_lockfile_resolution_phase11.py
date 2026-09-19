@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineEx
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 from tests.test_guard_js_supply_chain_phase11 import (
     WORKSPACE_ID,
     _artifact_from_command,
@@ -303,7 +304,7 @@ def test_bun_jsonc_lockfile_is_parsed_completely() -> None:
     }
 
 
-def test_representative_large_bun_lockfile_completes_within_scaled_budget() -> None:
+def test_representative_large_bun_lockfile_completes_within_scaled_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     lockfile_text = json.dumps(
         {
             "lockfileVersion": 1,
@@ -313,13 +314,26 @@ def test_representative_large_bun_lockfile_completes_within_scaled_budget() -> N
         }
     )
 
+    # Coverage tracers slow the parser beyond any plausible product regression, so
+    # covered CI runs scale the parse deadline; untraced runs keep the real budget.
+    coverage_scale = under_coverage_scale(4.0)
+    if coverage_scale > 1.0:
+        for budget_constant in (
+            "_LOCKFILE_PARSE_BUDGET_SECONDS",
+            "_LOCKFILE_PARSE_BUDGET_PER_MIB_SECONDS",
+            "_LOCKFILE_PARSE_MAX_BUDGET_SECONDS",
+        ):
+            monkeypatch.setattr(
+                evaluator_module, budget_constant, getattr(evaluator_module, budget_constant) * coverage_scale
+            )
+
     result = evaluator_module._parse_lockfile_text_result("bun.lock", lockfile_text)
 
     assert len(lockfile_text.encode("utf-8")) > 600_000
     assert result.complete is True
     assert result.error_reason is None
     assert len(result.entries) == 10_000
-    assert 200 < result.budget_ms <= 1_500
+    assert 200 * coverage_scale < result.budget_ms <= 1_500 * coverage_scale
 
 
 @pytest.mark.parametrize(

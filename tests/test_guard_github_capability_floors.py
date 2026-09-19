@@ -138,6 +138,8 @@ def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
         "gh pr merge 17 --squash",
         "gh pr merge 4751 --repo example/project --squash",
         "gh pr merge 4751 -R github.com/example/project --squash",
+        "gh pr merge 17 --squash --delete-branch=false",
+        "gh pr merge 4751 --repo example/project --squash --delete-branch=false",
     ),
 )
 def test_routine_squash_merge_is_prompt_free(command: str) -> None:
@@ -151,6 +153,20 @@ def test_routine_squash_merge_cleanup_followed_by_read_is_prompt_free() -> None:
             "command": (
                 "gh pr merge 5134 --repo example/project --squash --delete-branch && "
                 "gh pr view 5134 --repo example/project --json state,mergedAt,mergeCommit,url"
+            )
+        },
+    )
+
+    assert match is None
+
+
+def test_explicit_false_delete_branch_squash_merge_with_sleep_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "gh pr merge 252 --repo example/project --squash --delete-branch=false && "
+                "sleep 20 && gh run list --repo example/project --limit 1"
             )
         },
     )

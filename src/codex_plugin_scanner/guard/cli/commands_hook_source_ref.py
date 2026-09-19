@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..daemon.hook_request_parsing import parse_hook_source_file_ref
+from ..native_mode import python_oracle_surface_enabled
 from .commands_support_command_activity import (
     hook_post_succeeded,
     record_post_hook_command_activity_best_effort,
@@ -17,8 +19,12 @@ if TYPE_CHECKING:
 
     from ..adapters.base import HarnessContext
     from ..config import GuardConfig
-    from ..runtime.hook_review_types import HookOutputSummary, HookSourceFileRef
+    from ..runtime.hook_review_types import HookOutputSummary, HookReviewRequest, HookReviewResponse, HookSourceFileRef
     from ..store import GuardStore
+
+
+_TestSourceRefOracle = Callable[["HookReviewRequest", "GuardStore", "GuardConfig | None"], "HookReviewResponse"]
+_test_source_ref_oracle: _TestSourceRefOracle | None = None
 
 
 def _try_source_ref_fast_path(
@@ -30,20 +36,22 @@ def _try_source_ref_fast_path(
     runtime_workspace: Path | None,
     store: GuardStore,
 ) -> int | None:
+    """Run a source-ref oracle only when an explicit test has installed one."""
+
     if "guard_source_ref" not in payload:
         return None
     import os
 
-    if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1":
+    if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1" or not python_oracle_surface_enabled():
         return None
 
-    from ..runtime.hook_content_scanner import ContentScanner
-    from ..runtime.hook_decision_cache import HookDecisionCache
-    from ..runtime.hook_review_engine import HookReviewEngine
     from ..runtime.hook_review_types import HookReviewRequest
-    from ._commands_shared import load_guard_config
     from .commands_support_interaction import _emit
     from .commands_support_runtime_resolution import _canonical_harness_name
+
+    oracle = _test_source_ref_oracle
+    if oracle is None:
+        return None
 
     source_ref_raw = payload.get("guard_source_ref")
     if not isinstance(source_ref_raw, Mapping):
@@ -62,12 +70,7 @@ def _try_source_ref_fast_path(
         source_ref=_parse_source_ref(source_ref_raw),
         output_summary=_parse_output_summary(payload.get("tool_response_summary")),
     )
-    response = HookReviewEngine(
-        store=store,
-        scanner=ContentScanner(),
-        cache=HookDecisionCache(store),
-        config_loader=lambda gh, ws: config if config is not None else load_guard_config(gh, workspace=ws),
-    ).review(request)
+    response = oracle(request, store, config)
     event_name = _hook_event_name(payload) or "PostToolUse"
     record_post_hook_command_activity_best_effort(
         store=store,
@@ -82,24 +85,7 @@ def _try_source_ref_fast_path(
 
 
 def _parse_source_ref(ref: Mapping[str, object]) -> HookSourceFileRef:
-    from ..runtime.hook_review_types import HookSourceFileRef
-
-    version = ref.get("version")
-    path = ref.get("path")
-    output_sha256 = ref.get("output_sha256")
-    output_chars = ref.get("output_chars")
-    tool_input_path = ref.get("tool_input_path")
-    adapter_stat = ref.get("adapter_stat")
-    if not isinstance(version, int) or not isinstance(path, str) or not isinstance(output_sha256, str):
-        return HookSourceFileRef(version=-1, path="", output_sha256="", output_chars=0)
-    return HookSourceFileRef(
-        version=version,
-        path=path,
-        output_sha256=output_sha256,
-        output_chars=output_chars if isinstance(output_chars, int) else 0,
-        tool_input_path=tool_input_path if isinstance(tool_input_path, str) else None,
-        adapter_stat=dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {},
-    )
+    return parse_hook_source_file_ref(ref)
 
 
 def _parse_output_summary(summary_raw: object) -> HookOutputSummary | None:

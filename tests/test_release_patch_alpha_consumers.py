@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_release_3_0_consumers_follow_the_patch_prerelease_train() -> None:
     publish = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
-    assert 'alpha/v${TRAIN}.1a*' in publish
+    assert "alpha/v${TRAIN}.1a*" in publish
 
     for name in ("publish-mcp-registry.yml", "publish-mcpb.yml"):
         workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")

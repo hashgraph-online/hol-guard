@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import cast
 
 from .continuation_runtime import record_live_hook_completion
@@ -17,6 +18,8 @@ def complete_codex_live_decision(
     request_id: str,
     now: str,
     fresh_allow_authorized: bool = False,
+    require_consumed_once_for_replay: bool = False,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Consume exact authority and persist terminal continuation evidence."""
 
@@ -38,6 +41,12 @@ def complete_codex_live_decision(
         if not fresh_allow_authorized:
             return _failure("fresh_policy_revalidation_failed")
         if isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
+            if (
+                require_consumed_once_for_replay
+                and resolve_codex_consumed_allow_authority(store, request=request, request_id=request_id, now=now)
+                is None
+            ):
+                return _failure("exact_approval_authority_missing")
             return {"action": action, "completed": True, "continuation": previous, "replayed": True}
         approval_decision = resolve_codex_live_allow_authority(
             store,
@@ -56,6 +65,7 @@ def complete_codex_live_decision(
         action=action,
         now=now,
         approval_decision=approval_decision,
+        config_reader=config_reader,
     )
     expected_status = "resumed" if action == "allow" else "blocked_not_resumed"
     if not isinstance(completion, Mapping) or completion.get("continuationStatus") != expected_status:
@@ -85,6 +95,22 @@ def resolve_codex_live_allow_authority(
     if not isinstance(decision, Mapping) or not _exact_request_authority(decision, request_id=request_id):
         return None
     return {str(key): value for key, value in decision.items()}
+
+
+def resolve_codex_consumed_allow_authority(
+    store: GuardStore, *, request: Mapping[str, object], request_id: str, now: str
+) -> dict[str, object] | None:
+    """Verify the MAC-bound consumed once record before native terminal replay."""
+    decision = store.peek_consumed_local_once_approval(
+        request_id=request_id,
+        harness="codex",
+        artifact_id=_optional_text(request.get("artifact_id")),
+        artifact_hash=_optional_text(request.get("artifact_hash")),
+        workspace=_optional_text(request.get("workspace")),
+        publisher=_optional_text(request.get("publisher")),
+        now=now,
+    )
+    return decision if _exact_request_authority(decision, request_id=request_id) else None
 
 
 def _exact_request_authority(value: object, *, request_id: str) -> bool:

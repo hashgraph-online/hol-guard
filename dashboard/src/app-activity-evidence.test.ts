@@ -11,14 +11,19 @@ function assert(condition: boolean, message: string): void {
 }
 
 const appDetailSource = readFileSync(join(__dirname, "apps/app-detail-workspace.tsx"), "utf8");
+const appTabSource = readFileSync(join(__dirname, "evidence/app-tab.tsx"), "utf8");
 const appSource = readFileSync(join(__dirname, "app.tsx"), "utf8");
+const routingSource = readFileSync(join(__dirname, "app-routing.ts"), "utf8");
 const navSource = readFileSync(join(__dirname, "approval-center-primitives.tsx"), "utf8");
 
 assert(appDetailSource.includes("EvidenceActionList"), "app activity tab uses EvidenceActionList");
 assert(appDetailSource.includes("EvidenceActionDetail"), "app activity tab uses EvidenceActionDetail");
 assert(appDetailSource.includes("EvidenceFilterBar"), "app activity tab uses EvidenceFilterBar");
 assert(!appDetailSource.includes("ExpandableReceiptRow"), "legacy expandable receipt rows removed");
-assert(appSource.includes('export const PROTECT_ROUTE = "/protect"'), "protect route constant exported");
+assert(appTabSource.includes("isConnectableAppHarness"), "Apps tab groups only registered AI harnesses");
+assert(!appTabSource.includes("isDisplayableHarness"), "Apps tab does not group operational source slugs");
+assert(routingSource.includes('export const PROTECT_ROUTE = "/protect"'), "protect route constant defined by routing owner");
+assert(appSource.includes('export { PROTECT_ROUTE, TODAY_EVIDENCE_ROUTE, viewTitle, parseAppDetail, resolveView } from "./app-routing"'), "app preserves route exports from the routing owner");
 assert(navSource.includes('href: "/protect"'), "sidebar nav links to /protect");
 
 console.log("app-activity-evidence.test.ts: all tests passed");

@@ -254,9 +254,11 @@ def _activity_page_query(
         params.extend((cursor[0], cursor[0], cursor[1]))
     where = " where " + " and ".join(clauses) if clauses else ""
     sql = (
-        "select activity.*, feedback.label as feedback_label "
+        "select activity.*, feedback.label as feedback_label, "
+        "invocation.invocation_preview as invocation_preview "
         "from command_activity as activity "
-        "left join command_activity_feedback as feedback using (activity_id)"
+        "left join command_activity_feedback as feedback using (activity_id) "
+        "left join command_activity_invocation as invocation using (activity_id)"
         f"{where} order by activity.occurred_at desc, activity.activity_id desc limit ?"
     )
     params.append(query.limit + 1)
@@ -337,6 +339,7 @@ def _activity_row_payload(row: sqlite3.Row, matches: list[dict[str, object]]) ->
         "persistence_latency_bucket": str(row["persistence_latency_bucket"]),
         "feedback_label": str(row["feedback_label"]) if row["feedback_label"] is not None else None,
         "schema_version": str(row["schema_version"]),
+        "invocation_preview": str(row["invocation_preview"]) if row["invocation_preview"] is not None else None,
         "matches": matches,
     }
 

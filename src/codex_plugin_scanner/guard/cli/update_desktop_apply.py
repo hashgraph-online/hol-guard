@@ -8,6 +8,11 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
+from ..daemon.runtime_peer import (
+    daemon_refresh_outcome_succeeded,
+    retained_desktop_owner_note,
+    retained_desktop_owner_payload,
+)
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
 from .update_desktop_core import (
@@ -208,6 +213,7 @@ def refresh_desktop_core_daemon(
     context: HarnessContext,
     *,
     executable: Path,
+    minimum_version: str | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     from ..daemon.manager import (
         ensure_guard_daemon_after_update,
@@ -218,6 +224,15 @@ def refresh_desktop_core_daemon(
     try:
         retire_all_guard_daemons_for_home(context.guard_home)
         if not guard_daemon_retirement_is_complete(context.guard_home):
+            # The Guard Desktop supervisor can respawn a retired daemon faster
+            # than retirement completes. When the respawn already serves the
+            # applied version, keeping it is success instead of a failed update.
+            retained = retained_desktop_owner_payload(
+                context.guard_home,
+                minimum_version=minimum_version,
+            )
+            if retained is not None:
+                return retained, retained_desktop_owner_note(retained.get("daemon_version"))
             return None, "Could not stop the running Guard daemon before launching the updated Core."
         url = ensure_guard_daemon_after_update(
             context.guard_home,
@@ -226,7 +241,10 @@ def refresh_desktop_core_daemon(
         )
     except (OSError, RuntimeError) as error:
         return None, f"Could not restart the Guard daemon after update: {error}"
-    return {"status": "restarted", "url": url}, None
+    # ensure_guard_daemon_after_update only returns once the restarted daemon
+    # answers, so the outcome carries the same verification marker as the
+    # CLI refresh path.
+    return {"status": "restarted", "url": url, "runtime_verified": True}, None
 
 
 def _desktop_update_preflight(
@@ -278,6 +296,7 @@ def _desktop_already_current(
             payload,
             context=context,
             executable=Path(sys.executable).resolve(),
+            minimum_version=current_version,
             required=True,
         )
     return payload, 0
@@ -342,6 +361,7 @@ def _desktop_apply_target(
             payload,
             context=context,
             executable=applied.executable,
+            minimum_version=applied.version,
             required=daemon_refresh_required,
         )
     return payload, 0
@@ -352,15 +372,20 @@ def _refresh_or_fail(
     *,
     context: HarnessContext,
     executable: Path,
+    minimum_version: str,
     required: bool,
 ) -> tuple[dict[str, object], int]:
     from . import update_commands as commands
 
-    daemon_refresh, daemon_refresh_note = refresh_desktop_core_daemon(context, executable=executable)
+    daemon_refresh, daemon_refresh_note = refresh_desktop_core_daemon(
+        context,
+        executable=executable,
+        minimum_version=minimum_version,
+    )
     if daemon_refresh is not None:
         payload["daemon_refresh"] = daemon_refresh
     commands._append_payload_note(payload, daemon_refresh_note)
-    if required and not (isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted"):
+    if required and not daemon_refresh_outcome_succeeded(daemon_refresh):
         payload.update(
             {
                 "status": "failed",

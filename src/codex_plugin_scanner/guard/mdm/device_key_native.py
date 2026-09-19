@@ -15,6 +15,7 @@ from typing import Literal, cast
 from cryptography.hazmat.primitives.asymmetric import utils
 
 from .contracts import KeyProtectionLevel, MachinePaths
+from .device_key_windows_api import load_windows_token_api
 
 _MAX_HELPER_OUTPUT_BYTES = 16 * 1024
 _MAX_HELPER_STDERR_BYTES = 4096
@@ -290,20 +291,22 @@ def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: 
     )
 
 
-def sign_health_lease(
-    paths: MachinePaths, generation: str, canonical_claims: bytes, *, system_name: str
+def _sign_payload_with_device_key(
+    paths: MachinePaths,
+    subcommand: str,
+    generation: str,
+    payload_text: str,
+    *,
+    system_name: str,
 ) -> NativeHealthLeaseSignature:
-    if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
-        raise ValueError("device_key_request_invalid")
-    claims_text = _validated_canonical_health_lease_claims(canonical_claims)
-    command, environment, cwd = _helper_invocation(paths, "sign-health-lease", generation, system_name)
+    command, environment, cwd = _helper_invocation(paths, subcommand, generation, system_name)
     result = subprocess.run(
         command,
         check=False,
         capture_output=True,
         cwd=cwd,
         env=environment,
-        input=claims_text,
+        input=payload_text,
         text=True,
         timeout=_HELPER_TIMEOUT_SECONDS,
     )
@@ -326,6 +329,15 @@ def sign_health_lease(
     ):
         raise OSError("device_key_probe_failed")
     return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
+
+
+def sign_health_lease(
+    paths: MachinePaths, generation: str, canonical_claims: bytes, *, system_name: str
+) -> NativeHealthLeaseSignature:
+    if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
+        raise ValueError("device_key_request_invalid")
+    claims_text = _validated_canonical_health_lease_claims(canonical_claims)
+    return _sign_payload_with_device_key(paths, "sign-health-lease", generation, claims_text, system_name=system_name)
 
 
 def sign_protection_lease(
@@ -334,36 +346,9 @@ def sign_protection_lease(
     if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
         raise ValueError("device_key_request_invalid")
     lease_text = _validated_canonical_protection_lease(canonical_unsigned_lease)
-    command, environment, cwd = _helper_invocation(paths, "sign-protection-lease", generation, system_name)
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=environment,
-        input=lease_text,
-        text=True,
-        timeout=_HELPER_TIMEOUT_SECONDS,
+    return _sign_payload_with_device_key(
+        paths, "sign-protection-lease", generation, lease_text, system_name=system_name
     )
-    if (
-        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
-        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
-    ):
-        raise OSError("device_key_probe_failed")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if (
-        result.returncode != 0
-        or not isinstance(payload, dict)
-        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
-        or payload.get("ok") is not True
-        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
-        or payload.get("signatureEncoding") != "asn1-der"
-    ):
-        raise OSError("device_key_probe_failed")
-    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
 
 
 def sign_health_key_registration(
@@ -372,62 +357,44 @@ def sign_health_key_registration(
     if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
         raise ValueError("device_key_request_invalid")
     registration_text = _validated_canonical_health_key_registration(canonical_registration)
-    command, environment, cwd = _helper_invocation(paths, "sign-health-key-registration", generation, system_name)
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=environment,
-        input=registration_text,
-        text=True,
-        timeout=_HELPER_TIMEOUT_SECONDS,
+    return _sign_payload_with_device_key(
+        paths, "sign-health-key-registration", generation, registration_text, system_name=system_name
     )
-    if (
-        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
-        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
-    ):
-        raise OSError("device_key_probe_failed")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if (
-        result.returncode != 0
-        or not isinstance(payload, dict)
-        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
-        or payload.get("ok") is not True
-        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
-        or payload.get("signatureEncoding") != "asn1-der"
-    ):
-        raise OSError("device_key_probe_failed")
-    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
 
 
 def windows_current_user_sid() -> str:
+    import ctypes
     from ctypes import wintypes
 
+    windows_token_api = load_windows_token_api()
+
     token = wintypes.HANDLE()
-    if not ctypes.windll.advapi32.OpenProcessToken(
-        ctypes.windll.kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)
-    ):
+    if not windows_token_api.open_process_token(windows_token_api.get_current_process(), 0x0008, ctypes.byref(token)):
         raise OSError("device_key_system_context_required")
     try:
         needed = wintypes.DWORD()
-        ctypes.windll.advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(needed))
-        buffer = ctypes.create_string_buffer(needed.value)
-        if not ctypes.windll.advapi32.GetTokenInformation(token, 1, buffer, needed, ctypes.byref(needed)):
+        if windows_token_api.get_token_information(token, 1, None, 0, ctypes.byref(needed)):
             raise OSError("device_key_system_context_required")
-        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]
+        if ctypes.get_last_error() != 122 or not 0 < needed.value <= 64 * 1024:
+            raise OSError("device_key_system_context_required")
+        buffer = ctypes.create_string_buffer(needed.value)
+        if not windows_token_api.get_token_information(token, 1, buffer, needed, ctypes.byref(needed)):
+            raise OSError("device_key_system_context_required")
+        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(wintypes.LPVOID)).contents
+        if not sid_pointer.value:
+            raise OSError("device_key_system_context_required")
         sid_string = wintypes.LPWSTR()
-        if not ctypes.windll.advapi32.ConvertSidToStringSidW(sid_pointer, ctypes.byref(sid_string)):
+        if not windows_token_api.convert_sid(sid_pointer, ctypes.byref(sid_string)):
             raise OSError("device_key_system_context_required")
         try:
-            return str(sid_string.value)
+            value = sid_string.value
+            if not value:
+                raise OSError("device_key_system_context_required")
+            return str(value)
         finally:
-            ctypes.windll.kernel32.LocalFree(sid_string)
+            _ = windows_token_api.local_free(ctypes.cast(sid_string, wintypes.HLOCAL))
     finally:
-        ctypes.windll.kernel32.CloseHandle(token)
+        _ = windows_token_api.close_handle(token)
 
 
 def require_machine_context(system_name: str) -> None:

@@ -1,123 +1,50 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import {
-  HiMiniCheckCircle,
-  HiMiniMinusCircle,
-  HiMiniChevronRight,
-  HiMiniChevronDown,
-  HiMiniChevronUp,
-  HiMiniShieldCheck,
-  HiMiniSparkles,
-  HiMiniExclamationTriangle,
-  HiMiniXMark,
-  HiMiniBolt,
-  HiMiniQuestionMarkCircle,
-  HiMiniCloud,
-} from "react-icons/hi2";
-import {
-  ActionButton,
-  Badge,
-  EmptyState,
-  SectionLabel,
-  GuardHero,
-} from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
-import { useFocusTrap } from "./use-focus-trap";
-import { DeviceProofCard, OperatorHealthCard, resolveCloudIntelCopy } from "./runtime-overview";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { HiMiniCheckCircle, HiMiniShieldCheck } from "react-icons/hi2";
+import { ActionButton, EmptyState, SectionLabel, GuardHero } from "./approval-center-primitives";
+import { harnessDisplayName, formatNumber } from "./approval-center-utils";
+import { DeviceProofCard, OperatorHealthCard } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
-import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
-import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
+import {
+  protectionHealthFor,
+  unavailableProtectionHealth,
+  useProtectionPresentationState,
+} from "./protection-health";
 import { WatchProtectionBanner } from "./watch-protection-banner";
 import { updateSettings } from "./guard-api";
-import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
+import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardManagedInstall,
   GuardPolicyDecision,
-  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
 } from "./guard-types";
+import {
+  resolveHomeQueuedCount,
+  deriveHomeState,
+  buildDailyStory,
+  computeStreak,
+  resolveCloudUpsellVisible,
+} from "./home-dashboard-model";
+import { ClearConfirmDialog } from "./home-clear-confirm-dialog";
+import { AppsAtAGlance } from "./home-apps-at-a-glance";
+import {
+  ClearHarnessButton,
+  CloudStatusCard,
+  KeyboardHelpCard,
+  RecentProtectionSection,
+  CollapsibleCard,
+} from "./home-dashboard-cards";
+import { StreakMilestoneBanner, NewAppDiscoveryBanner } from "./home-dashboard-banners";
 
-export const safeLocalStorage = {
-  getItem(key: string): string | null {
-    try {
-      return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-    } catch {
-      return null;
-    }
-  },
-  setItem(key: string, value: string): void {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(key, value);
-      }
-    } catch {
-      return;
-    }
-  },
-};
-
-export const STREAK_MILESTONE_MESSAGES: Record<number, string> = {
-  7: "One week of Guard activity on this machine.",
-  14: "Two weeks of consistent Guard coverage.",
-  30: "A full month of daily Guard coverage.",
-};
-
-export function resolveCloudUpsellVisible(
-  pendingCount: number,
-  cloudState: GuardRuntimeSnapshot["cloud_state"]
-): boolean {
-  if (pendingCount > 0) return false;
-  return cloudState === "local_only";
-}
-
-export function buildEmptyStateCopy(): { title: string; body: string; installHint: string } {
-  return {
-    title: "No apps connected",
-    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Grok, Hermes, Kimi, and more.",
-    installHint: "hol-guard apps connect <app>",
-  };
-}
-
-export function buildDaemonErrorCopy(): { title: string; body: string; primaryCta: string; secondaryCta: string } {
-  return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Go to Settings to repair the connection and restore protection.",
-    primaryCta: "Go to Settings",
-    secondaryCta: "Open review queue",
-  };
-}
-
-export function redactHomeArtifactLabel(value: string | null | undefined): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return "a local action";
-  }
-  const trimmed = value.trim();
-  if (
-    trimmed.includes("/") ||
-    trimmed.includes("\\") ||
-    trimmed.includes("~") ||
-    trimmed.includes(":") ||
-    trimmed.length > 48
-  ) {
-    return "a local action";
-  }
-  return trimmed;
-}
-
-export function buildRecentProtectionCopy(receipt: GuardReceipt): string {
-  return guardActionActivityCopy(
-    receipt.policy_decision,
-    harnessDisplayName(receipt.harness),
-    redactHomeArtifactLabel(receipt.artifact_name),
-  );
-}
+export { safeLocalStorage, STREAK_MILESTONE_MESSAGES, resolveCloudUpsellVisible, buildEmptyStateCopy, redactHomeArtifactLabel, buildRecentProtectionCopy, resolveHomeQueuedCount, deriveHomeState, buildDailyStory, computeStreak, resolveNewAppDiscoveries } from "./home-dashboard-model";
+export { buildDaemonErrorCopy, buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 
 type HomeRequestState =
   | { kind: "loading" }
@@ -146,6 +73,7 @@ export function HomeWorkspace(props: {
   onOpenCommands: () => void;
   onOpenSettings: () => void;
   onRefreshRuntime?: () => Promise<void> | void;
+  onReconnectSession?: () => Promise<void> | void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
@@ -300,15 +228,23 @@ export function HomeWorkspace(props: {
   }
 
   if (props.runtime.kind === "error") {
-    const errorCopy = buildDaemonErrorCopy();
+    const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    const handlePrimary = () => {
+      if (errorCopy.kind === "session") {
+        void props.onReconnectSession?.();
+        return;
+      }
+      void props.onRefreshRuntime?.();
+    };
+    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
     return (
       <EmptyState
         title={errorCopy.title}
         body={errorCopy.body}
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
-            <ActionButton onClick={props.onOpenSettings}>{errorCopy.primaryCta}</ActionButton>
-            <ActionButton variant="outline" onClick={props.onOpenInbox}>{errorCopy.secondaryCta}</ActionButton>
+            <ActionButton onClick={handlePrimary}>{errorCopy.primaryCta}</ActionButton>
+            <ActionButton variant="outline" onClick={handleSecondary}>{errorCopy.secondaryCta}</ActionButton>
           </div>
         }
         tone="teach"
@@ -468,710 +404,6 @@ export function HomeWorkspace(props: {
           onCancelClear={props.onCancelClear}
           onConfirmClear={handleConfirmClearWithToast}
         />
-      )}
-    </div>
-  );
-}
-
-function ClearConfirmDialog(props: {
-  clearConfirm: { harness?: string; all?: boolean };
-  approvalGate: GuardApprovalGatePublicConfig | null;
-  clearPassword: string;
-  clearTotpCode: string;
-  clearError: string | null;
-  clearSubmitting: boolean;
-  onClearPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onClearTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onCancelClear: () => void;
-  onConfirmClear: () => Promise<void>;
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(true, dialogRef);
-  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  const proofIncomplete = needsProof
-    && (needsPassword ? props.clearPassword.trim() === "" : props.clearTotpCode.trim() === "");
-
-  return (
-    <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
-      <div ref={dialogRef} className="guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
-              <div>
-                <h3 className="text-lg font-semibold tracking-tight text-brand-dark">
-                  Clear remembered decisions?
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  This will remove {props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`}. Guard will ask again next time matching actions run.
-                </p>
-                {needsProof && (
-                  <div className="mt-4 grid gap-3">
-                    {needsPassword ? (
-                      <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-                      <input
-                        type="password"
-                        autoComplete="current-password"
-                        value={props.clearPassword}
-                        onChange={props.onClearPasswordChange}
-                        className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                      />
-                      </label>
-                    ) : (
-                      <label className="block">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          maxLength={6}
-                          value={props.clearTotpCode}
-                          onChange={props.onClearTotpCodeChange}
-                          placeholder="123456"
-                          autoComplete="one-time-code"
-                          className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                        />
-                      </label>
-                    )}
-                  </div>
-                )}
-                {props.clearError !== null && (
-                  <p className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark">
-                    {props.clearError}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={props.onCancelClear}
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
-              >
-                Keep decisions
-              </button>
-              <button
-                type="button"
-                onClick={props.onConfirmClear}
-                disabled={props.clearSubmitting || proofIncomplete}
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60"
-              >
-                {props.clearSubmitting ? "Clearing..." : "Clear decisions"}
-              </button>
-            </div>
-          </div>
-        </div>
-  );
-}
-
-export function resolveHomeQueuedCount(input: {
-  pendingCount: number | null;
-  requestCount: number | null;
-}): number {
-  return Math.max(input.pendingCount ?? 0, input.requestCount ?? 0);
-}
-
-export function deriveHomeState(input: {
-  hasActiveInstalls: boolean;
-  hasObservedHarnesses: boolean;
-  queuedCount: number;
-  watchedAppsCount: number;
-  protectionState: GuardProtectionState | "checking";
-}): {
-  heroStatus: "clear" | "needs_review" | "setup_gap" | "partial" | "degraded" | "checking";
-  headline: string;
-  subheadline: string;
-  ctaLabel: string;
-  ctaTarget: "inbox" | "protect" | "evidence";
-} {
-  const { hasActiveInstalls, hasObservedHarnesses, protectionState, queuedCount, watchedAppsCount } = input;
-
-  if (queuedCount > 0) {
-    return {
-      heroStatus: "needs_review",
-      headline: queuedCount === 1 ? "1 action needs review" : `${queuedCount} actions need review`,
-      subheadline: "Guard paused an action for your decision. Review it, then choose whether to allow or block it.",
-      ctaLabel: "Review now",
-      ctaTarget: "inbox",
-    };
-  }
-
-  if (!hasActiveInstalls && !hasObservedHarnesses) {
-    return {
-      heroStatus: "setup_gap",
-      headline: "Guard is ready",
-      subheadline: "Connect your first AI app so Guard can start protecting it.",
-      ctaLabel: "Open Protect",
-      ctaTarget: "protect",
-    };
-  }
-
-  if (!hasActiveInstalls && hasObservedHarnesses) {
-    return {
-      heroStatus: "setup_gap",
-      headline: "Finish setup",
-      subheadline: "Guard detected apps but they need setup to be fully protected.",
-      ctaLabel: "Open Protect",
-      ctaTarget: "protect",
-    };
-  }
-
-  if (protectionState === "checking") {
-    return {
-      heroStatus: "checking",
-      headline: "Checking protection",
-      subheadline: "Guard is confirming local protection. This takes a moment.",
-      ctaLabel: "Open Protect",
-      ctaTarget: "protect",
-    };
-  }
-
-  if (protectionState === "degraded") {
-    return {
-      heroStatus: "degraded",
-      headline: "Protection is degraded",
-      subheadline: "Guard is running, but one or more required protection checks failed or remain unproven.",
-      ctaLabel: "Review protection",
-      ctaTarget: "protect",
-    };
-  }
-
-  if (protectionState === "partial") {
-    return {
-      heroStatus: "partial",
-      headline: "Protection is partial",
-      subheadline: "Core protection passes, but complete decision-stream evidence is not available.",
-      ctaLabel: "Review protection",
-      ctaTarget: "protect",
-    };
-  }
-
-  return {
-    heroStatus: "clear",
-    headline: "All clear",
-    subheadline: `Guard is watching your AI work. ${watchedAppsCount} app${watchedAppsCount !== 1 ? "s" : ""} protected. Nothing needs you right now.`,
-    ctaLabel: "View history",
-    ctaTarget: "evidence",
-  };
-}
-
-export function buildDailyStory(
-  receipts: GuardReceipt[],
-  queuedCount: number
-): { title: string; body: string; stats?: { label: string; value: number }[] } | null {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayReceipts = receipts.filter((r) => new Date(r.timestamp) >= today);
-  const allowedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
-  const blockedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
-  const reviewedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
-
-  if (queuedCount > 0) {
-    const actionText = queuedCount === 1 ? "1 action is" : `${queuedCount} actions are`;
-    const pronoun = queuedCount === 1 ? "it" : "them";
-    return {
-      title: "Needs your attention",
-      body: `${actionText} waiting for review. Guard paused ${pronoun} to keep you safe.`,
-      stats: [{ label: "pending review", value: queuedCount }],
-    };
-  }
-
-  if (allowedToday + blockedToday + reviewedToday > 0) {
-    const clauses: string[] = [];
-    if (allowedToday > 0) clauses.push(`allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""}`);
-    if (blockedToday > 0) clauses.push(`blocked ${blockedToday}`);
-    if (reviewedToday > 0) clauses.push(`sent ${reviewedToday} for review`);
-    const story = clauses.length > 1
-      ? `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`
-      : clauses[0];
-    return {
-      title: "Today so far",
-      body: `Guard ${story}.`,
-      stats: [
-        ...(allowedToday > 0 ? [{ label: "allowed", value: allowedToday }] : []),
-        ...(blockedToday > 0 ? [{ label: "blocked", value: blockedToday }] : []),
-        ...(reviewedToday > 0 ? [{ label: "review", value: reviewedToday }] : []),
-      ],
-    };
-  }
-
-  if (receipts.length > 0) {
-    const last = receipts[0];
-    return {
-      title: "All quiet",
-      body: `No new activity today. Last decision was ${formatRelativeTime(last.timestamp)}.`,
-    };
-  }
-
-  return null;
-}
-
-function harnessPriorityScore(
-  install: GuardManagedInstall | undefined,
-  observed: boolean,
-  pendingCount: number,
-): number {
-  let score = 0;
-  if (install?.active) {
-    score = 3;
-  } else if (install !== undefined) {
-    score = 2;
-  } else if (observed) {
-    score = 1;
-  }
-  if (pendingCount > 0) score += 4;
-  return score;
-}
-
-export function computeStreak(receipts: GuardReceipt[]): number {
-  if (receipts.length === 0) return 0;
-  const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  const mostRecent = new Date(sortedByTime[0].timestamp);
-  const now = new Date();
-  const diffHours = (now.getTime() - mostRecent.getTime()) / (1000 * 60 * 60);
-  if (diffHours > 48) return 0;
-
-  const dates = new Set(receipts.map((r) => new Date(r.timestamp).toDateString()));
-  const sortedDates = Array.from(dates).sort((a, b) => +new Date(b) - +new Date(a));
-  let streak = 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  let checkDate = new Date(today);
-  for (const dateStr of sortedDates) {
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    if (d.getTime() === checkDate.getTime()) {
-      streak++;
-      checkDate.setDate(checkDate.getDate() - 1);
-    } else if (d.getTime() < checkDate.getTime()) {
-      break;
-    }
-  }
-  return streak;
-}
-
-function AppsAtAGlance(props: {
-  managedInstalls: GuardManagedInstall[];
-  observedHarnesses: string[];
-  queuedItems: GuardApprovalRequest[];
-  onOpenAppDetail: (harness: string) => void;
-}) {
-  const pendingByHarness = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of props.queuedItems) {
-      map.set(item.harness, (map.get(item.harness) ?? 0) + 1);
-    }
-    return map;
-  }, [props.queuedItems]);
-
-  const sortedHarnesses = useMemo(() => {
-    const all = Array.from(
-      new Set([
-        ...props.managedInstalls.map((i) => i.harness),
-        ...props.observedHarnesses,
-      ])
-    );
-    return all.sort((a, b) => {
-      const aInstall = props.managedInstalls.find((i) => i.harness === a);
-      const bInstall = props.managedInstalls.find((i) => i.harness === b);
-      const aPending = pendingByHarness.get(a) ?? 0;
-      const bPending = pendingByHarness.get(b) ?? 0;
-      const aScore = harnessPriorityScore(aInstall, props.observedHarnesses.includes(a), aPending);
-      const bScore = harnessPriorityScore(bInstall, props.observedHarnesses.includes(b), bPending);
-      return bScore - aScore;
-    });
-  }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);
-
-  if (sortedHarnesses.length === 0) {
-    const emptyCopy = buildEmptyStateCopy();
-    return (
-      <EmptyState
-        title={emptyCopy.title}
-        body={emptyCopy.body}
-        tone="teach"
-      />
-    );
-  }
-
-  return (
-    <div>
-      <div className="mb-3">
-        <SectionLabel>Apps at a glance</SectionLabel>
-        <p className="mt-1 text-sm text-slate-500">
-          Guard is watching these apps on this machine.
-        </p>
-      </div>
-      <div className="divide-y divide-slate-100 border-t border-slate-100" role="list" aria-label="Apps at a glance">
-        {sortedHarnesses.map((harness, index) => {
-          const install = props.managedInstalls.find((i) => i.harness === harness);
-          const isObserved = props.observedHarnesses.includes(harness);
-          const pending = pendingByHarness.get(harness) ?? 0;
-          return (
-            <AppGlanceRow
-              key={harness}
-              harness={harness}
-              install={install}
-              isObserved={isObserved}
-              pending={pending}
-              onOpenAppDetail={props.onOpenAppDetail}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AppGlanceRow(props: {
-  harness: string;
-  install: GuardManagedInstall | undefined;
-  isObserved: boolean;
-  pending: number;
-  onOpenAppDetail: (harness: string) => void;
-}) {
-  const handleOpen = useCallback(() => {
-    props.onOpenAppDetail(props.harness);
-  }, [props.onOpenAppDetail, props.harness]);
-
-  return (
-    <div role="listitem">
-      <button
-        type="button"
-        data-app-item
-        onClick={handleOpen}
-        className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/60 focus:bg-brand-blue/[0.04] focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-      >
-        <div className="flex min-w-0 items-center gap-2.5">
-          <AppStatusIcon install={props.install} isObserved={props.isObserved} />
-          <p className="truncate text-sm font-medium text-brand-dark">
-            {harnessDisplayName(props.harness)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {props.pending > 0 && (
-            <Badge tone="info">{props.pending} pending</Badge>
-          )}
-          <AppStatusBadge install={props.install} isObserved={props.isObserved} />
-          <HiMiniChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
-        </div>
-      </button>
-    </div>
-  );
-}
-
-function AppStatusIcon(props: { install: GuardManagedInstall | undefined; isObserved: boolean }) {
-  if (props.install?.active === true) {
-    return <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />;
-  }
-  if (props.install !== undefined && !props.install.active) {
-    return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />;
-  }
-  if (props.isObserved) {
-    return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />;
-  }
-  return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />;
-}
-
-function AppStatusBadge(props: { install: GuardManagedInstall | undefined; isObserved: boolean }) {
-  if (props.install?.active === true) {
-    return <Badge tone="success">Active</Badge>;
-  }
-  if (props.install !== undefined && !props.install.active) {
-    return <Badge tone="attention">Needs setup</Badge>;
-  }
-  if (props.isObserved) {
-    return <Badge tone="attention">Needs setup</Badge>;
-  }
-  return <Badge tone="attention">Needs setup</Badge>;
-}
-
-function ClearHarnessButton(props: {
-  harness: string;
-  onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
-}) {
-  const handleClick = useCallback(() => {
-    void props.onClearPolicies({ harness: props.harness });
-  }, [props.onClearPolicies, props.harness]);
-
-  return (
-    <ActionButton variant="outline" onClick={handleClick}>
-      Clear {props.harness}
-    </ActionButton>
-  );
-}
-
-function CloudStatusCard(props: {
-  snapshot: GuardRuntimeSnapshot;
-  showUpsell: boolean;
-  onOpenSettings: () => void;
-}) {
-  const copy = resolveCloudIntelCopy(props.snapshot.cloud_state);
-  return (
-    <section className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6">
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-brand-blue">
-          <HiMiniCloud className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <SectionLabel>Cloud sync</SectionLabel>
-          <p className="mt-2 text-sm font-medium text-brand-dark">{copy.label}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{copy.detail}</p>
-          {props.showUpsell && (
-            <div className="mt-4">
-              <ActionButton variant="outline" onClick={props.onOpenSettings}>
-                Open sync settings
-              </ActionButton>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function KeyboardHelpCard(props: { onOpenHelp?: () => void }) {
-  if (!props.onOpenHelp) {
-    return null;
-  }
-  return (
-    <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-dark">
-          <HiMiniQuestionMarkCircle className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <SectionLabel>Shortcuts</SectionLabel>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Press ? for help or / to jump to pending review. Every Home action also works with Tab and Enter.
-          </p>
-          <div className="mt-4">
-            <ActionButton variant="ghost" onClick={props.onOpenHelp}>
-              Show shortcuts
-            </ActionButton>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-
-
-type RecentReceiptRowProps = {
-  receipt: GuardReceipt;
-};
-
-function RecentReceiptRow(props: RecentReceiptRowProps) {
-  const { receipt } = props;
-  const copy = buildRecentProtectionCopy(receipt);
-  return (
-    <div className="flex items-start justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
-      <div className="min-w-0">
-        <p className="text-sm text-brand-dark">
-          {copy}
-        </p>
-      </div>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        {formatRelativeTime(receipt.timestamp)}
-      </span>
-    </div>
-  );
-}
-
-type RecentProtectionSectionProps = {
-  receipts: GuardReceipt[];
-};
-
-function RecentProtectionSection(props: RecentProtectionSectionProps) {
-  const recent = props.receipts.slice(0, 3);
-  return (
-    <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-      <SectionLabel>Recent protection</SectionLabel>
-      <p className="mt-2 text-sm text-muted-foreground">
-        What Guard stopped or allowed recently.
-      </p>
-      <div className="mt-4 overflow-hidden rounded-xl border border-slate-200/70">
-        {recent.map((receipt) => (
-          <RecentReceiptRow key={receipt.receipt_id} receipt={receipt} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const MILESTONE_STREAKS = [7, 14, 30];
-
-function StreakMilestoneBanner({ streak }: { streak: number }) {
-  const milestone = MILESTONE_STREAKS.includes(streak) ? streak : null;
-  const storageKey = milestone ? `guard-streak-milestone-dismissed-${milestone}` : "";
-  const [dismissed, setDismissed] = useState(() => {
-    if (!storageKey) return true;
-    return safeLocalStorage.getItem(storageKey) === "1";
-  });
-
-  const handleDismiss = useCallback(() => {
-    setDismissed(true);
-    if (storageKey) safeLocalStorage.setItem(storageKey, "1");
-  }, [storageKey]);
-
-  if (!milestone || dismissed) return null;
-
-  const messages: Record<number, string> = STREAK_MILESTONE_MESSAGES;
-
-  return (
-    <div className="guard-fade-in relative overflow-hidden rounded-2xl border border-brand-purple/20 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6">
-      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-purple/10" />
-      <div className="relative flex items-start gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/10">
-          <HiMiniSparkles className="h-5 w-5 text-brand-purple" aria-hidden="true" />
-        </span>
-        <div className="flex-1">
-          <SectionLabel>{streak} day coverage</SectionLabel>
-          <p className="mt-2 text-sm text-muted-foreground">{messages[milestone]}</p>
-        </div>
-        <button
-          onClick={handleDismiss}
-          className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-white/70 hover:text-brand-dark"
-          aria-label="Dismiss streak celebration"
-        >
-          <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function NewAppDiscoveryBanner(props: {
-  managedInstalls: GuardManagedInstall[];
-  observedHarnesses: string[];
-  receipts: GuardReceipt[];
-  policies: GuardPolicyDecision[];
-  onOpenAppDetail: (harness: string) => void;
-}) {
-  const discovered = resolveNewAppDiscoveries(props.managedInstalls, props.observedHarnesses);
-
-  return (
-    <>
-      {discovered.map((harness) => (
-        <NewAppBanner
-          key={harness}
-          harness={harness}
-          onOpenAppDetail={props.onOpenAppDetail}
-        />
-      ))}
-    </>
-  );
-}
-
-export function resolveNewAppDiscoveries(
-  managedInstalls: GuardManagedInstall[],
-  observedHarnesses: string[]
-): string[] {
-  const activeHarnesses = new Set(managedInstalls.filter((i) => isConnectableAppHarness(i.harness)).map((i) => i.harness));
-  return observedHarnesses.filter((h) => isConnectableAppHarness(h) && !activeHarnesses.has(h));
-}
-
-function NewAppBanner(props: {
-  harness: string;
-  onOpenAppDetail: (harness: string) => void;
-}) {
-  const storageKey = `guard-new-app-dismissed-${props.harness}`;
-  const [dismissed, setDismissed] = useState(() => {
-    return safeLocalStorage.getItem(storageKey) === "1";
-  });
-
-  const handleDismiss = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDismissed(true);
-    safeLocalStorage.setItem(storageKey, "1");
-  }, [storageKey]);
-
-  const handleOpen = useCallback(() => {
-    props.onOpenAppDetail(props.harness);
-  }, [props.onOpenAppDetail, props.harness]);
-
-  if (dismissed) return null;
-
-  return (
-    <div className="guard-fade-in flex w-full items-center gap-3 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-colors hover:bg-brand-blue/[0.08]">
-      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10">
-        <HiMiniBolt className="h-4 w-4 text-brand-blue" aria-hidden="true" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-brand-dark">
-          Guard discovered {harnessDisplayName(props.harness)}
-        </p>
-        <p className="text-xs text-slate-500">
-          Guard saw this app but it is not set up yet. Open to connect it.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-white/70"
-      >
-        Open
-      </button>
-      <button
-        type="button"
-        onClick={handleDismiss}
-        className="shrink-0 rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/70 hover:text-brand-dark"
-        aria-label={`Dismiss ${harnessDisplayName(props.harness)} discovery`}
-      >
-        <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
-function CollapsibleCard(props: {
-  id: string;
-  icon: ReactNode;
-  label: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const storageKey = `guard-collapsed-${props.id}`;
-  const [isOpen, setIsOpen] = useState(() => {
-    const saved = safeLocalStorage.getItem(storageKey);
-    return saved === null ? (props.defaultOpen ?? true) : saved === "1";
-  });
-
-  const toggle = useCallback(() => {
-    setIsOpen((prev) => {
-      const next = !prev;
-      safeLocalStorage.setItem(storageKey, next ? "1" : "0");
-      return next;
-    });
-  }, [storageKey]);
-
-  const borderClass =
-    props.id === "daily-brief"
-      ? "border-brand-green/15 bg-brand-green/[0.04]"
-      : "border-brand-purple/15 bg-brand-purple/[0.04]";
-
-  return (
-    <div className={`rounded-2xl border ${borderClass} p-5 shadow-sm sm:p-6`}>
-      <button
-        onClick={toggle}
-        className="flex w-full items-center gap-3 text-left"
-        aria-expanded={isOpen}
-        aria-controls={`collapsible-content-${props.id}`}
-      >
-        {props.icon}
-        <div className="flex-1">
-          <SectionLabel>{props.label}</SectionLabel>
-        </div>
-        {isOpen ? (
-          <HiMiniChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        ) : (
-          <HiMiniChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        )}
-      </button>
-      {isOpen && (
-        <div id={`collapsible-content-${props.id}`} className="mt-3 guard-fade-in">
-          {props.children}
-        </div>
       )}
     </div>
   );

@@ -7,7 +7,9 @@ import json
 import sys
 from typing import TYPE_CHECKING, TextIO
 
-from ..presentation_mode import PRESENTATION_SCHEMA_VERSION, UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC
+from ..presentation_mode import PRESENTATION_SCHEMA_VERSION
+
+UNSUPPORTED_PRESENTATION_SCHEMA_DIAGNOSTIC = "unsupported_presentation_schema_fell_back_to_everyday"
 
 if TYPE_CHECKING:
     from pathlib import Path

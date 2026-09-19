@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
-CORE_TARGET = "aarch64-apple-darwin"
+CORE_TARGETS = ("aarch64-apple-darwin", "x86_64-unknown-linux-gnu")
 
 
 def _regular_file_names(directory: Path) -> set[str]:
@@ -25,9 +25,16 @@ def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, chann
     mcpb_name = f"hol-guard-{version}.mcpb"
     checksum_name = f"{mcpb_name}.sha256"
     mcpb_names = {mcpb_name, checksum_name}
-    core_base = f"hol-guard-core-{version}-{CORE_TARGET}"
-    core_names = {core_base, f"{core_base}.json", f"{core_base}.attested.json"}
-    co_owned_names = mcpb_names | (core_names if channel == "alpha" else set())
+    core_names_by_target = {
+        target: {
+            f"hol-guard-core-{version}-{target}",
+            f"hol-guard-core-{version}-{target}.json",
+            f"hol-guard-core-{version}-{target}.attested.json",
+        }
+        for target in CORE_TARGETS
+    }
+    all_core_names = set().union(*core_names_by_target.values())
+    co_owned_names = mcpb_names | all_core_names
     allowed_names = owned_names | co_owned_names
     release_names = _regular_file_names(release_dir)
     unexpected_names = sorted(release_names - allowed_names)
@@ -38,9 +45,10 @@ def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, chann
     present_mcpb_names = release_names & mcpb_names
     if present_mcpb_names and present_mcpb_names != mcpb_names:
         raise ValueError("MCPB release asset and checksum must both be present")
-    present_core_names = release_names & core_names
-    if present_core_names and present_core_names != core_names:
-        raise ValueError("Desktop Core release assets must be a complete set")
+    for core_names in core_names_by_target.values():
+        present_core_names = release_names & core_names
+        if present_core_names and present_core_names != core_names:
+            raise ValueError("Desktop Core release assets must be a complete set")
     if not present_mcpb_names:
         return
 

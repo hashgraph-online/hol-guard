@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import cast
@@ -20,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.command_model import CanonicalCommand
 from codex_plugin_scanner.guard.runtime.command_rules import CommandSafetyRule
 
 
+@dataclass(frozen=True, slots=True)
 class _FailingMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command

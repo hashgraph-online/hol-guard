@@ -2,12 +2,14 @@ import { useCallback, type RefObject } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
 import { guardAwareHref } from "../guard-api";
+import { commitDashboardLocation } from "../dashboard-location";
 import { Badge, SectionLabel } from "../approval-center-primitives";
 import {
   commandDecisionLabel,
   commandEffectLabels,
   commandExecutionLabel,
   commandInteractionLabel,
+  commandInvocationLabel,
   commandProofLabel,
   commandReasonLabel,
   FEEDBACK_LABELS,
@@ -56,6 +58,24 @@ function EvidenceField(props: { label: string; value: string }) {
   );
 }
 
+function CommandValue(props: { preview: string | null }) {
+  const label = commandInvocationLabel(props.preview);
+  return (
+    <div className="sm:col-span-2">
+      <dt className="text-xs font-medium text-slate-500">Command</dt>
+      <dd className="mt-0.5">
+        {props.preview === null ? (
+          <span className="text-sm text-slate-500">{label}</span>
+        ) : (
+          <code className="block select-text whitespace-pre-wrap break-all font-mono text-[13px] leading-5 text-brand-dark">
+            {label}
+          </code>
+        )}
+      </dd>
+    </div>
+  );
+}
+
 function extensionPatternHref(extensionId: string, ruleId: string): string {
   // guardAwareHref carries the dashboard session in the fragment; append the
   // rule anchor as one more fragment parameter instead of replacing it.
@@ -70,8 +90,7 @@ function extensionPatternHref(extensionId: string, ruleId: string): string {
 function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; controlling: boolean }) {
   const effects = commandEffectLabels(props.match);
   const openPatternFromRule = useCallback(() => {
-    window.history.pushState({}, "", extensionPatternHref(props.match.extension_id, props.match.rule_id));
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    commitDashboardLocation(extensionPatternHref(props.match.extension_id, props.match.rule_id));
   }, [props.match.extension_id, props.match.rule_id]);
   return (
     <li className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
@@ -139,6 +158,7 @@ export function CommandActivityDetail(props: {
       </div>
 
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+        <CommandValue preview={props.activity.invocation_preview} />
         <EvidenceField label="Decision" value={commandDecisionLabel(props.activity.policy_action)} />
         <EvidenceField label="Execution proof" value={commandExecutionLabel(props.activity.execution_status)} />
         <EvidenceField label="Proof source" value={commandProofLabel(props.activity.proof_level)} />
@@ -169,7 +189,11 @@ export function CommandActivityDetail(props: {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">No rule match was recorded.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            {props.activity.decision_reason_code === "no_match"
+              ? "No rule matched this action."
+              : "Rule evidence is unavailable for this record."}
+          </p>
         )}
       </div>
 

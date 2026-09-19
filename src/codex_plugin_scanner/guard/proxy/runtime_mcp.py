@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import queue
 import shlex
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
@@ -40,9 +43,21 @@ from ..local_supply_chain import (
     compose_current_package_policy_action,
     package_request_policy_hash,
 )
+from ..mcp_authority_binding import (
+    AuthorityCheck,
+    UnsupportedAuthorityValueError,
+    capture_authority_binding,
+    check_current_mcp_authority,
+    current_mcp_authority_check,
+    exact_authority_digest,
+    inside_proxy_authority_scope,
+    proxy_authority_scope,
+    use_mcp_authority_check,
+)
 from ..mcp_tool_calls import (
     ApprovalReuseClaimDisposition,
     ToolCallDecision,
+    _normalized_tool_call_workspace,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
@@ -64,6 +79,7 @@ from ..runtime.approval_context import (
 )
 from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
@@ -72,16 +88,41 @@ from ..runtime.supply_chain_package_eval import evaluate_package_request_artifac
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
+from . import framing
 from ._env import _build_scrubbed_env
+from .framing import (
+    IO_FAILURES,
+    ByteBoundedQueue,
+    ProxyIoLimitError,
+    admit_response,
+    bounded_operation,
+    count_frame,
+    remaining_timeout,
+    retire_reader,
+    write_message,
+    write_timeout_reply,
+)
 from .stdio import (
     ProxyIoTimeoutError,
     _blocked_tool_response,
+    _io_failure_response,
+    _is_terminal_response,
     _is_timeout_response,
     _quarantine_process,
     _readline_with_timeout,
     _redact_json,
     _timeout_response,
 )
+from .tool_call_binding import (
+    bind_tool_call,
+    bind_tool_call_write,
+    changed_tool_call,
+    current_tool_call_binding,
+    require_tool_call_method,
+    tool_call_write_frame,
+    use_tool_call_binding,
+)
+from .tool_catalog import ToolCatalog
 
 
 def _guard_action(value: object) -> GuardAction:
@@ -378,6 +419,45 @@ def _mcp_arguments_digest(arguments: object) -> str:
     return sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _browser_intent_payload(
+    artifact: Any,
+    arguments: object,
+    *,
+    default_launch_target: str,
+) -> tuple[str, dict[str, object] | None]:
+    """Project the launch target label and safe browser intent payload for a tool call."""
+    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+    if browser_intent is None:
+        return default_launch_target, None
+    # Build a safer browser-specific launch target label
+    target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+    launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
+    browser_intent_dict = cast(
+        dict[str, object],
+        _safe_mcp_arguments(
+            {
+                "version": browser_intent.version,
+                "intent": browser_intent.intent,
+                "operation": browser_intent.operation,
+                "target_url": browser_intent.target_url,
+                "target_origin": browser_intent.target_origin,
+                "target_domain": browser_intent.target_domain,
+                "target_path_prefix": browser_intent.target_path_prefix,
+                "method": browser_intent.method,
+                "profile_mode": browser_intent.profile_mode,
+                "mcp_server_name": browser_intent.mcp_server_name,
+                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
+                "mcp_tool_name": browser_intent.mcp_tool_name,
+                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
+                "mcp_schema_hash": browser_intent.mcp_schema_hash,
+                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
+                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+            }
+        ),
+    )
+    return launch_target, browser_intent_dict
+
+
 _ToolCatalogState = Literal["unobserved", "pending", "complete", "invalidated", "error"]
 _APPROVAL_REUSE_TOOL_CATALOG_INCOMPLETE = "approval_reuse_tool_catalog_incomplete"
 _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED = "tool_catalog_changed_at_execution_boundary"
@@ -413,6 +493,17 @@ def _tool_catalog_fingerprint(
     state: _ToolCatalogState = "complete",
 ) -> str:
     """Hash catalog lifecycle state plus the complete canonical tool surface."""
+
+    if isinstance(catalog, ToolCatalog):
+        return catalog.fingerprint(state, lambda: _uncached_tool_catalog_fingerprint(catalog, state=state))
+    return _uncached_tool_catalog_fingerprint(catalog, state=state)
+
+
+def _uncached_tool_catalog_fingerprint(
+    catalog: Mapping[str, Mapping[str, object]],
+    *,
+    state: _ToolCatalogState,
+) -> str:
 
     canonical_tools = [_canonical_tool_catalog_entry(name, catalog[name]) for name in sorted(catalog)]
     serialized = json.dumps(
@@ -474,6 +565,13 @@ def _configured_server_environment(
     return {key: launch_env[key] for key in configured_keys if key in launch_env}
 
 
+def _configured_server_launch_environment(configured_keys: Sequence[str]) -> dict[str, str]:
+    """Build a scrubbed child environment plus only explicitly configured values."""
+
+    configured_values = {key: os.environ[key] for key in configured_keys if key in os.environ}
+    return _build_scrubbed_env(configured_values)
+
+
 @dataclass(frozen=True, slots=True)
 class _PackagePolicyResolution:
     base_evaluation: Any
@@ -486,6 +584,7 @@ class _PackagePolicyResolution:
     saved_policy_blocks: bool
     pending_approval_reuse_decision: Mapping[str, object] | None
     approval_reuse_claim_disposition: ApprovalReuseClaimDisposition | None = None
+    authority_check: AuthorityCheck | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,6 +595,7 @@ class _ToolCallAuthority:
     catalog_generation: int
     catalog_state: _ToolCatalogState
     catalog_fingerprint: str
+    authority_check: AuthorityCheck | None = field(default=None, repr=False, compare=False)
 
 
 class RuntimeMcpGuardProxy:
@@ -530,7 +630,7 @@ class RuntimeMcpGuardProxy:
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
-        initial_launch_env = _build_scrubbed_env()
+        initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
         self.server_identity = server_identity or build_mcp_server_identity(
             config_path=self.config_path,
             command=self.command[0] if self.command else "",
@@ -544,10 +644,13 @@ class RuntimeMcpGuardProxy:
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
         self._child_output_queue: queue.Queue[_ChildOutputFrame] | None = None
+        self._child_output_stop = threading.Event()
+        self._io_lifecycle_lock = threading.RLock()
+        self._io_failure: ProxyIoTimeoutError | ProxyIoLimitError | None = None
         self._active_child_stdout: IO[str] | None = None
         self._tools_call_boundary_lock = threading.RLock()
         self._tool_catalog_state: _ToolCatalogState = "unobserved"
-        self._tool_catalog: dict[str, dict[str, object]] = {}
+        self._tool_catalog = ToolCatalog()
         self._tool_catalog_pending: dict[str, dict[str, object]] | None = None
         self._tool_catalog_expected_cursor: str | None = None
         self._tool_catalog_inflight = False
@@ -622,17 +725,19 @@ class RuntimeMcpGuardProxy:
                 )
                 if response is not None:
                     responses.append(response)
-                    if _is_timeout_response(response):
+                    if _is_terminal_response(response):
                         events.append(event)
                         break
                 events.append(event)
-            process.stdin.close()
+                if self._io_failure is not None:
+                    break
+            if self._io_failure is None:
+                process.stdin.close()
             process.wait(timeout=5)
         finally:
             self._active_process = None
             if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+                _quarantine_process(process)
             self._active_executable_identity = None
             self._active_runtime_launch_identity = None
             self._active_server_env_values_hash = None
@@ -656,7 +761,12 @@ class RuntimeMcpGuardProxy:
             child_stdin = process.stdin
             child_stdout = process.stdout
             while True:
-                line = input_stream.readline()
+                line = self._read_idle_client(
+                    input_stream,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    server_output=output_stream,
+                )
                 if not line:
                     break
                 message = json.loads(line)
@@ -675,52 +785,128 @@ class RuntimeMcpGuardProxy:
                     ),
                 )
                 if response is not None:
-                    output_stream.write(json.dumps(response) + "\n")
-                    output_stream.flush()
-                    if _is_timeout_response(response):
+                    write_message(
+                        output_stream,
+                        response,
+                        timeout_seconds=self._child_response_timeout_seconds(),
+                        source="client_output",
+                    )
+                    if _is_terminal_response(response):
                         break
-            process.stdin.close()
+                if self._io_failure is not None:
+                    break
+            if self._io_failure is None:
+                process.stdin.close()
             process.wait(timeout=5)
-            return int(process.returncode or 0)
+            return 2 if self._io_failure is not None else int(process.returncode or 0)
+        except IO_FAILURES as error:
+            self._abort_transport(error)
+            return 2
         finally:
             self._active_process = None
             if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+                _quarantine_process(process)
             self._active_executable_identity = None
             self._active_runtime_launch_identity = None
             self._active_server_env_values_hash = None
             self._active_server_identity = None
             self._deactivate_child_process_io()
+            retire_reader(input_stream)
 
     def _reset_child_process_state(self) -> None:
+        self._deactivate_child_process_io()
+        self._io_failure = None
         self._buffered_child_responses.clear()
         self._buffered_client_responses.clear()
         self._child_output_queue = None
         self._active_child_stdout = None
         self._reset_tools_catalog_unobserved()
 
-    def _deactivate_child_process_io(self) -> None:
-        self._buffered_child_responses.clear()
-        self._buffered_client_responses.clear()
-        self._child_output_queue = None
-        self._active_child_stdout = None
+    def _read_idle_client(
+        self,
+        input_stream: TextIO,
+        *,
+        child_stdin: IO[str] | None = None,
+        child_stdout: IO[str] | None = None,
+        server_output: TextIO | None = None,
+    ) -> str:
+        while True:
+            self._check_transport()
+            if child_stdin is not None and child_stdout is not None:
+                # Servers can invalidate a catalog or request client input while
+                # the client is otherwise idle. Retain the ordinary bounded
+                # multiplexing path; another client request must not be needed
+                # to make a queued child notification visible.
+                self._drain_child_messages(
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=input_stream,
+                    server_output=server_output,
+                )
+            try:
+                line = _readline_with_timeout(input_stream, 0.1, source="client_input")
+            except ProxyIoTimeoutError:
+                continue
+            self._check_transport()
+            return line
 
-    def _activate_child_output_pump(self, child_stdout: IO[str]) -> None:
-        output_queue: queue.Queue[_ChildOutputFrame] = queue.Queue()
-        self._child_output_queue = output_queue
-        self._active_child_stdout = child_stdout
+    def _deactivate_child_process_io(self) -> None:
+        with self._io_lifecycle_lock:
+            self._child_output_stop.set()
+            child_stdout = self._active_child_stdout
+            self._buffered_child_responses.clear()
+            self._buffered_client_responses.clear()
+            self._child_output_queue = None
+            self._active_child_stdout = None
+        if child_stdout is not None:
+            retire_reader(child_stdout)
+
+    def _activate_child_output_pump(
+        self, child_stdout: IO[str], *, process: subprocess.Popen[str] | None = None
+    ) -> None:
+        output_queue: queue.Queue[_ChildOutputFrame] = ByteBoundedQueue(
+            lambda frame: len(frame.line.encode("utf-8")) if frame.line is not None else 0
+        )
+        stop = threading.Event()
+        with self._io_lifecycle_lock:
+            self._child_output_queue = output_queue
+            self._active_child_stdout = child_stdout
+            self._child_output_stop = stop
+            if process is not None:
+                self._active_process = process
 
         def pump() -> None:
             try:
-                while True:
-                    line = child_stdout.readline()
+                while not stop.is_set():
+                    try:
+                        line = _readline_with_timeout(child_stdout, 0.1, source="child_output")
+                    except ProxyIoTimeoutError:
+                        continue
+                    if stop.is_set():
+                        return
                     if not line:
                         output_queue.put(_ChildOutputFrame())
                         return
                     output_queue.put(_ChildOutputFrame(line=line))
+            except (queue.Full, ProxyIoLimitError) as exc:
+                if stop.is_set():
+                    return
+                failure = (
+                    exc
+                    if isinstance(exc, ProxyIoLimitError)
+                    else ProxyIoLimitError(source="child_output", reason="queue_frame_limit")
+                )
+                self._abort_transport(failure, expected_queue=output_queue)
             except BaseException as exc:  # pragma: no cover - surfaced by the synchronous consumer
-                output_queue.put(_ChildOutputFrame(error=exc))
+                if stop.is_set():
+                    return
+                try:
+                    output_queue.put_nowait(_ChildOutputFrame(error=exc))
+                except (queue.Full, ProxyIoLimitError):
+                    self._abort_transport(
+                        ProxyIoLimitError(source="child_output", reason="queue_frame_limit"),
+                        expected_queue=output_queue,
+                    )
 
         threading.Thread(
             target=pump,
@@ -733,7 +919,9 @@ class RuntimeMcpGuardProxy:
         # process must explicitly advertise a complete root-to-terminal list
         # before any saved allow can be reused against it.
         self._reset_child_process_state()
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
+        child_env = dict(launch_env)
+        child_env.update(origin_harness_env(self.harness))
         configured_env = _configured_server_environment(launch_env, self.server_env_keys)
         self._active_runtime_launch_identity = build_runtime_launch_identity(
             self.command[0] if self.command else "",
@@ -770,7 +958,7 @@ class RuntimeMcpGuardProxy:
                 stderr=None,
                 text=True,
                 cwd=self.context.workspace_dir,
-                env=launch_env,
+                env=child_env,
                 executable=resolved_runtime_launch_executable(self._active_runtime_launch_identity),
             )
             if not self._verify_post_spawn_launch_identity(launch_env=launch_env):
@@ -778,7 +966,7 @@ class RuntimeMcpGuardProxy:
                     "Guard runtime MCP server launch identity changed while the child process was starting."
                 )
             if process.stdout is not None:
-                self._activate_child_output_pump(process.stdout)
+                self._activate_child_output_pump(process.stdout, process=process)
             return process
         except BaseException:
             if process is not None:
@@ -819,7 +1007,7 @@ class RuntimeMcpGuardProxy:
         active_hash = self._active_server_env_values_hash
         if active_hash is not None:
             return active_hash
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
         return build_configured_environment_hash(
             launch_env,
             configured_keys=self.server_env_keys,
@@ -829,7 +1017,7 @@ class RuntimeMcpGuardProxy:
         identity = self._active_server_identity
         if identity is not None:
             return identity
-        launch_env = _build_scrubbed_env()
+        launch_env = _configured_server_launch_environment(self.server_env_keys)
         return build_mcp_server_identity(
             config_path=self.config_path,
             command=self.command[0] if self.command else "",
@@ -923,6 +1111,35 @@ class RuntimeMcpGuardProxy:
             policy_action="require-reapproval",
         )
 
+    def _inline_catalog_invalidation_response(
+        self,
+        *,
+        authority: _ToolCallAuthority,
+        message_id: object,
+        tool_name: str,
+        params: dict[str, Any],
+        scanner_evidence: tuple[dict[str, object], ...],
+        package_request: bool,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        if (
+            authority.catalog_generation == self._tool_catalog_generation
+            and authority.catalog_state == self._tool_catalog_state
+        ):
+            return None
+        binding = current_tool_call_binding()
+        if binding is not None:
+            binding.check()
+        # A notification observed during approval invalidates that approval.
+        # Build only a fresh denial; never remember or execute the old allow.
+        return self._catalog_boundary_failure_response(
+            message_id=message_id,
+            tool_name=tool_name,
+            params=params,
+            scanner_evidence=scanner_evidence,
+            phase="after_inline_approval",
+            package_request=package_request,
+        )
+
     def _disable_saved_allow_without_complete_catalog(self, decision: ToolCallDecision) -> ToolCallDecision:
         """Reject saved-allow authority until this process has a complete catalog."""
 
@@ -943,6 +1160,120 @@ class RuntimeMcpGuardProxy:
             approval_reuse_claim_disposition=None,
         )
 
+    def _capture_tool_call_authority(self, *, arguments: object, config: GuardConfig) -> AuthorityCheck | None:
+        """Capture security inputs before any artifact-construction callback."""
+        request_binding = current_tool_call_binding()
+
+        def changed() -> ProxyIoLimitError:
+            return ProxyIoLimitError(source="tool_call_authority", reason="tool_call_authority_changed")
+
+        def check_request() -> None:
+            if request_binding is not None:
+                request_binding.check()
+                if arguments is not request_binding.owned_message["params"].get("arguments"):
+                    raise changed_tool_call()
+
+        def attributes() -> dict[str, Any]:
+            return object.__getattribute__(self, "__dict__")
+
+        def owners() -> tuple[object, ...]:
+            current = attributes()
+            return tuple(
+                current[name] for name in ("config", "context", "store", "_tool_catalog", "_current_config_provider")
+            )
+
+        def values() -> object:
+            current = attributes()
+            catalog = current["_tool_catalog"]
+            if type(catalog) is dict:
+                raw_catalog = catalog
+            elif type(catalog) is ToolCatalog:
+                raw_catalog = object.__getattribute__(catalog, "_definitions")
+            else:
+                raise UnsupportedAuthorityValueError
+            context = current["context"]
+            if type(context) is not HarnessContext:
+                raise UnsupportedAuthorityValueError
+            workspace = context.workspace_dir
+            # Validate before normalization can call a custom path conversion.
+            exact_authority_digest(workspace)
+            effective_workspace = _normalized_tool_call_workspace(workspace if workspace is not None else Path.cwd())
+            return (
+                (config,) if current["config"] is config else (config, current["config"]),
+                None if request_binding is not None else arguments,
+                tuple(
+                    current[name]
+                    for name in (
+                        "command",
+                        "context",
+                        "harness",
+                        "server_name",
+                        "source_scope",
+                        "config_path",
+                        "transport",
+                        "server_id",
+                        "server_env_keys",
+                        "server_identity",
+                        "_active_executable_identity",
+                        "_active_runtime_launch_identity",
+                        "_active_server_env_values_hash",
+                        "_active_server_identity",
+                        "_tool_catalog_generation",
+                        "_tool_catalog_state",
+                    )
+                ),
+                raw_catalog,
+                effective_workspace,
+            )
+
+        try:
+            return capture_authority_binding(
+                values=values,
+                owners=owners,
+                changed=changed,
+                input_check=check_request,
+            ).check
+        except UnsupportedAuthorityValueError as error:
+            if inside_proxy_authority_scope():
+                raise changed() from error
+            # Unsupported direct Python helper calls retain their public API.
+            return None
+        except (TypeError, ValueError, RecursionError, RuntimeError, OSError) as error:
+            if isinstance(error, ProxyIoLimitError):
+                raise
+            raise changed() from error
+
+    @staticmethod
+    def _bind_tool_call_artifact(
+        artifact: GuardArtifact,
+        authority_check: AuthorityCheck | None,
+        *,
+        expected_digest: bytes | None = None,
+    ) -> tuple[AuthorityCheck | None, bytes | None]:
+        if authority_check is None:
+            return None, None
+
+        def changed() -> ProxyIoLimitError:
+            return ProxyIoLimitError(source="tool_call_authority", reason="tool_call_authority_changed")
+
+        try:
+            captured = exact_authority_digest(artifact)
+            if expected_digest is not None and captured != expected_digest:
+                raise changed()
+        except (TypeError, ValueError, RecursionError, RuntimeError) as error:
+            raise changed() from error
+
+        def check() -> None:
+            authority_check()
+            try:
+                if exact_authority_digest(artifact) != captured:
+                    raise changed()
+            except (TypeError, ValueError, RecursionError, RuntimeError) as error:
+                raise changed() from error
+
+        check()
+        return check, captured
+
     def _resolve_tool_call_authority(
         self,
         *,
@@ -953,6 +1284,7 @@ class RuntimeMcpGuardProxy:
         """Rebuild the complete current tool-call identity and policy result."""
 
         authority_config = config or self.config
+        authority_check = self._capture_tool_call_authority(arguments=arguments, config=authority_config)
         tool_definition = self._tool_catalog.get(tool_name, {})
         tool_description_value = tool_definition.get("description")
         tool_schema = tool_definition.get("inputSchema", tool_definition.get("input_schema"))
@@ -982,22 +1314,21 @@ class RuntimeMcpGuardProxy:
             tool_schema=tool_schema,
             tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
         )
-        artifact_hash = build_tool_call_hash(
-            artifact,
-            arguments,
-            workspace=self.context.workspace_dir or Path.cwd(),
-            config=authority_config,
-        )
-        decision = self._disable_saved_allow_without_complete_catalog(
-            evaluate_tool_call(
-                store=self.store,
-                config=authority_config,
-                artifact=artifact,
-                artifact_hash=artifact_hash,
-                arguments=arguments,
-                claim_saved_approval=False,
+        authority_check, artifact_digest = self._bind_tool_call_artifact(artifact, authority_check)
+        original_artifact = artifact
+        with use_mcp_authority_check(authority_check):
+            artifact, artifact_hash, decision = self._evaluate_tool_call_authority(
+                artifact=artifact, arguments=arguments, config=authority_config
             )
-        )
+            check_current_mcp_authority()
+        if artifact is not original_artifact:
+            # A private evaluator may return an owned copy. Bind the object
+            # actually consumed, while retaining the original source binding.
+            authority_check, _ = self._bind_tool_call_artifact(
+                artifact,
+                authority_check,
+                expected_digest=artifact_digest,
+            )
         return _ToolCallAuthority(
             artifact=artifact,
             artifact_hash=artifact_hash,
@@ -1005,7 +1336,37 @@ class RuntimeMcpGuardProxy:
             catalog_generation=catalog_generation,
             catalog_state=catalog_state,
             catalog_fingerprint=catalog_fingerprint,
+            authority_check=authority_check,
         )
+
+    def _evaluate_tool_call_authority(
+        self, *, artifact: GuardArtifact, arguments: object, config: GuardConfig
+    ) -> tuple[GuardArtifact, str, ToolCallDecision]:
+        """Retain the measured Python default; optional pilots override privately."""
+
+        self._check_tool_call_preparation()
+        check_current_mcp_authority()
+        artifact_hash = build_tool_call_hash(
+            artifact,
+            arguments,
+            workspace=self.context.workspace_dir or Path.cwd(),
+            config=config,
+        )
+        self._check_tool_call_preparation()
+        check_current_mcp_authority()
+        decision = self._disable_saved_allow_without_complete_catalog(
+            evaluate_tool_call(
+                store=self.store,
+                config=config,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                arguments=arguments,
+                claim_saved_approval=False,
+            )
+        )
+        self._check_tool_call_preparation()
+        check_current_mcp_authority()
+        return artifact, artifact_hash, decision
 
     def _handle_message(
         self,
@@ -1017,24 +1378,135 @@ class RuntimeMcpGuardProxy:
         server_output: TextIO | None,
         approval_callback: Any | None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-        if str(message.get("method", "")) == "tools/call":
-            with self._tools_call_boundary_lock:
-                return self._handle_message_serialized(
-                    message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
-                    approval_callback=approval_callback,
-                )
-        return self._handle_message_serialized(
-            message=message,
-            child_stdin=child_stdin,
-            child_stdout=child_stdout,
-            client_input=client_input,
-            server_output=server_output,
-            approval_callback=approval_callback,
+        incoming_method = message.get("method")
+        event_method = incoming_method if type(incoming_method) is str else "unknown"
+        incoming_id = message.get("id")
+        has_incoming_id = "id" in message
+        try:
+            self._check_transport()
+            result = self._handle_message_checked(
+                message=message,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                approval_callback=approval_callback,
+            )
+            if result[0] is None or not _is_terminal_response(result[0]):
+                self._check_transport()
+            return result
+        except IO_FAILURES as error:
+            self._abort_transport(error)
+            self._buffered_child_responses.clear()
+            self._buffered_client_responses.clear()
+            self._poison_tools_catalog()
+            response = _io_failure_response(incoming_id, error) if has_incoming_id else None
+            return response, {
+                "method": event_method,
+                "decision": "transport-failed",
+                "reason_code": error.reason,
+                "session_terminal": True,
+            }
+
+    def _handle_message_checked(
+        self,
+        *,
+        message: dict[str, Any],
+        child_stdin: IO[str],
+        child_stdout: IO[str],
+        client_input: TextIO | None,
+        server_output: TextIO | None,
+        approval_callback: Any | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        # Nested messages have their own binding and restore the caller's
+        # context; no notification or reply inherits another request's intent.
+        with use_tool_call_binding(None), proxy_authority_scope():
+            if str(message.get("method", "")) == "tools/call":
+                with self._tools_call_boundary_lock:
+                    binding = (
+                        bind_tool_call(message)
+                        if _is_request(message) and isinstance(message.get("params"), dict)
+                        else None
+                    )
+                    with use_tool_call_binding(binding):
+                        return self._handle_message_serialized(
+                            message=binding.owned_message if binding is not None else message,
+                            child_stdin=child_stdin,
+                            child_stdout=child_stdout,
+                            client_input=client_input,
+                            server_output=server_output,
+                            approval_callback=approval_callback,
+                        )
+            return self._handle_message_serialized(
+                message=message,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                approval_callback=approval_callback,
+            )
+
+    def _deny_inline_tool_call(
+        self,
+        *,
+        decision_source: str,
+        event_decision: str,
+        reason: str,
+        message: dict[str, Any],
+        tool_name: str,
+        event: dict[str, Any],
+        artifact: GuardArtifact,
+        artifact_hash: str,
+        decision: ToolCallDecision,
+        scanner_evidence: tuple[dict[str, object], ...],
+        arguments: object,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        block_tool_call(
+            store=self.store,
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            decision_source=decision_source,
+            now=_now(),
+            signals=decision.signals,
+            risk_categories=decision.risk_categories,
+            arguments=_safe_mcp_arguments(arguments),
+            additional_scanner_evidence=scanner_evidence,
+            policy_action="block",
         )
+        return _blocked_tool_response(
+            message.get("id"),
+            tool_name,
+            reason,
+            {"approvalRequests": [], "guardPolicyAction": "block"},
+        ), {
+            **event,
+            "decision": event_decision,
+            "policy_action": "block",
+            "approval_requests": [],
+        }
+
+    def _inline_approval_deny_result(
+        self,
+        approval_result: object,
+        deny_tool_call: Callable[..., tuple[dict[str, Any], dict[str, Any]]],
+        tool_name: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        if _approval_denies(approval_result):
+            return deny_tool_call(
+                decision_source="inline-denied",
+                event_decision="deny-inline",
+                reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+            )
+        if _approval_invalid(approval_result):
+            return deny_tool_call(
+                decision_source="inline-invalid",
+                event_decision="deny-inline-invalid",
+                reason=(
+                    f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                    "approval returned an invalid response."
+                ),
+            )
+        return None
 
     def _handle_message_serialized(
         self,
@@ -1122,6 +1594,8 @@ class RuntimeMcpGuardProxy:
         artifact = authority.artifact
         tool_artifact_hash = authority.artifact_hash
         package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
+        if authority.authority_check is not None:
+            authority.authority_check()
         decision = authority.decision
         if (
             package_artifact is None
@@ -1137,6 +1611,17 @@ class RuntimeMcpGuardProxy:
                 approval_reuse_claim_disposition=None,
             )
         decision_scanner_evidence = _tool_decision_scanner_evidence(decision)
+        deny_inline_call = partial(
+            self._deny_inline_tool_call,
+            message=message,
+            tool_name=tool_name,
+            event=event,
+            artifact=artifact,
+            artifact_hash=tool_artifact_hash,
+            decision=decision,
+            scanner_evidence=decision_scanner_evidence,
+            arguments=arguments,
+        )
         if decision.saved_action == "block":
             return self._stored_tool_block_response(
                 message_id=message.get("id"),
@@ -1166,7 +1651,8 @@ class RuntimeMcpGuardProxy:
                 scanner_evidence=decision_scanner_evidence,
             )
         if package_artifact is not None:
-            package_resolution = self._resolve_package_policy(artifact=package_artifact)
+            with use_mcp_authority_check(authority.authority_check):
+                package_resolution = self._resolve_package_policy(artifact=package_artifact)
             if package_resolution.saved_policy_blocks:
                 return self._handle_package_request(
                     message=message,
@@ -1185,6 +1671,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_generation=authority.catalog_generation,
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
+                    authority_check=authority.authority_check,
                 )
             if decision.action in {"allow", "warn"}:
                 response, package_event = self._handle_package_request(
@@ -1204,6 +1691,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_generation=authority.catalog_generation,
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
+                    authority_check=authority.authority_check,
                 )
                 return response, package_event
             if self._allow_after_native_prompt(decision):
@@ -1224,11 +1712,22 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_generation=authority.catalog_generation,
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
+                    authority_check=authority.authority_check,
                 )
                 return response, package_event
             if self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
+                    invalidated = self._inline_catalog_invalidation_response(
+                        authority=authority,
+                        message_id=message.get("id"),
+                        tool_name=tool_name,
+                        params=params,
+                        scanner_evidence=decision_scanner_evidence,
+                        package_request=True,
+                    )
+                    if invalidated is not None:
+                        return invalidated
                     try:
                         allow_tool_call(
                             store=self.store,
@@ -1271,63 +1770,20 @@ class RuntimeMcpGuardProxy:
                         expected_catalog_generation=authority.catalog_generation,
                         expected_catalog_state=authority.catalog_state,
                         expected_catalog_fingerprint=authority.catalog_fingerprint,
+                        authority_check=authority.authority_check,
                         remember_allow=True,
                         remember_decision_source="inline-approved",
                         remember_signals=decision.signals,
                         remember_risk_categories=decision.risk_categories,
                     )
                     return response, package_event
-                if _approval_denies(approval_result):
-                    block_tool_call(
-                        store=self.store,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
-                        decision_source="inline-denied",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        arguments=_safe_mcp_arguments(arguments),
-                        additional_scanner_evidence=decision_scanner_evidence,
-                        policy_action="block",
-                    )
-                    return _blocked_tool_response(
-                        message.get("id"),
-                        tool_name,
-                        f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                        {"approvalRequests": [], "guardPolicyAction": "block"},
-                    ), {
-                        **event,
-                        "decision": "deny-inline",
-                        "policy_action": "block",
-                        "approval_requests": [],
-                    }
-                if _approval_invalid(approval_result):
-                    block_tool_call(
-                        store=self.store,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
-                        decision_source="inline-invalid",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        arguments=_safe_mcp_arguments(arguments),
-                        additional_scanner_evidence=decision_scanner_evidence,
-                        policy_action="block",
-                    )
-                    return _blocked_tool_response(
-                        message.get("id"),
-                        tool_name,
-                        (
-                            f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                            "approval returned an invalid response."
-                        ),
-                        {"approvalRequests": [], "guardPolicyAction": "block"},
-                    ), {
-                        **event,
-                        "decision": "deny-inline-invalid",
-                        "policy_action": "block",
-                        "approval_requests": [],
-                    }
+                denied = self._inline_approval_deny_result(
+                    approval_result,
+                    deny_tool_call=deny_inline_call,
+                    tool_name=tool_name,
+                )
+                if denied is not None:
+                    return denied
             if self.config.mode == "observe":
                 response, package_event = self._handle_package_request(
                     message=message,
@@ -1346,6 +1802,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_generation=authority.catalog_generation,
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
+                    authority_check=authority.authority_check,
                 )
                 return response, package_event
             response, queued_event = self._queue_approval_center_response(
@@ -1381,6 +1838,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=authority.catalog_generation,
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
+                authority_check=authority.authority_check,
             )
         if self._allow_after_native_prompt(decision):
             return self._allow_and_forward(
@@ -1400,10 +1858,21 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=authority.catalog_generation,
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
+                authority_check=authority.authority_check,
             )
         if self._inline_prompt_available and approval_callback is not None:
             approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
             if _approval_allows(approval_result):
+                invalidated = self._inline_catalog_invalidation_response(
+                    authority=authority,
+                    message_id=message.get("id"),
+                    tool_name=tool_name,
+                    params=params,
+                    scanner_evidence=decision_scanner_evidence,
+                    package_request=False,
+                )
+                if invalidated is not None:
+                    return invalidated
                 return self._allow_and_forward(
                     message=message,
                     child_stdin=child_stdin,
@@ -1422,58 +1891,15 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_generation=authority.catalog_generation,
                     expected_catalog_state=authority.catalog_state,
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
+                    authority_check=authority.authority_check,
                 )
-            if _approval_denies(approval_result):
-                block_tool_call(
-                    store=self.store,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    decision_source="inline-denied",
-                    now=_now(),
-                    signals=decision.signals,
-                    risk_categories=decision.risk_categories,
-                    arguments=_safe_mcp_arguments(arguments),
-                    additional_scanner_evidence=decision_scanner_evidence,
-                    policy_action="block",
-                )
-                return _blocked_tool_response(
-                    message.get("id"),
-                    tool_name,
-                    f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-                    {"approvalRequests": [], "guardPolicyAction": "block"},
-                ), {
-                    **event,
-                    "decision": "deny-inline",
-                    "policy_action": "block",
-                    "approval_requests": [],
-                }
-            if _approval_invalid(approval_result):
-                block_tool_call(
-                    store=self.store,
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    decision_source="inline-invalid",
-                    now=_now(),
-                    signals=decision.signals,
-                    risk_categories=decision.risk_categories,
-                    arguments=_safe_mcp_arguments(arguments),
-                    additional_scanner_evidence=decision_scanner_evidence,
-                    policy_action="block",
-                )
-                return _blocked_tool_response(
-                    message.get("id"),
-                    tool_name,
-                    (
-                        f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                        "approval returned an invalid response."
-                    ),
-                    {"approvalRequests": [], "guardPolicyAction": "block"},
-                ), {
-                    **event,
-                    "decision": "deny-inline-invalid",
-                    "policy_action": "block",
-                    "approval_requests": [],
-                }
+            denied = self._inline_approval_deny_result(
+                approval_result,
+                deny_tool_call=deny_inline_call,
+                tool_name=tool_name,
+            )
+            if denied is not None:
+                return denied
         if self.config.mode == "observe":
             try:
                 catalog_current = self._drain_and_validate_catalog_authority(
@@ -1537,6 +1963,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=authority.catalog_generation,
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
+                authority_check=authority.authority_check,
             )
             final_observe_event = {
                 **observe_event,
@@ -1580,6 +2007,20 @@ class RuntimeMcpGuardProxy:
         artifact: Any,
         external_archive_network_authorized: bool = False,
     ) -> _PackagePolicyResolution:
+        authority_check, _ = self._bind_tool_call_artifact(artifact, current_mcp_authority_check())
+        with use_mcp_authority_check(authority_check):
+            return self._resolve_package_policy_checked(
+                artifact=artifact,
+                external_archive_network_authorized=external_archive_network_authorized,
+            )
+
+    def _resolve_package_policy_checked(
+        self,
+        *,
+        artifact: Any,
+        external_archive_network_authorized: bool = False,
+    ) -> _PackagePolicyResolution:
+        check_current_mcp_authority()
         package_evaluation = evaluate_package_request_artifact(
             artifact=artifact,
             store=self.store,
@@ -1588,16 +2029,19 @@ class RuntimeMcpGuardProxy:
             retain_external_archive_blob=external_archive_network_authorized,
         )
         try:
+            check_current_mcp_authority()
             package_current_action = compose_current_package_policy_action(
                 artifact=artifact,
                 evaluation=package_evaluation,
                 config=self.config,
             )
+            check_current_mcp_authority()
             package_workspace = self.context.workspace_dir or Path.cwd()
             package_context = build_package_execution_context(
                 workspace_dir=package_workspace,
                 artifact=artifact,
             )
+            check_current_mcp_authority()
             artifact_digest = package_request_policy_hash(
                 artifact=artifact,
                 store=self.store,
@@ -1606,12 +2050,14 @@ class RuntimeMcpGuardProxy:
                 execution_context=package_context,
                 config=self.config,
             )
+            check_current_mcp_authority()
             policy_workspace = package_request_runtime_workspace_scope(
                 artifact_id=artifact.artifact_id,
                 artifact_hash=artifact_digest,
                 artifact_type=artifact.artifact_type,
                 execution_context=package_context,
             )
+            check_current_mcp_authority()
             stored_package_resolution = _resolve_stored_package_policy_override(
                 package_evaluation,
                 store=self.store,
@@ -1623,6 +2069,7 @@ class RuntimeMcpGuardProxy:
                 current_action=package_current_action,
                 claim_saved_approval=False,
             )
+            check_current_mcp_authority()
             resolved_package_evaluation = stored_package_resolution.evaluation
             return _PackagePolicyResolution(
                 base_evaluation=package_evaluation,
@@ -1635,6 +2082,7 @@ class RuntimeMcpGuardProxy:
                 saved_policy_blocks=_has_saved_package_block(resolved_package_evaluation.reasons),
                 pending_approval_reuse_decision=stored_package_resolution.approval_reuse_decision,
                 approval_reuse_claim_disposition=stored_package_resolution.claim_disposition,
+                authority_check=current_mcp_authority_check(),
             )
         except BaseException:
             _cleanup_external_archive_downloads(package_evaluation)
@@ -1659,11 +2107,17 @@ class RuntimeMcpGuardProxy:
         expected_catalog_generation: int,
         expected_catalog_state: _ToolCatalogState,
         expected_catalog_fingerprint: str,
+        authority_check: AuthorityCheck | None = None,
         remember_allow: bool = False,
         remember_decision_source: str | None = None,
         remember_signals: tuple[str, ...] = (),
         remember_risk_categories: tuple[str, ...] = (),
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if authority_check is not None:
+            authority_check()
+        if package_resolution.authority_check is not None:
+            package_resolution.authority_check()
+            authority_check = package_resolution.authority_check
         package_evaluation = package_resolution.evaluation
         scanner_evidence = self._package_scanner_evidence(
             resolution=package_resolution,
@@ -1691,6 +2145,8 @@ class RuntimeMcpGuardProxy:
                 phase="before_package_revalidation",
                 package_request=True,
             )
+        if authority_check is not None:
+            authority_check()
         if package_resolution.saved_policy_blocks:
             return self._stored_package_block_response(
                 message_id=message.get("id"),
@@ -1730,13 +2186,17 @@ class RuntimeMcpGuardProxy:
             tool_name=tool_name,
             arguments=params.get("arguments"),
         )
+        if authority_check is not None:
+            authority_check()
         tool_artifact = fresh_tool_authority.artifact
         tool_artifact_hash = fresh_tool_authority.artifact_hash
         fresh_tool_decision = fresh_tool_authority.decision
         expected_catalog_generation = fresh_tool_authority.catalog_generation
         expected_catalog_state = fresh_tool_authority.catalog_state
         expected_catalog_fingerprint = fresh_tool_authority.catalog_fingerprint
-        fresh_package_resolution = self._resolve_package_policy(artifact=artifact)
+        with use_mcp_authority_check(fresh_tool_authority.authority_check):
+            fresh_package_resolution = self._resolve_package_policy(artifact=artifact)
+        authority_check = fresh_package_resolution.authority_check
         fresh_tool_evidence = _tool_decision_scanner_evidence(fresh_tool_decision)
         fresh_scanner_evidence = self._package_scanner_evidence(
             resolution=fresh_package_resolution,
@@ -1862,6 +2322,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=expected_catalog_generation,
                 expected_catalog_state=expected_catalog_state,
                 expected_catalog_fingerprint=expected_catalog_fingerprint,
+                authority_check=authority_check,
             )
             final_observe_event = {
                 **observe_event,
@@ -1949,6 +2410,8 @@ class RuntimeMcpGuardProxy:
                     phase="before_saved_approval_claim",
                     package_request=True,
                 )
+        if authority_check is not None:
+            authority_check()
         if pending_claims and not self.store.claim_approval_reuse_decisions(pending_claims, now=_now()):
             claim_failure_item: dict[str, object] = {
                 "source": "approval_reuse",
@@ -2000,6 +2463,8 @@ class RuntimeMcpGuardProxy:
                 tool_name=tool_name,
                 arguments=params.get("arguments"),
             )
+            if postclaim_tool_authority.authority_check is not None:
+                postclaim_tool_authority.authority_check()
             postclaim_tool_decision = postclaim_tool_authority.decision
             postclaim_tool_action = _postclaim_tool_action(postclaim_tool_decision)
             tool_context_matches = (
@@ -2047,10 +2512,11 @@ class RuntimeMcpGuardProxy:
                     policy_action="require-reapproval",
                 )
 
-            postclaim_package_resolution = self._resolve_package_policy(
-                artifact=postclaim_package_artifact,
-                external_archive_network_authorized=True,
-            )
+            with use_mcp_authority_check(postclaim_tool_authority.authority_check):
+                postclaim_package_resolution = self._resolve_package_policy(
+                    artifact=postclaim_package_artifact,
+                    external_archive_network_authorized=True,
+                )
             postclaim_package_action = most_restrictive_guard_action(
                 postclaim_package_resolution.current_action,
                 postclaim_package_resolution.evaluation.policy_action,
@@ -2158,6 +2624,7 @@ class RuntimeMcpGuardProxy:
             )
             artifact = postclaim_package_artifact
             fresh_package_resolution = postclaim_package_resolution
+            authority_check = postclaim_package_resolution.authority_check
             fresh_scanner_evidence = postclaim_package_evidence
         bound_request = _bound_external_archive_mcp_request(
             message,
@@ -2209,6 +2676,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=expected_catalog_generation,
                 expected_catalog_state=expected_catalog_state,
                 expected_catalog_fingerprint=expected_catalog_fingerprint,
+                authority_check=authority_check,
                 receipt_signals=remember_signals,
                 receipt_risk_categories=remember_risk_categories,
             )
@@ -2254,9 +2722,24 @@ class RuntimeMcpGuardProxy:
         expected_catalog_generation: int,
         expected_catalog_state: _ToolCatalogState,
         expected_catalog_fingerprint: str,
+        authority_check: AuthorityCheck | None = None,
         receipt_signals: tuple[str, ...] = (),
         receipt_risk_categories: tuple[str, ...] = (),
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if authority_check is not None:
+            authority_check()
+        binding = current_tool_call_binding()
+        if binding is not None:
+            binding.check()
+            if message is not binding.owned_message:
+                # Verified archive replacement is the existing authorized
+                # package handoff. Retain the original request as a parent
+                # fence while binding the exact replacement sent to the child.
+                binding = bind_tool_call(message, parent=binding)
+                if binding is None:
+                    raise changed_tool_call()
+                message = binding.owned_message
+                params = message["params"]
         reason_signals = tuple(
             str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
         )
@@ -2276,17 +2759,22 @@ class RuntimeMcpGuardProxy:
                 policy_action=policy_action,
                 emit_runtime_evidence=False,
             )
+        if binding is not None:
+            binding.check()
+        completed_params = _safe_mcp_params(params)
         try:
-            response = self._forward_message(
-                message,
-                child_stdin,
-                child_stdout,
-                client_input=client_input,
-                server_output=server_output,
-                expected_catalog_generation=expected_catalog_generation,
-                expected_catalog_state=expected_catalog_state,
-                expected_catalog_fingerprint=expected_catalog_fingerprint,
-            )
+            with use_tool_call_binding(binding):
+                response = self._forward_message(
+                    message,
+                    child_stdin,
+                    child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    expected_catalog_generation=expected_catalog_generation,
+                    expected_catalog_state=expected_catalog_state,
+                    expected_catalog_fingerprint=expected_catalog_fingerprint,
+                    authority_check=authority_check,
+                )
         except _ToolCatalogBoundaryChangedError:
             return self._catalog_boundary_failure_response(
                 message_id=message.get("id"),
@@ -2305,7 +2793,7 @@ class RuntimeMcpGuardProxy:
             signals=receipt_signals or reason_signals,
             risk_categories=receipt_risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=completed_params.get("arguments"),
             policy_workspace=policy_workspace,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
@@ -2315,7 +2803,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "timeout" if _is_timeout_response(response) else event_decision,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": completed_params,
             "scanner_evidence": list(scanner_evidence),
         }
 
@@ -2504,18 +2992,16 @@ class RuntimeMcpGuardProxy:
             event["scanner_evidence"] = list(scanner_evidence)
         return response, event
 
-    def _terminal_package_response(
+    def _record_package_block(
         self,
         *,
-        message_id: Any,
         artifact: Any,
         artifact_hash: str,
-        tool_name: str,
         params: dict[str, Any],
         package_evaluation: Any,
-        policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        policy_action: GuardAction,
+    ) -> None:
         reason_signals = tuple(
             str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
         )
@@ -2528,6 +3014,27 @@ class RuntimeMcpGuardProxy:
             signals=reason_signals,
             arguments=_safe_mcp_arguments(params.get("arguments")),
             additional_scanner_evidence=scanner_evidence,
+            policy_action=policy_action,
+        )
+
+    def _terminal_package_response(
+        self,
+        *,
+        message_id: Any,
+        artifact: Any,
+        artifact_hash: str,
+        tool_name: str,
+        params: dict[str, Any],
+        package_evaluation: Any,
+        policy_action: GuardAction,
+        scanner_evidence: tuple[dict[str, object], ...],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        self._record_package_block(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            params=params,
+            package_evaluation=package_evaluation,
+            scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
         reason = (
@@ -2619,18 +3126,12 @@ class RuntimeMcpGuardProxy:
         package_evaluation: Any,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        reason_signals = tuple(
-            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-        )
-        block_tool_call(
-            store=self.store,
+        self._record_package_block(
             artifact=artifact,
             artifact_hash=artifact_hash,
-            decision_source="policy-block",
-            now=_now(),
-            signals=reason_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
-            additional_scanner_evidence=scanner_evidence,
+            params=params,
+            package_evaluation=package_evaluation,
+            scanner_evidence=scanner_evidence,
             policy_action="block",
         )
         response = _blocked_tool_response(
@@ -2663,6 +3164,13 @@ class RuntimeMcpGuardProxy:
         del decision
         return False
 
+    def _check_tool_call_preparation(self) -> None:
+        """Verify the bound request; the default still holds no cached facts."""
+
+        binding = current_tool_call_binding()
+        if binding is not None:
+            binding.check()
+
     def _inline_approval_request(self, tool_name: str, summary: str) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -2683,11 +3191,14 @@ class RuntimeMcpGuardProxy:
         expected_catalog_generation: int | None = None,
         expected_catalog_state: _ToolCatalogState | None = None,
         expected_catalog_fingerprint: str | None = None,
+        authority_check: AuthorityCheck | None = None,
         remember: bool = False,
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "allow",
         approval_decision: ToolCallDecision | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if authority_check is not None:
+            authority_check()
         pending = approval_decision.pending_approval_reuse_decision if approval_decision is not None else None
         claim_disposition = (
             approval_decision.approval_reuse_claim_disposition if approval_decision is not None else None
@@ -2728,6 +3239,9 @@ class RuntimeMcpGuardProxy:
                     phase="before_saved_approval_claim",
                     package_request=False,
                 )
+            self._check_tool_call_preparation()
+            if authority_check is not None:
+                authority_check()
             if not self.store.claim_approval_reuse_decisions((pending,), now=_now()):
                 claim_failure_item: dict[str, object] = {
                     "source": "approval_reuse",
@@ -2750,6 +3264,7 @@ class RuntimeMcpGuardProxy:
                     policy_action="require-reapproval",
                 )
 
+            self._check_tool_call_preparation()
             tool_name = str(params.get("name") or artifact.name)
             try:
                 fresh_config = self._claim_boundary_config()
@@ -2839,6 +3354,7 @@ class RuntimeMcpGuardProxy:
             # current allow/warn is independently executable. Carry the fresh
             # identity and risk material into the final receipt and forward.
             artifact = fresh_authority.artifact
+            authority_check = fresh_authority.authority_check
             artifact_hash = fresh_authority.artifact_hash
             signals = fresh_decision.signals
             risk_categories = fresh_decision.risk_categories
@@ -2870,6 +3386,12 @@ class RuntimeMcpGuardProxy:
                     scanner_evidence=scanner_evidence,
                     policy_action="require-reapproval",
                 )
+        binding = current_tool_call_binding()
+        if binding is not None:
+            binding.check()
+        # Detach the existing receipt projection while the request is still
+        # bound. A later alias change cannot revise an already completed write.
+        completed_params = _safe_mcp_params(params)
         try:
             response = self._forward_message(
                 message,
@@ -2880,6 +3402,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_generation=expected_catalog_generation,
                 expected_catalog_state=expected_catalog_state,
                 expected_catalog_fingerprint=expected_catalog_fingerprint,
+                authority_check=authority_check,
             )
         except _ToolCatalogBoundaryChangedError:
             return self._catalog_boundary_failure_response(
@@ -2899,25 +3422,58 @@ class RuntimeMcpGuardProxy:
             signals=signals,
             risk_categories=risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=completed_params.get("arguments"),
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
         event: dict[str, Any] = {
             "method": "tools/call",
-            "tool_name": params.get("name"),
+            "tool_name": completed_params.get("name"),
             "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": completed_params,
         }
         if scanner_evidence:
             event["scanner_evidence"] = list(scanner_evidence)
         return response, event
 
-    @staticmethod
-    def _forward_notification(message: dict[str, Any], child_stdin: IO[str]) -> None:
-        child_stdin.write(json.dumps(message) + "\n")
-        child_stdin.flush()
+    def _check_transport(self) -> None:
+        if self._io_failure is not None:
+            raise self._io_failure
+
+    def _abort_transport(
+        self,
+        error: ProxyIoTimeoutError | ProxyIoLimitError,
+        *,
+        expected_queue: queue.Queue[_ChildOutputFrame] | None = None,
+    ) -> None:
+        # The pump may call this while policy evaluation owns the catalog lock.
+        # Mark terminal and stop the child without waiting for that lock.
+        with self._io_lifecycle_lock:
+            if expected_queue is not None and self._child_output_queue is not expected_queue:
+                return
+            self._io_failure = self._io_failure or error
+            self._child_output_stop.set()
+            process = self._active_process
+        if process is not None:
+            _quarantine_process(process)
+
+    def _write_message(self, stream: IO[str], message: dict[str, Any], *, source: str) -> None:
+        self._check_transport()
+        try:
+            frame = tool_call_write_frame(message, source=source)
+            if frame is None:
+                write_message(stream, message, timeout_seconds=self._child_response_timeout_seconds(), source=source)
+            else:
+                framing._write_encoded_line(
+                    stream, frame, timeout_seconds=self._child_response_timeout_seconds(), source=source
+                )
+        except IO_FAILURES as error:
+            self._abort_transport(error)
+            raise
+
+    def _forward_notification(self, message: dict[str, Any], child_stdin: IO[str]) -> None:
+        self._write_message(child_stdin, message, source="child_write")
 
     def _next_child_output_frame(
         self,
@@ -2926,11 +3482,25 @@ class RuntimeMcpGuardProxy:
         timeout_seconds: float,
         required: bool,
     ) -> _ChildOutputFrame | None:
+        self._check_transport()
+        if required:
+            timeout_seconds = remaining_timeout(timeout_seconds, source="child_response")
         output_queue = self._child_output_queue if child_stdout is self._active_child_stdout else None
         if output_queue is not None:
             try:
                 if required:
-                    return output_queue.get(timeout=timeout_seconds)
+                    deadline = time.monotonic() + timeout_seconds
+                    while True:
+                        self._check_transport()
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise queue.Empty
+                        try:
+                            frame = output_queue.get(timeout=min(0.05, remaining))
+                            self._check_transport()
+                            return frame
+                        except queue.Empty:
+                            continue
                 if timeout_seconds > 0:
                     return output_queue.get(timeout=timeout_seconds)
                 return output_queue.get_nowait()
@@ -2945,7 +3515,7 @@ class RuntimeMcpGuardProxy:
         if not required and isinstance(child_stdout, io.StringIO):
             if child_stdout.tell() >= len(child_stdout.getvalue()):
                 return None
-            return _ChildOutputFrame(line=child_stdout.readline())
+            return _ChildOutputFrame(line=_readline_with_timeout(child_stdout, 0.0, source="child_response"))
         try:
             line = _readline_with_timeout(
                 child_stdout,
@@ -2992,9 +3562,9 @@ class RuntimeMcpGuardProxy:
             self._buffer_child_response(payload)
             return
         if server_output is not None:
-            server_output.write(json.dumps(payload) + "\n")
-            server_output.flush()
+            self._write_message(server_output, payload, source="client_output")
 
+    @bounded_operation(lambda self: self._child_response_timeout_seconds(), source="child_drain")
     def _drain_child_messages(
         self,
         *,
@@ -3007,6 +3577,7 @@ class RuntimeMcpGuardProxy:
         """Multiplex every queued child frame and wait for an optional quiet edge."""
 
         while True:
+            remaining_timeout(self._child_response_timeout_seconds(), source="child_drain")
             frame = self._next_child_output_frame(
                 child_stdout,
                 timeout_seconds=quiet_seconds,
@@ -3014,6 +3585,8 @@ class RuntimeMcpGuardProxy:
             )
             if frame is None:
                 return
+            self._check_transport()
+            count_frame(source="child_drain")
             line = self._child_output_line(frame)
             try:
                 payload = json.loads(line)
@@ -3073,6 +3646,7 @@ class RuntimeMcpGuardProxy:
             fingerprint=fingerprint,
         )
 
+    @bounded_operation(lambda self: self._child_response_timeout_seconds(), source="child_response")
     def _forward_message(
         self,
         message: dict[str, Any],
@@ -3084,14 +3658,24 @@ class RuntimeMcpGuardProxy:
         expected_catalog_generation: int | None = None,
         expected_catalog_state: _ToolCatalogState | None = None,
         expected_catalog_fingerprint: str | None = None,
+        authority_check: AuthorityCheck | None = None,
     ) -> dict[str, Any]:
         request_id = message.get("id")
-        if (
-            str(message.get("method", "")) == "tools/call"
-            and expected_catalog_generation is not None
-            and expected_catalog_state is not None
-            and expected_catalog_fingerprint is not None
-            and not self._drain_and_validate_catalog_authority(
+        tool_bound = any(
+            value is not None
+            for value in (expected_catalog_generation, expected_catalog_state, expected_catalog_fingerprint)
+        )
+        if tool_bound:
+            if authority_check is None and inside_proxy_authority_scope():
+                raise ProxyIoLimitError(source="tool_call_authority", reason="tool_call_authority_changed")
+            if (
+                expected_catalog_generation is None
+                or expected_catalog_state is None
+                or expected_catalog_fingerprint is None
+            ):
+                raise changed_tool_call()
+            require_tool_call_method(message)
+            if not self._drain_and_validate_catalog_authority(
                 child_stdin=child_stdin,
                 child_stdout=child_stdout,
                 client_input=client_input,
@@ -3100,16 +3684,22 @@ class RuntimeMcpGuardProxy:
                 state=expected_catalog_state,
                 fingerprint=expected_catalog_fingerprint,
                 quiet_seconds=_TOOLS_CALL_PREWRITE_QUIET_SECONDS,
-            )
-        ):
-            raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
-        child_stdin.write(json.dumps(message) + "\n")
-        child_stdin.flush()
+            ):
+                raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
+            require_tool_call_method(message)
+            self._check_tool_call_preparation()
+            if authority_check is not None:
+                authority_check()
+            with bind_tool_call_write(message, authority_check=authority_check):
+                self._write_message(child_stdin, message, source="child_write")
+        else:
+            self._write_message(child_stdin, message, source="child_write")
+        timeout_seconds = self._child_response_timeout_seconds()
         while True:
+            count_frame(source="child_response")
             buffered_response = self._pop_buffered_child_response(request_id)
             if buffered_response is not None:
                 return buffered_response
-            timeout_seconds = self._child_response_timeout_seconds()
             try:
                 frame = self._next_child_output_frame(
                     child_stdout,
@@ -3117,9 +3707,7 @@ class RuntimeMcpGuardProxy:
                     required=True,
                 )
             except ProxyIoTimeoutError:
-                active_process = self._active_process
-                if active_process is not None:
-                    _quarantine_process(active_process)
+                self._abort_transport(ProxyIoTimeoutError(source="child_response", timeout_seconds=timeout_seconds))
                 return _timeout_response(
                     request_id,
                     source="child_response",
@@ -3145,9 +3733,15 @@ class RuntimeMcpGuardProxy:
         response_key = _response_key(payload.get("id"))
         if response_key is None:
             return
-        self._buffered_child_responses.setdefault(response_key, []).append(payload)
+        self._check_transport()
+        try:
+            admit_response(self._buffered_child_responses, response_key, payload)
+        except ProxyIoLimitError as error:
+            self._abort_transport(error)
+            raise
 
     def _pop_buffered_child_response(self, request_id: Any) -> dict[str, Any] | None:
+        self._check_transport()
         response_key = _response_key(request_id)
         if response_key is None:
             return None
@@ -3163,9 +3757,15 @@ class RuntimeMcpGuardProxy:
         response_key = _response_key(payload.get("id"))
         if response_key is None:
             return
-        self._buffered_client_responses.setdefault(response_key, []).append(payload)
+        self._check_transport()
+        try:
+            admit_response(self._buffered_client_responses, response_key, payload)
+        except ProxyIoLimitError as error:
+            self._abort_transport(error)
+            raise
 
     def _pop_buffered_client_response(self, request_id: Any) -> dict[str, Any] | None:
+        self._check_transport()
         response_key = _response_key(request_id)
         if response_key is None:
             return None
@@ -3177,6 +3777,41 @@ class RuntimeMcpGuardProxy:
             self._buffered_client_responses.pop(response_key, None)
         return payload
 
+    def _read_client_during_wait(
+        self,
+        *,
+        input_stream: TextIO,
+        output_stream: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
+        timeout_seconds: float,
+        source: str,
+    ) -> str:
+        # A pending approval must not stop child notifications/catalog changes
+        # from being consumed. Poll the owned client reader without losing a
+        # partial line, and preserve the enclosing operation's absolute budget.
+        while True:
+            self._check_transport()
+            self._drain_child_messages(
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=input_stream,
+                server_output=output_stream,
+            )
+            remaining = remaining_timeout(timeout_seconds, source=source)
+            try:
+                line = _readline_with_timeout(
+                    input_stream,
+                    min(0.05, remaining),
+                    source=source,
+                    allow_background_wait=False,
+                )
+                self._check_transport()
+                return line
+            except ProxyIoTimeoutError:
+                remaining_timeout(timeout_seconds, source=source)
+
+    @bounded_operation(lambda self: self._nested_request_timeout_seconds(), source="nested_client_response")
     def _proxy_child_request(
         self,
         *,
@@ -3188,31 +3823,34 @@ class RuntimeMcpGuardProxy:
     ) -> None:
         if client_input is None or server_output is None:
             raise RuntimeError("Guard runtime MCP proxy cannot service nested child requests without a live client.")
-        server_output.write(json.dumps(payload) + "\n")
-        server_output.flush()
+        self._write_message(server_output, payload, source="client_output")
         request_id = payload.get("id")
         while True:
+            count_frame(source="nested_client_response")
             buffered_response = self._pop_buffered_client_response(request_id)
             if buffered_response is not None:
                 self._forward_notification(buffered_response, child_stdin)
                 return
             timeout_seconds = self._nested_request_timeout_seconds()
             try:
-                line = _readline_with_timeout(
-                    client_input,
-                    timeout_seconds,
+                line = self._read_client_during_wait(
+                    input_stream=client_input,
+                    output_stream=server_output,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    timeout_seconds=timeout_seconds,
                     source="nested_client_response",
-                    allow_background_wait=False,
                 )
             except ProxyIoTimeoutError:
-                self._forward_notification(
+                self._check_transport()
+                write_timeout_reply(
+                    child_stdin,
                     _timeout_response(
                         request_id,
                         source="nested_client_response",
                         timeout_seconds=timeout_seconds,
                         message="Guard runtime MCP proxy timed out waiting for the client response.",
                     ),
-                    child_stdin,
                 )
                 return
             if not line:
@@ -3242,9 +3880,9 @@ class RuntimeMcpGuardProxy:
                 ),
             )
             if response is not None:
-                server_output.write(json.dumps(response) + "\n")
-                server_output.flush()
+                self._write_message(server_output, response, source="client_output")
 
+    @bounded_operation(lambda self: self._inline_approval_timeout_seconds(), source="inline_approval")
     def _request_inline_approval(
         self,
         request: dict[str, Any],
@@ -3255,19 +3893,21 @@ class RuntimeMcpGuardProxy:
         child_stdout: IO[str],
     ) -> dict[str, Any]:
         request_id = request.get("id")
-        output_stream.write(json.dumps(request) + "\n")
-        output_stream.flush()
+        self._write_message(output_stream, request, source="client_output")
         while True:
+            count_frame(source="inline_approval")
             buffered_response = self._pop_buffered_client_response(request_id)
             if buffered_response is not None:
                 return _approval_payload(buffered_response)
             timeout_seconds = self._inline_approval_timeout_seconds()
             try:
-                line = _readline_with_timeout(
-                    input_stream,
-                    timeout_seconds,
+                line = self._read_client_during_wait(
+                    input_stream=input_stream,
+                    output_stream=output_stream,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    timeout_seconds=timeout_seconds,
                     source="inline_approval",
-                    allow_background_wait=False,
                 )
             except ProxyIoTimeoutError:
                 return {"action": "cancel", "reason": "timeout"}
@@ -3297,8 +3937,7 @@ class RuntimeMcpGuardProxy:
                 ),
             )
             if response is not None:
-                output_stream.write(json.dumps(response) + "\n")
-                output_stream.flush()
+                self._write_message(output_stream, response, source="client_output")
 
     def _build_artifact_payload(
         self,
@@ -3317,40 +3956,15 @@ class RuntimeMcpGuardProxy:
         automation call (HGBM063-HGBM065).
         """
         arguments = params.get("arguments")
-        browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+        launch_target, browser_intent_dict = _browser_intent_payload(
+            artifact,
+            arguments,
+            default_launch_target=self._launch_target(tool_name, arguments),
+        )
         changed_fields: list[str] = ["runtime_tool_call"]
-        launch_target = self._launch_target(tool_name, arguments)
 
-        if browser_intent is not None:
+        if browser_intent_dict is not None:
             changed_fields.append("runtime_browser_tool_call")
-            # Build a safer browser-specific launch target label
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-            launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-            browser_intent_dict = cast(
-                dict[str, object],
-                _safe_mcp_arguments(
-                    {
-                        "version": browser_intent.version,
-                        "intent": browser_intent.intent,
-                        "operation": browser_intent.operation,
-                        "target_url": browser_intent.target_url,
-                        "target_origin": browser_intent.target_origin,
-                        "target_domain": browser_intent.target_domain,
-                        "target_path_prefix": browser_intent.target_path_prefix,
-                        "method": browser_intent.method,
-                        "profile_mode": browser_intent.profile_mode,
-                        "mcp_server_name": browser_intent.mcp_server_name,
-                        "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                        "mcp_tool_name": browser_intent.mcp_tool_name,
-                        "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                        "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                        "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                        "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-                    }
-                ),
-            )
-        else:
-            browser_intent_dict = None
 
         payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
@@ -3474,6 +4088,11 @@ class RuntimeMcpGuardProxy:
         if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
             return []
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
+        launch_target, browser_intent_dict = _browser_intent_payload(
+            artifact,
+            params.get("arguments"),
+            default_launch_target=self._launch_target(tool_name, params.get("arguments")),
+        )
         artifact_payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
@@ -3483,36 +4102,14 @@ class RuntimeMcpGuardProxy:
             "config_path": artifact.config_path,
             "changed_fields": ["runtime_tool_call"],
             "policy_action": policy_action,
-            "launch_target": self._launch_target(tool_name, params.get("arguments")),
+            "launch_target": launch_target,
             "risk_summary": risk_summary,
             "risk_signals": risk_signals,
         }
         # Include browser intent metadata when present
-        browser_intent = normalize_browser_mcp_intent(artifact, params.get("arguments"))
-        if browser_intent is not None:
+        if browser_intent_dict is not None:
             artifact_payload["changed_fields"].append("runtime_browser_tool_call")
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-            artifact_payload["launch_target"] = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-            artifact_payload["browser_intent"] = _safe_mcp_arguments(
-                {
-                    "version": browser_intent.version,
-                    "intent": browser_intent.intent,
-                    "operation": browser_intent.operation,
-                    "target_url": browser_intent.target_url,
-                    "target_origin": browser_intent.target_origin,
-                    "target_domain": browser_intent.target_domain,
-                    "target_path_prefix": browser_intent.target_path_prefix,
-                    "method": browser_intent.method,
-                    "profile_mode": browser_intent.profile_mode,
-                    "mcp_server_name": browser_intent.mcp_server_name,
-                    "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                    "mcp_tool_name": browser_intent.mcp_tool_name,
-                    "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                    "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                    "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                    "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-                }
-            )
+            artifact_payload["browser_intent"] = browser_intent_dict
         if decision_v2_payload is not None:
             artifact_payload["decision_v2_json"] = decision_v2_payload
         if extra_fields:
@@ -3539,7 +4136,7 @@ class RuntimeMcpGuardProxy:
         advance_generation: bool,
     ) -> None:
         self._tool_catalog_state = state
-        self._tool_catalog = {}
+        self._tool_catalog = ToolCatalog()
         self._tool_catalog_pending = None
         self._tool_catalog_expected_cursor = None
         self._tool_catalog_inflight = False
@@ -3565,7 +4162,7 @@ class RuntimeMcpGuardProxy:
             if advance_root_generation:
                 self._tool_catalog_generation += 1
             self._tool_catalog_state = "pending"
-            self._tool_catalog = {}
+            self._tool_catalog = ToolCatalog()
             self._tool_catalog_pending = {}
             self._tool_catalog_expected_cursor = None
             self._tool_catalog_inflight = True
@@ -3666,12 +4263,12 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight_cursor = None
         if next_cursor is not None:
             self._tool_catalog_state = "pending"
-            self._tool_catalog = {}
+            self._tool_catalog = ToolCatalog()
             self._tool_catalog_pending = merged
             self._tool_catalog_expected_cursor = next_cursor
             return
         self._tool_catalog_state = "complete"
-        self._tool_catalog = merged
+        self._tool_catalog = ToolCatalog(merged)
         self._tool_catalog_pending = None
         self._tool_catalog_expected_cursor = None
 

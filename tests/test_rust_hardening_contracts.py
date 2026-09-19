@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "docs" / "guard" / "contracts"
 
@@ -22,8 +24,7 @@ def test_hook_data_plane_ownership_v2_maps_every_supported_route() -> None:
     assert isinstance(harness_routes, dict)
     assert set(harnesses) == set(harness_routes)
     assert all(
-        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"}
-        for route in harness_routes.values()
+        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"} for route in harness_routes.values()
     )
 
     routes = payload["routes"]
@@ -77,6 +78,7 @@ def test_fail_safe_matrix_never_allows_unreviewed_output() -> None:
             "python_reference_withhold_until_complete",
             "python_reference_within_deadline",
             "withhold_or_block",
+            "observe_continue",
             "not_valid_for_allow",
             "more_restrictive_output_action",
             "python_reference_or_block",
@@ -108,13 +110,29 @@ def test_native_reason_codes_are_unique_and_privacy_safe() -> None:
     assert all(not any(word in str(code) for word in forbidden) for code in values)
 
 
-def test_hardening_source_documents_reference_the_current_backlog() -> None:
-    migration = (ROOT / "docs" / "guard" / "rust-runtime-migration-todo.md").read_text(encoding="utf-8")
-    hardening = (ROOT / "docs" / "guard" / "rust-runtime-hardening-todo.md").read_text(encoding="utf-8")
-    prd = (ROOT / "docs" / "guard" / "rust-runtime-hardening-prd.md").read_text(encoding="utf-8")
-    assert "rust-runtime-hardening-todo.md" in migration
-    assert "NRH-T001" in hardening and "NRH-T129" in hardening
-    assert "Definition of done" in prd
+def _required_ownership_steps(script: str) -> list[dict[str, object]]:
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "rust-authority-ownership.yml").read_text(encoding="utf-8")
+    )
+    job = workflow["jobs"]["ownership"]
+    assert not job.get("continue-on-error", False)
+    assert "if" not in job
+    steps = [step for step in job["steps"] if script in step.get("run", "")]
+    assert steps, f"ownership workflow does not run {script}"
+    for step in steps:
+        assert not step.get("continue-on-error", False)
+        assert "if" not in step
+    return steps
+
+
+def test_hardening_contracts_are_enforced_by_the_ownership_workflow() -> None:
+    for script in (
+        "scripts/ci/rust_authority_ownership_gate.py",
+        "scripts/ci/native_approval_contract_gate.py",
+        "scripts/ci/python_hook_semantic_callgraph_gate.py",
+        "scripts/ci/native_receipt_persistence_gate.py",
+    ):
+        _required_ownership_steps(script)
 
 
 def test_dead_python_cleanup_is_an_explicit_release_gate() -> None:
@@ -124,10 +142,16 @@ def test_dead_python_cleanup_is_an_explicit_release_gate() -> None:
     oracle = next(item for item in nodes if isinstance(item, dict) and item.get("id") == "python_reference_oracle")
     assert oracle["target"] == "differential tests only"
 
-    prd = (ROOT / "docs" / "guard" / "rust-runtime-hardening-prd.md").read_text(encoding="utf-8")
-    todo = (ROOT / "docs" / "guard" / "rust-runtime-hardening-todo.md").read_text(encoding="utf-8")
-    assert "replaced, unreachable, or untested python" in prd.lower()
-    assert "NRH-T112" in todo and "choose_post_tool_response" in todo
+    cleanup = _load("python-capability-ownership.v1.json")
+    classes = cleanup["classes"]
+    assert isinstance(classes, list)
+    assert set(classes) == {"required_control_plane", "named_reference_oracle", "dead_duplicate"}
+    assert cleanup["package_excluded_candidates"] == ["src/codex_plugin_scanner/guard/native_runtime_resident.py"]
+    steps = _required_ownership_steps("scripts/ci/python_capability_cleanup_gate.py")
+    commands = "\n".join(str(step["run"]) for step in steps)
+    assert "--root . --json python-capability-cleanup.json" in commands
+    assert '--artifact "$BUILT_WHEEL"' in commands
+    assert '--artifact "$BUILT_SDIST"' in commands
 
 
 def test_removed_native_selector_is_absent_from_the_package() -> None:

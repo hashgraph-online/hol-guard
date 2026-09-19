@@ -24,7 +24,8 @@ GUARD_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 GUARD_APPROVAL_URL_KEY = "guardApprovalUrl"
 _POLL_INTERVAL_SECONDS = 0.2
 _GET_TIMEOUT_CAP_SECONDS = 1.5
-_FINALIZE_TIMEOUT_CAP_SECONDS = 1.5
+_FINALIZE_TIMEOUT_CAP_SECONDS = 5.0
+_FINALIZE_MAX_ATTEMPTS = 3
 _REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
 
 
@@ -124,23 +125,31 @@ def _complete_resolution(
 ) -> str | None:
     if action not in {"allow", "block"}:
         return None
-    remaining = deadline - time.monotonic()
-    if remaining < _POLL_INTERVAL_SECONDS:
-        return None
     path = f"/v1/requests/{quote(request_id, safe='')}/live-decision"
-    try:
-        payload = _daemon_json_post(
-            state_path=state_path,
-            path=path,
-            payload={"hook_input": hook_input},
-            timeout_seconds=min(remaining, _FINALIZE_TIMEOUT_CAP_SECONDS),
-        )
-    except (OSError, TimeoutError, ValueError, http.client.HTTPException, urllib.error.URLError):
-        return None
-    if not isinstance(payload, Mapping) or payload.get("completed") is not True:
-        return None
-    completed_action = payload.get("action")
-    return action if completed_action == action else None
+    for attempt in range(_FINALIZE_MAX_ATTEMPTS):
+        remaining = deadline - time.monotonic()
+        if remaining < _POLL_INTERVAL_SECONDS:
+            return None
+        try:
+            payload = _daemon_json_post(
+                state_path=state_path,
+                path=path,
+                payload={"hook_input": hook_input},
+                timeout_seconds=min(remaining, _FINALIZE_TIMEOUT_CAP_SECONDS),
+            )
+        except (ValueError, urllib.error.HTTPError):
+            return None
+        except (OSError, TimeoutError, http.client.HTTPException, urllib.error.URLError):
+            # Completion may already be committed. Replaying this exact request
+            # still requires daemon authentication and fresh policy validation.
+            if attempt + 1 < _FINALIZE_MAX_ATTEMPTS:
+                time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
+            continue
+        if not isinstance(payload, Mapping) or payload.get("completed") is not True:
+            return None
+        completed_action = payload.get("action")
+        return action if completed_action == action else None
+    return None
 
 
 def _open_pending_approval(approval_url: str | None, *, state_path: str | Path) -> None:

@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import socket
 import threading
+import time
 from pathlib import Path
 
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
 from codex_plugin_scanner.guard.native_command_model import review_command_model_native
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from codex_plugin_scanner.guard.windows_paths import (
+    windows_process_creation_time,
+    windows_process_liveness,
+    windows_terminate_process_if_creation_time,
+)
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 
@@ -38,6 +47,18 @@ def _request(tmp_path: Path, request_id: str) -> HookReviewRequest:
         source_scope="project",
         request_id=request_id,
     )
+
+
+def _rust_resident_state_signature(guard_home: Path) -> tuple[tuple[object, ...], ...]:
+    state_paths = sorted((guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+    signatures: list[tuple[object, ...]] = []
+    for state_path in state_paths:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        assert isinstance(payload, dict)
+        signatures.append(
+            tuple(payload.get(field) for field in ("generation", "process_id", "owner_process_id", "runtime_sha256"))
+        )
+    return tuple(signatures)
 
 
 def test_invalid_loopback_server_proof_receives_no_authenticated_payload() -> None:
@@ -121,7 +142,7 @@ def test_windows_service_rotates_auth_secret_and_stays_closed(
     monkeypatch.setattr(
         service,
         "_transport_accepts_authenticated_connections",
-        lambda: False,
+        lambda *, timeout_seconds: timeout_seconds < 0,
     )
     monkeypatch.setattr(
         service,
@@ -155,28 +176,65 @@ def test_windows_native_runtime_reuses_authenticated_resident_service(
     assert status.capabilities is not None
     assert "authenticated-loopback-resident-v1" in status.capabilities.features
     assert "resident-command-model-shadow-v1" in status.capabilities.features
+    assert "pre-tool-command-model-shadow-v1" in status.capabilities.features
 
     first_request = _request(tmp_path, "windows-resident-first")
     second_request = _request(tmp_path, "windows-resident-second")
     try:
-        first = review_post_tool_native(first_request, observe_mode=False)
-        second = review_post_tool_native(second_request, observe_mode=False)
-        command_model = review_command_model_native(
-            "git status --short",
-            guard_home=first_request.guard_home,
-        )
-        assert first is not None and first.decision == "allow"
-        assert second is not None and second.decision == "allow"
-        assert command_model is not None
-        assert command_model["confidence"] == "exact"
-        assert command_model["segments"][0]["executable"] == "git"
-        assert (
-            resident.resident_service_starts(
-                executable=status.identity.path,
-                identity_sha256=status.identity.sha256,
+        with native_policy_snapshot(first_request.guard_home) as snapshot:
+            first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
+            first_state = _rust_resident_state_signature(first_request.guard_home)
+            second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
+            command_model = review_command_model_native(
+                "git status --short",
                 guard_home=first_request.guard_home,
             )
-            == 1
-        )
+            command_failure = native_resident_client_failure_code()
+        second_state = _rust_resident_state_signature(first_request.guard_home)
+        assert first is not None, native_resident_client_failure_code()
+        assert first.decision == "allow"
+        assert second is not None and second.decision == "allow"
+        assert len(first_state) == 1
+        assert second_state == first_state
+        assert command_model is not None, command_failure
+        assert command_model["confidence"] == "exact"
+        assert command_model["segments"][0]["executable"] == "git"
     finally:
+        resident.close_resident_native_runtimes()
+
+
+@pytest.mark.skipif(
+    os.name != "nt" or not _NATIVE_BINARY,
+    reason="compiled Windows native runtime is required",
+)
+def test_windows_abrupt_supervisor_exit_retires_its_serving_child(tmp_path: Path) -> None:
+    request = _request(tmp_path, "windows-supervisor-crash")
+    serving_identity: tuple[int, int] | None = None
+    try:
+        with native_policy_snapshot(request.guard_home) as snapshot:
+            result = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
+            assert result is not None and result.decision == "allow", native_resident_client_failure_code()
+            states = list((request.guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+            assert len(states) == 1
+            state = json.loads(states[0].read_text(encoding="utf-8"))
+            supervisor = int(state["owner_process_id"])
+            serving = int(state["process_id"])
+            owner_marker = str(state["owner_process_start_marker"])
+            serving_marker = str(state["process_start_marker"])
+            assert owner_marker.startswith("windows:") and serving_marker.startswith("windows:")
+            owner_creation = int(owner_marker.removeprefix("windows:"), 16)
+            serving_creation = int(serving_marker.removeprefix("windows:"), 16)
+            assert supervisor != serving and supervisor != os.getpid()
+            assert windows_process_creation_time(supervisor) == owner_creation
+            assert windows_process_creation_time(serving) == serving_creation
+            serving_identity = (serving, serving_creation)
+            assert windows_process_liveness(serving) is True
+            assert windows_terminate_process_if_creation_time(supervisor, owner_creation)
+            deadline = time.monotonic() + 2.0
+            while windows_process_liveness(serving) is not False and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert windows_process_liveness(serving) is False, "serving child survived abrupt supervisor exit"
+    finally:
+        if serving_identity is not None:
+            windows_terminate_process_if_creation_time(*serving_identity)
         resident.close_resident_native_runtimes()

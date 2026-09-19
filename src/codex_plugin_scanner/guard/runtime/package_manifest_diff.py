@@ -15,12 +15,48 @@ if TYPE_CHECKING or sys.version_info >= (3, 11):
 else:
     tomllib = importlib.import_module("tomli")
 
-from .jsonc import loads_jsonc
+from .jsonc import loads_jsonc as loads_jsonc
 from .package_intent_common import (
     ManifestDependencyChange,
     ManifestParseResult,
     PackageIntentTarget,
     python_target,
+)
+from .package_manifest_js import (
+    _bun_lock_dependency_map as _bun_lock_dependency_map,
+)
+from .package_manifest_js import (
+    _bun_lock_package_versions as _bun_lock_package_versions,
+)
+from .package_manifest_js import (
+    _bun_resolution_identity as _bun_resolution_identity,
+)
+from .package_manifest_js import (
+    _exact_dependency_version as _exact_dependency_version,
+)
+from .package_manifest_js import (
+    _json_dependency_map as _json_dependency_map,
+)
+from .package_manifest_js import (
+    _package_lock_dependency_map as _package_lock_dependency_map,
+)
+from .package_manifest_js import (
+    _pnpm_entry_name_version as _pnpm_entry_name_version,
+)
+from .package_manifest_js import (
+    _pnpm_lock_dependency_map as _pnpm_lock_dependency_map,
+)
+from .package_manifest_js import (
+    _walk_package_lock_v1_dependencies as _walk_package_lock_v1_dependencies,
+)
+from .package_manifest_js import (
+    _yarn_lock_dependency_map as _yarn_lock_dependency_map,
+)
+from .package_manifest_js import (
+    _yarn_selector_name as _yarn_selector_name,
+)
+from .package_manifest_js import (
+    _yarn_selector_names as _yarn_selector_names,
 )
 
 _GRADLE_DEP_RE = re.compile(r"([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([A-Za-z0-9+_.-]+)")
@@ -78,7 +114,9 @@ def parse_manifest_dependencies(
         return {}
 
 
-def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
+def _dependency_map_for_path(
+    path: str, text: str, *, deadline: float, document: dict[str, object] | None = None
+) -> dict[str, str]:
     lower_path = path.lower()
     lower_name = lower_path.rsplit("/", 1)[-1]
     if lower_path.endswith("package.json"):
@@ -88,13 +126,13 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
             deadline,
         )
     if lower_path.endswith("package-lock.json"):
-        return _package_lock_dependency_map(text, deadline)
+        return _package_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("pnpm-lock.yaml"):
         return _pnpm_lock_dependency_map(text, deadline)
     if lower_path.endswith("yarn.lock"):
         return _yarn_lock_dependency_map(text, deadline)
     if lower_path.endswith("bun.lock"):
-        return _bun_lock_dependency_map(text, deadline)
+        return _bun_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("composer.json"):
         return _json_dependency_map(text, ("require", "require-dev"), deadline)
     if (
@@ -106,17 +144,17 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
     if lower_path.endswith("pyproject.toml"):
         return _pyproject_dependency_map(text, deadline)
     if lower_path.endswith("poetry.lock"):
-        return _poetry_lock_dependency_map(text, deadline)
+        return _poetry_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("uv.lock"):
-        return _uv_lock_dependency_map(text, deadline)
+        return _uv_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("pipfile"):
         return _toml_table_dependency_map(text, ("packages", "dev-packages"), deadline)
     if lower_path.endswith("pipfile.lock"):
-        return _pipfile_lock_dependency_map(text, deadline)
+        return _pipfile_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("cargo.toml"):
         return _cargo_toml_dependency_map(text, deadline)
     if lower_path.endswith("cargo.lock"):
-        return _cargo_lock_dependency_map(text, deadline)
+        return _cargo_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("go.mod"):
         return _go_mod_dependency_map(text, deadline)
     if lower_path.endswith("pom.xml"):
@@ -126,220 +164,12 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
     if lower_path.endswith("gradle.lockfile"):
         return _gradle_lockfile_dependency_map(text, deadline)
     if lower_path.endswith("composer.lock"):
-        return _composer_lock_dependency_map(text, deadline)
+        return _composer_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("gemfile"):
         return _gemfile_dependency_map(text, deadline)
     if lower_path.endswith("gemfile.lock"):
         return _gemfile_lock_dependency_map(text, deadline)
     return {}
-
-
-def _json_dependency_map(text: str, sections: tuple[str, ...], deadline: float) -> dict[str, str]:
-    _ensure_within_deadline(deadline)
-    payload = json.loads(text or "{}")
-    dependencies: dict[str, str] = {}
-    for section in sections:
-        values = payload.get(section)
-        if isinstance(values, dict):
-            for package_name, version in values.items():
-                if isinstance(version, str):
-                    dependencies[str(package_name)] = version
-    return dependencies
-
-
-def _package_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    payload = json.loads(text or "{}")
-    dependencies: dict[str, str] = {}
-    packages = payload.get("packages")
-    if isinstance(packages, dict):
-        for package_path, value in packages.items():
-            _ensure_within_deadline(deadline)
-            if not isinstance(package_path, str) or not package_path.startswith("node_modules/"):
-                continue
-            version = value.get("version") if isinstance(value, dict) else None
-            if isinstance(version, str):
-                dependencies[package_path.removeprefix("node_modules/")] = version
-    if dependencies:
-        return dependencies
-    legacy_dependencies = payload.get("dependencies")
-    if isinstance(legacy_dependencies, dict):
-        _walk_package_lock_v1_dependencies(legacy_dependencies, dependencies, deadline)
-    return dependencies
-
-
-def _walk_package_lock_v1_dependencies(
-    payload: dict[str, object],
-    dependencies: dict[str, str],
-    deadline: float,
-) -> None:
-    for package_name, value in payload.items():
-        _ensure_within_deadline(deadline)
-        if not isinstance(package_name, str) or not isinstance(value, dict):
-            continue
-        version = value.get("version")
-        if isinstance(version, str):
-            dependencies[package_name] = version
-        nested_dependencies = value.get("dependencies")
-        if isinstance(nested_dependencies, dict):
-            _walk_package_lock_v1_dependencies(nested_dependencies, dependencies, deadline)
-
-
-def _pnpm_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    dependencies: dict[str, str] = {}
-    package_versions: dict[str, str] = {}
-    section: str | None = None
-    dependency_block = False
-    for raw_line in text.splitlines():
-        _ensure_within_deadline(deadline)
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        if indent == 0:
-            section = stripped.removesuffix(":")
-            dependency_block = False
-            continue
-        if section not in {"packages", "snapshots"}:
-            continue
-        if indent == 2 and stripped.endswith(":"):
-            dependency_block = False
-            entry_name, entry_version = _pnpm_entry_name_version(stripped[:-1].strip().strip('"').strip("'"))
-            if entry_name is not None and entry_version is not None:
-                package_versions[entry_name] = entry_version
-                dependencies[entry_name] = entry_version
-            continue
-        if section == "snapshots" and indent == 4 and stripped == "dependencies:":
-            dependency_block = True
-            continue
-        if section == "snapshots" and indent <= 4:
-            dependency_block = False
-        if not dependency_block or indent < 6 or ":" not in stripped:
-            continue
-        dependency_name, _, dependency_value = stripped.partition(":")
-        normalized_name = dependency_name.strip().strip('"').strip("'")
-        normalized_value = dependency_value.strip().strip('"').strip("'")
-        exact_version = package_versions.get(normalized_name) or _exact_dependency_version(normalized_value)
-        if exact_version is not None:
-            dependencies[normalized_name] = exact_version
-    return dependencies
-
-
-def _pnpm_entry_name_version(entry: str) -> tuple[str | None, str | None]:
-    normalized_entry = entry.split("(", 1)[0].lstrip("/")
-    if "@" not in normalized_entry:
-        return None, None
-    package_name, _, package_version = normalized_entry.rpartition("@")
-    if not package_name or not package_version:
-        return None, None
-    return package_name, package_version
-
-
-def _yarn_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    dependencies: dict[str, str] = {}
-    current_names: tuple[str, ...] = ()
-    for raw_line in text.splitlines():
-        _ensure_within_deadline(deadline)
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if not raw_line.startswith((" ", "\t")):
-            current_names = _yarn_selector_names(stripped.removesuffix(":"))
-            continue
-        if not current_names:
-            continue
-        version_match = _YARN_CLASSIC_VERSION_RE.match(stripped) or _YARN_BERRY_VERSION_RE.match(stripped)
-        if version_match is None:
-            continue
-        version = version_match.group(1)
-        for package_name in current_names:
-            dependencies[package_name] = version
-    return dependencies
-
-
-def _yarn_selector_names(selector_line: str) -> tuple[str, ...]:
-    names: list[str] = []
-    for part in selector_line.split(","):
-        selector = part.strip().strip('"').strip("'")
-        if not selector or selector == "__metadata":
-            continue
-        package_name = _yarn_selector_name(selector)
-        if package_name and package_name not in names:
-            names.append(package_name)
-    return tuple(names)
-
-
-def _yarn_selector_name(selector: str) -> str | None:
-    if "@npm:" in selector and not selector.startswith("@npm:"):
-        return selector.partition("@npm:")[0] or None
-    if selector.startswith("@"):
-        package_name, _, _ = selector.rpartition("@")
-        return package_name or selector
-    package_name, _, _ = selector.partition("@")
-    return package_name or selector
-
-
-def _bun_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    versions_by_name = _bun_lock_package_versions(text, deadline)
-    dependencies: dict[str, str] = {}
-    for package_name, versions in versions_by_name.items():
-        if versions:
-            dependencies[package_name] = versions[0]
-    return dependencies
-
-
-def _bun_lock_package_versions(text: str, deadline: float) -> dict[str, list[str]]:
-    _ensure_within_deadline(deadline)
-    payload = loads_jsonc(text or "{}", deadline_check=lambda: _ensure_within_deadline(deadline))
-    if not isinstance(payload, dict):
-        raise ValueError("unsupported Bun lockfile shape")
-    packages = payload.get("packages", {})
-    if not isinstance(packages, dict):
-        raise ValueError("unsupported Bun packages shape")
-    versions_by_name: dict[str, list[str]] = {}
-    for package in packages.values():
-        _ensure_within_deadline(deadline)
-        if not isinstance(package, list) or not package or not isinstance(package[0], str):
-            raise ValueError("unsupported Bun package entry")
-        identity = _bun_resolution_identity(package[0])
-        if identity is None:
-            continue
-        package_name, version = identity
-        versions = versions_by_name.setdefault(package_name, [])
-        if version not in versions:
-            versions.append(version)
-    return versions_by_name
-
-
-def _bun_resolution_identity(resolution: str) -> tuple[str, str] | None:
-    if resolution.startswith("@"):
-        scope_separator = resolution.find("/")
-        version_separator = resolution.find("@", scope_separator + 1)
-    else:
-        version_separator = resolution.find("@")
-    if version_separator <= 0:
-        return None
-    package_name = resolution[:version_separator]
-    version = resolution[version_separator + 1 :]
-    if version.startswith("npm:"):
-        version = version.removeprefix("npm:")
-    if (
-        not package_name
-        or not version
-        or version.startswith(("workspace:", "root:", "file:", "link:", "git:", "git+", "http:", "https:"))
-    ):
-        return None
-    return package_name, version
-
-
-def _exact_dependency_version(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip().strip('"').strip("'")
-    if not normalized:
-        return None
-    while normalized.startswith(("=", "^", "~", "v")):
-        normalized = normalized[1:]
-    return normalized or None
 
 
 def _requirements_dependency_map(text: str, deadline: float) -> dict[str, str]:
@@ -435,9 +265,11 @@ def _collect_poetry_dependency_table(
             dependencies[normalized_name] = str(value["version"])
 
 
-def _toml_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _toml_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = tomllib.loads(text or "")
+    payload = tomllib.loads(text or "") if document is None else document
     packages = payload.get("package")
     dependencies: dict[str, str] = {}
     if not isinstance(packages, list):
@@ -458,9 +290,11 @@ _uv_lock_dependency_map = _toml_lock_dependency_map
 _cargo_lock_dependency_map = _toml_lock_dependency_map
 
 
-def _pipfile_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _pipfile_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = json.loads(text or "{}")
+    payload = json.loads(text or "{}") if document is None else document
     dependencies: dict[str, str] = {}
     for section in ("default", "develop"):
         values = payload.get(section)
@@ -587,9 +421,11 @@ def _gradle_lockfile_dependency_map(text: str, deadline: float) -> dict[str, str
     return dependencies
 
 
-def _composer_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _composer_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = json.loads(text or "{}")
+    payload = json.loads(text or "{}") if document is None else document
     dependencies: dict[str, str] = {}
     for section in ("packages", "packages-dev"):
         packages = payload.get(section)

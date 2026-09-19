@@ -8,7 +8,7 @@ from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 def test_good_plugin_expected_score():

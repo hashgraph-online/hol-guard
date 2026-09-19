@@ -7,6 +7,8 @@ assert.deepEqual(readPresentationSettings({ presentation: initial }), initial);
 for (const invalid of [undefined, null, {}, { presentation_mode: "technical" }, { presentation: { ...initial, schema_version: 2 } },
   { presentation: { ...initial, revision: -1 } }, { presentation: { ...initial, revision: 0.5 } },
   { presentation: { ...initial, revision: Number.MAX_SAFE_INTEGER + 1 } }, { presentation: { ...initial, mode: "technical" } },
+  { presentation: { ...initial, source: "migrated" } },
+  { presentation: { ...initial, diagnostic: "legacy_presentation_mode_migrated" } },
   { presentation: { ...initial, diagnostic: "raw secret-bearing server error" } }]) {
   assert.equal(readPresentationSettings(invalid).writable, false);
   assert.equal(readPresentationSettings(invalid).value, "everyday");

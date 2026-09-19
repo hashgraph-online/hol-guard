@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
@@ -140,6 +141,7 @@ def defer_request_resume_to_live_hook(
     request_id: str,
     action: str,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
     """Let an active Codex hook consume the saved browser decision itself."""
 
@@ -153,7 +155,8 @@ def defer_request_resume_to_live_hook(
         return None
     event_name = str(metadata.get("hook_event_name") or metadata.get("event") or "")
     if not _live_hook_wait_is_active(metadata=metadata, now=now) and not (
-        event_name == "PreToolUse" and _pretool_bridge_wait_is_active(store, operation, now=now)
+        event_name == "PreToolUse"
+        and _pretool_bridge_wait_is_active(store, operation, now=now, config_reader=config_reader)
     ):
         return None
     resume = get_request_resume_status(store, request_id=request_id, now=now)
@@ -231,6 +234,7 @@ def _pretool_bridge_wait_is_active(
     operation: Mapping[str, object],
     *,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> bool:
     metadata = operation.get("metadata")
     if not isinstance(metadata, Mapping):
@@ -241,6 +245,7 @@ def _pretool_bridge_wait_is_active(
         store,
         operation={**operation, "status": operation.get("status") or "waiting_on_approval"},
         metadata={**metadata, "hook_event_name": metadata.get("hook_event_name") or "PreToolUse"},
+        config_reader=config_reader,
     )
     now_at = _parse_timestamp(now)
     return deadline is not None and now_at is not None and now_at <= deadline

@@ -10,8 +10,30 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook*.py"
+      - "src/codex_plugin_scanner/guard/*hook*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
+      - "src/codex_plugin_scanner/guard/config_source_io.py"
+      - "src/codex_plugin_scanner/guard/daemon/config_read_scope.py"
+      - "src/codex_plugin_scanner/guard/windows_paths.py"
+      - "src/codex_plugin_scanner/safe_output_windows.py"
+      - "scripts/native_slo_failure.py"
+      - "tests/test_guard_config_source_io.py"
+      - "tests/test_daemon_config_read_scope.py"
+      - "tests/test_native_slo_failure.py"
+      - "scripts/ci/installed_transition*.py"
+      - "scripts/ci/installed_artifact_transition_probe.py"
+      - "scripts/ci/verify_installed_artifact_transitions.py"
+      - "tests/test_installed_transition_windows*.py"
+      - "tests/test_native_policy_snapshot_write_safety.py"
+      - "tests/test_windows_config_directory_access.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
@@ -20,6 +42,28 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook*.py"
+      - "src/codex_plugin_scanner/guard/*hook*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
+      - "src/codex_plugin_scanner/guard/config_source_io.py"
+      - "src/codex_plugin_scanner/guard/daemon/config_read_scope.py"
+      - "src/codex_plugin_scanner/guard/windows_paths.py"
+      - "src/codex_plugin_scanner/safe_output_windows.py"
+      - "scripts/native_slo_failure.py"
+      - "tests/test_guard_config_source_io.py"
+      - "tests/test_daemon_config_read_scope.py"
+      - "tests/test_native_slo_failure.py"
+      - "scripts/ci/installed_transition*.py"
+      - "scripts/ci/installed_artifact_transition_probe.py"
+      - "scripts/ci/verify_installed_artifact_transitions.py"
+      - "tests/test_installed_transition_windows*.py"
+      - "tests/test_native_policy_snapshot_write_safety.py"
+      - "tests/test_windows_config_directory_access.py"
   workflow_dispatch:
 
 permissions:
@@ -45,6 +89,21 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Exercise Windows configuration source and scope contracts
+        run: >-
+          uv run --no-sync pytest
+          tests/test_guard_config_source_io.py
+          tests/test_daemon_config_read_scope.py
+          tests/test_native_slo_failure.py
+          tests/test_native_policy_snapshot_write_safety.py
+          tests/test_windows_config_directory_access.py
+          --tb=short
+      - name: Exercise installed transition Windows ownership
+        run: >-
+          uv run --no-sync pytest
+          tests/test_installed_transition_windows_owner.py
+          tests/test_installed_transition_windows_files.py
+          --tb=short
       - name: Install pinned Rust toolchain
         shell: pwsh
         run: |

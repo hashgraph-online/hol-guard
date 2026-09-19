@@ -1,0 +1,36 @@
+{
+  "schema": "guard-claude-current-source-conformance.v1",
+  "source_revision": "1cd7842c1da4f327b568065dd159c67e7bd0c92b",
+  "source_tree": "5250218ff36acbb35a2fba0fde483db02a724f63",
+  "python_execution": "current_adapter_registered_python_argv",
+  "installed_artifact": false,
+  "qualification_complete": false,
+  "historical_auth_provenance": {
+    "fixture": "tests/fixtures/claude-launcher-pilot-auth.json",
+    "fixture_sha256": "ebf41a37cfe9e6e05bcd9f5161874a3e1329015bb990f779e238d3c8f4b3571a",
+    "revision": "ae33987d0c8675c36a77375e03419aee920825f6",
+    "generator": "scripts/generate_claude_launcher_auth_vectors.py",
+    "generator_sha256": "03fa95cd2b9366c8913ac5b703f153c64f2b917e1d1ba953825486ca0debeeb5",
+    "module": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_auth.py",
+    "module_sha256": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+    "historical_bridge_executed": false
+  },
+  "bridge_modules": {
+    "adapters/claude_daemon_hook_bridge.py": "596e5b982813fb5400c8dc900259b5dd302641b84251bb44df32cf1cad665b0b",
+    "adapters/claude_daemon_hook_transport.py": "9a01c09bd0f1ce2f8b0352154a3253fbc070395be18d4f0365406aca4c12253e",
+    "adapters/codex_daemon_hook_auth.py": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+    "adapters/claude_daemon_state.py": "14859cac506d29ced21ea2b6a1609d10279e0d988ef88a54592203cfd719cc7e"
+  },
+  "marker_source": {
+    "module": "adapters/claude_hook_config.py",
+    "sha256": "a452508d7650662709fba99632befdea0a019b66957dc1ffdf67e24c6d4c2f61"
+  },
+  "reviewed_import_delta": {
+    "module": "adapters/claude_daemon_hook_bridge.py",
+    "historical_sha256": "4a57d7ac27bbd57695e5696b61fcabe5ec07f61af4a148e61aa3483cc70397f5",
+    "current_sha256": "596e5b982813fb5400c8dc900259b5dd302641b84251bb44df32cf1cad665b0b",
+    "removed": "from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER",
+    "added": "from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER",
+    "scope": "Only the marker import changes; inverse edit must reproduce the exact historical bridge bytes."
+  }
+}

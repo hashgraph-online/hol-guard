@@ -4,8 +4,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
+
+bootstrap_compatibility_module(globals())
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -667,6 +672,16 @@ def _should_relax_configured_default(
         runtime_workspace=runtime_workspace,
     ):
         return True
+    if event_name == "PreToolUse" and _canonical_harness_name(harness) in {"claude-code", "codex"}:
+        from ..runtime.secret_file_requests import is_explicitly_benign_native_file_read_request
+
+        if is_explicitly_benign_native_file_read_request(
+            payload.get("tool_name"),
+            payload.get("tool_input", payload.get("arguments")),
+            cwd=runtime_workspace,
+            home_dir=home_dir,
+        ):
+            return True
     return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
@@ -690,6 +705,7 @@ def _run_hook_generic_payload(
     _claimed_saved_allow_hash: str | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> int:
     payload_map = dict(payload)
     artifact_id = _coalesce_string(
@@ -729,6 +745,8 @@ def _run_hook_generic_payload(
     verified_benign_classifier = "is_explicitly_benign_tool_action_request"
     if hook_event_name == "PostToolUse":
         verified_benign_classifier = "_codex_post_tool_command_is_read_only_source_inspection"
+    elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "read":
+        verified_benign_classifier = "is_explicitly_benign_native_file_read_request"
     elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "apply_patch":
         verified_benign_classifier = "runtime_artifact_verified_non_sensitive_apply_patch"
     verified_benign_default = _should_relax_configured_default(
@@ -928,6 +946,7 @@ def _run_hook_generic_payload(
                 _claimed_saved_allow_hash=runtime_artifact_hash,
                 _claim_saved_approval=False,
                 _post_claim_refresh_failed=_post_claim_refresh_failed,
+                config_reader=config_reader,
             )
     policy_action = approval_reuse.action
     stored_policy_action = (
@@ -1205,6 +1224,7 @@ def _run_hook_generic_payload(
             risk_summary="Watch-only mode allowed an action that current policy would stop.",
             scanner_evidence=scanner_evidence,
             store=store,
+            config_reader=config_reader,
         )
     if (
         hook_is_pre_event(hook_event_name)
@@ -1266,6 +1286,7 @@ def _run_hook_generic_payload(
             approval_center_url=approval_center_url,
             now=_now(),
             redaction_level=config.receipt_redaction_level,
+            config_reader=config_reader,
         )
         payload_map["approval_requests"] = queued
         payload_map["approval_center_url"] = approval_center_url
@@ -1283,7 +1304,7 @@ def _run_hook_generic_payload(
             approval_context,
             _embedded_script_remediation(command_text),
         )
-        if _canonical_harness_name(args.harness) == "kimi":
+        if _canonical_harness_name(args.harness) in {"kimi", "hermes"}:
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,

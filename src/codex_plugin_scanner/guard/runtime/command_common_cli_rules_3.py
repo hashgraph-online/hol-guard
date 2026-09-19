@@ -24,8 +24,13 @@ _CLOUD_CREDENTIAL_MUTATION_REFINED = AnyMatcher(
         for matcher in _CLOUD_CREDENTIAL_MUTATION.matchers
         if not (
             isinstance(matcher, ExecutableMatcher)
-            and "gcloud" in matcher.executables
-            and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
+            and (
+                (
+                    "gcloud" in matcher.executables
+                    and matcher.subcommands == ("iam", "service-accounts", "keys", "delete")
+                )
+                or ("aws" in matcher.executables and matcher.subcommands == ("iam", "delete-access-key"))
+            )
         )
     )
 )

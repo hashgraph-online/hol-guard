@@ -22,7 +22,7 @@ const request: GuardApprovalRequest = {
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
   allowed_scopes: ["artifact", "workspace", "harness", "global"],
-  scope_contract_version: "guard.approval-scopes.v5",
+  scope_contract_version: "guard.approval-scopes.v6",
   scope_contract_digest: "scope-contract-digest",
   allowed_scopes_by_action: {
     allow: ["artifact", "workspace", "harness", "global"],
@@ -128,7 +128,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   expect(resolutionBodies[0]).toMatchObject({
     action: "block",
     scope: "global",
-    scope_contract_version: "guard.approval-scopes.v5",
+    scope_contract_version: "guard.approval-scopes.v6",
     scope_contract_digest: "scope-contract-digest",
   });
 });

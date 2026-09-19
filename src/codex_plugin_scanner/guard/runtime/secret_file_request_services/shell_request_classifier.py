@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .._shell_execution_context_support import SHELL_CWD_UNRESOLVED_PARENT_SHELL
 from ..command_evaluation import evaluate_command
 from ..command_extension_interaction import classify_command_extension_interaction
 from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -289,6 +290,18 @@ def _destructive_shell_tool_action_request(
         bounded_source_edit = False
 
     execution_context_reason = _shell_execution_context_validation_reason(execution_context)
+    if (
+        initial_risk is not None
+        and initial_risk.action_class == "local secret read shell command"
+        and execution_context_reason == SHELL_CWD_UNRESOLVED_PARENT_SHELL
+        and execution_context.segments
+        and execution_context.segments[0].tokens
+        and execution_context.segments[0].tokens[0] in {"source", "."}
+    ):
+        # A leading source command reads its operand before sourced code can
+        # mutate the parent shell. Keep that proven credential read while
+        # allowing unrelated commands to reach their more specific policies.
+        return initial_risk
     if execution_context.directory_change_present and execution_context_reason is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -508,7 +521,7 @@ def _destructive_shell_tool_action_request(
             reason_code="interpreter_identity_untrusted",
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    return None
+    return initial_risk
 
 
 __all__ = [

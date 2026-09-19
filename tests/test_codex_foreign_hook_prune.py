@@ -23,10 +23,7 @@ def _command_group(command: str) -> dict[str, object]:
 def test_foreign_hook_detects_pytest_guard_home(tmp_path: Path) -> None:
     current = tmp_path / "guard-home"
     foreign = tmp_path / "pytest-of-user" / "test_repair" / "guard-home"
-    group = _command_group(
-        "python -m codex_plugin_scanner.cli guard hook --harness codex "
-        f"--guard-home {foreign}"
-    )
+    group = _command_group(f"python -m codex_plugin_scanner.cli guard hook --harness codex --guard-home {foreign}")
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is True
 
 
@@ -44,6 +41,13 @@ def test_non_guard_hooks_are_not_foreign() -> None:
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=Path("guard-home")) is False
 
 
+def test_bridge_flag_in_non_guard_command_is_not_foreign(tmp_path: Path) -> None:
+    current = tmp_path / "guard-home"
+    foreign = tmp_path / "other-home"
+    group = _command_group(f"echo --_hol-guard-codex-bridge --guard-home {foreign}")
+    assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
+
+
 def test_unrelated_scanner_cli_hook_is_not_foreign(tmp_path: Path) -> None:
     current = tmp_path / "guard-home"
     foreign = tmp_path / "other-home"
@@ -55,8 +59,7 @@ def test_quoted_same_home_path_with_spaces_is_not_foreign(tmp_path: Path) -> Non
     current = tmp_path / "Application Support" / "guard-home"
     current.mkdir(parents=True)
     group = _command_group(
-        "python -m codex_plugin_scanner.cli guard hook --harness codex "
-        f"--guard-home {shlex.quote(str(current))}"
+        f"python -m codex_plugin_scanner.cli guard hook --harness codex --guard-home {shlex.quote(str(current))}"
     )
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
 
@@ -70,17 +73,11 @@ def test_mixed_home_group_keeps_current_handler_only(tmp_path: Path) -> None:
         "hooks": [
             {
                 "type": "command",
-                "command": (
-                    "python -m codex_plugin_scanner.cli guard hook --harness codex "
-                    f"--guard-home {current}"
-                ),
+                "command": (f"python -m codex_plugin_scanner.cli guard hook --harness codex --guard-home {current}"),
             },
             {
                 "type": "command",
-                "command": (
-                    "python -m codex_plugin_scanner.cli guard hook --harness codex "
-                    f"--guard-home {foreign}"
-                ),
+                "command": (f"python -m codex_plugin_scanner.cli guard hook --harness codex --guard-home {foreign}"),
             },
         ],
     }
@@ -111,10 +108,7 @@ def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path:
     payload: dict[str, object] = {
         "hooks": {
             "PreToolUse": [
-                _command_group(
-                    "python -m codex_plugin_scanner.cli guard hook --harness codex "
-                    f"--guard-home {foreign}"
-                ),
+                _command_group(f"python -m codex_plugin_scanner.cli guard hook --harness codex --guard-home {foreign}"),
                 _command_group("lean-ctx hook observe"),
             ]
         }

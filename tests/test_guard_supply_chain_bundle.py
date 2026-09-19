@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -25,6 +26,74 @@ from codex_plugin_scanner.guard.runtime.supply_chain_bundle import (
 )
 
 WORKSPACE_ID = "workspace-alpha"
+
+
+def test_bundle_index_preserves_cross_ecosystem_order_unversioned_risk_and_literal_versions():
+    from codex_plugin_scanner.guard.runtime.supply_chain_bundle_models import SupplyChainBundle
+
+    payload = _bundle_dict()
+    first = _package_record(ecosystem="cargo", name="demo", namespace=None, version="1.0.0")
+    second = _package_record(ecosystem="npm", name="demo", namespace=None, version="1.0.0")
+    higher = {**second, "version": "2.0.0", "riskScore": 999}
+    payload["packages"] = [first, second, higher]
+    bundle = SupplyChainBundle.from_dict(payload)
+    match, _ = bundle.package_index.match(package_name="demo", package_version="1.0.0", ecosystem=None)
+    assert match.ecosystem == "cargo"
+    match, _ = bundle.package_index.match(package_name="DEMO", package_version=None, ecosystem="npm")
+    assert match.version == "2.0.0"
+    assert bundle.package_index.match(package_name="demo", package_version=" 1.0.0 ", ecosystem="npm") == (None, None)
+    assert bundle.package_index.match(package_name="demo", package_version=None, ecosystem="")[0] is None
+
+
+def test_bundle_index_is_immutable_and_belongs_to_the_exact_bundle():
+    from codex_plugin_scanner.guard.runtime.supply_chain_bundle_models import SupplyChainBundle
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_identity import parse_package_identity
+
+    bundle = SupplyChainBundle.from_dict(_bundle_dict())
+    identity = parse_package_identity(ecosystem="npm", package_name="minimist", version="1.2.8")
+    with pytest.raises(TypeError):
+        bundle.package_index.exact[identity] = bundle.packages[0]
+    replacement = replace(bundle, packages=(replace(bundle.packages[0], default_action="warn"),))
+    assert replacement.bundle_version == bundle.bundle_version
+    assert replacement.package_index is not bundle.package_index
+    assert replacement.package_index.exact[identity].default_action == "warn"
+    assert bundle.package_index.exact[identity].default_action == "block"
+
+
+def test_emergency_index_keeps_signed_order_across_ecosystems_and_versions():
+    from codex_plugin_scanner.guard.runtime.supply_chain_bundle_models import SupplyChainBundle
+
+    payload = _bundle_dict()
+    payload["emergencyDenylist"] = [
+        {
+            "ecosystem": "cargo",
+            "name": "demo",
+            "namespace": None,
+            "reason": "known_malware",
+            "recommendedFixVersion": "3",
+        },
+        {
+            "ecosystem": "npm",
+            "name": "demo",
+            "namespace": None,
+            "reason": "known_exploited",
+            "recommendedFixVersion": "4",
+        },
+        {
+            "ecosystem": "cargo",
+            "name": "demo",
+            "namespace": None,
+            "reason": "known_exploited",
+            "recommendedFixVersion": "5",
+        },
+    ]
+    bundle = SupplyChainBundle.from_dict(payload)
+    _, denial = bundle.package_index.match(package_name="demo", package_version="9000", ecosystem=None)
+    assert denial.reason == "known_malware"
+    assert denial.recommended_fix_version == "3"
+    _, denial = bundle.package_index.match(package_name="demo", package_version=None, ecosystem="npm")
+    assert denial.reason == "known_exploited"
+    assert denial.recommended_fix_version == "4"
 
 
 def _iso(value: datetime) -> str:

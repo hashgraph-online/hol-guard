@@ -6,8 +6,10 @@ import base64
 import hashlib
 import json
 import os
+import select
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -27,11 +29,13 @@ from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import commands_dispatch_local as guard_dispatch_local
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.package_shim_gate import (
     package_shim_command_requires_external_archive_binding,
     package_shim_command_requires_guard,
 )
+from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
@@ -887,6 +891,116 @@ def test_generated_package_shim_delegates_external_archive_execution_to_guard(tm
     assert "guard_command = [*base_command, resolved_command]" in source
     assert "raise SystemExit(guard_process.returncode)" in source
     assert source.index("raise SystemExit(guard_process.returncode)") < source.rindex("_exec_real_manager()")
+
+
+def _generated_shim_with_fake_guard(context: HarnessContext, child_code: str) -> str:
+    source = guard_shims_module._build_package_manager_python_shim(context, "npm")
+    base_command_line = next(line for line in source.splitlines() if line.startswith("base_command = "))
+    fake_command = [sys.executable, "-c", child_code]
+    source = source.replace(base_command_line, f"base_command = {fake_command!r}", 1)
+    contained_start = source.index(
+        "try:\n    from codex_plugin_scanner.guard.contained_package_script_execution"
+    )
+    guard_env_start = source.index("guard_env = dict(os.environ)", contained_start)
+    return source[:contained_start] + "contained_result = None\n" + source[guard_env_start:]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the generated POSIX shim uses pass_fds for live status")
+def test_package_shim_pending_status_reaches_parent_stderr_before_guard_exit(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    status = "HOL Guard: package approval pending; review it in Guard Inbox.\n"
+    child_code = (
+        "import os, time; "
+        f"os.write(int(os.environ[{PACKAGE_SHIM_STATUS_FD_ENV_VAR!r}]), {status.encode()!r}); "
+        "time.sleep(3.0); "
+        "raise SystemExit(2)"
+    )
+    source = _generated_shim_with_fake_guard(context, child_code)
+    process = subprocess.Popen(
+        [sys.executable, "-c", source, "install", "fixture@1.0.0"],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stderr is not None
+    ready, _, _ = select.select([process.stderr], [], [], 2.0)
+    assert ready, "the pending approval status must not wait for the guard child"
+    assert process.stderr.readline() == status
+    stdout, stderr = process.communicate(timeout=5)
+
+    assert process.returncode == 2
+    assert stdout == ""
+    assert stderr == ""
+
+
+def test_package_shim_preserves_captured_output_and_exit_code_without_pending_status(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    source = _generated_shim_with_fake_guard(
+        context,
+        "import sys; sys.stdout.write('guard-stdout\\n'); sys.stderr.write('guard-stderr\\n'); raise SystemExit(7)",
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", source, "install", "fixture@1.0.0"],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 7
+    assert result.stdout == "guard-stdout\n"
+    assert result.stderr == "guard-stderr\n"
+    assert "Guard Inbox" not in result.stderr
+
+
+def test_package_shim_pending_status_writes_fd_without_request_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    read_fd, write_fd = os.pipe()
+    monkeypatch.setenv(PACKAGE_SHIM_STATUS_FD_ENV_VAR, str(write_fd))
+    try:
+        guard_dispatch_local._emit_package_shim_pending_approval_status()
+        os.close(write_fd)
+        write_fd = -1
+        assert os.read(read_fd, 256) == b"HOL Guard: package approval pending; review it in Guard Inbox.\n"
+    finally:
+        if write_fd >= 0:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
+def test_package_shim_pending_status_fallback_flushes_redacted_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FlushTrackingStream:
+        def __init__(self) -> None:
+            self.value = ""
+            self.flush_count = 0
+
+        def write(self, value: str) -> int:
+            self.value += value
+            return len(value)
+
+        def flush(self) -> None:
+            self.flush_count += 1
+
+    stream = _FlushTrackingStream()
+    monkeypatch.delenv(PACKAGE_SHIM_STATUS_FD_ENV_VAR, raising=False)
+    monkeypatch.setattr(guard_dispatch_local.sys, "stderr", stream)
+
+    guard_dispatch_local._emit_package_shim_pending_approval_status()
+
+    assert stream.value == "HOL Guard: package approval pending; review it in Guard Inbox.\n"
+    assert stream.flush_count == 1
+    assert "request" not in stream.value.lower()
+    assert "http" not in stream.value.lower()
 
 
 def test_package_manager_shim_bypasses_guard_for_pnpm_run_commands(tmp_path: Path, capsys) -> None:

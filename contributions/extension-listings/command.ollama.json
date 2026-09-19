@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.ollama",
+  "tagline": "Community-maintained HOL Guard coverage for sensitive Ollama CLI operations.",
+  "category": "other",
+  "limitations": [
+    "v1 reviews ollama push and ollama rm only and does not claim comprehensive Ollama security coverage.",
+    "This community-maintained listing is not an official Ollama integration, affiliation, or endorsement."
+  ],
+  "documentationUrl": "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extensions/README.md",
+  "tags": ["ollama", "ai", "llm", "model", "cli"],
+  "maintainerGithubIds": ["6068672"]
+}

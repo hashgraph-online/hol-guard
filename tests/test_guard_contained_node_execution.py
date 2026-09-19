@@ -341,8 +341,8 @@ def test_workspace_or_executable_drift_never_reaches_or_survives_execution(
     shim, _node = _manager(tmp_path, monkeypatch)
     executable = workspace / "node_modules" / "eslint" / "bin" / "eslint.mjs"
 
-    def drifting_snapshot(path: Path):
-        captured = complete_workspace_snapshot(path)
+    def drifting_snapshot(path: Path, *, exclude_protected: bool = False):
+        captured = complete_workspace_snapshot(path, exclude_protected=exclude_protected)
         _write(executable, "process.exit(2);\n", executable=True)
         return captured
 
@@ -389,9 +389,9 @@ def test_provenance_drift_before_snapshot_never_reaches_executor(
     shim, _node = _manager(tmp_path, monkeypatch)
     original_snapshot = complete_workspace_snapshot
 
-    def drifting_snapshot(path: Path):
+    def drifting_snapshot(path: Path, *, exclude_protected: bool = False):
         _write(workspace / relative_path, replacement)
-        return original_snapshot(path)
+        return original_snapshot(path, exclude_protected=exclude_protected)
 
     def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
         raise AssertionError("drifted provenance reached executor")
@@ -448,3 +448,46 @@ def test_exploit_deltas_never_reach_executor(
         )
         is None
     )
+
+
+@pytest.mark.parametrize("manager", ("npx", "bunx"))
+def test_dot_reporter_runs_only_with_secret_free_containment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+) -> None:
+    workspace = _workspace(tmp_path, "vitest")
+    manager_directory, node = _manager(tmp_path, monkeypatch)
+    _write(manager_directory / "bunx", "#!/bin/sh\nexit 99\n", executable=True)
+    _write(workspace / ".env", "FAKE_TEST_SECRET=do-not-copy\n")
+    _write(workspace / "scripts" / "read-config.sh", "cat .env\n")
+    observed: list[ContainmentRequest] = []
+
+    def captured_execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
+        del timeout_seconds
+        observed.append(request)
+        assert request.argv == (
+            str(node),
+            "node_modules/vitest/bin/vitest.mjs",
+            "run",
+            "src/example.test.ts",
+            "--reporter=dot",
+        )
+        assert ".env" not in {item.snapshot_path for item in request.inputs}
+        assert "scripts/read-config.sh" in {item.snapshot_path for item in request.inputs}
+        assert "FAKE_TEST_SECRET" not in dict(request.environment)
+        return _result(request)
+
+    monkeypatch.setattr(execution_module, "execute_contained", captured_execute)
+    prefix = ("--no-install",) if manager == "npx" else ()
+    result = try_execute_contained_node_command(
+        manager,
+        (*prefix, "vitest", "run", "src/example.test.ts", "--reporter=dot"),
+        workspace=workspace,
+        guard_home=tmp_path / "guard-home",
+        shim_directory=manager_directory,
+        environment={"PATH": str(manager_directory), "FAKE_TEST_SECRET": "not-in-child-env"},
+    )
+    assert result is not None
+    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
+    assert len(observed) == 1

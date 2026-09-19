@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.probe",
+  "version": "1.0.0",
+  "name": "Probe",
+  "description": "Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.crizant",
+    "displayName": "Community",
+    "url": "https://github.com/crizant/probe"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#B45309" },
+  "homepage": "https://github.com/crizant/probe/blob/main/docs/CLI.md",
+  "license": "MIT",
+  "executables": ["probe"],
+  "ecosystemIds": ["probe"],
+  "riskClasses": ["execution", "network_egress", "destructive_shell"],
+  "actionClasses": [
+    "Probe request execution command",
+    "Probe workspace mutation command",
+    "Probe destructive command"
+  ],
+  "referenceUrls": ["https://github.com/crizant/probe/blob/main/docs/CLI.md"],
+  "saferAlternatives": [
+    "Inspect selected requests, environments, selectors, and output paths before execution or mutation."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_probe_extensions"
+  }
+}

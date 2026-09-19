@@ -61,6 +61,11 @@ class TestSuiteMetrics:
 class _NodeCollector:
     def __init__(self) -> None:
         self.items: list[pytest.Item] = []
+        self.errors: list[str] = []
+
+    def pytest_collectreport(self, report: pytest.CollectReport) -> None:
+        if report.failed:
+            self.errors.append(str(report.longrepr))
 
     def pytest_collection_finish(self, session: _CollectionSession) -> None:
         self.items = list(session.items)
@@ -96,7 +101,9 @@ def collect_inventory(root: Path) -> TestInventory:
         plugins=[collector],
     )
     if result != pytest.ExitCode.OK:
-        raise RuntimeError(f"pytest collection failed with exit code {result}")
+        detail = "\n\n".join(collector.errors[:5]).strip()
+        suffix = f":\n{detail}" if detail else ""
+        raise RuntimeError(f"pytest collection failed with exit code {result}{suffix}")
     node_ids = [item.nodeid for item in collector.items]
     markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in collector.items}
     return build_inventory(node_ids, markers)

@@ -164,14 +164,15 @@ COMMON_CLI_COMMAND_EXTENSION_SPECS: tuple[CommandExtensionSpec, ...] = (
     spec(
         "command.kubernetes-operations",
         "Kubernetes and OpenShift operation protection",
-        "Reviews destructive Kubernetes/OpenShift operations plus OpenShift execution, tunnels, and file transfer.",
+        "Reviews Kubernetes/OpenShift mutations, remote execution, tunnels, file transfer, and security changes.",
         (
             "Kubernetes destructive command",
             "Kubernetes remote execution command",
             "Kubernetes network tunnel command",
             "Kubernetes remote file transfer command",
+            "Kubernetes security administration command",
         ),
-        ("destructive_shell", "network_egress", "execution"),
+        ("destructive_shell", "network_egress", "execution", "local_secret_read"),
         "Use explicit projects and the narrowest remote operation required before cluster mutation.",
         (
             "https://kubernetes.io/docs/reference/kubectl/",

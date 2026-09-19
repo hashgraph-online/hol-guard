@@ -24,6 +24,13 @@ _ALLOWED_RESULT_FIELDS: Final = (
     "browser_launches",
     "inbox_requests",
     "dispatch_counts",
+    "transport_counts",
+)
+
+_TRANSPORT_COUNTERS: Final = frozenset(
+    f"{lane}_{counter}"
+    for lane in ("hook", "challenge")
+    for counter in ("attempts", "admission_refusals", "admission_retries")
 )
 
 
@@ -42,6 +49,11 @@ def sanitize_report(payload: dict[str, object]) -> dict[str, object]:
                 _ = sanitized.pop("dispatch_counts", None)
         else:
             _ = sanitized.pop("dispatch_counts", None)
+        transport_counts = sanitized.get("transport_counts")
+        if not isinstance(transport_counts, dict) or not all(
+            key in _TRANSPORT_COUNTERS and type(value) is int and value >= 0 for key, value in transport_counts.items()
+        ):
+            _ = sanitized.pop("transport_counts", None)
         sanitized_results.append(sanitized)
 
     def string_field(name: str, default: str) -> str:

@@ -50,8 +50,6 @@ def _permission_layer(permission_id: str, state: ControlState) -> ExtensionContr
     (
         "git stash",
         "git stash push -m wip",
-        "zsh -lc 'git stash'",
-        "zsh -lc 'git stash list'",
     ),
 )
 def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, tmp_path: Path) -> None:
@@ -93,6 +91,34 @@ def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, 
         )
         == "allow"
     )
+
+
+def test_explicit_git_stash_permission_does_not_unwrap_login_shells(tmp_path: Path) -> None:
+    request = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": "zsh -lc 'git stash list'"},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED,
+            revision=11,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            layers=(_permission_layer("command.git.permission.stash", ControlState.ENABLED),),
+        )
+    )
+
+    assert request is not None
+    with use_extension_control_snapshot(snapshot):
+        artifact = build_tool_action_request_artifact(
+            "grok",
+            request,
+            config_path="config.toml",
+            source_scope="project",
+        )
+
+    assert artifact.metadata["command_action_floor"] == "require-reapproval"
 
 
 def test_explicit_permission_allow_keeps_harness_risk_blocks(tmp_path: Path) -> None:

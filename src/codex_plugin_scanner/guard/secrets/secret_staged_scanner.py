@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .secret_detection import SecretFinding, SecretScanSource
 from .secret_repository_scanner import (
@@ -16,6 +17,9 @@ from .secret_repository_scanner import (
     _run_git,
     _scan_blob,
 )
+
+if TYPE_CHECKING:
+    from .git_object_reader import GitBlobReference
 
 
 def _git_repository_root(root: Path) -> Path | None:
@@ -31,40 +35,19 @@ def _git_repository_root(root: Path) -> Path | None:
     return Path(raw).resolve()
 
 
-def _git_staged_paths(root: Path) -> list[str] | None:
+def _git_staged_paths(root: Path) -> list[GitBlobReference] | None:
+    from .git_object_reader import parse_raw_diff
+
     try:
         result = _run_git(
             root,
-            ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z", "--"],
+            ["diff", "--cached", "--raw", "--no-abbrev", "--no-renames", "--diff-filter=ACMR", "-z", "--"],
         )
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode != 0:
         return None
-    return [item.decode("utf-8", errors="surrogateescape") for item in result.stdout.split(b"\0") if item]
-
-
-def _git_staged_blob(root: Path, path: str, max_file_bytes: int) -> tuple[bytes | None, bool]:
-    spec = f":{path}"
-    try:
-        size_result = _run_git(root, ["cat-file", "-s", spec])
-    except (OSError, subprocess.SubprocessError):
-        return None, True
-    if size_result.returncode != 0:
-        return None, True
-    try:
-        size = int(size_result.stdout.strip())
-    except ValueError:
-        return None, True
-    if size < 0 or size > max_file_bytes:
-        return None, True
-    try:
-        blob_result = _run_git(root, ["cat-file", "blob", spec])
-    except (OSError, subprocess.SubprocessError):
-        return None, True
-    if blob_result.returncode != 0 or len(blob_result.stdout) > max_file_bytes:
-        return None, True
-    return blob_result.stdout, False
+    return parse_raw_diff(result.stdout)
 
 
 def scan_staged_secrets(
@@ -81,6 +64,9 @@ def scan_staged_secrets(
     suitable for pre-commit enforcement even when unstaged edits differ from the
     index that will actually be committed.
     """
+
+    from .git_blob_scan_cache import GitBlobScanCache
+    from .git_object_reader import GitObjectReader, GitObjectReadError
 
     requested_root = target.expanduser().resolve()
     if not requested_root.exists() or not requested_root.is_dir():
@@ -128,33 +114,42 @@ def scan_staged_secrets(
     bytes_scanned = 0
     truncated = False
     staged_source: SecretScanSource = "staged"
-    for relative_path in paths:
-        if files_scanned >= max_files or bytes_scanned >= max_total_bytes or len(findings) >= max_findings:
-            truncated = True
-            break
-        data, incomplete_blob = _git_staged_blob(root, relative_path, max_file_bytes)
-        if incomplete_blob:
-            truncated = True
-            errors.add("git_staged_blob_unavailable_or_oversized")
-            continue
-        if data is None:
-            continue
-        if bytes_scanned + len(data) > max_total_bytes:
-            truncated = True
-            break
-        found, scanned_bytes = _scan_blob(
-            data,
-            path=relative_path.replace("\\", "/"),
-            source=staged_source,
-            commit=None,
-            finding_budget=max_findings - len(findings),
-        )
-        files_scanned += 1
-        bytes_scanned += scanned_bytes
-        findings.extend(found)
-        if len(findings) >= max_findings:
-            truncated = True
-            break
+    cache = GitBlobScanCache()
+    with GitObjectReader(root) as objects:
+        for reference in paths:
+            if files_scanned >= max_files or bytes_scanned >= max_total_bytes or len(findings) >= max_findings:
+                truncated = True
+                break
+            try:
+                size = objects.size(reference.oid)
+                if size is None or size > max_file_bytes:
+                    truncated = True
+                    errors.add("git_staged_blob_unavailable_or_oversized")
+                    continue
+                if bytes_scanned + size > max_total_bytes:
+                    truncated = True
+                    break
+                found, scanned_bytes = cache.scan(
+                    objects,
+                    oid=reference.oid,
+                    size=size,
+                    path=reference.path.replace("\\", "/"),
+                    source=staged_source,
+                    commit=None,
+                    finding_budget=max_findings - len(findings),
+                    max_file_bytes=max_file_bytes,
+                    scan_blob=_scan_blob,
+                )
+            except (GitObjectReadError, OSError, subprocess.SubprocessError):
+                truncated = True
+                errors.add("git_staged_blob_unavailable_or_oversized")
+                continue
+            files_scanned += 1
+            bytes_scanned += scanned_bytes
+            findings.extend(found)
+            if len(findings) >= max_findings:
+                truncated = True
+                break
 
     deduped: dict[tuple[str, int, str], SecretFinding] = {}
     for finding in findings:

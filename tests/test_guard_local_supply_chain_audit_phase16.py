@@ -12,6 +12,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import stub_authenticated_urlopen
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -124,7 +125,7 @@ def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pyte
         )
 
     monkeypatch.setattr(runner, "_guard_sync_headers", _fake_guard_sync_headers)
-    monkeypatch.setattr(local_supply_chain_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     response, fallback = local_supply_chain_module._run_cloud_workspace_audit(
         auth_context={
@@ -890,9 +891,8 @@ def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pyte
         def __exit__(self, exc_type, exc, tb) -> None:
             self.close()
 
-    monkeypatch.setattr(
-        local_supply_chain_module.urllib.request,
-        "urlopen",
+    stub_authenticated_urlopen(
+        monkeypatch,
         lambda *_args, **_kwargs: _FakeResponse(
             json.dumps(
                 {

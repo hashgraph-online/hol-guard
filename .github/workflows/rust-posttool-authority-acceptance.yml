@@ -2,7 +2,7 @@ name: Rust PostToolUse authority acceptance
 
 on:
   push:
-    branches: [fix/rust-authority-batch-2]
+    branches: [fix/rust-authority-batch-2, release/3.2]
     paths:
       - "rust/AUTHORITY_BATCH_2"
       - ".github/workflows/rust-posttool-authority-acceptance.yml"
@@ -10,14 +10,40 @@ on:
       - "src/codex_plugin_scanner/guard/native_runtime*.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
       - "scripts/ci/rust_posttool_failclosed_integration.py"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook*.py"
+      - "src/codex_plugin_scanner/guard/adapters/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "src/codex_plugin_scanner/guard/config*.py"
+      - "src/codex_plugin_scanner/guard/runtime/extension_control*.py"
+      - "src/codex_plugin_scanner/guard/approval*.py"
+      - "src/codex_plugin_scanner/guard/store_native*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   pull_request:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime*.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
       - "scripts/ci/rust_posttool_failclosed_integration.py"
       - ".github/workflows/rust-posttool-authority-acceptance.yml"
+      - "src/codex_plugin_scanner/guard/native_*.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook*.py"
+      - "src/codex_plugin_scanner/guard/adapters/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_hook*.py"
+      - "src/codex_plugin_scanner/guard/config*.py"
+      - "src/codex_plugin_scanner/guard/runtime/extension_control*.py"
+      - "src/codex_plugin_scanner/guard/approval*.py"
+      - "src/codex_plugin_scanner/guard/store_native*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   workflow_dispatch:
 
 permissions:

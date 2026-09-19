@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,7 +23,9 @@ else:  # pragma: no cover - runtime compatibility
 
 from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .config_preset_support import apply_named_posture_harness_policy
+from .config_source_io import GuardConfigParentValidator, capture_guard_config
 from .guard_home_state import database_has_custom_extension_state
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
@@ -426,8 +428,6 @@ class GuardConfig:
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
     evidence_retain_days: int = 90
-    # Opt-in caps on retained detailed rows. None keeps the store defaults
-    # (250k each); power users can lower these to bound database growth.
     receipt_detail_limit: int | None = None
     guard_event_limit: int | None = None
     managed_policy_status: str = "absent"
@@ -492,15 +492,18 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     return canonical_home
 
 
-def _read_toml(path: Path) -> dict[str, object]:
-    if not path.is_file():
-        return {}
-    try:
-        with path.open("rb") as handle:
-            payload = tomllib.load(handle)
-        return payload if isinstance(payload, dict) else {}
-    except OSError:
-        return {}
+def _parse_toml(content: bytes) -> dict[str, object]:
+    payload = tomllib.loads(content.decode("utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def _read_toml(path: Path, *, parent_validator: GuardConfigParentValidator | None = None) -> dict[str, object]:
+    captured = capture_guard_config(
+        path,
+        parent_validator=parent_validator,
+        expected_parent=path.parent.absolute() if parent_validator is not None else None,
+    )
+    return _parse_toml(captured.content)
 
 
 def _coerce_loaded_receipt_redaction_level(value: object) -> str:
@@ -514,12 +517,15 @@ def load_guard_config(
     workspace: Path | None = None,
     *,
     managed_policy_state: ManagedPolicyState | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> GuardConfig:
     """Load Guard config from home and workspace overrides."""
 
     guard_home.mkdir(parents=True, exist_ok=True)
-    home_config = _read_toml(guard_home / "config.toml")
-    workspace_config = _load_workspace_guard_config(workspace)
+    home_config = (
+        _read_toml(guard_home / "config.toml") if config_reader is None else config_reader(guard_home / "config.toml")
+    )
+    workspace_config = _load_workspace_guard_config(workspace, config_reader=config_reader)
 
     merged = _merge_config_payload(home_config, workspace_config)
     managed_state = managed_policy_state or load_managed_policy()
@@ -757,19 +763,16 @@ def update_guard_settings(
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
-    explicit_choice = incoming_selected_posture and updated.protection_posture_explicit
-    if current_config.protection_posture != updated.protection_posture or (
-        explicit_choice and not current_config.protection_posture_explicit
-    ):
-        from .protection_events import record_posture_change
-
-        record_posture_change(
-            guard_home,
-            previous=current_config.protection_posture,
-            next_posture=updated.protection_posture,
-            source=event_source,
-            auto=event_source == "auto-revert",
-        )
+    notify_native_policy_mutation(guard_home)
+    record_posture_change_if_needed(
+        guard_home,
+        previous=current_config.protection_posture,
+        next_posture=updated.protection_posture,
+        previous_explicit=current_config.protection_posture_explicit,
+        next_explicit=updated.protection_posture_explicit,
+        selected=incoming_selected_posture,
+        event_source=event_source,
+    )
     return updated
 
 
@@ -791,7 +794,9 @@ def update_guard_update_channel(
     current = _read_toml(guard_home / "config.toml")
     current["update_channel"] = update_channel
     _write_guard_config(guard_home / "config.toml", current)
-    return load_guard_config(guard_home)
+    updated = load_guard_config(guard_home)
+    notify_native_policy_mutation(guard_home)
+    return updated
 
 
 @serialize_guard_settings
@@ -809,10 +814,22 @@ def reset_guard_settings(
         load_guard_config(guard_home).presentation_revision
     )
     _write_guard_config(guard_home / "config.toml", next_payload)
-    return load_guard_config(guard_home)
+    updated = load_guard_config(guard_home)
+    notify_native_policy_mutation(guard_home)
+    return updated
 
 
 def _coerce_editable_setting(key: str, value: object) -> object:
+    if key == "presentation_mode":
+        return coerce_presentation_mode_write(value)
+    if key == "presentation_mode_explicit":
+        if isinstance(value, bool):
+            return value
+        raise ValueError("presentation_mode_explicit must be true or false.")
+    if key == "presentation_schema_version":
+        if value == PRESENTATION_SCHEMA_VERSION:
+            return value
+        raise ValueError("Unsupported presentation schema version.")
     if key == "mode":
         if isinstance(value, str) and value in VALID_GUARD_MODES:
             return value
@@ -1378,12 +1395,15 @@ def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
         raise TimeoutError("guard.db migration timed out")
 
 
-def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
+def _load_workspace_guard_config(
+    workspace: Path | None, *, config_reader: Callable[[Path], dict[str, object]] | None = None
+) -> dict[str, object]:
     if workspace is None:
         return {}
     merged: dict[str, object] = {}
     for filename in WORKSPACE_CONFIG_FILENAMES:
-        merged = _merge_config_payload(merged, _sanitize_workspace_guard_config(_read_toml(workspace / filename)))
+        payload = _read_toml(workspace / filename) if config_reader is None else config_reader(workspace / filename)
+        merged = _merge_config_payload(merged, _sanitize_workspace_guard_config(payload))
     return merged
 
 
