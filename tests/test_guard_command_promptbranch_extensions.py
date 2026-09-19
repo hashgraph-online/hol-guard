@@ -74,6 +74,26 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _PUBLISH_RULE,
     ),
     (
+        "exec bunx @promptbranch/cli publish security-audit --yes",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
+        "xargs -n 1 bunx @promptbranch/cli publish security-audit --yes",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
+        "exec promptbranch.exe publish security-audit --yes",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
+        "xargs -n 1 promptbranch.cmd publish security-audit --yes",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
         "xargs -n 1 promptbranch publish security-audit --yes",
         _PUBLISH_ACTION,
         _PUBLISH_RULE,
@@ -155,6 +175,26 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _SUGGEST_ACTION,
         _SUGGEST_RULE,
     ),
+    (
+        "exec bunx @promptbranch/cli suggest --prompt security-audit --content rewritten",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "xargs -n 1 bunx @promptbranch/cli suggest --prompt security-audit --content rewritten",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "exec promptbranch.exe suggest --prompt security-audit --content rewritten",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "xargs -n 1 promptbranch.cmd suggest --prompt security-audit --content rewritten",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
     ("promptbranch suggest --prompt security-audit", _SUGGEST_ACTION, _SUGGEST_RULE),
     (
         "promptbranch suggest --prompt security-audit --unknown-option",
@@ -170,6 +210,10 @@ PROMPTBRANCH_SUGGEST_FILE_CASES: tuple[str, ...] = (
     "bunx @promptbranch/cli@latest suggest --file rewrite.md --prompt security-audit",
     "zsh -lc 'promptbranch suggest --prompt security-audit --file rewrite.md'",
     "exec promptbranch suggest --prompt security-audit --file rewrite.md",
+    "exec bunx @promptbranch/cli suggest --prompt security-audit --file rewrite.md",
+    "xargs -n 1 bunx @promptbranch/cli suggest --prompt security-audit --file rewrite.md",
+    "exec promptbranch.exe suggest --prompt security-audit --file rewrite.md",
+    "xargs -n 1 promptbranch.cmd suggest --prompt security-audit --file rewrite.md",
     "promptbranch suggest --prompt security-audit --file",
     "promptbranch suggest --prompt security-audit --file rewrite.md --content rewritten",
 )

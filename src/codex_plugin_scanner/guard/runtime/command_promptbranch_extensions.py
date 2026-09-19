@@ -41,7 +41,14 @@ def _promptbranch_matcher(
         ("@promptbranch/cli", subcommand),
         ("@promptbranch/cli@latest", subcommand),
     )
-    launcher_arguments = (("promptbranch", subcommand), *(("npx", *package) for package in package_arguments))
+    launcher_arguments = (
+        *((launcher, subcommand) for launcher in sorted(executable_names("promptbranch"))),
+        *(
+            (launcher, *package)
+            for launcher in sorted(executable_names("npx") | executable_names("bunx"))
+            for package in package_arguments
+        ),
+    )
 
     def _wrapped_matcher(prefix: tuple[str, ...]) -> tuple[ExecutableMatcher, ...]:
         return (
