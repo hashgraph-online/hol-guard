@@ -103,10 +103,19 @@ class ExecutableMatcher(_ExecutableContractBase):
                     self.leading_options_with_values,
                     self.interspersed_flags,
                 )
-            if (
-                self.subcommands
-                and subcommand_arguments[: len(self.subcommands)] != self.subcommands
-                and (
+            if self.subcommands:
+                matched_subcmds = False
+                candidate = subcommand_arguments[: len(self.subcommands)]
+                if candidate == self.subcommands:
+                    matched_subcmds = True
+                elif self.allow_leading_options and len(candidate) == len(self.subcommands):
+                    # For wrapped commands, the first subcommand is the nested executable.
+                    # Normalize it by basename to support path-based wrapper invocation.
+                    norm_first = candidate[0].replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".exe").removesuffix(".cmd")
+                    if (norm_first,) + candidate[1:] == self.subcommands:
+                        matched_subcmds = True
+                
+                if not matched_subcmds and (
                     not self.fail_secure_unknown_options
                     or not matches_subcommands_conservatively(
                         lowered_arguments,
@@ -118,9 +127,8 @@ class ExecutableMatcher(_ExecutableContractBase):
                         ),
                         known_flags=self.interspersed_flags,
                     )
-                )
-            ):
-                continue
+                ):
+                    continue
             if self.required_flags_in_all_arguments:
                 flag_arguments = lowered_arguments
             elif self.subcommands:

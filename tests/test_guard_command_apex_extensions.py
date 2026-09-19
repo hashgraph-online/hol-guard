@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
+    enable_local_admin_extension_layer,
     assert_safe_command_cases,
 )
 
@@ -105,6 +106,16 @@ APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.apex.compress",
     ),
     (
+        "exec -c apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -P 4 apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
         "xargs apex compress ./src",
         "apex compress command",
         "command.apex.compress",
@@ -140,6 +151,9 @@ APEX_SAFE_COMMANDS: tuple[str, ...] = (
     "apex diff a.apx b.apx",
     "apex info",
     "apex benchmark f --full",
+    "exec -c apex compress --help",
+    "xargs -P 4 apex compress --help",
+    "exec /usr/local/bin/apex compress --help",
     "apex compress --help",
     "apex --help",
     "apex compress -h",
@@ -157,3 +171,34 @@ def test_apex_extension_publishes_official_reference() -> None:
     assert extension is not None
     assert extension.reference_urls
     assert all(url.startswith("https://") for url in extension.reference_urls)
+
+
+def test_enabled_apex_mutating_commands_reach_review(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in APEX_REVIEW_CASES:
+        evaluation = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            extension_control_layers=(enable_local_admin_extension_layer("command.apex"),),
+        )
+        assert evaluation.controlling_rule_id == rule_id
+
+
+def test_enabled_apex_preview_and_help_commands_remain_safe(tmp_path: Path) -> None:
+    for command in APEX_SAFE_COMMANDS:
+        evaluation = evaluate_command(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            extension_control_layers=(enable_local_admin_extension_layer("command.apex"),),
+        )
+        assert evaluation.controlling_rule_id not in {
+            "command.apex.compress",
+            "command.apex.decompress",
+            "command.apex.repair",
+        }
+        assert all(
+            not item.effective_evidence
+            for item in evaluation.extension_observations
+            if item.extension.extension_id == "command.apex"
+        )

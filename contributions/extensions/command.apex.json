@@ -11,7 +11,7 @@
     "displayName": "Community"
   },
   "icon": { "kind": "none" },
-  "license": "MIT",
+  "license": "GPLv3",
   "executables": ["apex", "apexcompress"],
   "ecosystemIds": ["apex"],
   "riskClasses": ["destructive_shell"],
