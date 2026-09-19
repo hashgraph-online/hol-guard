@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "a2331872c6f7fa872f8a9e06f919339c78f07b9308b487a051c0652ddaedd377",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
+    "command.apex",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -97,8 +98,11 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 251,
   "permission_examples": {
+    "command.apex.permission.compress": "apex compress",
+    "command.apex.permission.decompress": "apex decompress",
+    "command.apex.permission.repair": "apex repair",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -445,6 +449,9 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.apex.permission.compress",
+    "command.apex.permission.decompress",
+    "command.apex.permission.repair",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -704,8 +711,11 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 237,
   "rule_ids": [
+    "command.apex.compress",
+    "command.apex.decompress",
+    "command.apex.repair",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",
