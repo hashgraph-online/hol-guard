@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 import stat
+from collections.abc import Callable
 from pathlib import Path
 from threading import Condition
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
+from .native_cloud_policy_inputs import NativeCloudPolicyInputs, read_native_cloud_policy_inputs
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
@@ -14,6 +17,9 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_policy import _merge_effective_native_policies, effective_native_policy_v3
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 class NativePolicySnapshotPublisherInputs:
@@ -25,6 +31,10 @@ class NativePolicySnapshotPublisherInputs:
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    store: GuardStore  # pyright: ignore[reportUninitializedInstanceVariable]
+    _wall_clock: Callable[[], float]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _published_cloud_inputs: NativeCloudPolicyInputs  # pyright: ignore[reportUninitializedInstanceVariable]
+    _observed_cloud_inputs: NativeCloudPolicyInputs  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def _current_input_fingerprint(
         self,
@@ -174,18 +184,28 @@ class NativePolicySnapshotPublisherInputs:
             paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
         return tuple(paths)
 
-    def _compiled_effective_policy(self) -> dict[str, object]:
+    def _compiled_effective_policy(self, *, cloud_defaults: dict[str, object] | None = None) -> dict[str, object]:
         """Build the native snapshot input off the synchronous hook path."""
 
-        from .config import load_guard_config
+        from .config import load_guard_config, overlay_synced_guard_policy
 
         with self._condition:
             workspaces = tuple(sorted(self._workspace_paths, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
+        configs = [overlay_synced_guard_policy(config, cloud_defaults) for config in configs]
         return _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
+
+    def _compiled_native_policy(self) -> tuple[dict[str, object], NativeCloudPolicyInputs]:
+        cloud_inputs = read_native_cloud_policy_inputs(self.store, now=self._wall_clock())
+        policy = (
+            self._compiled_effective_policy()
+            if cloud_inputs.defaults is None
+            else self._compiled_effective_policy(cloud_defaults=cloud_inputs.defaults)
+        )
+        return policy, cloud_inputs
 
     @staticmethod
     def _external_policy_paths() -> tuple[Path, ...]:
@@ -219,7 +239,7 @@ class NativePolicySnapshotPublisherInputs:
                     self._acked = False
                     self._condition.notify_all()
         try:
-            effective_policy = self._compiled_effective_policy()
+            effective_policy, cloud_inputs = self._compiled_native_policy()
             # ``_compiled_effective_policy`` carries the raw mode beside the
             # bounded policy so snapshot generation can derive enforce versus
             # observe. ``config_digest`` deliberately covers only the
@@ -232,8 +252,9 @@ class NativePolicySnapshotPublisherInputs:
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
             )
-        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
+        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError, sqlite3.Error):
             current_fingerprint = ("unavailable", "")
+            cloud_inputs = NativeCloudPolicyInputs()
         # Observation is independent of acknowledgment: unchanged inputs must
         # not reset a failed publication's retry backoff on every database write.
         previous_fingerprint = (
@@ -242,7 +263,9 @@ class NativePolicySnapshotPublisherInputs:
             else self._published_policy_fingerprint
         )
         self._observed_policy_fingerprint = current_fingerprint
-        return force_republish or previous_fingerprint != current_fingerprint
+        source_changed = self._observed_cloud_inputs.source_identity != cloud_inputs.source_identity
+        self._observed_cloud_inputs = cloud_inputs
+        return force_republish or source_changed or previous_fingerprint != current_fingerprint
 
     @staticmethod
     def _resolved_workspace(workspace: Path) -> Path:

@@ -19,6 +19,7 @@ from ..package_execution_context import (
     package_execution_context_from_scanner_evidence,
 )
 from ..policy import build_decision_v2
+from ..policy_rule_identity import PolicyRuleIdentity
 from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
@@ -175,7 +176,16 @@ def _protect_approval_item(
         or _optional_string(user_copy_map.get("summary"))
     )
     decision_reason = risk_summary or f"package_supply_chain_{policy_action.replace('-', '_')}"
-    decision_v2 = build_decision_v2(policy_action, reason=decision_reason)
+    decision_v2 = build_decision_v2(
+        policy_action,
+        reason=decision_reason,
+        policy_rule_identity=(
+            PolicyRuleIdentity.from_mapping(supply_chain_evaluation)
+            if not _protect_policy_actions_disagree(response_payload)
+            and supply_chain_evaluation.get("policy_action") == policy_action
+            else None
+        ),
+    )
     decision_v2_payload = decision_v2.to_dict()
     action_envelope = _protect_approval_action_envelope(
         receipt.get("action_envelope_json"),

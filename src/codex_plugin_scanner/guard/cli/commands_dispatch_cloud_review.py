@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import TextIO
 
 from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
+from ..daemon.cloud_review_status_reader import read_cloud_review_worker_observation
+from ..runtime.cloud_review_consent import reuse_or_issue_cloud_review_consent
+from ..runtime.cloud_review_status import cloud_review_status
+from ..runtime.cloud_review_worker_readiness import cloud_review_workers_ready, project_cloud_review_worker_refresh
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
@@ -57,10 +61,14 @@ def apply_connect_time_cloud_review_consent(
         return payload
     if exit_code != 0:
         return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
-    previously_enabled = exact_cloud_review_status(store).get("enabled") is True
+    previously_enabled = False
     try:
-        capability = enable_exact_cloud_review(store, issuer="connect-consent")
-        pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
+        with store.hold_oauth_credential_lock():
+            previously_enabled = exact_cloud_review_status(store).get("enabled") is True
+            capability = reuse_or_issue_cloud_review_consent(
+                store, issue=lambda: enable_exact_cloud_review(store, issuer="connect-consent")
+            )
+            pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     except PendingReviewRequeueError:
         return {
             **payload,
@@ -77,16 +85,16 @@ def apply_connect_time_cloud_review_consent(
     except ExactCloudReviewError as error:
         return {**payload, "cloud_review": {"enabled": False, "reason": error.code}}
     worker = _refresh_cloud_review_worker(guard_home)
-    ready = worker.get("status") == "refreshed"
     return {
         **payload,
         "cloud_review": {
             "capability": capability,
             "capability_enabled": True,
-            "enabled": ready,
-            "reason": None if ready else "worker_restart_required",
+            **project_cloud_review_worker_refresh(worker),
             "pending_requests_requeued": pending_requests_requeued,
             "pending_request_requeue_status": "requeued",
+            "retained_existing_capability": previously_enabled,
+            "recovery_action": "retry_delivery",
             "worker": worker,
         },
     }
@@ -111,19 +119,34 @@ def _run_guard_cloud_review_command(
     previously_enabled = False
     capability: dict[str, object] | None = None
     if command == "status":
-        _emit("cloud-review", exact_cloud_review_status(store), bool(getattr(args, "json", False)))
+        if bool(getattr(args, "support_export", False)):
+            from ..policy_support_export import build_policy_support_export
+
+            _emit("cloud-review", build_policy_support_export(store), bool(getattr(args, "json", False)))
+            return 0
+        worker_observation = read_cloud_review_worker_observation(guard_home)
+        _emit(
+            "cloud-review",
+            cloud_review_status(store, worker_observation=worker_observation),
+            bool(getattr(args, "json", False)),
+        )
         return 0
     try:
         if command == "enable":
-            previously_enabled = exact_cloud_review_status(store).get("enabled") is True
-            capability = enable_exact_cloud_review(
-                store,
-                ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
-            )
-            pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
+            ttl_seconds = int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60
+            with store.hold_oauth_credential_lock():
+                previously_enabled = exact_cloud_review_status(store).get("enabled") is True
+                capability = reuse_or_issue_cloud_review_consent(
+                    store,
+                    issue=lambda: enable_exact_cloud_review(store, ttl_seconds=ttl_seconds),
+                    renew=bool(getattr(args, "renew", False)),
+                    ttl_seconds=ttl_seconds,
+                )
+                pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             status = "enabled"
         elif command == "disable":
-            capability = disable_exact_cloud_review(store)
+            with store.hold_oauth_credential_lock():
+                capability = disable_exact_cloud_review(store)
             status = "disabled"
         else:
             _emit("cloud-review", {"status": "error", "error": "subcommand_required"}, bool(args.json))
@@ -147,6 +170,10 @@ def _run_guard_cloud_review_command(
     except ExactCloudReviewError as error:
         _emit("cloud-review", {"status": "error", "error": error.code}, bool(getattr(args, "json", False)))
         return 2
+    worker = _refresh_cloud_review_worker(guard_home)
+    ready = cloud_review_workers_ready(worker)
+    if command == "enable" and not ready:
+        status = "enabled_worker_retry_required"
     _emit(
         "cloud-review",
         {
@@ -156,15 +183,20 @@ def _run_guard_cloud_review_command(
                 {
                     "pending_requests_requeued": pending_requests_requeued,
                     "pending_request_requeue_status": "requeued",
+                    "capability_enabled": True,
+                    **project_cloud_review_worker_refresh(worker),
+                    "renew_command": "hol-guard cloud-review enable --renew",
+                    "retained_existing_capability": previously_enabled and not bool(getattr(args, "renew", False)),
+                    "recovery_action": "renew_consent" if bool(getattr(args, "renew", False)) else "retry_delivery",
                 }
                 if command == "enable"
                 else {}
             ),
-            "worker": _refresh_cloud_review_worker(guard_home),
+            "worker": worker,
         },
         bool(getattr(args, "json", False)),
     )
-    return 0
+    return 2 if command == "enable" and not ready else 0
 
 
 __all__ = ["_run_guard_cloud_review_command", "apply_connect_time_cloud_review_consent"]

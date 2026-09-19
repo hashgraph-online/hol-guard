@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .memory_pattern_fingerprint import build_exact_shell_command_memory_artifact_id
 from .models import PolicyDecision
+from .policy_bundle_device_selector import device_selector_matches_installation
 from .policy_bundle_parser import (
     POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
     POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
@@ -221,7 +222,8 @@ def _policy_bundle_rule_matches_local_scope(
     if not isinstance(scope, dict):
         return False
     devices = scope.get("devices")
-    if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
+    del device_name
+    if not device_selector_matches_installation(devices, device_id=device_id):
         return False
     environments = scope.get("environments")
     if not isinstance(environments, list) or not environments:

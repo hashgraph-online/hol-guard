@@ -193,6 +193,7 @@ def _cached_snapshot_v3(
     rule_digest: str,
     scope_digest: str,
     renew_after_generation: int | None,
+    requested_expires_at_ms: int | None,
 ) -> tuple[dict[str, object] | None, int | None]:
     cached = api._read_v3_snapshot_cache(guard_home, verifier_key=verifier_key)
     if cached is None:
@@ -215,6 +216,8 @@ def _cached_snapshot_v3(
     current_time_ms = int(time.time() * 1_000)
     expires = cached_snapshot.get("expires_at_ms")
     cache_is_current = isinstance(expires, int) and expires > current_time_ms
+    if cache_is_current and requested_expires_at_ms is not None and expires > requested_expires_at_ms:
+        return None, max(renew_after_generation or 0, cache_generation)
     if cache_is_current and (renew_after_generation is None or cache_generation > renew_after_generation):
         return cached_snapshot, renew_after_generation
     if not cache_is_current:
@@ -343,6 +346,7 @@ def native_policy_snapshot_v3(
                 rule_digest=rule_digest,
                 scope_digest=scope_digest,
                 renew_after_generation=renew_after_generation,
+                requested_expires_at_ms=expires_at_ms,
             )
             if cached_snapshot is not None:
                 return cached_snapshot

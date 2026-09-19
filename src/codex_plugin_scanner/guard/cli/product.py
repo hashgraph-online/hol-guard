@@ -29,6 +29,7 @@ from .connect_flow import (
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
+from .policy_sync_status import cloud_policy_sync_fields
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
@@ -395,11 +396,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "advisory_count": len(advisories),
         "advisory_headline": _advisory_headline(advisories),
         "remote_policy_active": bool(remote_policy),
-        "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
-        "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
-        "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
-        "cloud_policy_sync_error": cached_policy_bundle_error
-        or _optional_string(policy_bundle_last_error.get("reason")),
+        **cloud_policy_sync_fields(policy_bundle, policy_bundle_last_error, sync_summary, cached_policy_bundle_error),
         "alert_preferences_active": bool(alert_preferences),
         "watchlist_enabled": bool(alert_preferences.get("watchlistEnabled")),
         "team_alerts_enabled": bool(alert_preferences.get("teamAlertsEnabled")),

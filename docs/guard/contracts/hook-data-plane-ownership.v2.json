@@ -345,6 +345,8 @@
         "src/codex_plugin_scanner/guard/**/approval*.py",
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_mutation.py",
+        "src/codex_plugin_scanner/guard/native_cloud_policy_capabilities.py",
+        "src/codex_plugin_scanner/guard/native_cloud_policy_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
         "src/codex_plugin_scanner/guard/store_approvals.py",

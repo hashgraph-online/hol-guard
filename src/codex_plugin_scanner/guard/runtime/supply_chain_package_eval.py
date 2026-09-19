@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..policy_rule_identity import PolicyRuleIdentity
+from .package_user_copy import SupplyChainUserCopy as SupplyChainUserCopy
+
 if TYPE_CHECKING:
     import tomllib
 else:  # pragma: no cover - runtime compatibility
@@ -159,24 +162,6 @@ _DECISION_TO_GUARD_ACTION: dict[str, GuardAction] = {
 
 
 @dataclass(frozen=True, slots=True)
-class SupplyChainUserCopy:
-    title: str
-    summary: str
-    next_step: str | None
-    dashboard_url: str | None
-    harness_message: str
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "title": self.title,
-            "summary": self.summary,
-            "next_step": self.next_step,
-            "dashboard_url": self.dashboard_url,
-            "harness_message": self.harness_message,
-        }
-
-
-@dataclass(frozen=True, slots=True)
 class PackageRequestEvaluation:
     decision: str
     policy_action: GuardAction
@@ -198,6 +183,7 @@ class PackageRequestEvaluation:
     evidence_ids: tuple[str, ...] = ()
     external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
     external_archive_source_hashes: tuple[str, ...] = ()
+    policy_rule_identity: PolicyRuleIdentity | None = None
 
     def to_cache_dict(self) -> dict[str, object]:
         return {
@@ -219,6 +205,8 @@ class PackageRequestEvaluation:
 
     def to_dict(self) -> dict[str, object]:
         payload = self.to_cache_dict()
+        if self.policy_rule_identity is not None:
+            payload.update(self.policy_rule_identity.to_dict())
         payload["package_intent_hash"] = self.package_intent_hash
         payload["policy_version"] = self.policy_version
         payload["bundle_version"] = self.bundle_version

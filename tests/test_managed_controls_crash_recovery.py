@@ -36,8 +36,9 @@ def _run_activation_crash_child(guard_home: Path, stage: str) -> None:
             _store: GuardStore,
             connection: sqlite3.Connection,
             rows: Sequence[tuple[object, ...]],
+            **kwargs: object,
         ) -> None:
-            original_replace(connection, rows)
+            original_replace(connection, rows, **kwargs)
             os._exit(91)
 
         store._replace_remote_policy_rows_locked = MethodType(  # pyright: ignore[reportPrivateUsage]

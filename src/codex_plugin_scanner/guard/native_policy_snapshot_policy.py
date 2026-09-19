@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -46,8 +47,10 @@ def _normalize_scope_text_v3(value: str) -> str:
         while len(normalized) > 3 and normalized.endswith("\\"):
             normalized = normalized[:-1]
         return normalized.casefold()
-    if value.startswith("/private/"):
-        return value[len("/private") :]
+    if sys.platform in {"darwin", "ios"} and value.startswith("/private/"):
+        value = value[len("/private") :]
+    while len(value) > 1 and value.endswith("/"):
+        value = value[:-1]
     return value
 
 

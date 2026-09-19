@@ -11,6 +11,7 @@ from .native_policy_snapshot_constants import (
     _MAX_ACK_BYTES,
     _PUBLISH_TIMEOUT_SECONDS,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
+    POLICY_SNAPSHOT_MAX_EXPIRY_MS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
@@ -79,6 +80,7 @@ def _publish_snapshot_v3(
     master_key: bytes,
     client: Callable[..., bytes | None],
     renew_after_generation: int | None,
+    authority_expires_at_ms: int | None = None,
 ) -> tuple[dict[str, object], int]:
     """Materialize, push, and authenticate a snapshot, including one recovery retry."""
 
@@ -87,13 +89,20 @@ def _publish_snapshot_v3(
 
     recovery_attempted = False
     while True:
+        issued_at_ms = int(publisher._wall_clock() * 1_000)
+        expires_at_ms = (
+            None
+            if authority_expires_at_ms is None
+            else min(authority_expires_at_ms, issued_at_ms + POLICY_SNAPSHOT_MAX_EXPIRY_MS)
+        )
         snapshot = native_policy_snapshot_v3(
             config=config,
             guard_home=publisher.guard_home,
             runtime_identity=identity.sha256,
             rule_digest=capabilities.rule_digest,
             policy_integrity_key=master_key,
-            issued_at_ms=int(publisher._wall_clock() * 1_000),
+            issued_at_ms=issued_at_ms,
+            expires_at_ms=expires_at_ms,
             deadline_monotonic=publisher._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS,
             renew_after_generation=renew_after_generation,
         )

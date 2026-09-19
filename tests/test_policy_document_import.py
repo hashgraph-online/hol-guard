@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.policy_document_io import (
     build_policy_document_from_rows,
     compile_policy_document,
 )
+from codex_plugin_scanner.guard.policy_document_types import PolicyCompilationError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -207,6 +208,7 @@ def test_replace_removes_only_prior_yaml_imports(tmp_path: Path) -> None:
     plan = store.plan_policy_document_import(
         compile_policy_document(second),
         mode="replace",
+        document=second,
     )
     assert plan.additions == ("rule-2",)
     assert plan.replacements == ()
@@ -247,7 +249,7 @@ def test_merge_preserves_cloud_policy_with_the_same_selector(tmp_path: Path) -> 
     )
     document = _document(rule_ids=("rule-1",))
 
-    plan = store.plan_policy_document_import(compile_policy_document(document), mode="merge")
+    plan = store.plan_policy_document_import(compile_policy_document(document), mode="merge", document=document)
     result = store.import_policy_document(
         document,
         compile_policy_document(document),
@@ -322,14 +324,8 @@ def test_duplicate_compiled_selector_is_rejected_before_writes(tmp_path: Path) -
     store = GuardStore(tmp_path / "guard")
     document = _document(rule_ids=("rule-1", "rule-1"))
 
-    with pytest.raises(ValueError, match="duplicate_policy_selector"):
-        store.import_policy_document(
-            document,
-            compile_policy_document(document),
-            mode="merge",
-            now="2026-07-16T12:00:00Z",
-            approval_gate_grant=None,
-        )
+    with pytest.raises(PolicyCompilationError, match="duplicate_policy_rule_id"):
+        compile_policy_document(document)
 
     assert _rows(store) == []
 
@@ -367,3 +363,65 @@ def test_privileged_export_preserves_imported_rule_identity_and_semantics(tmp_pa
         )
 
     assert [semantic_row(row) for row in round_trip_rows] == [semantic_row(row) for row in original_rows]
+
+
+def _portable_rules(*effects: str) -> list[dict[str, object]]:
+    return [
+        {
+            "id": f"rule-{effect}-{index}",
+            "enabled": True,
+            "match": {"artifacts": [f"skill:hol/{effect}-{index}"]},
+            "effect": effect,
+            "lifetime": {"mode": "permanent"},
+            "provenance": {"source": "cli-import", "createdAt": "2026-07-16T12:00:00Z"},
+            "x-hol-local": {"harness": "codex", "scope": "artifact"},
+        }
+        for index, effect in enumerate(effects)
+    ]
+
+
+def test_compile_projects_review_and_inert_ignore_without_dropping_valid_rules() -> None:
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "mixed-effects", "name": "Effects", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": _portable_rules("allow", "ignore", "review", "block"),
+            },
+        }
+    )
+
+    compiled = compile_policy_document(document)
+
+    assert [row.decision.action for row in compiled] == ["allow", "review", "block"]
+    assert "allow" in {row.decision.action for row in compiled}
+    assert all(row.decision.action != "allow" or row.rule_id == "rule-allow-0" for row in compiled)
+
+
+def test_compile_rejects_device_selectors_before_publication() -> None:
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "device-policy", "name": "Devices", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": [
+                    {
+                        "id": "device-only",
+                        "enabled": True,
+                        "match": {"artifacts": ["skill:hol/x"], "devices": ["other-device"]},
+                        "effect": "allow",
+                        "lifetime": {"mode": "permanent"},
+                        "provenance": {"source": "cli-import", "createdAt": "2026-07-16T12:00:00Z"},
+                    }
+                ],
+            },
+        }
+    )
+
+    with pytest.raises(Exception) as error:
+        compile_policy_document(document)
+    assert getattr(error.value, "code", None) == "unsupported_policy_device_selector"

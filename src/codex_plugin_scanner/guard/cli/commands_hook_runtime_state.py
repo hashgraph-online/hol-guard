@@ -16,6 +16,7 @@ from dataclasses import dataclass, field, replace
 from ..action_lattice import normalize_guard_action
 from ..incident import build_incident_context
 from ..models import GuardReceipt
+from ..policy_rule_identity import PolicyRuleIdentity
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ..runtime.signals import RiskSignalV2
 from .commands_support_command_activity import (
@@ -93,6 +94,10 @@ def set_runtime_artifact_hook_final_action(
             else normalized_action
         ),
         signals=state.decision_signals,
+        policy_rule_identity=(
+            PolicyRuleIdentity.from_mapping(state.decision_v2_payload)
+            if previous_action == normalized_action and approval_source is None else None
+        ),
     ).to_dict()
     state.decision_v2_payload = decision_v2_payload
     state.response_payload["decision_v2_json"] = decision_v2_payload

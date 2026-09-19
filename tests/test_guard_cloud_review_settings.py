@@ -54,7 +54,7 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     assert disabled["connected"] is True
 
 
-def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path: Path) -> None:
+def test_status_counts_only_current_binding_and_keeps_unbound_delivery_unknown(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     add_review_request(store, review_request("current-workspace"))
     add_review_request(store, review_request("other-workspace"))
@@ -72,7 +72,7 @@ def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path:
     )
     result = cloud_review_settings_status(alternate)
     assert result["last_synced_at"] is None
-    assert result["delivery_state"] == "error"
+    assert result["delivery_state"] == "unknown"
     assert result["pending_uploads"] == 0
 
 

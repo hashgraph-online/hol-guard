@@ -71,11 +71,11 @@ class StoreReceiptsRuntimeMixin:
         self,
         receipt: GuardReceipt,
         *,
-        action_envelope: GuardActionEnvelope | None = None,
+        action_envelope: GuardActionEnvelope | dict[str, object] | None = None,
     ) -> None:
         canonical_decision = canonical_receipt_decision(
             receipt.policy_decision,
-            action_envelope.to_dict() if action_envelope is not None else None,
+            action_envelope.to_dict() if isinstance(action_envelope, GuardActionEnvelope) else action_envelope,
             reject_contradiction=True,
         )
         redacted_action_envelope: dict[str, object] | None = None
@@ -129,10 +129,7 @@ class StoreReceiptsRuntimeMixin:
                 redacted_action_envelope,
                 reject_contradiction=False,
             ).action_envelope_json
-            canonical_receipt = replace(
-                receipt,
-                policy_decision=final_policy_decision,
-            )
+            canonical_receipt = replace(receipt, policy_decision=final_policy_decision)
             connection.execute(
                 """
                 insert into runtime_receipts (

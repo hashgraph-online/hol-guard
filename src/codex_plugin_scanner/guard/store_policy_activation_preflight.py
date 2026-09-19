@@ -40,7 +40,10 @@ def encoded_policy_activation_payloads(
     }
     if update_last_good:
         state_payloads["policy_bundle_last_good"] = dict(policy_bundle)
-    return None, {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()}
+    try:
+        return None, {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()}
+    except (TypeError, ValueError):
+        return "policy_bundle_activation_payload_unencodable", {}
 
 
 def continuity_activation_rejection(

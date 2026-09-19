@@ -107,6 +107,7 @@ def remote_approval(
     authority: str | None = None,
     reviewer_role: str = "owner",
     step_up_challenge_id: str | None = None,
+    step_up_expires_at: datetime | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     assert isinstance(request, dict)
@@ -118,6 +119,7 @@ def remote_approval(
     expires_at = expires_at or issued_at + timedelta(minutes=5)
     if authority == "workspace_admin_mfa":
         capability_id = "ab" * 32
+        step_up_expires_at = step_up_expires_at or expires_at
     else:
         assert isinstance(advertisement, dict)
         capability_id = advertisement["capabilityId"]
@@ -154,6 +156,8 @@ def remote_approval(
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": claim["workspaceId"],
     }
+    if step_up_expires_at is not None:
+        envelope["stepUpExpiresAt"] = step_up_expires_at.isoformat()
     if authority is not None:
         envelope["authority"] = authority
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)

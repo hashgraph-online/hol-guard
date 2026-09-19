@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from datetime import datetime, timezone
 from typing import Literal
 
 from .contract_validation import canonical_uuid, positive_integer
+from .policy_bundle_ack_contract import normalized_observed_at
+from .policy_bundle_generic_ack import generic_policy_bundle_acknowledgement
 from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
@@ -206,7 +207,18 @@ def policy_bundle_acknowledgement_payload(
             "status": "synced",
         }
     if delivery is None:
-        return {}
+        if policy_bundle_has_extension_semantics(policy_bundle):
+            return {}
+        payload = policy_bundle.get("payload")
+        if isinstance(payload, dict) and "x-hol-custom-extension-continuity" in payload:
+            return {}
+        return generic_policy_bundle_acknowledgement(
+            device_id=device_id,
+            policy_bundle=policy_bundle,
+            synced_at=synced_at,
+            applied=status == "applied",
+            previous=previous,
+        )
     if applied_extension_authority_revision is None or applied_effective_projection_digest is None:
         return {}
     identity_fields = tuple(_DELIVERY_KEYS)
@@ -229,23 +241,13 @@ def policy_bundle_acknowledgement_payload(
         **candidate_identity,
         "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
         "status": resolved_status,
-        "observedAt": _normalized_observed_at(synced_at),
+        "observedAt": normalized_observed_at(synced_at),
         "errorCode": None,
     }
     validated, error = validated_policy_bundle_v2_acknowledgement(acknowledgement, previous=matching_previous)
     if validated is None:
         raise ValueError(error or "invalid_policy_bundle_acknowledgement")
     return validated
-
-
-def _normalized_observed_at(value: str) -> str:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return value
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def effective_policy_bundle_acknowledgement(
@@ -257,6 +259,7 @@ def effective_policy_bundle_acknowledgement(
     validated_delivery: dict[str, object] | None,
     stored_acknowledgement: object,
     synced_at: str,
+    applied: bool | None = None,
 ) -> dict[str, object]:
     """Select the exact acknowledgement for a newly activated or retained bundle."""
 
@@ -278,11 +281,17 @@ def effective_policy_bundle_acknowledgement(
         delivered_device_id = validated_delivery.get("deviceId")
         if isinstance(delivered_device_id, str) and delivered_device_id:
             acknowledgement_device_id = delivered_device_id
+    generic_applied = activating_new_bundle and not policy_bundle_has_extension_semantics(effective_policy_bundle)
+    if applied is False:
+        generic_applied = False
+    elif applied is True:
+        generic_applied = activating_new_bundle and not policy_bundle_has_extension_semantics(effective_policy_bundle)
     return policy_bundle_acknowledgement_payload(
         device_id=acknowledgement_device_id,
         device_name=device_name,
         policy_bundle=effective_policy_bundle,
         synced_at=synced_at,
+        status="applied" if generic_applied or validated_delivery is not None else "validated",
         previous=previous,
         delivery=validated_delivery,
     )

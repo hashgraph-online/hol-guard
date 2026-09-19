@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from .native_cloud_policy_inputs import NativeCloudPolicyInputs, read_native_cloud_policy_inputs
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_MAX_SECONDS,
     _PUBLISH_RETRY_SECONDS,
@@ -68,6 +69,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._published_config_digest: str | None = None
         self._published_policy_fingerprint: tuple[str, str] | None = None
         self._observed_policy_fingerprint: tuple[str, str] | None = None
+        self._published_cloud_inputs = NativeCloudPolicyInputs()
+        self._observed_cloud_inputs = NativeCloudPolicyInputs()
         self._renewal_due_monotonic: float | None = None
         self._renewal_after_generation: int | None = None
         self._retry_not_before_monotonic: float | None = None
@@ -385,7 +388,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             context = self._publication_context()
             if context is None:
                 return
-            identity, capabilities, master_key, config, client = context
+            identity, capabilities, master_key, config, client, cloud_inputs = context
             resident_fingerprint_before = self._current_input_fingerprint()[1]
             try:
                 snapshot, resident_generation = _publish_snapshot_v3(
@@ -396,6 +399,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     master_key=master_key,
                     client=client,
                     renew_after_generation=renew_after_generation,
+                    authority_expires_at_ms=cloud_inputs.expires_at_ms,
                 )
             finally:
                 # The master is only an ephemeral input to derivation/signing;
@@ -403,6 +407,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 master_key = None
             resident_fingerprint = self._current_input_fingerprint()[1]
             resident_directory_fingerprint = self._resident_directory_fingerprint()
+            current_cloud_inputs = read_native_cloud_policy_inputs(self.store, now=self._wall_clock())
+            if current_cloud_inputs.source_identity != cloud_inputs.source_identity:
+                raise NativePolicySnapshotError("native_cloud_policy_changed_during_publish")
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
@@ -436,6 +443,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     cast(str, snapshot["mode"]),
                 )
                 self._observed_policy_fingerprint = self._published_policy_fingerprint
+                self._published_cloud_inputs = cloud_inputs
+                self._observed_cloud_inputs = cloud_inputs
                 self._acked = True
                 self._last_error = None
                 self._renewal_after_generation = None
@@ -444,13 +453,16 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._schedule_renewal_locked(snapshot)
                 self._condition.notify_all()
         except NativePolicySnapshotError as error:
+            if str(error).startswith("native_cloud_policy_"):
+                with self._condition:
+                    self._acked = False
             self._record_error(str(error))
         except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:
             self._record_error(type(error).__name__)
 
     def _publication_context(
         self,
-    ) -> tuple[Any, Any, bytes, Mapping[str, object], Callable[..., bytes | None]] | None:
+    ) -> tuple[Any, Any, bytes, Mapping[str, object], Callable[..., bytes | None], NativeCloudPolicyInputs] | None:
         status_provider = self._status_provider
         if status_provider is None:
             from .native_runtime import native_runtime_status
@@ -488,13 +500,13 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             ):
                 self._record_error("native_policy_snapshot_integrity_key_unavailable")
                 return None
-            config = self._compiled_effective_policy()
+            config, cloud_inputs = self._compiled_native_policy()
             client = self._client_request
             if client is None:
                 from .native_resident_client import native_resident_client_request
 
                 client = native_resident_client_request
-            return identity, capabilities, material[0], config, client
+            return identity, capabilities, material[0], config, client, cloud_inputs
         finally:
             material = None
 

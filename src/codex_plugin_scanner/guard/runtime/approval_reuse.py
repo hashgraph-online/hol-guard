@@ -11,7 +11,8 @@ keeps both exceptions explicit and independently testable.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from ..action_lattice import (
@@ -21,6 +22,7 @@ from ..action_lattice import (
     normalize_guard_action_result,
 )
 from ..models import GuardAction
+from ..policy_rule_identity import PolicyRuleIdentity
 
 ApprovalReuseStatus = Literal["accepted", "rejected", "not-applicable"]
 ApprovalReuseValidationFailure = Literal[
@@ -67,6 +69,7 @@ class ApprovalReuseDecision:
     original_saved_action: str | None = None
     original_current_type: str = "str"
     original_saved_type: str | None = None
+    policy_rule_identity: PolicyRuleIdentity | None = None
 
     @property
     def accepted(self) -> bool:
@@ -88,7 +91,32 @@ class ApprovalReuseDecision:
             "original_saved_action": self.original_saved_action,
             "original_current_type": self.original_current_type,
             "original_saved_type": self.original_saved_type,
+            **self.policy_rule_evidence(self.action),
         }
+
+    def policy_rule_evidence(self, final_action: GuardAction, *, overridden: bool = False) -> dict[str, str]:
+        if overridden or final_action != self.action or self.policy_rule_identity is None:
+            return {}
+        return self.policy_rule_identity.to_dict()
+
+
+def bind_saved_policy_identity(
+    reuse: ApprovalReuseDecision,
+    selected: Mapping[str, object] | None,
+    *,
+    validation_reason: ApprovalReuseValidationFailure | None,
+) -> ApprovalReuseDecision:
+    """Retain provenance only when an authenticated selected row changes the outcome."""
+    if (
+        validation_reason is not None
+        or reuse.current_normalization_reason_code is not None
+        or reuse.saved_normalization_reason_code is not None
+        or reuse.saved_action != reuse.action
+        or reuse.current_action == reuse.action
+        or selected is None
+    ):
+        return reuse
+    return replace(reuse, policy_rule_identity=PolicyRuleIdentity.from_selected_row(selected))
 
 
 def evaluate_approval_reuse(

@@ -63,7 +63,7 @@ def compose_control_layers(layers: Iterable[ExtensionControlLayer]) -> ComposedE
             else:
                 states[control.target] = ControlState.ENABLED
     controls = tuple(ExtensionControl(target, states[target]) for target in sorted(states))
-    return ComposedExtensionControls(lockdown, controls, tuple(sorted(failures)))
+    return ComposedExtensionControls(lockdown, controls, tuple(sorted(failures, key=_failure_sort_key)))
 
 
 def resolve_extension_controls(
@@ -208,6 +208,10 @@ def _permission_closure(
     return resolved
 
 
+def _failure_sort_key(failure: ControlResolverFailure) -> tuple[str, str]:
+    return failure.code.value, failure.layer_kind.value if failure.layer_kind is not None else ""
+
+
 def _resolution(
     composed: ComposedExtensionControls,
     failures: set[ControlResolverFailure],
@@ -215,7 +219,7 @@ def _resolution(
     *,
     reason: str | None,
 ) -> ControlResolution:
-    ordered_failures = tuple(sorted(failures))
+    ordered_failures = tuple(sorted(failures, key=_failure_sort_key))
     reason_code = _FAILURE_REASON if ordered_failures else reason
     if reason_code is None:
         return ControlResolution(composed, False, (), ordered_failures, observations)

@@ -104,6 +104,7 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
         guard_home=tmp_path,
         context=SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path / "home"),
         store=SimpleNamespace(
+            get_sync_payload=lambda _key: None,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,
@@ -156,6 +157,7 @@ def test_desktop_preflight_skips_daemon_session(monkeypatch, tmp_path: Path) -> 
         guard_home=tmp_path,
         context=SimpleNamespace(guard_home=tmp_path),
         store=SimpleNamespace(
+            get_sync_payload=lambda _key: None,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,

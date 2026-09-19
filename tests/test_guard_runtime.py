@@ -88,6 +88,7 @@ from codex_plugin_scanner.guard.store import (
     runtime_tool_action_exact_match_context,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests.policy_bundle_activation_helpers import activate_signed_policy_bundle
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
@@ -253,6 +254,7 @@ def _cache_signed_test_policy_bundle(
     bundle_version: str = "policy-2026-01-01.1",
     issued_at: str = "2026-01-01T00:00:00Z",
     expires_at: str | None = None,
+    activate: bool = False,
 ) -> None:
     workspace_id = "workspace-1"
     store.set_sync_payload("oauth_local_credentials", {"workspace_id": workspace_id}, "2026-01-01T00:00:00Z")
@@ -261,16 +263,21 @@ def _cache_signed_test_policy_bundle(
         policy_bundle_test_keyring(workspace_id=workspace_id),
         "2026-01-01T00:00:00Z",
     )
-    store.set_sync_payload(
-        "policy_bundle",
-        _signed_test_policy_bundle(
-            rules,
-            bundle_version=bundle_version,
-            issued_at=issued_at,
-            expires_at=expires_at,
-        ),
-        "2026-01-01T00:00:00Z",
+    bundle = _signed_test_policy_bundle(
+        rules,
+        bundle_version=bundle_version,
+        issued_at=issued_at,
+        expires_at=expires_at,
     )
+    if activate:
+        activate_signed_policy_bundle(
+            store,
+            bundle,
+            keyring=policy_bundle_test_keyring(workspace_id=workspace_id),
+            now=issued_at,
+        )
+    else:
+        store.set_sync_payload("policy_bundle", bundle, "2026-01-01T00:00:00Z")
 
 
 def _request_header(request: urllib.request.Request, name: str) -> str | None:
@@ -4060,6 +4067,11 @@ clearer UX and an implementation plan with technical references.
                 "policy_document_versions": [
                     "guard.hashgraphonline.com/v1alpha1",
                 ],
+                "selected_enforcement_lane": "legacy",
+                "advertised_canonical_capabilities": [],
+                "effective_canonical_capabilities": [],
+                "canonical_policy_enforcement_enabled": False,
+                "canonical_rollout_percentage": 0,
                 "yaml_import": False,
             }
             return {
@@ -22302,13 +22314,7 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
         ],
     }
 
-    decisions = guard_runner_module._build_policy_bundle_decisions(
-        bundle,
-        device_id=guard_runner_module._guard_device_metadata(store)[0],
-        device_name="MacBook Pro",
-    )
-    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
-    _cache_signed_test_policy_bundle(store, bundle["rules"])
+    _cache_signed_test_policy_bundle(store, bundle["rules"], activate=True)
 
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
     assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
@@ -22360,17 +22366,12 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         ],
     }
 
-    decisions = guard_runner_module._build_policy_bundle_decisions(
-        bundle,
-        device_id=guard_runner_module._guard_device_metadata(store)[0],
-        device_name="MacBook Pro",
-    )
-    store.replace_remote_policies(decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
     _cache_signed_test_policy_bundle(
         store,
         bundle["rules"],
         bundle_version=str(bundle["bundleVersion"]),
         expires_at=str(bundle["expiresAt"]),
+        activate=True,
     )
 
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a) == "allow"
@@ -22653,21 +22654,6 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="harness",
-                action="allow",
-                artifact_id="family:package-request",
-                source="policy-bundle",
-                owner="signed-package-allow",
-                reason="Test-only signed policy decision.",
-            )
-        ],
-        "2026-04-19T00:00:00Z",
-        remote_write_authorized=True,
-    )
     policy_bundle = sign_policy_bundle(
         {
             "contractVersion": "guard-policy-bundle.v1",
@@ -22698,6 +22684,12 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
             ],
             "acknowledgements": [],
         }
+    )
+    activate_signed_policy_bundle(
+        store,
+        policy_bundle,
+        keyring=policy_bundle_test_keyring(),
+        now="2026-04-19T00:00:00Z",
     )
     digest_bundle = dict(policy_bundle)
     digest_bundle["verifier"] = {
@@ -22763,15 +22755,11 @@ def test_policy_bundle_replacement_invalidates_prevalidated_allow_claim(tmp_path
         },
     }
     authorized_bundle = _signed_test_policy_bundle([allow_rule])
-    store.set_sync_payload("policy_bundle", authorized_bundle, "2026-01-01T00:00:00Z")
-    store.replace_remote_policies(
-        guard_runner_module._build_policy_bundle_decisions(
-            authorized_bundle,
-            device_id=guard_runner_module._guard_device_metadata(store)[0],
-            device_name=guard_runner_module._guard_device_metadata(store)[1],
-        ),
-        "2026-01-01T00:00:00Z",
-        remote_write_authorized=True,
+    activate_signed_policy_bundle(
+        store,
+        authorized_bundle,
+        keyring=policy_bundle_test_keyring(workspace_id="workspace-1"),
+        now="2026-01-01T00:00:00Z",
     )
     artifact_id = "codex:project:package-request:claim-race"
     lookup = store.resolve_policy_decision_lookup(
@@ -22812,25 +22800,12 @@ def test_interrupted_policy_bundle_replacement_cannot_reuse_prior_materialized_a
         "matcherFamilies": ["package-request"],
         "scope": {"harnesses": ["codex"], "ecosystems": []},
     }
-    _cache_signed_test_policy_bundle(store, [old_rule])
-    device_metadata = store.get_device_metadata()
-    old_bundle = store.get_sync_payload("policy_bundle")
-    assert isinstance(old_bundle, dict)
-    old_decisions = guard_runner_module._build_policy_bundle_decisions(
-        old_bundle,
-        device_id=device_metadata["installation_id"],
-        device_name=device_metadata["device_label"],
-    )
-    store.replace_remote_policies(
-        old_decisions,
-        "2026-01-01T00:00:00Z",
-        remote_write_authorized=True,
-    )
+    _cache_signed_test_policy_bundle(store, [old_rule], activate=True)
     artifact_id = "codex:project:package-request:test"
     assert store.resolve_policy("codex", artifact_id, "sha256:test") == "allow"
 
-    # Both sync paths persist the newly verified bundle before replacing its
-    # materialized rows. Simulate a process interruption at exactly that point.
+    # Simulate an interrupted legacy cache update. Current publication is atomic,
+    # and a mismatched cached source must never authorize older materialized rows.
     replacement_bundle = _signed_test_policy_bundle(
         [],
         bundle_version="policy-2026-01-02.1",
@@ -23476,16 +23451,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
             }
         ],
     }
-    store.replace_remote_policies(
-        guard_runner_module._build_policy_bundle_decisions(
-            bundle,
-            device_id=guard_runner_module._guard_device_metadata(store)[0],
-            device_name="MacBook Pro",
-        ),
-        "2026-06-05T13:31:00+00:00",
-        remote_write_authorized=True,
-    )
-    _cache_signed_test_policy_bundle(store, bundle["rules"])
+    _cache_signed_test_policy_bundle(store, bundle["rules"], activate=True)
 
     order: list[str] = []
     original_resolve_policy = store.resolve_policy_decision_lookup_with_memory_pattern
