@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "4393091ccef5132be9971755272494815120311af314286717935e75a50c373c",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -92,12 +92,13 @@
     "command.storage.google-cloud",
     "command.storage.minio",
     "command.system",
+    "command.tui-runner",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 249,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -212,25 +213,25 @@
     "command.git.permission.unsafe-read": "git diff --output",
     "command.git.permission.unverified-fetch": "git fetch origin",
     "command.git.permission.worktree": "git worktree",
+    "command.github.permission.access-remote": "gh repo edit owner/repo --visibility private",
+    "command.github.permission.content-remote": "gh issue close 123",
+    "command.github.permission.delete-remote": "gh repo delete owner/repo",
+    "command.github.permission.force-remote": "gh repo sync owner/repo --force",
+    "command.github.permission.maintain-remote": "gh pr ready 123",
+    "command.github.permission.merge-admin": "gh pr merge 123 --admin",
+    "command.github.permission.merge-remote": "gh pr merge 123 --merge",
+    "command.github.permission.mutate-remote": "gh api -X POST /repos/OWNER/REPO/dispatches",
+    "command.github.permission.propose-remote": "gh pr create --title \"Fix login\" --body \"Summary\"",
+    "command.github.permission.publish-remote": "gh release create v1.2.3",
     "command.github.permission.read-local": "gh auth status",
     "command.github.permission.read-remote": "gh pr view 123",
-    "command.github.permission.propose-remote": "gh pr create --title \"Fix login\" --body \"Summary\"",
     "command.github.permission.routine-merge-remote": "gh pr merge 123 --squash",
     "command.github.permission.routine-review-thread-remote": "gh api graphql -f query=resolveReviewThread",
     "command.github.permission.routine-workflow-remote": "gh run rerun 1234567890 --failed",
-    "command.github.permission.write-local": "gh repo set-default owner/repo",
-    "command.github.permission.maintain-remote": "gh pr ready 123",
-    "command.github.permission.content-remote": "gh issue close 123",
-    "command.github.permission.merge-remote": "gh pr merge 123 --merge",
-    "command.github.permission.merge-admin": "gh pr merge 123 --admin",
-    "command.github.permission.publish-remote": "gh release create v1.2.3",
-    "command.github.permission.workflow-remote": "gh workflow run deploy.yml",
-    "command.github.permission.force-remote": "gh repo sync owner/repo --force",
-    "command.github.permission.delete-remote": "gh repo delete owner/repo",
     "command.github.permission.secret-remote": "gh secret set DEPLOY_TOKEN",
-    "command.github.permission.access-remote": "gh repo edit owner/repo --visibility private",
-    "command.github.permission.mutate-remote": "gh api -X POST /repos/OWNER/REPO/dispatches",
     "command.github.permission.unknown": "gh extension run custom-tool",
+    "command.github.permission.workflow-remote": "gh workflow run deploy.yml",
+    "command.github.permission.write-local": "gh repo set-default owner/repo",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
@@ -346,6 +347,7 @@
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
     "command.system.permission.disk-or-power-mutation": "halt",
+    "command.tui-runner.permission.reconfigure": "tui-runner --reconfigure",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
   "permission_families": {
@@ -406,9 +408,9 @@
     "command.git.permission.unsafe-read": "git-workspace",
     "command.git.permission.unverified-fetch": "git-remote",
     "command.git.permission.worktree": "git-workspace",
-    "command.github.permission.routine-merge-remote": "gh-pr-merge",
-    "command.github.permission.merge-remote": "gh-pr-merge",
     "command.github.permission.merge-admin": "gh-pr-merge",
+    "command.github.permission.merge-remote": "gh-pr-merge",
+    "command.github.permission.routine-merge-remote": "gh-pr-merge",
     "command.storage.aws-s3.permission.access-control": "aws-s3",
     "command.storage.aws-s3.permission.bucket-configuration": "aws-s3",
     "command.storage.aws-s3.permission.cp": "aws-s3",
@@ -692,6 +694,7 @@
     "command.storage.minio.permission.mirror",
     "command.storage.minio.permission.mv",
     "command.system.permission.disk-or-power-mutation",
+    "command.tui-runner.permission.reconfigure",
     "command.windows.permission.destructive-storage"
   ],
   "preview_shape": [
@@ -704,7 +707,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -939,6 +942,7 @@
     "command.storage.minio.cat",
     "command.storage.minio.mirror",
     "command.system.disk-or-power-mutation",
+    "command.tui-runner.reconfigure",
     "command.windows.destructive-storage"
   ],
   "schema_version": "guard.extension-control-center.baseline.v1"

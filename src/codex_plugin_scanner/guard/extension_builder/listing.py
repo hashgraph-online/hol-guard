@@ -158,6 +158,8 @@ def category_for_extension(extension_id: str) -> str:
         return "managed-services"
     if extension_id.startswith("command.package."):
         return "package-supply-chain"
-    if extension_id == "command.skill-sunset" or extension_id.startswith(("command.mcp-", "mcp.")):
+    if extension_id in {"command.skill-sunset", "command.tui-runner"} or extension_id.startswith(
+        ("command.mcp-", "mcp.")
+    ):
         return "specialized-tools"
     return "other"

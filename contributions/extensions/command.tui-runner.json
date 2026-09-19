@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.tui-runner",
+  "version": "1.0.0",
+  "name": "TUI Runner",
+  "description": "Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.tui-runner",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0E7490" },
+  "executables": ["tui-runner"],
+  "ecosystemIds": ["tui-runner"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": ["tui-runner forced reconfiguration command"],
+  "saferAlternatives": [
+    "Review the saved tui.config.json before forcing a reconfiguration that will replace it."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_tui_runner_extensions"
+  }
+}
