@@ -337,14 +337,19 @@ class GuardPolicyDocument:
         spec = _mapping(value["spec"])
         defaults = _mapping(spec["defaults"])
         rules = _sequence(spec["rules"])
-        rollout_state = spec.get("rolloutState")
+        if "rolloutState" not in spec:
+            rollout_state = None
+        else:
+            rollout_state = spec["rolloutState"]
+            if not isinstance(rollout_state, str):
+                raise TypeError("validated_policy_document_shape")
         return cls(
             api_version=str(value["apiVersion"]),
             kind=str(value["kind"]),
             metadata=PolicyMetadata.from_mapping(metadata),
             defaults=PolicyDefaults.from_mapping(defaults),
             rules=tuple(PolicyRule.from_mapping(_mapping(rule)) for rule in rules),
-            rollout_state=rollout_state if isinstance(rollout_state, str) else None,
+            rollout_state=rollout_state,
             spec_extensions=_encode_extensions(spec, frozenset({"defaults", "rolloutState", "rules"})),
             extensions=_encode_extensions(value, frozenset({"apiVersion", "kind", "metadata", "spec"})),
         )

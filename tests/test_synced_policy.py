@@ -171,3 +171,92 @@ def test_local_observe_mode_remains_an_execution_escape_hatch(tmp_path: Path) ->
 
     assert effective_config.mode == "observe"
     assert effective_config.default_action == "block"
+
+
+def test_offline_lifetime_distinguishes_current_valid_expired_and_last_good() -> None:
+    from datetime import datetime, timezone
+
+    from codex_plugin_scanner.guard.synced_policy import offline_policy_lifetime
+
+    current = _signed_policy_bundle()
+    last_good = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-01.1",
+            "bundleHash": "",
+            "issuedAt": "2026-06-01T00:00:00Z",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "test-only-placeholder",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "receiptRedactionLevel": "none",
+            "policyDefaults": current["policyDefaults"],
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_WORKSPACE_ID,
+    )
+    expired_current = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-07-01.2",
+            "bundleHash": "",
+            "issuedAt": "2026-06-01T00:00:00Z",
+            "expiresAt": "2026-07-02T00:00:00Z",
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "test-only-placeholder",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "receiptRedactionLevel": "none",
+            "policyDefaults": current["policyDefaults"],
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_WORKSPACE_ID,
+    )
+    keyring = policy_bundle_test_keyring(workspace_id=_WORKSPACE_ID)
+    valid_store = _MemorySyncStore({"policy_bundle": current, "policy_bundle_keyring": keyring})
+    now = datetime(2026, 7, 3, tzinfo=timezone.utc).timestamp()
+    mixed_store = _MemorySyncStore(
+        {
+            "policy_bundle": expired_current,
+            "policy_bundle_last_good": last_good,
+            "policy_bundle_keyring": keyring,
+        }
+    )
+    both_expired = _MemorySyncStore(
+        {
+            "policy_bundle": expired_current,
+            "policy_bundle_last_good": expired_current,
+            "policy_bundle_keyring": keyring,
+        }
+    )
+    assert offline_policy_lifetime(valid_store)["state"] == "current-valid"
+    mixed = offline_policy_lifetime(mixed_store, now=now)
+    assert mixed["state"] == "last-good-valid"
+    assert mixed["retained"] is True
+    assert mixed["active"] is True
+    assert synced_policy_payload(mixed_store) is None
+    both = offline_policy_lifetime(both_expired, now=now)
+    assert both["state"] == "expired"
+    revoked_keyring = policy_bundle_test_keyring(workspace_id=_WORKSPACE_ID)
+    keys = revoked_keyring.get("keys")
+    assert isinstance(keys, list) and isinstance(keys[0], dict)
+    keys[0] = {**keys[0], "state": "revoked"}
+    revoked_store = _MemorySyncStore(
+        {
+            "policy_bundle": current,
+            "policy_bundle_last_good": last_good,
+            "policy_bundle_keyring": revoked_keyring,
+        }
+    )
+    revoked = offline_policy_lifetime(revoked_store)
+    assert revoked["active"] is False
+    assert revoked["recovery"] is True
+    assert revoked["state"] == "recovery"
+

@@ -237,7 +237,7 @@ def test_export_order_is_stable_when_primary_fields_tie() -> None:
 
 
 def test_compile_rejects_effect_not_supported_by_local_store() -> None:
-    document = _policy_document(effect="review")
+    document = _policy_document(effect="warn")
 
     with pytest.raises(PolicyCompilationError, match="unsupported_policy_effect"):
         compile_policy_document(document)

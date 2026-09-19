@@ -112,9 +112,56 @@ def synced_policy_payload(store: SyncPayloadReader) -> dict[str, object] | None:
     return None
 
 
+def offline_policy_lifetime(
+    store: SyncPayloadReader,
+    *,
+    now: float | None = None,
+) -> dict[str, object]:
+    """Describe current vs last-good lifetime without authorizing expired grants."""
+
+    current, current_error = cached_policy_bundle_validation(
+        store,
+        store.get_sync_payload("policy_bundle"),
+        now=now,
+    )
+    last_good, last_good_error = cached_policy_bundle_validation(
+        store,
+        store.get_sync_payload("policy_bundle_last_good"),
+        now=now,
+    )
+    revoked = current_error == "signing_key_revoked" or last_good_error == "signing_key_revoked"
+    if current is not None:
+        return {
+            "state": "current-valid",
+            "active": True,
+            "retained": False,
+            "expired": False,
+            "recovery": False,
+        }
+    if last_good is not None:
+        return {
+            "state": "last-good-valid",
+            "active": True,
+            "retained": True,
+            "expired": current_error == "bundle_expired",
+            "currentError": current_error,
+            "recovery": False,
+        }
+    return {
+        "state": "recovery" if revoked else "expired",
+        "active": False,
+        "retained": False,
+        "expired": not revoked,
+        "recovery": revoked,
+        "currentError": current_error,
+        "lastGoodError": last_good_error,
+    }
+
+
 __all__ = [
     "SyncPayloadReader",
     "cached_policy_bundle_validation",
+    "offline_policy_lifetime",
     "synced_policy_bundle_validation",
     "synced_policy_payload",
     "validated_synced_policy_bundle",

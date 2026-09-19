@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import importlib
-import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, cast
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .policy_bundle_key_validity import signing_key_is_current as signing_key_is_current
 from .runtime.supply_chain_bundle_base import SupplyChainBundleMalformedError, _parse_iso_timestamp
 from .stable_digest import sha256_content_digest
 
@@ -138,6 +139,7 @@ class _PolicyBundleV2Module(Protocol):
         *,
         trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
         anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+        now: datetime | float | None = None,
     ) -> tuple[dict[str, object] | None, str | None]: ...
 
 
@@ -351,31 +353,6 @@ def signing_key_is_trusted(
         and item.workspace_id == signing_key.workspace_id
         for item in anchored_keys
     )
-
-
-def signing_key_is_current(
-    signing_key: PolicyBundleVerificationKey,
-    *,
-    now: float | None = None,
-    require_active: bool = False,
-) -> bool:
-    if signing_key.state == "revoked" or (require_active and signing_key.state != "active"):
-        return False
-    current_time = now if now is not None else time.time()
-    if signing_key.valid_from is not None:
-        try:
-            valid_from = _parse_iso_timestamp(signing_key.valid_from, field_name="validFrom")
-        except (SupplyChainBundleMalformedError, TypeError, ValueError):
-            return False
-        if current_time < valid_from:
-            return False
-    if signing_key.valid_until is None:
-        return True
-    try:
-        expiry = _parse_iso_timestamp(signing_key.valid_until, field_name="validUntil")
-    except (SupplyChainBundleMalformedError, TypeError, ValueError):
-        return False
-    return current_time <= expiry
 
 
 def resolve_authorized_policy_bundle_signing_key(
@@ -598,6 +575,7 @@ def validate_synced_policy_bundle(
             policy_bundle,
             trusted_verification_keys=trusted_keys,
             anchored_verification_keys=anchored_keys,
+            now=now,
         )
         if validated_bundle is not None and expected_workspace_id is not None:
             workspace_id = validated_bundle.get("workspaceId")

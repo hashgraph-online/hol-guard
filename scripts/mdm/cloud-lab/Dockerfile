@@ -8,6 +8,7 @@ WORKDIR /hol-guard
 COPY pyproject.toml uv.lock README.md ./
 COPY docs ./docs
 COPY contracts ./contracts
+COPY contributions ./contributions
 COPY src ./src
 COPY scripts/mdm ./scripts/mdm
 
