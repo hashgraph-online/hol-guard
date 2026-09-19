@@ -236,6 +236,8 @@ impl CompiledNativeCommandControls {
         };
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
+        } else if batch.evaluation_error.is_some() {
+            "native_command_extension_evaluation_failed"
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -380,5 +382,52 @@ fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
         result.explicitly_benign = action == "allow";
         result.reason_code = reason.to_owned();
         result.reason = "HOL Guard requires the native command extension policy before this action can execute.".to_owned();
+    }
+}
+
+#[cfg(test)]
+mod review_regressions {
+    use super::*;
+
+    #[test]
+    fn delegated_deadline_failure_is_not_an_administrator_disable() {
+        let program = packaged_command_program().unwrap();
+        let mut binding: NativeCommandControlBindingV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema": "guard.native-command-control-binding.v1",
+                "program_digest": program.program_digest,
+                "catalog_digest": program.catalog_digest,
+                "trust_digest": program.trust_digest,
+                "health": "protected", "revision": 1, "managed_revision": 0,
+                "effective_digest": "", "layers": []
+            }))
+            .unwrap();
+        binding.effective_digest = binding.compute_effective_digest().unwrap();
+        let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+        let intrinsic = crate::pretool::evaluate_pre_tool_envelope(
+            "claude-code",
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}}),
+        );
+        let result = controls.apply_with_tool(
+            None,
+            intrinsic,
+            Some("mcp__filesystem__read_file"),
+            &[],
+            Some(Instant::now() - std::time::Duration::from_secs(1)),
+        );
+        assert_eq!(result.minimum_action, "block");
+        assert_eq!(result.decision, "deny");
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert_eq!(
+            evidence.evaluation_error.as_deref(),
+            Some("native_command_evaluation_failed")
+        );
+        assert_eq!(evidence.binding.uncertainty_count, 1);
+        assert_eq!(evidence.binding.observation_count, 0);
+        assert_eq!(
+            result.reason_code,
+            "native_command_extension_evaluation_failed"
+        );
     }
 }

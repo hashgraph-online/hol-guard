@@ -22,7 +22,10 @@ from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
-from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+from codex_plugin_scanner.guard.native_resident_client import (
+    close_native_residents,
+    native_resident_client_failure_code,
+)
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
@@ -41,7 +44,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
-
 
 _ACTION_RANK = {
     "allow": 0,
@@ -148,7 +150,6 @@ def exercise(root: Path) -> dict[str, object]:
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=root, workspace_dir=workspace)
     rows: list[dict[str, object]] = []
     all_receipts: list[str] = []
-    daemon.start()
 
     def case(
         label: str,
@@ -180,6 +181,23 @@ def exercise(root: Path) -> dict[str, object]:
             deadline=time.monotonic() + 5,
             policy_snapshot=binding,
         )
+        if raw is None:
+            # Capture the existing client's fixed diagnostic code immediately.
+            # Do not retry, reset the deadline, or reinterpret a missing result.
+            print(
+                json.dumps(
+                    {
+                        "schema": "guard.installed-native-extension-failure.v1",
+                        "case": label,
+                        "completed_cases": len(rows),
+                        "control_revision": revision,
+                        "policy_generation": binding["generation"],
+                        "native_failure_code": native_resident_client_failure_code(),
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
         require(raw is not None, f"{label}:native_missing")
         result = raw["result"]
         extensions = result.get("command_extensions")
@@ -230,6 +248,7 @@ def exercise(root: Path) -> dict[str, object]:
         return extensions
 
     try:
+        daemon.start()
         case("external-off", "ollama rm example-model", 0, matched=None)
         enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
         revision = commit_controls(store, password, (enabled,))
