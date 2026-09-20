@@ -127,9 +127,17 @@ def control(kind: ControlTargetKind, target: str, state: ControlState) -> Extens
 
 def ready(daemon: GuardDaemonServer, workspace: Path, revision: int) -> dict[str, object]:
     worker = daemon._server.hook_worker
-    binding = worker.prepare_workspace_policy(workspace, deadline=time.monotonic() + 5)
+    deadline = time.monotonic() + 5
+    publisher = worker.policy_snapshot_publisher
+    publisher.register_workspace(workspace)
+    publisher.start()
+    # Control commits publish asynchronously. The hook admission API may
+    # immediately fail closed while an earlier publication is being retried;
+    # await fixture setup before issuing the decision this probe measures.
+    require(publisher.wait_until_ready(deadline), "policy_not_ready")
+    binding = worker.prepare_workspace_policy(workspace, deadline=deadline)
     require(binding is not None, "policy_not_ready")
-    snapshot = worker.policy_snapshot_publisher.current_snapshot()
+    snapshot = publisher.current_snapshot()
     require(snapshot is not None, "snapshot_missing")
     require(snapshot["command_extensions"]["revision"] == revision, "wrong_control_generation")
     return binding

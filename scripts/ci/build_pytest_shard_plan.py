@@ -17,18 +17,26 @@ from typing import Protocol, cast
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.pytest_duration_manifest import load_duration_manifest, node_id_digest
+from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
 from scripts.ci.pytest_shard import discover_test_nodes
 
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
 MAX_NODES_PER_AFFINITY_GROUP = 32
+SCHEDULING_ONLY_NODE_IDS = frozenset(
+    {
+        "tests/test_guard_hook_process_runner.py::"
+        "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial",
+        "tests/test_guard_daemon_storage_liveness.py::"
+        "test_locked_storage_hook_burst_fails_safe_without_stranding_daemon",
+    }
+)
 
 
 class _Arguments(Protocol):
     shard_count: int
-    duration_manifest: Path
+    duration_manifest: list[Path]
     max_manifest_age_days: int
     output_directory: Path
 
@@ -97,9 +105,11 @@ def build_affinity_node_shards(
     shard_count: int,
     durations: Mapping[str, float],
 ) -> tuple[list[list[str]], list[float]]:
-    """Balance by duration while keeping each test file together when practical."""
+    """Balance traced tests, leaving exact timing contracts to their dedicated job."""
 
-    nodes = list(node_ids)
+    # A timing contract that is deselected during coverage execution must never
+    # own an otherwise empty shard or contribute phantom time to its estimate.
+    nodes = [node_id for node_id in node_ids if node_id not in SCHEDULING_ONLY_NODE_IDS]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
     if shard_count > len(nodes):
@@ -171,16 +181,15 @@ def write_shard_plan(
     )
 
 
-def _load_current_durations(path: Path, max_age_days: int) -> tuple[dict[str, float], bool]:
+def _load_current_durations(paths: Sequence[Path], max_age_days: int) -> tuple[dict[str, float], bool]:
     try:
-        return (
-            load_duration_manifest(
-                path,
-                now=datetime.now(timezone.utc),
-                max_age=timedelta(days=max_age_days),
-            ),
-            True,
+        durations, selected_path = load_latest_duration_manifest(
+            paths,
+            now=datetime.now(timezone.utc),
+            max_age=timedelta(days=max_age_days),
         )
+        print(f"pytest duration evidence: {selected_path}", file=sys.stderr)
+        return durations, True
     except (OSError, ValueError) as exc:
         print(
             f"pytest duration manifest unavailable; using deterministic equal-weight planning: {exc}",
@@ -192,7 +201,7 @@ def _load_current_durations(path: Path, max_age_days: int) -> tuple[dict[str, fl
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument("--shard-count", type=int, required=True)
-    _ = parser.add_argument("--duration-manifest", type=Path, required=True)
+    _ = parser.add_argument("--duration-manifest", type=Path, action="append", required=True)
     _ = parser.add_argument("--max-manifest-age-days", type=int, default=28)
     _ = parser.add_argument("--output-directory", type=Path, required=True)
     args = cast(_Arguments, cast(object, parser.parse_args()))

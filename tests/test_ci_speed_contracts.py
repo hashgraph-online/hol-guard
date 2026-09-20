@@ -16,6 +16,19 @@ def _workflow(name: str) -> dict:
     return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
 
 
+def test_ci_checkouts_do_not_expose_credentials_to_project_code() -> None:
+    workflow = _workflow("ci.yml")
+    checkouts = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("actions/checkout@")
+    ]
+
+    assert checkouts
+    assert all(step.get("with", {}).get("persist-credentials") is False for step in checkouts)
+
+
 @pytest.mark.parametrize("filename", ["publish-mcpb.yml", "publish-mcp-registry.yml"])
 def test_downstream_publication_requires_successful_same_repository_release(filename: str) -> None:
     """Privileged checkout depends on independently verified canonical run provenance."""

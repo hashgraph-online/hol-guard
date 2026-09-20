@@ -20,6 +20,9 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
     download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
+    wait_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Wait for successful pytest coverage producers"
+    )
     setup_index = next(
         i for i, step in enumerate(steps) if step.get("name") == "Prepare coverage and pinned Rust analysis"
     )
@@ -31,7 +34,11 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
 
     assert job["timeout-minutes"] == 20
-    assert download_index < setup_index < scan_index
+    assert job["needs"] == ["sonar-guard"]
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    assert wait_index < download_index < setup_index < scan_index
+    assert "wait_for_pytest_shards.py" in steps[wait_index]["run"]
+    assert "SONAR_TOKEN" not in steps[wait_index].get("env", {})
     assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
     assert '"rust/rust-toolchain.toml"' in script
     assert script.index(install) < script.index(default)
@@ -41,7 +48,7 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     )
     cache_index = next(i for i, step in enumerate(steps) if step.get("name") == "Cache Rust analysis dependencies")
     assert steps[toolchain_index]["run"] == "bash scripts/ci/setup_sonar_rust.sh"
-    assert toolchain_index < cache_index < setup_index
+    assert toolchain_index < cache_index < wait_index
     assert "set -euo pipefail" in script
     assert setup["shell"] == "bash"
     assert not job.get("continue-on-error", False)
@@ -101,7 +108,7 @@ def test_preparation_combines_all_shards_before_installing_and_running_clippy(tm
         "combine",
         *(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(96)),
     ]
-    assert commands[1] == "uv run --no-sync coverage xml"
+    assert commands[1] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
     assert commands[2] == "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
 
 
@@ -128,7 +135,7 @@ def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
     "failed_command",
     [
         "uv run --no-sync coverage combine",
-        "uv run --no-sync coverage xml",
+        "uv run --no-sync python scripts/ci/parallel_coverage_xml.py",
         "cargo clippy",
     ],
 )

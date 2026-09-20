@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
 SCHEDULING_SENSITIVE_NODE = (
@@ -69,6 +71,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert f"--deselect {STORAGE_LIVENESS_NODE}" in tests_job
     assert STORAGE_LIVENESS_NODE in scheduling_job
     assert tests_job.count("--deselect ") == 2
+    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} == SCHEDULING_ONLY_NODE_IDS
     assert "--ignore" not in tests_job
     assert "--cov" not in scheduling_job
 

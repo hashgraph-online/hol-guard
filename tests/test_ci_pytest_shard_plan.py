@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
+    SCHEDULING_ONLY_NODE_IDS,
     build_affinity_node_shards,
     estimate_node_durations,
     node_file,
@@ -65,6 +66,20 @@ def test_affinity_plan_covers_every_node_once_and_is_deterministic() -> None:
         for file_path in {node_file(node_id) for node_id in nodes}
     }
     assert all(len(shard_indexes) == 1 for shard_indexes in owning_shards.values())
+
+
+def test_scheduling_only_nodes_cannot_own_or_inflate_a_coverage_shard() -> None:
+    scheduling_nodes = sorted(SCHEDULING_ONLY_NODE_IDS)
+    # A similarly named test in the same file still belongs in coverage.
+    traced_nodes = [f"{node}_followup" for node in scheduling_nodes]
+    durations = {**_durations(scheduling_nodes, seconds=600.0), **_durations(traced_nodes)}
+
+    shards, loads = build_affinity_node_shards(scheduling_nodes + traced_nodes, 2, durations)
+
+    assert all(shards)
+    assert sorted(node for shard in shards for node in shard) == sorted(traced_nodes)
+    assert loads == [1.0, 1.0]
+    assert not SCHEDULING_ONLY_NODE_IDS.intersection(node for shard in shards for node in shard)
 
 
 def test_affinity_plan_splits_only_an_oversized_file() -> None:

@@ -16,7 +16,12 @@ from typing import Final
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.hook_data_plane_ownership_contract import SCHEMA, load_manifest, registered_harnesses
+from scripts.ci.hook_data_plane_ownership_contract import (
+    SCHEMA,
+    load_manifest,
+    registered_harnesses,
+    validate_installed_proof_environment,
+)
 from scripts.ci.python_hook_semantic_callgraph_gate import _graph_failures as _python_semantic_graph_failures
 from scripts.ci.rust_pretool_no_python_gate import _graph_failures
 
@@ -362,13 +367,7 @@ def _workflow_gate() -> None:
     native_trigger = native_wheel.split("permissions:", maxsplit=1)[0]
     if "paths:" in native_trigger or "paths-ignore:" in native_trigger:
         raise RuntimeError("installed native-wheel proof must be selected for every pull request to main")
-    for required in (
-        "HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH",
-        "Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH",
-        "probe_native_default_auto.py --json native-default-auto.json",
-    ):
-        if required not in native_wheel:
-            raise RuntimeError(f"installed no-env workflow is incomplete: {required}")
+    validate_installed_proof_environment(native_wheel)
 
 
 def _docs_gate() -> None:

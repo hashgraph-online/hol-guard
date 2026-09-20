@@ -10,13 +10,11 @@ import subprocess
 import tempfile
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from http.client import HTTPConnection, HTTPResponse
+from http.client import HTTPConnection, HTTPException, HTTPResponse
 from pathlib import Path
 from typing import cast
 
@@ -203,6 +201,36 @@ def stop_native_resident(
     return NativeStopResult(True, diagnostic)
 
 
+def _loopback_response(
+    daemon: GuardDaemonServer,
+    *,
+    path: str,
+    encoded: str,
+    connection: HTTPConnection | None,
+) -> tuple[int, bytes]:
+    # The target is an authenticated loopback listener. Match the production
+    # Codex/Claude transports: never consult system proxy settings for it.
+    # Concurrent calls still open a fresh TCP connection inside their timer.
+    transport = connection or HTTPConnection("127.0.0.1", daemon.port, timeout=5)
+    opened: HTTPResponse | None = None
+    try:
+        transport.request(
+            "POST",
+            path,
+            body=encoded.encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        )
+        opened = transport.getresponse()
+        return opened.status, opened.read(_MAX_HTTP_RESPONSE_BYTES + 1)
+    finally:
+        try:
+            if opened is not None:
+                opened.close()
+        finally:
+            if connection is None:
+                transport.close()
+
+
 def _request(
     daemon: GuardDaemonServer,
     *,
@@ -247,32 +275,20 @@ def _request(
             raise RuntimeError("adapter request failed") from error
     else:
         try:
-            path = f"/v1/hooks/{harness}?{query}"
-            headers = {"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token}
-            if connection is None:
-                request = urllib.request.Request(
-                    f"http://127.0.0.1:{daemon.port}{path}",
-                    data=encoded.encode("utf-8"),
-                    headers=headers,
-                    method="POST",
-                )
-                opened = cast(HTTPResponse, urllib.request.urlopen(request, timeout=5))
-            else:
-                connection.request("POST", path, body=encoded.encode("utf-8"), headers=headers)
-                opened = connection.getresponse()
-            status = opened.status
-            raw = opened.read(_MAX_HTTP_RESPONSE_BYTES + 1)
-            opened.close()
-        except urllib.error.HTTPError as error:
-            if error.code == 503:
-                return _CAPACITY_FAIL_SAFE.copy()
-            raise RuntimeError("adapter request failed") from error
-        except (OSError, urllib.error.URLError) as error:
+            status, raw = _loopback_response(
+                daemon,
+                path=f"/v1/hooks/{harness}?{query}",
+                encoded=encoded,
+                connection=connection,
+            )
+        except (OSError, HTTPException) as error:
             raise RuntimeError("adapter request failed") from error
         if len(raw) > _MAX_HTTP_RESPONSE_BYTES:
             raise RuntimeError("adapter response exceeded bound")
         if status == 503:
             return _CAPACITY_FAIL_SAFE.copy()
+        if status != 200:
+            raise RuntimeError("adapter request failed")
         try:
             response = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:

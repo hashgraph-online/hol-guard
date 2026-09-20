@@ -1,0 +1,15 @@
+{
+  "artifact_id": 10608711407,
+  "artifact_name": "pytest-duration-manifest-candidate",
+  "description": "Initial phase-inclusive duration seed, copied without changing any measured values.",
+  "head_sha": "c475fd1694d933a7ee840a14e8a7a9ce945ca056",
+  "manifest_sha256": "e7f86ec02f08611df385b35c91eb092888e8c25b237f584bee362a681d3389f1",
+  "node_count": 19778,
+  "observed_at": "2026-09-20T16:05:56Z",
+  "phases": ["setup", "call", "teardown"],
+  "run_attempt": 1,
+  "run_conclusion": "success",
+  "run_id": 35521360638,
+  "run_url": "https://github.com/hashgraph-online/hol-guard/actions/runs/35521360638",
+  "workflow_path": ".github/workflows/ci.yml"
+}

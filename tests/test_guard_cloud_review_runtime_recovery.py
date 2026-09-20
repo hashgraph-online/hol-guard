@@ -236,7 +236,7 @@ def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
 
     monkeypatch.setattr(cloud_review_sync, "_resolve_cloud_review_sync_auth_context", lambda _store: {})
     monkeypatch.setattr(cloud_review_sync, "sync_cloud_review_events_once", sync)
-    monkeypatch.setattr(cloud_review_sync._LOGGER, "exception", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cloud_review_sync_worker._LOGGER, "exception", lambda *_args, **_kwargs: None)
 
     cloud_review_sync_worker._cloud_sync_sync_loop(
         store,
