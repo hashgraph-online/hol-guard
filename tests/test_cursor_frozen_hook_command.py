@@ -35,6 +35,38 @@ def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
     }
 
 
+def test_isolated_python_rejects_group_writable(tmp_path: Path) -> None:
+    import os
+
+    from codex_plugin_scanner.guard.adapters.cursor_hook_config import _isolated_python_is_usable
+
+    if os.name == "nt":
+        pytest.skip("POSIX interpreter write bits are not enforced on Windows")
+
+    path = tmp_path / "python3"
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o775)
+    assert _isolated_python_is_usable(path) is False
+
+
+def test_isolated_python_probe_requires_python_310(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters import cursor_hook_config
+
+    path = tmp_path / "python3"
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+    captured: list[str] = []
+
+    def fake_run(argv: list[str], **_kwargs: object) -> object:
+        captured.append(str(argv))
+        return type("Completed", (), {"returncode": 1})()
+
+    monkeypatch.setattr(cursor_hook_config.subprocess, "run", fake_run)
+    assert cursor_hook_config._isolated_python_is_usable(path) is False
+    assert captured
+    assert "sys.version_info >= (3, 10)" in captured[0]
+
+
 def test_frozen_cursor_hook_command_prefers_isolated_python(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hook_config.sys.frozen", True, raising=False)
     monkeypatch.setattr(

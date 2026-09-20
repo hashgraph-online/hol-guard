@@ -264,7 +264,15 @@ def _run_guard_fallback(
         if remaining <= 0:
             raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
         if run_isolated_hook_process is None:
-            raise RuntimeError("HOL Guard isolated hook runtime is unavailable")
+            return subprocess.run(
+                [*_resolved_guard_cli(), *guard_argv],
+                cwd=GUARD_HOME,
+                env=dict(guard_env),
+                input=payload_json,
+                capture_output=True,
+                text=True,
+                timeout=remaining,
+            )
         result = run_isolated_hook_process(
             [*_resolved_guard_cli(), *guard_argv],
             cwd=GUARD_HOME,
@@ -297,6 +305,17 @@ def _run_guard_recovery(
         if remaining <= 0:
             return
         if run_isolated_hook_process is None:
+            try:
+                subprocess.run(
+                    [*GUARD_RECOVERY_COMMAND, failure_kind],
+                    cwd=GUARD_HOME,
+                    env=dict(guard_env),
+                    capture_output=True,
+                    text=True,
+                    timeout=remaining,
+                )
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                return
             return
         _ = run_isolated_hook_process(
             [*GUARD_RECOVERY_COMMAND, failure_kind],

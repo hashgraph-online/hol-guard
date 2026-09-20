@@ -30,7 +30,9 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
-_ISOLATED_PYTHON_PROBE = "import hmac, json, urllib.request"
+_ISOLATED_PYTHON_PROBE = (
+    "import hmac, json, sys, urllib.request; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+)
 _ISOLATED_PYTHON_PROBE_TIMEOUT_SECONDS = 1.5
 
 
@@ -53,7 +55,7 @@ def _isolated_python_is_usable(path: Path) -> bool:
         return False
     if not stat.S_ISREG(metadata.st_mode) or not os.access(path, os.X_OK):
         return False
-    if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o002:
+    if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o022:
         return False
     probe_env = {"PATH": "/usr/bin:/bin"}
     system_root = os.environ.get("SYSTEMROOT")

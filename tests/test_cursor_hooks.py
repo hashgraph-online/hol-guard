@@ -249,6 +249,8 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     assert "_FALLBACK_LOCK.acquire(blocking=False)" in source
     assert 'recover_kind != "overload"' in source
     assert "[*GUARD_RECOVERY_COMMAND, failure_kind]" in source
+    assert "run_isolated_hook_process is None:" in source
+    assert "capture_output=True" in source
 
 
 def test_cursor_hook_recovers_dead_daemon_once_then_retries(
