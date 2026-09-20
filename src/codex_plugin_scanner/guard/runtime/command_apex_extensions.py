@@ -30,11 +30,30 @@ _APEX_MODULE_LAUNCHERS = (
 )
 
 _EXEC_LEADING_OPTIONS = frozenset({"-a"})
-_XARGS_LEADING_OPTIONS = frozenset({
-    "-a", "--arg-file", "-e", "--eof", "-i", "--replace",
-    "-l", "--max-lines", "-n", "--max-args", "-p", "--max-procs",
-    "-s", "--max-chars", "--process-slot-var"
-})
+_XARGS_LEADING_OPTIONS = frozenset(
+    {
+        "--arg-file",
+        "--delimiter",
+        "--eof",
+        "--max-args",
+        "--max-chars",
+        "--max-lines",
+        "--max-procs",
+        "--replace",
+        "-E",
+        "-I",
+        "-J",
+        "-L",
+        "-P",
+        "-R",
+        "-S",
+        "-a",
+        "-d",
+        "-e",
+        "-n",
+        "-s",
+    }
+)
 
 _APEX_OPTIONS_WITH_VALUES = frozenset({
     "--threads",
@@ -55,7 +74,26 @@ _APEX_MODULE_OPTIONS_WITH_VALUES = frozenset({
 
 _EXPANSION_MARKERS = frozenset({"$", "`"})
 
-
+_APEX_WRAPPER_DIRECT_LAUNCHERS = (
+    ("exec", "apex"),
+    ("exec", "apexcompress"),
+    ("xargs", "apex"),
+    ("xargs", "apexcompress"),
+)
+_APEX_WRAPPER_MODULE_LAUNCHERS = (
+    ("exec", "python", "-m", "apex"),
+    ("exec", "python3", "-m", "apex"),
+    ("exec", "py", "-m", "apex"),
+    ("exec", "python", "-m", "apexcompress"),
+    ("exec", "python3", "-m", "apexcompress"),
+    ("exec", "py", "-m", "apexcompress"),
+    ("xargs", "python", "-m", "apex"),
+    ("xargs", "python3", "-m", "apex"),
+    ("xargs", "py", "-m", "apex"),
+    ("xargs", "python", "-m", "apexcompress"),
+    ("xargs", "python3", "-m", "apexcompress"),
+    ("xargs", "py", "-m", "apexcompress"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,13 +166,21 @@ class ApexUnresolvedExpansionMatcher:
             for wrapper, opts in (("exec", _EXEC_LEADING_OPTIONS), ("xargs", _XARGS_LEADING_OPTIONS)):
                 if not _segment_matches_executable(segment, frozenset(executable_names(wrapper))):
                     continue
-                candidate_arguments = _after_leading_options(lowered_arguments, opts, frozenset())
+                candidate_arguments = _after_leading_options(segment.arguments, opts, frozenset())
                 if not candidate_arguments:
                     continue
-                nested_exe = candidate_arguments[0].replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".exe").removesuffix(".cmd")
+                nested_exe = (
+                    candidate_arguments[0]
+                    .replace("\\", "/")
+                    .rsplit("/", 1)[-1]
+                    .removesuffix(".exe")
+                    .removesuffix(".cmd")
+                    .lower()
+                )
+                candidate_lowered = tuple(arg.lower() for arg in candidate_arguments[1:])
                 if nested_exe in ("apex", "apexcompress"):
                     action_args = _after_leading_options(
-                        candidate_arguments[1:], _APEX_OPTIONS_WITH_VALUES, frozenset()
+                        candidate_lowered, _APEX_OPTIONS_WITH_VALUES, frozenset()
                     )
                     if action_args:
                         action_token = action_args[0]
@@ -147,6 +193,25 @@ class ApexUnresolvedExpansionMatcher:
                                 )
                             )
                             break
+                elif nested_exe in ("python", "python3", "py"):
+                    for prefix in (("-m", "apex"), ("-m", "apexcompress")):
+                        if candidate_lowered[: len(prefix)] == prefix:
+                            action_args = _after_leading_options(
+                                candidate_lowered[len(prefix) :],
+                                _APEX_MODULE_OPTIONS_WITH_VALUES,
+                                frozenset(),
+                            )
+                            if action_args:
+                                action_token = action_args[0]
+                                if any(marker in action_token for marker in self.expansion_markers):
+                                    evidence.append(
+                                        MatcherEvidence(
+                                            index,
+                                            segment.executable,
+                                            "Matched apex command with unresolved expansion in the subcommand position.",
+                                        )
+                                    )
+                                    break
         return tuple(evidence)
 
 
@@ -171,47 +236,29 @@ _APEX_COMPRESS = AnyMatcher(
         for subcmd in ("compress", "c",)
     ) + tuple(
         executable_matcher(
-            "exec",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
             options_with_values=_APEX_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
+        for launcher in _APEX_WRAPPER_DIRECT_LAUNCHERS
         for subcmd in ("compress", "c",)
     ) + tuple(
         executable_matcher(
-            "xargs",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
+            options_with_values=_APEX_MODULE_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
-        for subcmd in ("compress", "c",)
-    ) + tuple(
-        executable_matcher(
-            "exec",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
-        for subcmd in ("compress", "c",)
-    ) + tuple(
-        executable_matcher(
-            "xargs",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
+        for launcher in _APEX_WRAPPER_MODULE_LAUNCHERS
         for subcmd in ("compress", "c",)
     )
 )
@@ -236,47 +283,29 @@ _APEX_DECOMPRESS = AnyMatcher(
         for subcmd in ("decompress", "x", "extract",)
     ) + tuple(
         executable_matcher(
-            "exec",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
             options_with_values=_APEX_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
+        for launcher in _APEX_WRAPPER_DIRECT_LAUNCHERS
         for subcmd in ("decompress", "x", "extract",)
     ) + tuple(
         executable_matcher(
-            "xargs",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
+            options_with_values=_APEX_MODULE_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
-        for subcmd in ("decompress", "x", "extract",)
-    ) + tuple(
-        executable_matcher(
-            "exec",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
-        for subcmd in ("decompress", "x", "extract",)
-    ) + tuple(
-        executable_matcher(
-            "xargs",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
+        for launcher in _APEX_WRAPPER_MODULE_LAUNCHERS
         for subcmd in ("decompress", "x", "extract",)
     )
 )
@@ -301,53 +330,41 @@ _APEX_REPAIR = AnyMatcher(
         for subcmd in ("repair", "fix", "heal",)
     ) + tuple(
         executable_matcher(
-            "exec",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
             options_with_values=_APEX_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
+        for launcher in _APEX_WRAPPER_DIRECT_LAUNCHERS
         for subcmd in ("repair", "fix", "heal",)
     ) + tuple(
         executable_matcher(
-            "xargs",
-            "apex",
+            *launcher,
             subcmd,
             allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
+            leading_options_with_values=(
+                _EXEC_LEADING_OPTIONS if launcher[0] == "exec" else _XARGS_LEADING_OPTIONS
+            ),
+            options_with_values=_APEX_MODULE_OPTIONS_WITH_VALUES,
             fail_secure_unknown_options=True,
         )
-        for subcmd in ("repair", "fix", "heal",)
-    ) + tuple(
-        executable_matcher(
-            "exec",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_EXEC_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
-        for subcmd in ("repair", "fix", "heal",)
-    ) + tuple(
-        executable_matcher(
-            "xargs",
-            "apexcompress",
-            subcmd,
-            allow_leading_options=True,
-            leading_options_with_values=_XARGS_LEADING_OPTIONS,
-            options_with_values=_APEX_OPTIONS_WITH_VALUES,
-            fail_secure_unknown_options=True,
-        )
+        for launcher in _APEX_WRAPPER_MODULE_LAUNCHERS
         for subcmd in ("repair", "fix", "heal",)
     )
 )
 
 _APEX_COMPRESS_WITH_EXPANSIONS = AnyMatcher(
     matchers=(*_APEX_COMPRESS.matchers, ApexUnresolvedExpansionMatcher()),
+)
+_APEX_DECOMPRESS_WITH_EXPANSIONS = AnyMatcher(
+    matchers=(*_APEX_DECOMPRESS.matchers, ApexUnresolvedExpansionMatcher()),
+)
+_APEX_REPAIR_WITH_EXPANSIONS = AnyMatcher(
+    matchers=(*_APEX_REPAIR.matchers, ApexUnresolvedExpansionMatcher()),
 )
 
 APEX_COMMAND_RULES = (
@@ -387,7 +404,9 @@ APEX_COMMAND_RULES = (
         title="apex archive decompression",
         description=(
             "Identifies `apex decompress` commands, which can extract files and "
-            "potentially overwrite existing contents in the destination directory."
+            "potentially overwrite existing contents in the destination directory. "
+            "Invocations carrying unresolved shell expansions in the action position "
+            "are reviewed because they cannot prove mutating actions absent."
         ),
         severity="high",
         risk_classes=("destructive_shell",),
@@ -395,7 +414,7 @@ APEX_COMMAND_RULES = (
         safer_alternatives=(
             "Confirm the destination directory is safe for extraction.",
         ),
-        matcher=_APEX_DECOMPRESS,
+        matcher=_APEX_DECOMPRESS_WITH_EXPANSIONS,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(
@@ -417,7 +436,9 @@ APEX_COMMAND_RULES = (
         title="apex archive repair",
         description=(
             "Identifies `apex repair` commands, which can modify or overwrite "
-            "existing archives during the repair process."
+            "existing archives during the repair process. Invocations carrying "
+            "unresolved shell expansions in the action position are reviewed "
+            "because they cannot prove mutating actions absent."
         ),
         severity="medium",
         risk_classes=("destructive_shell",),
@@ -425,7 +446,7 @@ APEX_COMMAND_RULES = (
         safer_alternatives=(
             "Ensure you have a backup of the archive before repairing.",
         ),
-        matcher=_APEX_REPAIR,
+        matcher=_APEX_REPAIR_WITH_EXPANSIONS,
         default_mode="review",
         safe_variants=(
             safe_flag_variant(

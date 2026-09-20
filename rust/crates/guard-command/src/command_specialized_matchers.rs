@@ -357,21 +357,44 @@ impl ApexExpansionConfig {
             } else {
                 &self.compiled.xargs_options
             };
-            let candidate = after_leading_options(&arguments, wrapper_opts);
-            if let Some(first) = candidate.first() {
+            let candidate_raw = after_leading_options(&segment.arguments, wrapper_opts);
+            if let Some(first) = candidate_raw.first() {
                 let nested_base = first.rsplit(['/', '\\']).next().unwrap_or(first);
                 let norm = nested_base
                     .strip_suffix(".exe")
                     .or_else(|| nested_base.strip_suffix(".cmd"))
-                    .unwrap_or(nested_base);
+                    .unwrap_or(nested_base)
+                    .to_ascii_lowercase();
                 if norm == "apex" || norm == "apexcompress" {
+                    let lowered_args: Vec<String> = candidate_raw[1..]
+                        .iter()
+                        .map(|arg| lowercase_for_ascii_comparison(arg))
+                        .collect();
                     let action_args = after_leading_options(
-                        &candidate[1..],
+                        &lowered_args,
                         &self.compiled.apex_value_options,
                     );
                     if let Some(action_token) = action_args.first() {
                         if self.expansion_markers.iter().any(|marker| action_token.contains(marker)) {
                             return Ok(true);
+                        }
+                    }
+                } else if norm == "python" || norm == "python3" || norm == "py" {
+                    let lowered_args: Vec<String> = candidate_raw[1..]
+                        .iter()
+                        .map(|arg| lowercase_for_ascii_comparison(arg))
+                        .collect();
+                    for prefix in &self.compiled.module_prefixes {
+                        if lowered_args.starts_with(prefix) {
+                            let action_args = after_leading_options(
+                                &lowered_args[prefix.len()..],
+                                &self.compiled.apex_module_value_options,
+                            );
+                            if let Some(action_token) = action_args.first() {
+                                if self.expansion_markers.iter().any(|marker| action_token.contains(marker)) {
+                                    return Ok(true);
+                                }
+                            }
                         }
                     }
                 }
@@ -416,9 +439,26 @@ impl Default for CompiledApexExpansion {
             ]),
             exec_options: string_set(&["-a"]),
             xargs_options: string_set(&[
-                "-a", "--arg-file", "-e", "--eof", "-i", "--replace",
-                "-l", "--max-lines", "-n", "--max-args", "-p", "--max-procs",
-                "-s", "--max-chars", "--process-slot-var",
+                "--arg-file",
+                "--delimiter",
+                "--eof",
+                "--max-args",
+                "--max-chars",
+                "--max-lines",
+                "--max-procs",
+                "--replace",
+                "-E",
+                "-I",
+                "-J",
+                "-L",
+                "-P",
+                "-R",
+                "-S",
+                "-a",
+                "-d",
+                "-e",
+                "-n",
+                "-s",
             ]),
             apex_value_options: string_set(&[
                 "--threads", "-t", "--level", "-l", "-m", "--mode",

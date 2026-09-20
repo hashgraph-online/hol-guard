@@ -39,7 +39,7 @@ class ExecutableMatcher(_ExecutableContractBase):
         normalized_required_flags = frozenset(value.strip().lower() for value in self.required_flags if value.strip())
         normalized_forbidden_flags = frozenset(value.strip().lower() for value in self.forbidden_flags if value.strip())
         normalized_leading_options = frozenset(
-            value.strip().lower() for value in self.leading_options_with_values if value.strip()
+            value.strip() for value in self.leading_options_with_values if value.strip()
         )
         normalized_interspersed_options = frozenset(
             value.strip().lower() for value in self.interspersed_options_with_values if value.strip()
@@ -92,15 +92,22 @@ class ExecutableMatcher(_ExecutableContractBase):
             if not _segment_matches_executable(segment, self.executables):
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
-            subcommand_arguments = _without_options(
-                lowered_arguments,
-                self.interspersed_options_with_values,
-                self.interspersed_flags,
-            )
             if self.allow_leading_options:
-                subcommand_arguments = _after_leading_options(
-                    subcommand_arguments,
+                raw_without_interspersed = _without_options(
+                    segment.arguments,
+                    self.interspersed_options_with_values,
+                    self.interspersed_flags,
+                )
+                raw_remaining = _after_leading_options(
+                    raw_without_interspersed,
                     self.leading_options_with_values,
+                    self.interspersed_flags,
+                )
+                subcommand_arguments = tuple(argument.lower() for argument in raw_remaining)
+            else:
+                subcommand_arguments = _without_options(
+                    lowered_arguments,
+                    self.interspersed_options_with_values,
                     self.interspersed_flags,
                 )
             if self.subcommands:
@@ -108,7 +115,11 @@ class ExecutableMatcher(_ExecutableContractBase):
                 candidate = subcommand_arguments[: len(self.subcommands)]
                 if candidate == self.subcommands:
                     matched_subcmds = True
-                elif self.allow_leading_options and len(candidate) == len(self.subcommands):
+                elif (
+                    self.allow_leading_options
+                    and any(exe in {"exec", "xargs"} for exe in self.executables)
+                    and len(candidate) == len(self.subcommands)
+                ):
                     # For wrapped commands, the first subcommand is the nested executable.
                     # Normalize it by basename to support path-based wrapper invocation.
                     norm_first = candidate[0].replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".exe").removesuffix(".cmd")

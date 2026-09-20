@@ -143,6 +143,66 @@ APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "apex compress command",
         "command.apex.compress",
     ),
+    (
+        "exec /usr/local/bin/apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs /usr/local/bin/apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "exec python -m apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs python -m apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -p apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -d , apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -p python -m apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -P 4 python -m apex compress ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "exec python -m apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs python -m apex $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "exec /usr/local/bin/apex decompress archive.apx",
+        "apex decompress command",
+        "command.apex.decompress",
+    ),
+    (
+        "xargs /usr/local/bin/apex repair damaged.apx",
+        "apex repair command",
+        "command.apex.repair",
+    ),
 )
 
 
@@ -226,3 +286,46 @@ def test_enabled_apex_preview_and_help_commands_remain_safe(tmp_path: Path) -> N
             for item in evaluation.extension_observations
             if item.extension.extension_id == "command.apex"
         )
+
+
+def test_apex_unresolved_expansion_matches_when_compress_permission_disabled(tmp_path: Path) -> None:
+    """When compress permission is disabled, unresolved expansion still matches decompress and repair rules."""
+    command = "apex $ACTION ./src"
+    evaluation = real_native_command_evaluation(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        controls=(
+            ("extension", "command.apex", "enabled"),
+            ("permission", "command.apex.permission.compress", "disabled"),
+        ),
+    ).evaluation
+    observed_rules = {
+        item.rule.rule_id
+        for item in evaluation.extension_observations
+        if item.extension.extension_id == "command.apex" and item.effective_evidence
+    }
+    assert "command.apex.decompress" in observed_rules
+    assert "command.apex.repair" in observed_rules
+
+
+def test_apex_unresolved_expansion_matches_when_compress_and_decompress_disabled(tmp_path: Path) -> None:
+    """When compress and decompress permissions are disabled, repair rule still observes unresolved expansion."""
+    command = "apex $ACTION ./src"
+    evaluation = real_native_command_evaluation(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        controls=(
+            ("extension", "command.apex", "enabled"),
+            ("permission", "command.apex.permission.compress", "disabled"),
+            ("permission", "command.apex.permission.decompress", "disabled"),
+        ),
+    ).evaluation
+    observed_rules = {
+        item.rule.rule_id
+        for item in evaluation.extension_observations
+        if item.extension.extension_id == "command.apex" and item.effective_evidence
+    }
+    assert "command.apex.repair" in observed_rules
+
