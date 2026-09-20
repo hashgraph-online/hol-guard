@@ -3135,9 +3135,49 @@ def test_daemon_inventory_skips_serve_without_guard_home(tmp_path, monkeypatch) 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_adopts_implicit_default_home(tmp_path, monkeypatch) -> None:
+    default_home = tmp_path / "default-home"
+    default_home.mkdir()
+    monkeypatch.setattr(daemon_manager_module, "_implicit_daemon_guard_home", lambda: default_home)
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: "123 /usr/local/bin/hol-guard daemon --serve --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(default_home) == [(123, 5474)]
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_parses_equals_guard_home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path} --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == [(123, 5474)]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_equals_home_without_port(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_ignores_bounded_hook_launcher(tmp_path, monkeypatch) -> None:
     command_line = (
-        '/usr/local/bin/hol-guard __guard-bounded-hook '
+        "/usr/local/bin/hol-guard __guard-bounded-hook "
         '{"python_executable":"/usr/local/bin/hol-guard","cli_args":["guard","hook"]}'
     )
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")

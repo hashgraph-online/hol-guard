@@ -115,10 +115,7 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
         source = expected_script.read_text(encoding="utf-8")
     except OSError:
         return False
-    return (
-        'HARNESS = "grok"' in source
-        and f"TIMEOUT_SECONDS = {GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}" in source
-    )
+    return 'HARNESS = "grok"' in source and f"TIMEOUT_SECONDS = {GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}" in source
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:

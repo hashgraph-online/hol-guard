@@ -46,9 +46,7 @@ def is_guard_pretool_entry(entry: object, *, expected_command: str | None = None
 
 
 def _legacy_guard_pretool_command(command: object) -> bool:
-    return isinstance(command, str) and any(
-        marker in command.replace("\\", "/") for marker in _GUARD_HOOK_MARKERS
-    )
+    return isinstance(command, str) and any(marker in command.replace("\\", "/") for marker in _GUARD_HOOK_MARKERS)
 
 
 def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:

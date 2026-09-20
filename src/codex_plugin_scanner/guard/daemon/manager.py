@@ -2430,8 +2430,18 @@ def _guard_home_from_command_parts(parts: list[str]) -> Path | None:
         return frozen_context[0]
     for index, part in enumerate(parts):
         if part == "--guard-home" and index + 1 < len(parts):
-            return Path(parts[index + 1])
+            value = parts[index + 1]
+            return Path(value) if value else None
+        if part.startswith("--guard-home="):
+            value = part.split("=", 1)[1]
+            return Path(value) if value else None
     return None
+
+
+def _implicit_daemon_guard_home() -> Path:
+    from ..config import resolve_guard_home
+
+    return resolve_guard_home(None)
 
 
 def _guard_daemon_port_from_command(command: str) -> int | None:
@@ -2588,7 +2598,7 @@ def _guard_daemon_process_inventory_for_guard_home(
             continue
         command_guard_home = _guard_home_from_command_parts(parts)
         if command_guard_home is None:
-            continue
+            command_guard_home = _implicit_daemon_guard_home()
         try:
             matches_home = command_guard_home.resolve() == guard_home.resolve()
         except OSError:
@@ -2886,7 +2896,7 @@ def _guard_daemon_pid_command_identity(
         return True
     command_guard_home = _guard_home_from_command_parts(parts)
     if command_guard_home is None:
-        return None
+        command_guard_home = _implicit_daemon_guard_home()
     try:
         return command_guard_home.resolve() == expected_guard_home.resolve()
     except OSError:

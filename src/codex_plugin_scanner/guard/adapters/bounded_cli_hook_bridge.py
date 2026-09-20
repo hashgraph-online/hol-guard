@@ -50,9 +50,7 @@ def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
 
 
 def _render_bounded_hook_script(*, guard_home: Path, harness: str, timeout_seconds: float) -> str:
-    timeout_token = (
-        str(int(timeout_seconds)) if timeout_seconds == int(timeout_seconds) else str(timeout_seconds)
-    )
+    timeout_token = str(int(timeout_seconds)) if timeout_seconds == int(timeout_seconds) else str(timeout_seconds)
     return (
         BOUNDED_HOOK_SCRIPT_TEMPLATE.replace(
             "__GUARD_HOME__",
