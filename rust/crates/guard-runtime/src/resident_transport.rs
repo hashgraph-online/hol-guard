@@ -291,10 +291,10 @@ pub(crate) fn start_resident_workers(
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) -> SyncSender<BoxedResidentStream> {
     let (evaluation_sender, evaluation_receiver) =
-        sync_channel::<PendingRequest>(crate::EVALUATION_QUEUE_CAPACITY);
+        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
     let evaluation_policy_store = policy_store.clone();
     spawn_workers(
-        crate::EVALUATION_WORKERS,
+        crate::evaluation_workers(),
         evaluation_receiver,
         move |pending| {
             handle_pending_request(pending, evaluation_policy_store.as_deref());
@@ -302,9 +302,9 @@ pub(crate) fn start_resident_workers(
     );
 
     let (authentication_sender, authentication_receiver) =
-        sync_channel::<BoxedResidentStream>(crate::AUTH_QUEUE_CAPACITY);
+        sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
     spawn_workers(
-        crate::AUTH_WORKERS,
+        crate::auth_workers(),
         authentication_receiver,
         move |mut stream| {
             if authenticate_resident_stream(&mut *stream, &token).is_err() {

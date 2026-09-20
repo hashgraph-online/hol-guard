@@ -19,7 +19,7 @@ from .hermes_file_inspection import HERMES_CONFIG_MAX_BYTES, inspect_hermes_conf
 
 _PRETOOL_EVENT = "pre_tool_call"
 _GUARD_HOOK_ID = "hol-guard-pretool"
-_GUARD_HOOK_MARKERS = ("__guard-bounded-hook", "bounded_cli_hook_bridge")
+_GUARD_HOOK_MARKERS = ("__guard-bounded-hook", "bounded_cli_hook_bridge", "managed/bounded-hooks")
 _ALLOWLIST_NAME = "shell-hooks-allowlist.json"
 _BLOCK_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
@@ -46,7 +46,9 @@ def is_guard_pretool_entry(entry: object, *, expected_command: str | None = None
 
 
 def _legacy_guard_pretool_command(command: object) -> bool:
-    return isinstance(command, str) and all(marker in command for marker in _GUARD_HOOK_MARKERS)
+    return isinstance(command, str) and any(
+        marker in command.replace("\\", "/") for marker in _GUARD_HOOK_MARKERS
+    )
 
 
 def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:

@@ -44,6 +44,7 @@ def test_frozen_bounded_hook_command_bakes_current_hol_guard_shim(
         "_trusted_desktop_hook_proxy_command",
         lambda executable, config: None,
     )
+    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: None)
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(versioned),
         package_root=tmp_path,

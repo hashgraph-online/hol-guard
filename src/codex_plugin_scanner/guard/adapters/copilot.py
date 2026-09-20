@@ -156,6 +156,13 @@ def _is_managed_hook_command(command: str) -> bool:
             return False
         normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
         return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
+    if len(tokens) == 3 and tokens[1] == "-I":
+        script = Path(tokens[2])
+        if "managed/bounded-hooks" not in script.as_posix().lower():
+            return False
+        if script.stem.lower() != "copilot":
+            return False
+        return Path(tokens[0]).name.lower().startswith("python")
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()

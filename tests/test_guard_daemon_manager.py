@@ -3121,6 +3121,48 @@ def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_pa
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_skips_serve_without_guard_home(tmp_path, monkeypatch) -> None:
+    command_line = "/usr/local/bin/hol-guard daemon --serve --port 5474"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_ignores_bounded_hook_launcher(tmp_path, monkeypatch) -> None:
+    command_line = (
+        '/usr/local/bin/hol-guard __guard-bounded-hook '
+        '{"python_executable":"/usr/local/bin/hol-guard","cli_args":["guard","hook"]}'
+    )
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, monkeypatch) -> None:
+    command_line = f"/usr/local/bin/hol-guard daemon --serve --guard-home {tmp_path}"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
 @pytest.mark.parametrize(
     "command_line",
     (
