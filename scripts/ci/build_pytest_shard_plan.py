@@ -31,11 +31,15 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_daemon_storage_liveness.py::"
         "test_locked_storage_hook_burst_fails_safe_without_stranding_daemon",
         "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_listing_first_queue_page_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
         "test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows",
         "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
         "test_resolving_one_request_with_100k_rows_stays_under_100ms",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
+        "tests/test_guard_cloud_review_runtime_recovery.py::"
+        "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
     }
 )
 

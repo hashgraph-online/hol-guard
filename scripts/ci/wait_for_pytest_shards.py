@@ -21,7 +21,7 @@ SHARD_COUNT = 128
 # delay successful producers or define the CI performance target.
 _DEFAULT_TIMEOUT_SECONDS = 660.0
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-_SHARD_NAME = re.compile(r"coverage \(3\.14, (0|[1-9][0-9]*)\)")
+_SHARD_NAME = re.compile(r"coverage \(3\.12, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
 _MAX_JOBS = 1000
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -157,7 +157,7 @@ def _snapshot(
                     raise ShardWaitError("GitHub jobs API returned duplicate coverage-plan jobs")
                 plan_seen = True
                 _job_state(job, "Python coverage-plan")
-            if not name.startswith("coverage (3.14,"):
+            if not name.startswith("coverage (3.12,"):
                 continue
             match = _SHARD_NAME.fullmatch(name)
             if match is None or int(match[1]) >= SHARD_COUNT:

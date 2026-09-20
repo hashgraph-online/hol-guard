@@ -22,7 +22,7 @@ _RUN_ID = 123456
 def _job(index: int, *, status: str = "completed", conclusion: str | None = "success") -> dict[str, object]:
     return {
         "id": index + 100,
-        "name": f"coverage (3.14, {index})",
+        "name": f"coverage (3.12, {index})",
         "run_id": _RUN_ID,
         "status": status,
         "conclusion": conclusion,
@@ -126,6 +126,14 @@ def test_coverage_succeeds_only_after_its_own_complete_suite() -> None:
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
+def test_other_python_coverage_cannot_supply_missing_python312_producer() -> None:
+    other_python_jobs = [
+        dict(_job(index), id=index + 10000, name=f"coverage (3.14, {index})") for index in range(barrier.SHARD_COUNT)
+    ]
+    with pytest.raises(barrier.ShardWaitError, match="Timed out"):
+        _run([other_python_jobs + _jobs()[:-1]], timeout_seconds=10)
+
+
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out", "neutral", None, {}])
 def test_rejects_non_success_on_last_page(conclusion: object) -> None:
     jobs = [dict(_job(index + 1000), name="other") for index in range(20)] + _jobs()
@@ -146,7 +154,7 @@ def test_rejects_invalid_shard_state(status: object, conclusion: object) -> None
     "index", [str(barrier.SHARD_COUNT), "-1", "00", "1.0", "${{ matrix.shard-index }}", "1) suffix"]
 )
 def test_rejects_invalid_shard_names(index: str) -> None:
-    jobs = [*_jobs(), dict(_job(200), name=f"coverage (3.14, {index})")]
+    jobs = [*_jobs(), dict(_job(200), name=f"coverage (3.12, {index})")]
     with pytest.raises(barrier.ShardWaitError, match="invalid Python coverage shard index"):
         _run([jobs])
 
@@ -324,7 +332,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
     assert barrier.SHARD_COUNT == 128
-    assert jobs["coverage"]["name"] == "coverage (3.14, ${{ matrix.shard-index }})"
+    assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
     producer = next(
         step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"

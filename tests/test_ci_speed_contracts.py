@@ -108,10 +108,9 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
 def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    for job_name in ("test-plan", "coverage-plan"):
-        job = workflow["jobs"][job_name]
-        plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
-        assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
+    job = workflow["jobs"]["coverage-plan"]
+    plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
+    assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
     action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
     restore = next(step for step in action["runs"]["steps"] if step.get("id") == "latest-duration-telemetry")
     assert restore["env"]["TELEMETRY_BRANCH"] == "${{ inputs.telemetry-branch }}"

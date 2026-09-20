@@ -14,7 +14,6 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
-  CI_COVERAGE_PYTHON_VERSION: "3.14.7"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
     uv.lock
@@ -91,9 +90,7 @@ jobs:
             exit 1
           fi
 
-  test-plan:
-    # Admit coverage producers before the additional untraced suite fills runners.
-    needs: coverage-plan
+  coverage-plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -108,65 +105,12 @@ jobs:
       - uses: ./.github/actions/plan-pytest
         with:
           python-version: "3.12"
-          shard-count: "64"
-          telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
-          github-token: ${{ github.token }}
-
-  coverage-plan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-ci-python
-        with:
-          python-version: ${{ env.CI_COVERAGE_PYTHON_VERSION }}
-          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-          save-cache: "true"
-      - uses: ./.github/actions/plan-pytest
-        with:
-          python-version: "3.14"
           shard-count: "128"
           telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
           github-token: ${{ github.token }}
 
-  tests:
-    needs: test-plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-        shard-index: [
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-          16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-          32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-          48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63
-        ]
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-ci-python
-        with:
-          python-version: ${{ env.CI_PYTHON_VERSION }}
-          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-      - name: Download Python 3.12 pytest shard plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: pytest-shard-plan-3.12
-          path: pytest-shards
-      - name: Run complete Python 3.12 shard ${{ matrix.shard-index }} untraced
-        shell: bash
-        run: |
-          shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
-          test -s "$shard_file"
-          uv run --no-sync pytest "@$shard_file" --tb=short --durations=10
-
   coverage:
-    name: coverage (3.14, ${{ matrix.shard-index }})
+    name: coverage (3.12, ${{ matrix.shard-index }})
     needs: coverage-plan
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -189,29 +133,29 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci-python
         with:
-          python-version: ${{ env.CI_COVERAGE_PYTHON_VERSION }}
+          python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: pytest-shard-plan-3.14
+          name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Run coverage shard ${{ matrix.shard-index }}
         shell: bash
-        env:
-          COVERAGE_CORE: sysmon
         run: |
           shard_file=$(printf 'pytest-shards/shard-%03d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
           # Timing contracts run untraced in scheduling-sensitive with their original deadlines.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
-            uv run --no-sync pytest -p pytest_duration_report -p pytest_coverage_core "@$shard_file" --tb=short --durations=10 \
+            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
+            --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_resolving_one_request_with_100k_rows_stays_under_100ms \
             --deselect 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' \
             --deselect tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner \
+            --deselect tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
         if: always()
@@ -296,7 +240,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: ${{ env.CI_COVERAGE_PYTHON_VERSION }}
+          python-version: ${{ env.CI_PYTHON_VERSION }}
       - name: Set up uv
         id: setup-uv-primary
         continue-on-error: true
@@ -314,7 +258,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ env.CI_COVERAGE_PYTHON_VERSION }}
+      - run: uv sync --frozen --extra dev --python ${{ env.CI_PYTHON_VERSION }}
       - name: Cache Sonar analyzer downloads
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
@@ -379,11 +323,13 @@ jobs:
           tests/test_guard_runtime_hook_scheduler.py
           tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial
           tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon
+          tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms
           tests/test_guard_continuation_contract.py
           tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows
           tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_resolving_one_request_with_100k_rows_stays_under_100ms
           tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]
           tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner
+          tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects
           --tb=short
 
   compatibility:
@@ -504,23 +450,19 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, test-plan, tests, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Verify Python CI dependencies
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
-          TEST_PLAN_RESULT: ${{ needs.test-plan.result }}
-          TESTS_RESULT: ${{ needs.tests.result }}
           COVERAGE_PLAN_RESULT: ${{ needs.coverage-plan.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
-          test "$TEST_PLAN_RESULT" = "success"
-          test "$TESTS_RESULT" = "success"
           test "$COVERAGE_PLAN_RESULT" = "success"
           test "$COVERAGE_RESULT" = "success"
           test "$COMPATIBILITY_RESULT" = "success"

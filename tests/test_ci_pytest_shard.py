@@ -57,13 +57,12 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--ignore" not in collector
     assert "--deselect" not in collector
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
-    assert payload["env"]["CI_COVERAGE_PYTHON_VERSION"] == "3.14.7"
-    assert jobs["test-plan"]["needs"] == "coverage-plan"
+    assert "test-plan" not in jobs
+    assert "tests" not in jobs
     assert "needs" not in jobs["coverage-plan"]
 
     for planner, executor, version, env_name, count, width in (
-        ("test-plan", "tests", "3.12", "CI_PYTHON_VERSION", 64, 2),
-        ("coverage-plan", "coverage", "3.14", "CI_COVERAGE_PYTHON_VERSION", 128, 3),
+        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 128, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
@@ -85,15 +84,12 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert "--ignore" not in commands
         assert '"@$shard_file"' in commands
 
-    tests_job = _workflow_job(workflow, "tests", "coverage")
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
-    assert "--cov" not in tests_job
-    assert "GUARD_PYTEST_UNDER_COVERAGE" not in tests_job
     assert "--cov --cov-branch --cov-report=" in coverage_job
-    assert "COVERAGE_CORE: sysmon" in coverage_job
-    assert "-p pytest_coverage_core" in coverage_job
-    assert jobs["coverage"]["name"] == "coverage (3.14, ${{ matrix.shard-index }})"
+    assert "COVERAGE_CORE" not in coverage_job
+    assert "-p pytest_coverage_core" not in coverage_job
+    assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
     for node in SCHEDULING_ONLY_NODE_IDS:
         assert f"--deselect {node}" in coverage_job or f"--deselect '{node}'" in coverage_job
@@ -123,8 +119,6 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert gate["if"] == "always()"
     assert set(gate["needs"]) == {
         "quality",
-        "test-plan",
-        "tests",
         "coverage-plan",
         "coverage",
         "compatibility",
@@ -144,10 +138,10 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 
 
 @pytest.mark.parametrize(
-    "failed_dependency", ["TEST_PLAN_RESULT", "TESTS_RESULT", "COVERAGE_PLAN_RESULT", "COVERAGE_RESULT"]
+    "failed_dependency", ["COVERAGE_PLAN_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
-def test_required_python_gate_rejects_either_incomplete_suite(failed_dependency: str, result: str) -> None:
+def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     step = workflow["jobs"]["ci-python-312"]["steps"][0]
     env = dict(os.environ, **dict.fromkeys(step["env"], "success"))
