@@ -411,18 +411,22 @@ jobs:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
           $version = uv run --no-sync python scripts/sync_repo_version.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOL_GUARD_PACKAGE_VERSION = $version.Trim()
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\rust\target\release\hol-guard-runtime.exe self-test --json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Assemble and install native wheel
         shell: pwsh
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $runtime = "rust\target\release\hol-guard-runtime.exe"
           $caps = & $runtime capabilities --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv run --no-sync python scripts/build_native_hol_guard_wheel.py `
             --wheel "pure-dist\hol_guard-$version-py3-none-any.whl" `
             --runtime $runtime `
@@ -432,9 +436,12 @@ jobs:
             --target x86_64-pc-windows-msvc `
             --source-sha $env:SOURCE_SHA `
             --rule-digest $caps.rule_digest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
           uv pip uninstall --python .venv\Scripts\python.exe hol-guard
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item Env:HOL_GUARD_NATIVE -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_NATIVE_BINARY -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_NATIVE_MODE -ErrorAction SilentlyContinue
@@ -475,8 +482,11 @@ jobs:
           Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_PYTHON_ORACLE -ErrorAction SilentlyContinue
           uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_command_control_lock.py --json installed-command-control-lock.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:

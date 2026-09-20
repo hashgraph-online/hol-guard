@@ -65,11 +65,14 @@ jobs:
         shell: pwsh
         run: |
           uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build version-matched Windows runtime
         shell: pwsh
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOL_GUARD_BUILD_SHA = "${{ github.sha }}"
           $env:HOL_GUARD_PACKAGE_VERSION = $version
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime

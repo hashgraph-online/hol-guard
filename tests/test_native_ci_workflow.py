@@ -81,12 +81,14 @@ def test_authority_source_and_both_distribution_formats_are_gated_together() -> 
 
 
 @pytest.mark.parametrize("name", ["native-wheel-ci.yml", "rust-runtime-windows-resident.yml"])
-def test_windows_build_failure_cannot_fall_through_to_a_cached_binary(name: str) -> None:
+def test_windows_build_and_proof_failures_cannot_fall_through(name: str) -> None:
     for job in _workflow(name)["jobs"].values():
         for step in job.get("steps", []):
             if step.get("shell") != "pwsh":
                 continue
             lines = step.get("run", "").splitlines()
+            if len(lines) == 1:
+                continue
             for index, line in enumerate(lines):
-                if line.startswith(("cargo ", "rustfmt ")):
+                if line.startswith(("cargo ", "rustfmt ", "uv ", ".venv\\")) and not line.endswith("`"):
                     assert lines[index + 1] == "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
