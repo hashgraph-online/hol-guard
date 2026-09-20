@@ -36,13 +36,20 @@ async function mountWorkspaceAuditFixture(page: Page, auditRequests: unknown[]):
     if (path.endsWith("/supply-chain/audit")) {
       const payload = request.postDataJSON();
       auditRequests.push(payload);
-      if (typeof payload !== "object" || payload === null || (payload as { workspace_dir?: string }).workspace_dir !== projectFolder) {
+      const workspaceDir =
+        typeof payload === "object" && payload !== null
+          ? (payload as { workspace_dir?: string }).workspace_dir
+          : undefined;
+      if (workspaceDir !== projectFolder) {
+        const invalidWorkspace = typeof workspaceDir === "string" && workspaceDir.length > 0;
         await route.fulfill({
           status: 400,
           contentType: "application/json",
           body: JSON.stringify({
-            error: "workspace_dir_required",
-            message: "Guard needs a project folder with package manifests before it can run the workspace audit.",
+            error: invalidWorkspace ? "workspace_dir_invalid" : "workspace_dir_required",
+            message: invalidWorkspace
+              ? "Guard could not use the selected project folder. Choose an existing local folder and try again."
+              : "Guard needs a project folder with package manifests before it can run the workspace audit.",
             operation: "audit",
           }),
         });
@@ -102,13 +109,19 @@ for (const width of [390, 1440]) {
     await expect(workspaceInput).toBeVisible();
     await expect(runAudit).toBeDisabled();
 
+    await workspaceInput.fill("/workspace/missing");
+    await expect(runAudit).toBeEnabled();
+    await runAudit.click();
+    await expect(page.getByTestId("workbench-audit-error")).toContainText("could not use that project folder");
+
     await workspaceInput.fill(projectFolder);
     await expect(runAudit).toBeEnabled();
     await runAudit.click();
 
-    await expect.poll(() => auditRequests.length).toBe(2);
+    await expect.poll(() => auditRequests.length).toBe(3);
     expect(auditRequests[0]).toEqual({});
-    expect(auditRequests[1]).toEqual({ workspace_dir: projectFolder });
+    expect(auditRequests[1]).toEqual({ workspace_dir: "/workspace/missing" });
+    expect(auditRequests[2]).toEqual({ workspace_dir: projectFolder });
     await expect(page.getByTestId("workbench-audit-error")).toHaveCount(0);
     await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
     await page.screenshot({ path: testInfo.outputPath(`workspace-audit-recovery-${width}.png`), fullPage: true });

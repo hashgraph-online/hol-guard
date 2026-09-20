@@ -3,6 +3,7 @@ import { GuardHarnessActionError } from "./guard-api";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
 import {
   isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceInvalidError,
   isSupplyChainAuditWorkspaceRequiredError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
@@ -96,6 +97,19 @@ assert(
 assert(
   !isSupplyChainAuditConnectError(workspaceError),
   "workspace_dir_required should not be treated as a cloud connect gate",
+);
+
+const invalidWorkspaceError = new GuardHarnessActionError(400, {
+  error: "workspace_dir_invalid",
+  operation: "audit",
+});
+assert(
+  isSupplyChainAuditWorkspaceInvalidError(invalidWorkspaceError),
+  "invalid workspace errors should preserve the folder-recovery flow",
+);
+assert(
+  supplyChainAuditUserMessage(invalidWorkspaceError)?.includes("could not use that project folder"),
+  "invalid workspace errors should explain how to correct the selected folder",
 );
 
 const auditConnectMarkup = renderToStaticMarkup(

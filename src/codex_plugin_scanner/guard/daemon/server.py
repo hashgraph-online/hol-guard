@@ -3701,7 +3701,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._enforce_package_firewall_rate_limit(operation, payload):
             return
         entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(
+                payload,
+                reject_invalid_explicit=operation == "audit",
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
+            return
         current_status = package_shim_status(context)
         if not package_firewall_operation_allowed(
             entitlement,
@@ -3743,15 +3750,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error)
             return
         except ValueError as error:
-            error_code = str(error)
-            error_payload: dict[str, object] = {"error": error_code, "operation": operation}
-            if error_code == "workspace_dir_required":
-                error_payload["message"] = (
-                    "Guard needs a project folder with package manifests before it can run "
-                    "the workspace audit. Open Guard from a connected app workspace or pass "
-                    "workspace_dir in the audit request."
-                )
-            self._write_json(error_payload, status=400)
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         except Exception as error:
             status, error_payload = _supply_chain_package_action_error_response(
@@ -3845,7 +3844,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         raise ValueError("unsupported_supply_chain_operation")
 
-    def _resolve_supply_chain_workspace_dir(self, payload: dict[str, object]) -> Path | None:
+    def _resolve_supply_chain_workspace_dir(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> Path | None:
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
@@ -3857,15 +3861,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace_value=payload.get("workspace"),
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
+            reject_invalid_explicit=reject_invalid_explicit,
         )
 
-    def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace_dir = self._resolve_supply_chain_workspace_dir(payload)
+    def _supply_chain_context(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> HarnessContext:
+        workspace_dir = self._resolve_supply_chain_workspace_dir(
+            payload,
+            reject_invalid_explicit=reject_invalid_explicit,
+        )
         return HarnessContext(
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
+
+    @staticmethod
+    def _supply_chain_value_error_payload(operation: str, error_code: str) -> dict[str, object]:
+        error_payload: dict[str, object] = {"error": error_code, "operation": operation}
+        if error_code == "workspace_dir_required":
+            error_payload["message"] = (
+                "Guard needs a project folder with package manifests before it can run "
+                "the workspace audit. Open Guard from a connected app workspace or pass "
+                "workspace_dir in the audit request."
+            )
+        elif error_code == "workspace_dir_invalid":
+            error_payload["message"] = (
+                "Guard could not use the selected project folder. Choose an existing local folder and try again."
+            )
+        return error_payload
 
     @staticmethod
     def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:

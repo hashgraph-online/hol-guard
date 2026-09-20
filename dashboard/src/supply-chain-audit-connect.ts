@@ -110,10 +110,17 @@ export function isSupplyChainAuditWorkspaceRequiredError(error: unknown): boolea
   return error instanceof GuardHarnessActionError && error.payload?.error === "workspace_dir_required";
 }
 
+export function isSupplyChainAuditWorkspaceInvalidError(error: unknown): boolean {
+  return error instanceof GuardHarnessActionError && error.payload?.error === "workspace_dir_invalid";
+}
+
 export function supplyChainAuditUserMessage(error: unknown): string | null {
   if (error instanceof GuardHarnessActionError) {
     if (isSupplyChainAuditWorkspaceRequiredError(error)) {
       return "Enter the project folder to audit below, then run the audit again. Or run `hol-guard supply-chain audit --json` from that project folder.";
+    }
+    if (isSupplyChainAuditWorkspaceInvalidError(error)) {
+      return "Guard could not use that project folder. Choose an existing local folder and run the audit again.";
     }
     return supplyChainAuditConnectUserMessage(error);
   }

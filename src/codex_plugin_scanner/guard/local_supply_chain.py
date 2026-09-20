@@ -591,16 +591,20 @@ def resolve_supply_chain_audit_workspace_dir(
     workspace_value: object,
     allowed_roots: tuple[Path, ...],
     managed_workspace_dirs: Sequence[str] | None = None,
+    reject_invalid_explicit: bool = False,
 ) -> Path | None:
     for candidate in (workspace_dir_value, workspace_value):
-        if isinstance(candidate, str):
-            resolved = resolve_path_within_allowed_roots(
-                candidate,
-                allowed_roots,
-                require_exists=True,
-            )
-            if resolved is not None:
-                return resolved
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        resolved = resolve_path_within_allowed_roots(
+            candidate,
+            allowed_roots,
+            require_exists=True,
+        )
+        if resolved is not None:
+            return resolved
+        if reject_invalid_explicit:
+            raise ValueError("workspace_dir_invalid")
     cursor_project = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
     if cursor_project:
         resolved = resolve_path_within_allowed_roots(
