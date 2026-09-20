@@ -57,3 +57,18 @@ def test_codex_pre_tool_warn_preserves_reason_as_system_message() -> None:
         "hookSpecificOutput": {"hookEventName": "PreToolUse"},
     }
     assert "permissionDecision" not in warned["hookSpecificOutput"]
+
+
+def test_codex_pre_tool_response_drops_invalid_permission_fields() -> None:
+    payload = bridge._codex_hook_response(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "permissionDecision": "block",
+                "permissionDecisionReason": 12,
+            }
+        },
+        event_name="PreToolUse",
+    )
+
+    assert payload == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
