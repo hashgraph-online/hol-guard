@@ -523,6 +523,42 @@ def test_initialize_recovers_fatal_sqlite_even_when_schema_looks_current(
     assert isinstance(recover_calls[0], sqlite3.DatabaseError)
 
 
+def test_initialize_tolerates_transient_io_when_schema_is_already_current(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    recover_calls: list[BaseException] = []
+    integrity_calls = {"count": 0}
+
+    def recover(
+        error: BaseException,
+        *,
+        failed_identity: tuple[int, int] | None = None,
+    ) -> bool:
+        del failed_identity
+        recover_calls.append(error)
+        return False
+
+    monkeypatch.setattr(
+        store,
+        "_initialize_serialized_once",
+        lambda: (_ for _ in ()).throw(sqlite3.OperationalError("disk I/O error")),
+    )
+    monkeypatch.setattr(store, "_schema_is_current", lambda: True)
+    monkeypatch.setattr(store, "_recover_fatal_sqlite_store", recover)
+    monkeypatch.setattr(
+        store,
+        "_initialize_policy_integrity",
+        lambda: integrity_calls.__setitem__("count", integrity_calls["count"] + 1),
+    )
+
+    store._initialize_serialized()  # pyright: ignore[reportPrivateUsage]
+
+    assert recover_calls
+    assert integrity_calls["count"] == 1
+
+
 def test_yielded_select_recovery_keeps_triggering_sqlite_error_as_cause(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
