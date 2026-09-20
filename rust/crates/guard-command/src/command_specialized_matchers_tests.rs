@@ -394,6 +394,42 @@ fn canonical_parser_feeds_database_php_curl_and_expansion_matchers() {
             vec![],
         ),
         (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "python -m apex -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apexcompress -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex compress ./src",
+            vec![],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "printf café",
+            vec![],
+        ),
+        (
             "zero-operand-flags.v1",
             serde_json::json!({"executables":["deploy"],"required_flags":["--prod"],"options_with_values":["--cwd"]}),
             "deploy --cwd project --prod",
@@ -404,4 +440,43 @@ fn canonical_parser_feeds_database_php_curl_and_expansion_matchers() {
         assert_eq!(command.confidence, "exact", "{source}");
         assert_eq!(evaluate(op, config, &command), Ok(expected), "{source}");
     }
+}
+
+#[test]
+fn apex_expansion_matches_wrappers_and_global_options() {
+    let matcher = SpecializedMatcher::from_config("apex-expansion.v1", serde_json::json!({})).unwrap();
+
+    let exec_cmd = model(
+        &[(
+            Some("exec".to_owned()),
+            vec![
+                "-a".to_owned(),
+                "proc".to_owned(),
+                "apex".to_owned(),
+                "-t".to_owned(),
+                "4".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&exec_cmd), Ok(vec![0]));
+
+    let xargs_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-P".to_owned(),
+                "4".to_owned(),
+                "/usr/local/bin/apex.exe".to_owned(),
+                "-t".to_owned(),
+                "4".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_cmd), Ok(vec![0]));
 }

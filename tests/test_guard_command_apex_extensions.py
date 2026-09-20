@@ -116,6 +116,26 @@ APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.apex.compress",
     ),
     (
+        "apex -t 4 $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "python -m apex -t 4 $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "exec apex -t 4 $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
+        "xargs -P 4 apex -t 4 $ACTION ./src",
+        "apex compress command",
+        "command.apex.compress",
+    ),
+    (
         "xargs apex compress ./src",
         "apex compress command",
         "command.apex.compress",

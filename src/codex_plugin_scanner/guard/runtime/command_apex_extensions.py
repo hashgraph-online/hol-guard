@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
@@ -76,39 +76,77 @@ class ApexUnresolvedExpansionMatcher:
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
             
             # Direct launchers
+            matched = False
             for launcher in _APEX_DIRECT_LAUNCHERS:
-                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
+                if not _segment_matches_executable(segment, frozenset(executable_names(launcher[0]))):
                     continue
                 prefix_len = len(launcher) - 1
-                if len(lowered_arguments) > prefix_len:
-                    action_token = lowered_arguments[prefix_len]
+                action_args = _after_leading_options(
+                    lowered_arguments[prefix_len:], _APEX_OPTIONS_WITH_VALUES, frozenset()
+                )
+                if action_args:
+                    action_token = action_args[0]
                     if any(marker in action_token for marker in self.expansion_markers):
-                        evidence.append(MatcherEvidence(index, segment.executable, "Matched apex command with unresolved expansion in the subcommand position."))
-                        
+                        evidence.append(
+                            MatcherEvidence(
+                                index,
+                                segment.executable,
+                                "Matched apex command with unresolved expansion in the subcommand position.",
+                            )
+                        )
+                        matched = True
+                        break
+            if matched:
+                continue
+
             # Module launchers
             for launcher in _APEX_MODULE_LAUNCHERS:
-                if not _segment_matches_executable(segment, frozenset({launcher[0]})):
+                if not _segment_matches_executable(segment, frozenset(executable_names(launcher[0]))):
                     continue
                 prefix_len = len(launcher) - 1
                 launcher_args = launcher[1:]
-                if lowered_arguments[:prefix_len] == launcher_args and len(lowered_arguments) > prefix_len:
-                    action_token = lowered_arguments[prefix_len]
-                    if any(marker in action_token for marker in self.expansion_markers):
-                        evidence.append(MatcherEvidence(index, segment.executable, "Matched apex command with unresolved expansion in the subcommand position."))
+                if lowered_arguments[:prefix_len] == launcher_args:
+                    action_args = _after_leading_options(
+                        lowered_arguments[prefix_len:], _APEX_MODULE_OPTIONS_WITH_VALUES, frozenset()
+                    )
+                    if action_args:
+                        action_token = action_args[0]
+                        if any(marker in action_token for marker in self.expansion_markers):
+                            evidence.append(
+                                MatcherEvidence(
+                                    index,
+                                    segment.executable,
+                                    "Matched apex command with unresolved expansion in the subcommand position.",
+                                )
+                            )
+                            matched = True
+                            break
+            if matched:
+                continue
 
             # Wrapper launchers
             for wrapper, opts in (("exec", _EXEC_LEADING_OPTIONS), ("xargs", _XARGS_LEADING_OPTIONS)):
-                if not _segment_matches_executable(segment, frozenset({wrapper})):
+                if not _segment_matches_executable(segment, frozenset(executable_names(wrapper))):
                     continue
                 candidate_arguments = _after_leading_options(lowered_arguments, opts, frozenset())
                 if not candidate_arguments:
                     continue
                 nested_exe = candidate_arguments[0].replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".exe").removesuffix(".cmd")
                 if nested_exe in ("apex", "apexcompress"):
-                    if len(candidate_arguments) > 1:
-                        action_token = candidate_arguments[1]
+                    action_args = _after_leading_options(
+                        candidate_arguments[1:], _APEX_OPTIONS_WITH_VALUES, frozenset()
+                    )
+                    if action_args:
+                        action_token = action_args[0]
                         if any(marker in action_token for marker in self.expansion_markers):
-                            evidence.append(MatcherEvidence(index, segment.executable, "Matched apex command with unresolved expansion in the subcommand position."))
+                            evidence.append(
+                                MatcherEvidence(
+                                    index,
+                                    segment.executable,
+                                    "Matched apex command with unresolved expansion in the subcommand position.",
+                                )
+                            )
+                            break
         return tuple(evidence)
 
 

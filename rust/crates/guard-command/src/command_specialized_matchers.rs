@@ -75,12 +75,22 @@ struct CompiledLauncher {
     wrapper: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ApexExpansionConfig {
+    #[serde(default = "expansion_markers")]
+    expansion_markers: BTreeSet<String>,
+    #[serde(skip)]
+    compiled: CompiledApexExpansion,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum SpecializedMatcher {
     PhpArtisan(PhpArtisanConfig),
     ZeroOperand(ZeroOperandConfig),
     CurlElasticsearch(CurlElasticsearchConfig),
     Repo2nbExpansion(Repo2nbExpansionConfig),
+    ApexExpansion(ApexExpansionConfig),
     ReviewedLiteral(ReviewedLiteralConfig),
 }
 
@@ -142,6 +152,19 @@ impl SpecializedMatcher {
                     .collect();
                 Ok(Self::Repo2nbExpansion(config))
             }
+            "apex-expansion.v1" => {
+                let mut config: ApexExpansionConfig =
+                    serde_json::from_value(config).map_err(invalid)?;
+                if config
+                    .expansion_markers
+                    .iter()
+                    .any(|value| !value.is_ascii())
+                {
+                    return Err("unsupported_specialized_unicode_config");
+                }
+                config.compiled = CompiledApexExpansion::default();
+                Ok(Self::ApexExpansion(config))
+            }
             "reviewed-literal.v1" => {
                 let config: ReviewedLiteralConfig =
                     serde_json::from_value(config).map_err(invalid)?;
@@ -200,6 +223,7 @@ impl SpecializedMatcher {
                     )?
                 }
                 Self::Repo2nbExpansion(config) => config.matches(segment, deadline)?,
+                Self::ApexExpansion(config) => config.matches(segment, deadline)?,
                 Self::ReviewedLiteral(_) => unreachable!("handled before segment iteration"),
             };
             check_deadline(deadline)?;
@@ -278,6 +302,131 @@ impl Repo2nbExpansionConfig {
             }));
         }
         Ok(false)
+    }
+}
+
+impl ApexExpansionConfig {
+    fn matches(
+        &self,
+        segment: &CommandSegmentV1,
+        deadline: Option<Instant>,
+    ) -> Result<bool, &'static str> {
+        if segment.executable.is_none() {
+            return Ok(false);
+        }
+        check_deadline(deadline)?;
+        let arguments = segment
+            .arguments
+            .iter()
+            .map(|argument| lowercase_for_ascii_comparison(argument))
+            .collect::<Vec<_>>();
+
+        // Direct launchers
+        if ascii_comparison::executable_matches(segment, &self.compiled.direct_executables) {
+            let action_args = after_leading_options(&arguments, &self.compiled.apex_value_options);
+            if let Some(action_token) = action_args.first() {
+                if self.expansion_markers.iter().any(|marker| action_token.contains(marker)) {
+                    return Ok(true);
+                }
+            }
+        }
+
+        // Module launchers
+        if ascii_comparison::executable_matches(segment, &self.compiled.module_executables) {
+            for prefix in &self.compiled.module_prefixes {
+                if arguments.starts_with(prefix) {
+                    let action_args = after_leading_options(
+                        &arguments[prefix.len()..],
+                        &self.compiled.apex_module_value_options,
+                    );
+                    if let Some(action_token) = action_args.first() {
+                        if self.expansion_markers.iter().any(|marker| action_token.contains(marker)) {
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Wrapper launchers
+        if ascii_comparison::executable_matches(segment, &self.compiled.wrapper_executables) {
+            let exec_name = segment.executable.as_deref().unwrap_or("");
+            let base_exec = exec_name.rsplit(['/', '\\']).next().unwrap_or(exec_name);
+            let wrapper_opts = if base_exec.eq_ignore_ascii_case("exec") {
+                &self.compiled.exec_options
+            } else {
+                &self.compiled.xargs_options
+            };
+            let candidate = after_leading_options(&arguments, wrapper_opts);
+            if let Some(first) = candidate.first() {
+                let nested_base = first.rsplit(['/', '\\']).next().unwrap_or(first);
+                let norm = nested_base
+                    .strip_suffix(".exe")
+                    .or_else(|| nested_base.strip_suffix(".cmd"))
+                    .unwrap_or(nested_base);
+                if norm == "apex" || norm == "apexcompress" {
+                    let action_args = after_leading_options(
+                        &candidate[1..],
+                        &self.compiled.apex_value_options,
+                    );
+                    if let Some(action_token) = action_args.first() {
+                        if self.expansion_markers.iter().any(|marker| action_token.contains(marker)) {
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(false)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CompiledApexExpansion {
+    direct_executables: BTreeSet<String>,
+    module_executables: BTreeSet<String>,
+    module_prefixes: Vec<Vec<String>>,
+    wrapper_executables: BTreeSet<String>,
+    exec_options: BTreeSet<String>,
+    xargs_options: BTreeSet<String>,
+    apex_value_options: BTreeSet<String>,
+    apex_module_value_options: BTreeSet<String>,
+}
+
+impl Default for CompiledApexExpansion {
+    fn default() -> Self {
+        Self {
+            direct_executables: string_set(&[
+                "apex", "apex.cmd", "apex.exe",
+                "apexcompress", "apexcompress.cmd", "apexcompress.exe",
+            ]),
+            module_executables: string_set(&[
+                "python", "python.cmd", "python.exe",
+                "python3", "python3.cmd", "python3.exe",
+                "py", "py.cmd", "py.exe",
+            ]),
+            module_prefixes: vec![
+                vec!["-m".to_string(), "apex".to_string()],
+                vec!["-m".to_string(), "apexcompress".to_string()],
+            ],
+            wrapper_executables: string_set(&[
+                "exec", "exec.cmd", "exec.exe",
+                "xargs", "xargs.cmd", "xargs.exe",
+            ]),
+            exec_options: string_set(&["-a"]),
+            xargs_options: string_set(&[
+                "-a", "--arg-file", "-e", "--eof", "-i", "--replace",
+                "-l", "--max-lines", "-n", "--max-args", "-p", "--max-procs",
+                "-s", "--max-chars", "--process-slot-var",
+            ]),
+            apex_value_options: string_set(&[
+                "--threads", "-t", "--level", "-l", "-m", "--mode",
+            ]),
+            apex_module_value_options: string_set(&[
+                "--threads", "-t", "--level", "-l", "--mode",
+            ]),
+        }
     }
 }
 
