@@ -19,8 +19,12 @@ def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
     cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
     assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
     assert cache["with"]["cache-workspace-crates"] is True
-    assert cache["with"]["cache-bin"] is False
+    assert cache["with"]["cache-bin"] is True
     assert "inputs.targets" in cache["with"]["shared-key"]
+    # Reuse the existing trusted dependency cache on the first migration PR.
+    # A new prefix forces several minutes of cold compilation on macOS Intel.
+    assert cache["with"]["prefix-key"] == "v0-rust"
+    assert action["inputs"]["cache-key"]["default"] == "native-wheel"
     assert action["inputs"]["toolchain"]["default"] == "1.88.0"
     assert "continue-on-error" not in cache
 
@@ -90,5 +94,35 @@ def test_windows_build_and_proof_failures_cannot_fall_through(name: str) -> None
             if len(lines) == 1:
                 continue
             for index, line in enumerate(lines):
-                if line.startswith(("cargo ", "rustfmt ", "uv ", ".venv\\")) and not line.endswith("`"):
+                if line.startswith(
+                    ("cargo ", "rustfmt ", "uv ", ".venv\\", ".\\rust\\", "rust/target/")
+                ) and not line.endswith("`"):
                     assert lines[index + 1] == "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+
+
+@pytest.mark.parametrize(
+    ("name", "integration_job", "runner"),
+    [
+        ("rust-runtime-windows-resident.yml", "windows-resident", "windows-latest"),
+        ("rust-daemon-edge-hardening.yml", "cross-platform", "windows-2025"),
+    ],
+)
+def test_parallel_windows_workspace_checks_remain_required(name: str, integration_job: str, runner: str) -> None:
+    jobs = _workflow(name)["jobs"]
+    checks = jobs["windows-workspace"]
+    integration = jobs[integration_job]
+    assert checks["runs-on"] == runner
+    assert "if" not in checks
+    assert "continue-on-error" not in checks
+    assert "needs" not in checks
+    assert "needs" not in integration
+    commands = "\n".join(step.get("run", "") for step in checks["steps"])
+    assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings" in commands
+    assert "cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in commands
+    integration_commands = "\n".join(step.get("run", "") for step in integration["steps"])
+    assert "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime" in integration_commands
+    if name == "rust-runtime-windows-resident.yml":
+        assert "test_guard_native_runtime_windows_resident.py" in integration_commands
+    else:
+        assert "test_native_hook_client.py" in integration_commands
+        assert "test_native_hook_client_transport.py" in integration_commands

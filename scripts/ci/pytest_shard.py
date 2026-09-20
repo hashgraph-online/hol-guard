@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import multiprocessing
 import sys
 from collections.abc import Mapping
-from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol, cast
@@ -70,40 +68,15 @@ def build_test_shards(root: Path, shard_count: int) -> list[list[Path]]:
     return shards
 
 
-def _collect_test_paths(paths: list[Path]) -> list[str]:
+def discover_test_nodes(root: Path) -> list[str]:
     collector = _NodeCollector()
     result = pytest.main(
-        [*(str(path) for path in paths), "--collect-only", "-p", "no:terminal"],
+        [str(root / "tests"), "--collect-only", "-p", "no:terminal"],
         plugins=[collector],
     )
-    # A file batch may contain only tests excluded by the repository marker policy.
-    if result not in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
+    if result != pytest.ExitCode.OK:
         raise RuntimeError(f"pytest collection failed with exit code {result}")
     return collector.node_ids
-
-
-def discover_test_nodes(root: Path, *, collection_workers: int = 1) -> list[str]:
-    """Collect every test file in isolated processes, preserving pytest selection."""
-
-    if collection_workers < 1:
-        raise ValueError("collection_workers must be positive")
-    if collection_workers == 1:
-        nodes = _collect_test_paths([root / "tests"])
-    else:
-        file_count = len(discover_test_files(root))
-        if not file_count:
-            raise RuntimeError("pytest collection produced no test nodes")
-        shards = build_test_shards(root, min(collection_workers, file_count))
-        with ProcessPoolExecutor(
-            max_workers=len(shards),
-            mp_context=multiprocessing.get_context("spawn"),
-        ) as executor:
-            nodes = [node for batch in executor.map(_collect_test_paths, shards) for node in batch]
-    if not nodes:
-        raise RuntimeError("pytest collection produced no test nodes")
-    if len(nodes) != len(set(nodes)):
-        raise RuntimeError("pytest collection produced duplicate test node ids")
-    return sorted(nodes)
 
 
 def build_node_shards(

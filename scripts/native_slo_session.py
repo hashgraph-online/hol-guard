@@ -325,6 +325,11 @@ class AdapterSession:
         self.close()
 
     def start(self) -> None:
+        # Match the installed all-harness probe: register the actual workspace
+        # before daemon startup so the readiness barrier measures its initial
+        # acknowledged policy, rather than invalidating a home-only snapshot
+        # and timing a second publication on slower runners.
+        self.daemon._server.hook_worker.policy_snapshot_publisher.register_workspace(self.workspace)
         self.daemon.start()
         self._connection = HTTPConnection("127.0.0.1", self.daemon.port, timeout=5)
         self._owner_thread_id = threading.get_ident()
@@ -343,7 +348,9 @@ class AdapterSession:
         if prepared is None:
             raise RuntimeError("native_installed_slo_failed: native policy was not ready")
         if self.readiness_ms > MAX_READINESS_P95_MS:
-            raise RuntimeError("native_installed_slo_failed: native readiness exceeded budget")
+            raise RuntimeError(
+                f"native_installed_slo_failed: native readiness exceeded budget ({self.readiness_ms:.3f} ms)"
+            )
 
     def observe(
         self,

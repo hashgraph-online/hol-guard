@@ -28,7 +28,6 @@ MAX_NODES_PER_AFFINITY_GROUP = 32
 
 class _Arguments(Protocol):
     shard_count: int
-    collection_workers: int
     duration_manifest: Path
     max_manifest_age_days: int
     output_directory: Path
@@ -193,7 +192,6 @@ def _load_current_durations(path: Path, max_age_days: int) -> tuple[dict[str, fl
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument("--shard-count", type=int, required=True)
-    _ = parser.add_argument("--collection-workers", type=int, default=1)
     _ = parser.add_argument("--duration-manifest", type=Path, required=True)
     _ = parser.add_argument("--max-manifest-age-days", type=int, default=28)
     _ = parser.add_argument("--output-directory", type=Path, required=True)
@@ -205,7 +203,7 @@ def main() -> int:
         args.max_manifest_age_days,
     )
     collection_started = time.monotonic()
-    nodes = discover_test_nodes(root, collection_workers=args.collection_workers)
+    nodes = discover_test_nodes(root)
     collection_seconds = time.monotonic() - collection_started
     shards, loads = build_affinity_node_shards(nodes, args.shard_count, durations)
     write_shard_plan(
@@ -219,7 +217,6 @@ def main() -> int:
             {
                 "shards": len(shards),
                 "nodes": len(nodes),
-                "collection_workers": args.collection_workers,
                 "collection_seconds": round(collection_seconds, 3),
                 "manifest_used": manifest_used,
                 "estimated_min_seconds": round(min(loads), 3),

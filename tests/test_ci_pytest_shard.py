@@ -9,6 +9,9 @@ SCHEDULING_SENSITIVE_NODE = (
     "tests/test_guard_hook_process_runner.py::"
     "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial"
 )
+STORAGE_LIVENESS_NODE = (
+    "tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon"
+)
 SPEC = importlib.util.spec_from_file_location("pytest_shard", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 pytest_shard = importlib.util.module_from_spec(SPEC)
@@ -63,6 +66,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
     assert f"--deselect {SCHEDULING_SENSITIVE_NODE}" in tests_job
     assert SCHEDULING_SENSITIVE_NODE in scheduling_job
+    assert f"--deselect {STORAGE_LIVENESS_NODE}" in tests_job
+    assert STORAGE_LIVENESS_NODE in scheduling_job
+    assert tests_job.count("--deselect ") == 2
+    assert "--ignore" not in tests_job
+    assert "--cov" not in scheduling_job
 
     cache_consumers = (
         ("compatibility", "deep-compatibility", 1),
@@ -79,9 +87,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 def test_sonar_scope_includes_native_rust_workspace() -> None:
     config = (ROOT / "sonar-project.properties").read_text(encoding="utf-8")
     properties = dict(
-        line.split("=", 1)
-        for line in config.splitlines()
-        if line and not line.startswith("#") and "=" in line
+        line.split("=", 1) for line in config.splitlines() if line and not line.startswith("#") and "=" in line
     )
 
     assert properties["sonar.sources"] == "src,rust"
