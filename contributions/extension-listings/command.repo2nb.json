@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.repo2nb",
+  "tagline": "Reviews repo2nb commands that can overwrite a destination directory or drop untracked notebook cells.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ]
+}

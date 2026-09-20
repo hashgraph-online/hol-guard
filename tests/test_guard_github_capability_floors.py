@@ -60,6 +60,7 @@ _EXPECTED_FLOORS = {
         (("pr", "merge", "17"), ("merge_remote",), False),
         (("pr", "merge", "17", "--delete-branch"), ("merge_remote", "delete_remote"), False),
         (("api", "repos/o/r/pulls/17/merge", "-X", "PUT"), ("merge_remote",), False),
+        (("api", "repos/o/r/pulls/17/merge?x=y", "-X", "PUT"), ("merge_remote",), False),
         (("release", "create", "v1"), ("publish_remote",), False),
         (("api", "repos/o/r/releases", "-X", "POST", "-f", "tag_name=v1"), ("publish_remote",), False),
         (("workflow", "run", "ci.yml"), ("workflow_remote",), False),

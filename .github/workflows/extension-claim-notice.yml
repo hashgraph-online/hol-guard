@@ -18,6 +18,11 @@ on:
         required: true
         default: false
         type: boolean
+      dry_run:
+        description: "Print the notice body without posting (read-only rehearsal)"
+        required: false
+        default: false
+        type: boolean
 
 # New jobs start without a token grant; writers declare only their own scopes.
 permissions: {}
@@ -47,6 +52,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
           ALLOW_RENAMES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_renames || 'false' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
           GUARD_EXTENSION_STUDIO_URL: https://hol.org/guard/extension-studio
         run: |
           args=(
@@ -56,5 +62,8 @@ jobs:
           )
           if [[ "$ALLOW_RENAMES" == "true" ]]; then
             args+=(--allow-renames)
+          fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
           fi
           python3 "${args[@]}"

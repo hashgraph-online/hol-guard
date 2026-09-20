@@ -10,6 +10,7 @@ use search::safe_search_arguments;
 pub mod generic;
 
 pub use generic::evaluate_pre_tool_envelope;
+pub use generic::evaluate_pre_tool_envelope_with_extensions;
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
@@ -330,6 +331,23 @@ mod tests {
         assert_eq!(decision.decision, "deny");
         assert_eq!(decision.minimum_action, "review");
         assert_eq!(decision.reason_code, "native_sensitive_access_review");
+    }
+
+    #[test]
+    fn reviews_dotenv_family_shell_reads() {
+        for command in [
+            "cat .env",
+            "cat .env.synthetic",
+            "cat /workspace/.env.local",
+        ] {
+            let decision = evaluate_pre_tool(&request(command)).unwrap();
+            assert_eq!(decision.decision, "deny", "{command}");
+            assert_eq!(decision.minimum_action, "review", "{command}");
+            assert_eq!(
+                decision.reason_code, "native_sensitive_access_review",
+                "{command}"
+            );
+        }
     }
 
     #[test]

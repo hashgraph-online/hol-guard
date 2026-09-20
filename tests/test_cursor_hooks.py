@@ -249,6 +249,9 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     assert "_FALLBACK_LOCK.acquire(blocking=False)" in source
     assert 'recover_kind != "overload"' in source
     assert "[*GUARD_RECOVERY_COMMAND, failure_kind]" in source
+    assert "run_isolated_hook_process is None:" in source
+    assert "os.killpg(" in source
+    assert "start_new_session" in source
 
 
 def test_cursor_hook_recovers_dead_daemon_once_then_retries(
@@ -634,6 +637,64 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
 
     assert proc.returncode == 0
     assert json.loads(proc.stdout)["permission"] == "allow"
+    assert not marker.exists()
+
+
+def test_cursor_hook_timeout_kills_descendants_without_package_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    marker = tmp_path / "descendant-ran"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    fake_guard = tmp_path / "slow-guard.py"
+    descendant = f"import time;time.sleep(0.8);open({str(marker)!r},'w',encoding='utf-8').write('ran')"
+    fake_guard.write_text(
+        f"import subprocess,sys,time\nsubprocess.Popen([sys.executable, '-c', {descendant!r}])\ntime.sleep(10)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda _context: [sys.executable, str(fake_guard)],
+    )
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    source = cursor_hook_script_source(context)
+    source = source.replace(
+        "from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process",
+        "run_isolated_hook_process = None",
+        1,
+    )
+    source = source.replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
+    )
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(source, encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeShellExecution",
+                "tool_name": "Bash",
+                "command": "echo hi",
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+        timeout=3,
+    )
+    time.sleep(1)
+
+    assert json.loads(proc.stdout).get("permission") in {"allow", "deny"}
     assert not marker.exists()
 
 

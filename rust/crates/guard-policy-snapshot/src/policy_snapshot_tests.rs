@@ -38,6 +38,7 @@ fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
             workspace_binding: "request-source".into(),
         },
         effective_policy,
+        command_extensions: None,
         issued_at_ms: 100,
         expires_at_ms: 1_000,
         integrity: SnapshotIntegrityV3 {

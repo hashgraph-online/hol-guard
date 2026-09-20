@@ -35,3 +35,39 @@ Icons must use an allowlisted `react-icon` name or `kind: none`. Remote icon URL
 - Custom device CLIs and unmapped local/test ids stay first-party. Only ids listed as `external` stay off until a local-admin enable.
 - Tests must prove the contribution stays inert until a local-admin enable layer exists.
 - A signed-cloud enable cannot turn an external contribution on. Local-admin enable is required.
+
+
+## Native execution
+
+Python modules are the reviewed authoring format, not hook-time plugins. The build
+compiler turns every rule and safe variant into the packaged
+`guard.native-command-program.v1` artifact. The Rust resident validates that
+artifact once and evaluates the admitted matcher operations against its canonical
+command model. Unknown matcher types fail compilation; a stale artifact fails CI.
+
+After changing detector definitions or contribution metadata, run:
+
+```sh
+uv run python scripts/build_native_command_program.py
+uv run python scripts/build_native_command_program.py --check
+```
+
+The authenticated policy snapshot binds the program, catalog, trust classes and
+committed local/managed controls. External contributions still require local
+opt-in. A control mutation closes the native authority fence before changing
+stored settings, and a matching resident acknowledgement is required to reopen it.
+Native receipts retain the program/control identity and a digest of bounded,
+redacted observations. A missing or changed binding cannot reuse an older approval.
+
+Package ecosystem entries retain their Package Firewall delegation. The native
+command boundary applies their explicit disabled-permission gates without
+claiming to replace package download, advisory or provenance scans. MCP entries
+carry their packaged tool defaults into native PreToolUse; declared block rules
+and explicit controls only strengthen the existing native result. Neither a
+package name nor a server namespace grants allow authority. Unidentified MCPs
+retain the native unknown/tool-review floor.
+
+The installed-wheel gate exercises contribution opt-in, permission blocking,
+safe-variant isolation, restart persistence, package/MCP controls, persisted
+native receipts and tampered authority markers. The headless control fixture uses
+generated production keys; interactive terminal enrollment is a separate flow.

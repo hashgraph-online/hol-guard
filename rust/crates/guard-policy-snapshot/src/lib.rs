@@ -137,6 +137,8 @@ pub struct PolicySnapshotV3 {
     pub mode: String,
     pub scope_contract: ScopeContractV3,
     pub effective_policy: EffectiveNativePolicyV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_extensions: Option<guard_contracts::NativeCommandControlBindingV1>,
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub integrity: SnapshotIntegrityV3,
@@ -279,6 +281,9 @@ pub fn validate_v3(
     }
     validate_scope(&snapshot.scope_contract)?;
     validate_effective_policy(&snapshot.effective_policy)?;
+    if let Some(binding) = &snapshot.command_extensions {
+        binding.validate().map_err(|_| SnapshotError::Policy)?;
+    }
     if snapshot.expires_at_ms <= snapshot.issued_at_ms
         || snapshot.expires_at_ms - snapshot.issued_at_ms > POLICY_SNAPSHOT_MAX_EXPIRY_MS
     {

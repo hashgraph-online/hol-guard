@@ -58,9 +58,12 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
         return None
     if not isinstance(digest, str) or not isinstance(identity, str) or not isinstance(mode, str):
         return None
-    return {
+    binding: dict[str, object] = {
         "generation": generation,
         "policy_digest": digest,
         "runtime_identity": identity,
         "mode": mode,
     }
+    if "command_extensions" in snapshot:
+        binding["command_extensions_bound"] = True
+    return binding

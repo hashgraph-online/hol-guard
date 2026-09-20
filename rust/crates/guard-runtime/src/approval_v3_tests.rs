@@ -75,6 +75,7 @@ fn snapshot(root: &Path, key: &[u8; 32]) -> PolicySnapshotV3 {
             workspace_binding: "request-source".into(),
         },
         effective_policy,
+        command_extensions: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
         expires_at_ms: now_ms().unwrap() + 60_000,
         integrity: SnapshotIntegrityV3 {

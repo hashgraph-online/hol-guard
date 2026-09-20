@@ -29,10 +29,11 @@ use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
     PolicyFacts, PATH_KEYS,
 };
-use policy_enforcement_policy::{
-    canonical_harness_action, canonical_harness_risk_actions, policy_map_action,
-    validate_effective_policy,
-};
+use policy_enforcement_policy::{policy_map_action, CompiledEffectivePolicy};
+
+#[path = "policy_enforcement_admission.rs"]
+mod policy_enforcement_admission;
+pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
 
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
@@ -184,15 +185,15 @@ fn normalized_harness(value: &str) -> String {
 
 fn policy_floor(
     policy: &EffectiveNativePolicyV3,
+    compiled: &CompiledEffectivePolicy,
     harness: &str,
     action_type: PreToolActionTypeV1,
     facts: &PolicyFacts,
     reason_code: &str,
 ) -> Result<String, String> {
-    validate_effective_policy(policy)?;
     let mut floor = policy.default_action.clone();
-    if let Some(action) = canonical_harness_action(&policy.harness_actions, harness)? {
-        floor = join_action(&floor, &action)?;
+    if let Some(action) = compiled.harness_actions.get(harness) {
+        floor = join_action(&floor, action)?;
     }
     if matches!(
         action_type,
@@ -227,7 +228,7 @@ fn policy_floor(
             floor = join_action(&floor, &action)?;
         }
     }
-    let harness_risks = canonical_harness_risk_actions(&policy.harness_risk_actions, harness)?;
+    let harness_risks = compiled.harness_risk_actions.get(harness);
     for risk in risk_classes(action_type, facts.sensitive_target, reason_code) {
         if let Some(action) = policy_map_action(&policy.risk_actions, risk)? {
             floor = join_action(&floor, &action)?;
@@ -268,7 +269,7 @@ fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
 
 /// Apply the authenticated policy to a generic native PreTool result.
 pub(crate) fn apply_pre_tool_policy(
-    snapshot: &PolicySnapshotV3,
+    snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
     result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
@@ -281,6 +282,7 @@ pub(crate) fn apply_pre_tool_policy(
     facts.sensitive_target |= result.action.sensitive_target;
     let policy_floor = policy_floor(
         &snapshot.effective_policy,
+        &snapshot.compiled,
         &harness,
         result.action.action_type,
         &facts,
@@ -385,7 +387,7 @@ fn post_action_type(
 /// source/content decision is intrinsic and therefore remains strongest even
 /// when the configured policy says `allow`.
 pub(crate) fn apply_post_tool_policy(
-    snapshot: &PolicySnapshotV3,
+    snapshot: &AdmittedPolicySnapshot,
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
     mut response: HookReviewResponseV1,
@@ -412,6 +414,7 @@ pub(crate) fn apply_post_tool_policy(
     let facts = payload_facts(&request.payload, action_type, &response.reason_code)?;
     let floor = policy_floor(
         &snapshot.effective_policy,
+        &snapshot.compiled,
         &normalized_harness(&request.harness),
         action_type,
         &facts,

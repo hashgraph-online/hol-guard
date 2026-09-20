@@ -172,11 +172,52 @@ def write_catalog(path: Path, rendered: str) -> None:
             checked_path(staged).unlink()
 
 
+def claim_readiness(root: Path = ROOT) -> dict[str, object]:
+    """Read-only invitation-readiness signal for the exported directory.
+
+    A valid runtime contribution with an empty accepted claimant set is NOT
+    invitation-eligible: the claim server requires accepted numeric GitHub IDs
+    from a merged listing sidecar. This report never grants authority.
+    """
+
+    entries: list[dict[str, object]] = []
+    for entry in export_directory(root)["entries"]:
+        claim_policy = str(entry["claimPolicy"])
+        accepted_ids = list(entry["maintainerGithubIds"])  # type: ignore[arg-type]
+        if claim_policy != "provenance":
+            reason = "project_policy"
+        elif accepted_ids:
+            reason = "eligible"
+        else:
+            reason = "empty_accepted_set"
+        entries.append(
+            {
+                "id": entry["id"],
+                "claimPolicy": claim_policy,
+                "acceptedGithubIdCount": len(accepted_ids),
+                "invitationEligible": claim_policy == "provenance" and bool(accepted_ids),
+                "reason": reason,
+            }
+        )
+    return {
+        "schemaVersion": "guard.extension-claim-readiness.v1",
+        "entries": entries,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("--check", action="store_true")
+    _ = parser.add_argument(
+        "--readiness",
+        action="store_true",
+        help="Print a read-only claim-invitation readiness report instead of writing the catalog.",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.readiness:
+            print(json.dumps(claim_readiness(), ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+            return 0
         rendered = render_directory()
         if args.check:
             if read_bytes(OUTPUT, limit=MAX_CATALOG_BYTES) != rendered.encode("utf-8"):
