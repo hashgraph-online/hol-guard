@@ -68,6 +68,28 @@ pub(crate) struct Repo2nbExpansionConfig {
     compiled_launchers: Vec<CompiledLauncher>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PromptBranchVersionedPackageConfig {
+    subcommand: String,
+    package_launchers: BTreeSet<String>,
+    wrapper_executables: BTreeSet<String>,
+    wrapper_options_with_values: BTreeSet<String>,
+    wrapper_flags: BTreeSet<String>,
+    package_launcher_options_with_values: BTreeSet<String>,
+    package_launcher_flags: BTreeSet<String>,
+    #[serde(default = "promptbranch_package_prefix")]
+    package_prefix: String,
+    #[serde(default)]
+    excluded_qualifiers: BTreeSet<String>,
+    #[serde(default)]
+    required_flags: BTreeSet<String>,
+    #[serde(default)]
+    options_with_values: BTreeSet<String>,
+    #[serde(default)]
+    flags: BTreeSet<String>,
+}
+
 #[derive(Debug, Clone)]
 struct CompiledLauncher {
     executables: BTreeSet<String>,
@@ -80,6 +102,7 @@ pub(crate) enum SpecializedMatcher {
     PhpArtisan(PhpArtisanConfig),
     ZeroOperand(ZeroOperandConfig),
     CurlElasticsearch(CurlElasticsearchConfig),
+    PromptBranchVersionedPackage(PromptBranchVersionedPackageConfig),
     Repo2nbExpansion(Repo2nbExpansionConfig),
     ReviewedLiteral(ReviewedLiteralConfig),
 }
@@ -110,6 +133,14 @@ impl SpecializedMatcher {
             "curl-elasticsearch-delete.v1" => Ok(Self::CurlElasticsearch(
                 serde_json::from_value(config).map_err(invalid)?,
             )),
+            "promptbranch-versioned-package.v1" => {
+                let config: PromptBranchVersionedPackageConfig =
+                    serde_json::from_value(config).map_err(invalid)?;
+                if !config.valid() {
+                    return Err("invalid_promptbranch_versioned_package_config");
+                }
+                Ok(Self::PromptBranchVersionedPackage(config))
+            }
             "repo2nb-expansion.v1" => {
                 let mut config: Repo2nbExpansionConfig =
                     serde_json::from_value(config).map_err(invalid)?;
@@ -199,6 +230,7 @@ impl SpecializedMatcher {
                         deadline,
                     )?
                 }
+                Self::PromptBranchVersionedPackage(config) => config.matches(segment, deadline)?,
                 Self::Repo2nbExpansion(config) => config.matches(segment, deadline)?,
                 Self::ReviewedLiteral(_) => unreachable!("handled before segment iteration"),
             };
@@ -210,6 +242,161 @@ impl SpecializedMatcher {
         check_deadline(deadline)?;
         Ok(matches)
     }
+}
+
+impl PromptBranchVersionedPackageConfig {
+    fn valid(&self) -> bool {
+        !self.subcommand.is_empty()
+            && self.package_prefix.ends_with('@')
+            && !self.package_launchers.is_empty()
+            && !self.wrapper_executables.is_empty()
+            && std::iter::once(&self.subcommand)
+                .chain(std::iter::once(&self.package_prefix))
+                .chain(&self.package_launchers)
+                .chain(&self.wrapper_executables)
+                .chain(&self.wrapper_options_with_values)
+                .chain(&self.wrapper_flags)
+                .chain(&self.package_launcher_options_with_values)
+                .chain(&self.package_launcher_flags)
+                .chain(&self.excluded_qualifiers)
+                .chain(&self.required_flags)
+                .chain(&self.options_with_values)
+                .chain(&self.flags)
+                .all(|value| value.is_ascii() && !value.is_empty() && value.len() <= 4_096)
+    }
+
+    fn matches(
+        &self,
+        segment: &CommandSegmentV1,
+        deadline: Option<Instant>,
+    ) -> Result<bool, &'static str> {
+        let Some(executable) = segment.executable.as_deref() else {
+            return Ok(false);
+        };
+        let executable = lowercase_for_ascii_comparison(
+            executable.rsplit(['/', '\\']).next().unwrap_or(executable),
+        );
+        if !self.package_launchers.contains(&executable)
+            && !self.wrapper_executables.contains(&executable)
+        {
+            return Ok(false);
+        }
+        let arguments = segment
+            .arguments
+            .iter()
+            .map(|argument| lowercase_for_ascii_comparison(argument))
+            .collect::<Vec<_>>();
+        let exec_options = BTreeSet::from(["-a".to_owned()]);
+        let launcher_arguments = if self.wrapper_executables.contains(&executable) {
+            let wrapper_options =
+                if matches!(executable.as_str(), "xargs" | "xargs.cmd" | "xargs.exe") {
+                    &self.wrapper_options_with_values
+                } else {
+                    &exec_options
+                };
+            leading_operand_suffixes(&arguments, wrapper_options, &self.wrapper_flags, deadline)?
+                .into_iter()
+                .filter_map(|suffix| {
+                    suffix
+                        .first()
+                        .is_some_and(|launcher| self.package_launchers.contains(launcher))
+                        .then_some(&suffix[1..])
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![arguments.as_slice()]
+        };
+
+        let mut matched_launch = false;
+        for launcher_arguments in launcher_arguments {
+            for candidate in leading_operand_suffixes(
+                launcher_arguments,
+                &self.package_launcher_options_with_values,
+                &self.package_launcher_flags,
+                deadline,
+            )? {
+                if candidate.len() >= 2
+                    && candidate[0].starts_with(&self.package_prefix)
+                    && candidate[0].len() > self.package_prefix.len()
+                    && !self
+                        .excluded_qualifiers
+                        .contains(&candidate[0][self.package_prefix.len()..])
+                    && candidate[1] == self.subcommand
+                {
+                    matched_launch = true;
+                    break;
+                }
+            }
+            if matched_launch {
+                break;
+            }
+        }
+        if !matched_launch {
+            return Ok(false);
+        }
+        if self.required_flags.is_empty() {
+            return Ok(true);
+        }
+        let options_with_values = self
+            .options_with_values
+            .union(&self.wrapper_options_with_values)
+            .chain(&self.package_launcher_options_with_values)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let known_flags = self
+            .flags
+            .union(&self.required_flags)
+            .chain(&self.wrapper_flags)
+            .chain(&self.package_launcher_flags)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let semantics = argument_semantics(&arguments, &options_with_values, &BTreeSet::new());
+        Ok(self.required_flags.is_subset(&semantics.present_flags)
+            && crate::command_option_parsing::flags_present_in_all_option_parses_with_deadline(
+                &arguments,
+                &self.required_flags,
+                &options_with_values,
+                &known_flags,
+                deadline,
+            ))
+    }
+}
+
+fn leading_operand_suffixes<'a>(
+    arguments: &'a [String],
+    options_with_values: &BTreeSet<String>,
+    flags: &BTreeSet<String>,
+    deadline: Option<Instant>,
+) -> Result<Vec<&'a [String]>, &'static str> {
+    let mut pending = vec![0];
+    let mut visited = BTreeSet::new();
+    let mut suffixes = Vec::new();
+    while let Some(index) = pending.pop() {
+        check_deadline(deadline)?;
+        if !visited.insert(index) || index >= arguments.len() {
+            continue;
+        }
+        let argument = &arguments[index];
+        if argument == "--" {
+            if index + 1 < arguments.len() {
+                suffixes.push(&arguments[index + 1..]);
+            }
+            continue;
+        }
+        if argument.len() <= 1 || !argument.starts_with('-') {
+            suffixes.push(&arguments[index..]);
+            continue;
+        }
+        if let Some(advance) = known_option_advance(argument, options_with_values, flags) {
+            pending.push(index + advance);
+            continue;
+        }
+        pending.push(index + 1);
+        if !argument.contains('=') && index + 1 < arguments.len() {
+            pending.push(index + 2);
+        }
+    }
+    Ok(suffixes)
 }
 
 impl PhpArtisanConfig {
@@ -307,6 +494,9 @@ fn elasticsearch_ports() -> BTreeSet<u16> {
 }
 fn reverse_subcommand() -> String {
     "reverse".to_owned()
+}
+fn promptbranch_package_prefix() -> String {
+    "@promptbranch/cli@".to_owned()
 }
 fn wrapper_value_options() -> BTreeSet<String> {
     string_set(&["-n", "-P", "-I", "-L", "-s"])

@@ -11,6 +11,47 @@ fn model(command: &str) -> CanonicalCommandV1 {
         .unwrap()
 }
 
+fn exact_model(executable: &str, arguments: &[&str]) -> CanonicalCommandV1 {
+    let arguments = arguments
+        .iter()
+        .map(|argument| (*argument).to_owned())
+        .collect::<Vec<_>>();
+    let text = std::iter::once(executable)
+        .chain(arguments.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ");
+    CanonicalCommandV1 {
+        exact_raw_text: true,
+        normalized_text: text.clone(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "native-command-program-test".into(),
+        wrapper_chain: Vec::new(),
+        segments: vec![CommandSegmentV1 {
+            text: text.clone(),
+            tokens: std::iter::once(executable.to_owned())
+                .chain(arguments.iter().cloned())
+                .collect(),
+            executable: Some(executable.to_owned()),
+            arguments,
+            environment_names: Vec::new(),
+            wrapper_chain: Vec::new(),
+            path_overridden: false,
+            execution_context: "top:0".into(),
+            pipeline_index: 0,
+            span: crate::CommandSpanV1 {
+                source: "normalized".into(),
+                start: 0,
+                end: text.len(),
+            },
+        }],
+        confidence: "exact".into(),
+        uncertainty_reason: None,
+        path_overridden: false,
+        parser_profile: "native-command-program-test".into(),
+    }
+}
+
 fn binding(controls: &[(&str, &str, &str)], managed: bool) -> NativeCommandControlBindingV1 {
     let program = packaged_command_program().unwrap();
     let mut binding = NativeCommandControlBindingV1 {
@@ -68,7 +109,7 @@ fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
     assert_eq!(first.extensions.len(), 72);
-    assert_eq!(first.rules.len(), 239);
+    assert_eq!(first.rules.len(), 245);
     assert_eq!(
         first
             .rules
@@ -81,6 +122,191 @@ fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
         .runtime_coverage()
         .iter()
         .any(|(id, supported)| *id == "command.ollama.push" && *supported));
+}
+
+#[test]
+fn promptbranch_versioned_package_launches_preserve_native_review_parity() {
+    let program = packaged_command_program().unwrap();
+    let active = BTreeSet::from(["command.promptbranch".to_owned()]);
+    for (source, executable, arguments, rule_id) in [
+        (
+            "npx --prefer-offline @promptbranch/cli@0.2.8 publish security-audit",
+            "npx",
+            &["--prefer-offline", "@promptbranch/cli@0.2.8", "publish", "security-audit"] as &[_],
+            "command.promptbranch.publish",
+        ),
+        (
+            "bunx --bun @promptbranch/cli@next import https://example.test/p/share-id",
+            "bunx",
+            &["--bun", "@promptbranch/cli@next", "import", "https://example.test/p/share-id"],
+            "command.promptbranch.import",
+        ),
+        (
+            "exec npx --package helper @promptbranch/cli@0.2.8 add-note --prompt security-audit --body works-well",
+            "exec",
+            &[
+                "npx",
+                "--package",
+                "helper",
+                "@promptbranch/cli@0.2.8",
+                "add-note",
+                "--prompt",
+                "security-audit",
+                "--body",
+                "works-well",
+            ],
+            "command.promptbranch.add-note",
+        ),
+        (
+            "xargs -n 1 bunx --package helper @promptbranch/cli@0.2.8 report-run --prompt security-audit --tool cli",
+            "xargs",
+            &[
+                "-n",
+                "1",
+                "bunx",
+                "--package",
+                "helper",
+                "@promptbranch/cli@0.2.8",
+                "report-run",
+                "--prompt",
+                "security-audit",
+                "--tool",
+                "cli",
+            ],
+            "command.promptbranch.report-run",
+        ),
+        (
+            "exec bunx --verbose @promptbranch/cli@next suggest --prompt security-audit --content rewritten",
+            "exec",
+            &[
+                "bunx",
+                "--verbose",
+                "@promptbranch/cli@next",
+                "suggest",
+                "--prompt",
+                "security-audit",
+                "--content",
+                "rewritten",
+            ],
+            "command.promptbranch.suggest",
+        ),
+    ] {
+        let observations = program
+            .observe_declarative(&exact_model(executable, arguments), &active, None)
+            .unwrap();
+        assert!(
+            observations
+                .observations
+                .iter()
+                .any(|item| item.rule_id == rule_id && item.effective_segment_indexes == [0]),
+            "{source}: {observations:#?}"
+        );
+    }
+
+    let file_suggestion = program
+        .observe_declarative(
+            &exact_model(
+                "xargs",
+                &[
+                    "-n",
+                    "1",
+                    "bunx",
+                    "--package",
+                    "helper",
+                    "@promptbranch/cli@0.2.8",
+                    "suggest",
+                    "--prompt",
+                    "security-audit",
+                    "--file",
+                    "rewrite.md",
+                ],
+            ),
+            &active,
+            None,
+        )
+        .unwrap();
+    for rule_id in [
+        "command.promptbranch.suggest",
+        "command.promptbranch.suggest-file",
+    ] {
+        assert!(
+            file_suggestion
+                .observations
+                .iter()
+                .any(|item| item.rule_id == rule_id && item.effective_segment_indexes == [0]),
+            "{rule_id}"
+        );
+    }
+
+    let preview = program
+        .observe_declarative(
+            &exact_model(
+                "npx",
+                &[
+                    "--prefer-offline",
+                    "@promptbranch/cli@0.2.8",
+                    "publish",
+                    "security-audit",
+                    "--preview",
+                ],
+            ),
+            &active,
+            None,
+        )
+        .unwrap();
+    let publish = preview
+        .observations
+        .iter()
+        .find(|item| item.rule_id == "command.promptbranch.publish")
+        .unwrap();
+    assert!(publish.effective_segment_indexes.is_empty());
+    assert_eq!(
+        publish
+            .safe_variants
+            .iter()
+            .map(|variant| variant.variant_id.as_str())
+            .collect::<Vec<_>>(),
+        ["preview"]
+    );
+
+    for (source, executable, arguments) in [
+        (
+            "npx --prefer-offline @promptbranch/client@0.2.8 publish security-audit",
+            "npx",
+            &["--prefer-offline", "@promptbranch/client@0.2.8", "publish", "security-audit"] as &[_],
+        ),
+        (
+            "exec npx @promptbranch/cli@ publish security-audit",
+            "exec",
+            &["npx", "@promptbranch/cli@", "publish", "security-audit"],
+        ),
+        (
+            "xargs -n 1 bunx @promptbranch/cli-tools@beta report-run --prompt security-audit --tool cli",
+            "xargs",
+            &[
+                "-n",
+                "1",
+                "bunx",
+                "@promptbranch/cli-tools@beta",
+                "report-run",
+                "--prompt",
+                "security-audit",
+                "--tool",
+                "cli",
+            ],
+        ),
+    ] {
+        let observations = program
+            .observe_declarative(&exact_model(executable, arguments), &active, None)
+            .unwrap();
+        assert!(
+            observations
+                .observations
+                .iter()
+                .all(|item| item.extension_id != "command.promptbranch"),
+            "{source}"
+        );
+    }
 }
 
 #[test]
