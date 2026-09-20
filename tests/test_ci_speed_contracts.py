@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -12,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _workflow(name: str) -> dict:
+def _workflow(name: str) -> dict[str | bool, Any]:
     return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
 
 
@@ -107,9 +108,13 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
 def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    job = workflow["jobs"]["test-plan"]
-    restore = next(step for step in job["steps"] if step.get("id") == "latest-duration-telemetry")
-    assert restore["env"]["TELEMETRY_BRANCH"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
+    for job_name in ("test-plan", "coverage-plan"):
+        job = workflow["jobs"][job_name]
+        plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
+        assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
+    action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    restore = next(step for step in action["runs"]["steps"] if step.get("id") == "latest-duration-telemetry")
+    assert restore["env"]["TELEMETRY_BRANCH"] == "${{ inputs.telemetry-branch }}"
     command = restore["run"]
     assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in command
     assert 'test "$event" = "push"' in command

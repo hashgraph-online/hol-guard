@@ -1,0 +1,54 @@
+name: Set up locked CI Python
+description: Install the exact interpreter and development dependencies for Linux pytest jobs.
+inputs:
+  python-version:
+    description: Exact Python version shared by discovery and execution.
+    required: true
+  cache-dependency-glob:
+    description: Files that identify the locked dependency environment.
+    required: true
+  save-cache:
+    description: Whether this job is a dependency-cache producer.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Set up uv
+      id: setup-uv-primary
+      continue-on-error: true
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      with:
+        version: "0.9.26"
+        enable-cache: true
+        cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
+        save-cache: ${{ inputs.save-cache }}
+    - name: Retry uv setup after transient download failure
+      if: steps.setup-uv-primary.outcome == 'failure'
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      with:
+        version: "0.9.26"
+        enable-cache: true
+        cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
+        save-cache: ${{ inputs.save-cache }}
+    - name: Install locked development dependencies
+      shell: bash
+      env:
+        CI_SETUP_PYTHON_VERSION: ${{ inputs.python-version }}
+      run: uv sync --frozen --extra dev --python "$CI_SETUP_PYTHON_VERSION"
+    - name: Secure the CI virtualenv interpreter
+      shell: bash
+      run: |
+        interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+        target="$(realpath "$interpreter")"
+        mode="$(stat -c '%a' "$target")"
+        if (( (8#$mode & 2) != 0 )); then
+          replacement="${interpreter}.guard-ci"
+          cp --dereference "$target" "$replacement"
+          chmod 0755 "$replacement"
+          mv "$replacement" "$target"
+        fi
+        secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
+        (( (8#$secured_mode & 2) == 0 ))

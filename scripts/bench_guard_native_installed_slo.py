@@ -196,14 +196,37 @@ def _run_cold(runtime: Path, session: AdapterSession, iterations: int) -> list[f
 def _run_recovery(session: AdapterSession, iterations: int) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
-        _ = session.observe("claude-code", "PostToolUse", "1k")
+        warm = session.observe("claude-code", "PostToolUse", "1k")
         _require(
-            session.stop_resident(),
+            warm.allowed and warm.route == "native_resident", f"recovery sample {index} was not resident before stop"
+        )
+        _require(
+            # A resident restart leaves the installed adapter's persistent
+            # Rust client alive. That stream re-discovers/authenticates the
+            # new generation on the next request; destroying it here would
+            # add a separate client cold start to the resident recovery SLO.
+            session.stop_resident(preserve_clients=True),
             f"resident stop failed during recovery sample {index}",
         )
         started = time.perf_counter()
         observation = session.observe("claude-code", "PostToolUse", "1k")
-        values.append((time.perf_counter() - started) * 1_000.0)
+        elapsed_ms = (time.perf_counter() - started) * 1_000.0
+        values.append(elapsed_ms)
+        print(
+            json.dumps(
+                {
+                    "schema": "hol-guard.native-recovery-sample.v1",
+                    "sample": index,
+                    "adapter_ms": round(observation.latency_ms, 3),
+                    "elapsed_ms": round(elapsed_ms, 3),
+                    "route": observation.route,
+                    "allowed": observation.allowed,
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
         _require(observation.allowed and observation.route == "native_resident", f"recovery sample {index} failed")
     return values
 

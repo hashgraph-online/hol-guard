@@ -335,10 +335,9 @@ def measure_capacity(
 ) -> CapacityMeasurements:
     ready_workers = _stabilize_ready_hook_workers(session)
     if include_capacity:
-        # Recovery closes the per-worker resident clients. A ready process has
-        # not necessarily reopened its transport, so initialize the full pool
-        # before measuring steady-state capacity. Cold and recovery latency
-        # remain separate measurements; the 16-client sample still precedes
+        # Serialized warmup has not exercised every ready worker's transport,
+        # so initialize the full pool before measuring steady-state capacity.
+        # Cold and recovery latency remain separate measurements; the 16-client sample still precedes
         # the larger 64-client overload wave.
         _prewarm_capacity_workers(session, routes, ready_workers)
     concurrent_16, errors_16 = _measure_c16(session, routes, include_capacity=include_capacity)

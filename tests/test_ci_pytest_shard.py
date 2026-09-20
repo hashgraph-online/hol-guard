@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
@@ -40,45 +43,84 @@ def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> st
 
 
 def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    plan_job = _workflow_job(workflow, "test-plan", "tests")
-    tests_job = _workflow_job(workflow, "tests", "duration-manifest-candidate")
-    sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
-    scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
-
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    payload = yaml.safe_load(workflow)
+    jobs = payload["jobs"]
+    plan_action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    plan_steps = plan_action["runs"]["steps"]
+    collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
     assert "cancel-in-progress: true" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
     assert "actions: read" in workflow
     assert "**/pyproject.toml" not in workflow
-    assert "--shard-count 128" in plan_job
-    jobs = yaml.safe_load(workflow)["jobs"]
-    assert jobs["tests"]["strategy"]["matrix"]["shard-index"] == list(range(128))
-    assert 'test "${#reports[@]}" -eq 128' in _workflow_job(workflow, "duration-manifest-candidate", "sonar-guard")
-    assert "build_pytest_shard_plan.py" in plan_job
-    assert "Restore latest trusted duration telemetry" in plan_job
-    assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in plan_job
-    assert 'test "$event" = "push"' in plan_job
-    assert 'test "$conclusion" = "success"' in plan_job
-    assert 'test "$branch" = "$TELEMETRY_BRANCH"' in plan_job
-    assert 'test "$workflow_path" = ".github/workflows/ci.yml"' in plan_job
-    assert "needs: test-plan" in tests_job
-    assert "name: pytest-shard-plan" in tests_job
-    assert "shard-%03d.txt" in tests_job
-    assert "python scripts/ci/pytest_shard.py" not in tests_job
+    assert '--shard-count "$CI_PLAN_SHARD_COUNT"' in collector
+    assert "--ignore" not in collector
+    assert "--deselect" not in collector
+    assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
+    assert payload["env"]["CI_COVERAGE_PYTHON_VERSION"] == "3.14.7"
+
+    for planner, executor, version, env_name, count, width in (
+        ("test-plan", "tests", "3.12", "CI_PYTHON_VERSION", 32, 2),
+        ("coverage-plan", "coverage", "3.14", "CI_COVERAGE_PYTHON_VERSION", 128, 3),
+    ):
+        plan_job = jobs[planner]
+        execution_job = jobs[executor]
+        assert execution_job["needs"] == planner
+        assert execution_job["strategy"]["matrix"]["shard-index"] == list(range(count))
+        for job in (plan_job, execution_job):
+            setup = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/setup-ci-python")
+            assert setup["with"]["python-version"] == "${{ env." + env_name + " }}"
+        plan = next(step for step in plan_job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
+        assert plan["with"]["python-version"] == version
+        assert plan["with"]["shard-count"] == str(count)
+        download = next(
+            step for step in execution_job["steps"] if step.get("uses", "").startswith("actions/download-artifact@")
+        )
+        assert download["with"]["name"] == f"pytest-shard-plan-{version}"
+        commands = "\n".join(step.get("run", "") for step in execution_job["steps"])
+        assert f"shard-%0{width}d.txt" in commands
+        assert "python scripts/ci/pytest_shard.py" not in commands
+        assert "--ignore" not in commands
+        assert '"@$shard_file"' in commands
+
+    tests_job = _workflow_job(workflow, "tests", "coverage")
+    coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
+    scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
+    assert "--cov" not in tests_job
+    assert "GUARD_PYTEST_UNDER_COVERAGE" not in tests_job
+    assert "--cov --cov-branch --cov-report=" in coverage_job
+    assert "COVERAGE_CORE: sysmon" in coverage_job
+    assert "-p pytest_coverage_core" in coverage_job
+    assert jobs["coverage"]["name"] == "coverage (3.14, ${{ matrix.shard-index }})"
+    assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
+    for node in (SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE):
+        assert f"--deselect {node}" in coverage_job
+        assert node in scheduling_job
+    assert coverage_job.count("--deselect ") == 2
+    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} == SCHEDULING_ONLY_NODE_IDS
+    assert "--cov" not in scheduling_job
+
+    candidate = jobs["duration-manifest-candidate"]
+    assert candidate["needs"] == "coverage"
+    assert candidate["if"] == "needs.coverage.result == 'success'"
+    assert 'test "${#reports[@]}" -eq 128' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
     assert 'test "${#reports[@]}" -eq 128' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
-    assert "name: ci (3.12)" in workflow
-    assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
-    assert f"--deselect {SCHEDULING_SENSITIVE_NODE}" in tests_job
-    assert SCHEDULING_SENSITIVE_NODE in scheduling_job
-    assert f"--deselect {STORAGE_LIVENESS_NODE}" in tests_job
-    assert STORAGE_LIVENESS_NODE in scheduling_job
-    assert tests_job.count("--deselect ") == 2
-    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} == SCHEDULING_ONLY_NODE_IDS
-    assert "--ignore" not in tests_job
-    assert "--cov" not in scheduling_job
+    gate = jobs["ci-python-312"]
+    assert gate["name"] == "ci (3.12)"
+    assert gate["if"] == "always()"
+    assert set(gate["needs"]) == {
+        "quality",
+        "test-plan",
+        "tests",
+        "coverage-plan",
+        "coverage",
+        "compatibility",
+        "scheduling-sensitive",
+    }
 
     cache_consumers = (
         ("compatibility", "deep-compatibility", 1),
@@ -90,6 +132,21 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     for job_name, next_job_name, expected_count in cache_consumers:
         job = _workflow_job(workflow, job_name, next_job_name)
         assert job.count("save-cache: false") >= expected_count
+
+
+@pytest.mark.parametrize(
+    "failed_dependency", ["TEST_PLAN_RESULT", "TESTS_RESULT", "COVERAGE_PLAN_RESULT", "COVERAGE_RESULT"]
+)
+@pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
+def test_required_python_gate_rejects_either_incomplete_suite(failed_dependency: str, result: str) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    step = workflow["jobs"]["ci-python-312"]["steps"][0]
+    env = dict(os.environ, **dict.fromkeys(step["env"], "success"))
+    env[failed_dependency] = result
+
+    completed = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, check=False)
+
+    assert completed.returncode != 0
 
 
 def test_sonar_scope_includes_native_rust_workspace() -> None:

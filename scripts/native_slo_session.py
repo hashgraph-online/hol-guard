@@ -154,6 +154,7 @@ def stop_native_resident(
     guard_home: Path,
     *,
     write_diagnostic: bool = True,
+    preserve_clients: bool = False,
 ) -> NativeStopResult:
     """Stop one Rust resident and retain bounded containment evidence."""
 
@@ -195,7 +196,8 @@ def stop_native_resident(
     # Keep persistent client processes alive until the Rust stop command has
     # verified containment. Their resident supervisor reaper must remain
     # runnable while it waits for the serving process to exit.
-    close_native_resident_clients(guard_home)
+    if not preserve_clients:
+        close_native_resident_clients(guard_home)
     if write_diagnostic:
         _write_stop_diagnostic(diagnostic)
     return NativeStopResult(True, diagnostic)
@@ -443,10 +445,10 @@ class AdapterSession:
                 self.last_stop_diagnostic = diagnostic
                 self.temporary.cleanup()
 
-    def stop_resident(self) -> bool:
-        """Stop the resident before closing serving-worker client streams."""
+    def stop_resident(self, *, preserve_clients: bool = False) -> bool:
+        """Verify resident containment, optionally retaining clients for recovery."""
 
-        result = stop_native_resident(self.runtime, self.guard_home)
+        result = stop_native_resident(self.runtime, self.guard_home, preserve_clients=preserve_clients)
         self._stop_diagnostic_written = True
         if isinstance(result, NativeStopResult):
             self.last_stop_diagnostic = result.diagnostic
@@ -457,6 +459,8 @@ class AdapterSession:
             )
         if not result:
             return False
+        if preserve_clients:
+            return True
         close_clients = getattr(self.daemon._server.hook_process_runner, "close_native_resident_clients", None)
         if callable(close_clients) and close_clients() is False:
             diagnostic = dict(result.diagnostic)

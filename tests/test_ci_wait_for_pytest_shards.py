@@ -22,7 +22,7 @@ _RUN_ID = 123456
 def _job(index: int, *, status: str = "completed", conclusion: str | None = "success") -> dict[str, object]:
     return {
         "id": index + 100,
-        "name": f"tests (3.12, {index})",
+        "name": f"coverage (3.14, {index})",
         "run_id": _RUN_ID,
         "status": status,
         "conclusion": conclusion,
@@ -79,13 +79,13 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
     assert f"{barrier.SHARD_COUNT} not yet scheduled" in logs[1]
     assert f"{barrier.SHARD_COUNT} queued" in logs[2]
     assert "1 running" in logs[3]
-    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python shards succeeded in run {_RUN_ID}, attempt 2"
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
 def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[1]
     jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())["jobs"]
-    producer_limit = 60 * (jobs["test-plan"]["timeout-minutes"] + jobs["tests"]["timeout-minutes"])
+    producer_limit = 60 * (jobs["coverage-plan"]["timeout-minutes"] + jobs["coverage"]["timeout-minutes"])
     default_timeout = inspect.signature(barrier.wait_for_shards).parameters["timeout_seconds"].default
     assert default_timeout == producer_limit + 60
     captured: dict[str, float] = {}
@@ -106,14 +106,31 @@ def test_default_wait_accepts_healthy_shards_after_full_planning_and_execution_l
     # Advance only the injected clock: five minutes planning, five minutes
     # execution, and one polling interval for the complete success to appear.
     _, logs = _run([[]] * 60 + [running] * 61 + [_jobs()])
-    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python shards succeeded in run {_RUN_ID}, attempt 2"
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+@pytest.mark.parametrize("legacy_shards", [32, 128])
+def test_untraced_python312_jobs_cannot_supply_missing_coverage(legacy_shards: int) -> None:
+    compatibility_jobs = [
+        dict(_job(index), id=index + 10000, name=f"tests (3.12, {index})") for index in range(legacy_shards)
+    ]
+    with pytest.raises(barrier.ShardWaitError, match="Timed out"):
+        _run([compatibility_jobs + _jobs()[:-1]], timeout_seconds=10)
+
+
+def test_coverage_succeeds_only_after_its_own_complete_suite() -> None:
+    compatibility_jobs = [dict(_job(index), id=index + 10000, name=f"tests (3.12, {index})") for index in range(32)]
+    coverage_running = [_job(index, status="in_progress", conclusion=None) for index in range(barrier.SHARD_COUNT)]
+    _, logs = _run([compatibility_jobs + coverage_running, compatibility_jobs + _jobs()])
+    assert f"{barrier.SHARD_COUNT} running" in logs[1]
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out", "neutral", None, {}])
 def test_rejects_non_success_on_last_page(conclusion: object) -> None:
     jobs = [dict(_job(index + 1000), name="other") for index in range(20)] + _jobs()
     jobs[-1]["conclusion"] = conclusion
-    with pytest.raises(barrier.ShardWaitError, match=f"Python shard {barrier.SHARD_COUNT - 1} completed with"):
+    with pytest.raises(barrier.ShardWaitError, match=f"Python coverage shard {barrier.SHARD_COUNT - 1} completed with"):
         _run([jobs])
 
 
@@ -129,14 +146,14 @@ def test_rejects_invalid_shard_state(status: object, conclusion: object) -> None
     "index", [str(barrier.SHARD_COUNT), "-1", "00", "1.0", "${{ matrix.shard-index }}", "1) suffix"]
 )
 def test_rejects_invalid_shard_names(index: str) -> None:
-    jobs = [*_jobs(), dict(_job(200), name=f"tests (3.12, {index})")]
-    with pytest.raises(barrier.ShardWaitError, match="invalid Python shard index"):
+    jobs = [*_jobs(), dict(_job(200), name=f"coverage (3.14, {index})")]
+    with pytest.raises(barrier.ShardWaitError, match="invalid Python coverage shard index"):
         _run([jobs])
 
 
 def test_rejects_duplicate_index_with_distinct_job_id() -> None:
     jobs = [*_jobs(), dict(_job(0), id=9000)]
-    with pytest.raises(barrier.ShardWaitError, match="duplicate Python shard 0"):
+    with pytest.raises(barrier.ShardWaitError, match="duplicate Python coverage shard 0"):
         _run([jobs])
 
 
@@ -168,7 +185,7 @@ def test_rejects_inherited_success_with_new_job_id_and_current_attempt(index: in
         started_at="2026-09-20T16:55:15Z",
         completed_at="2026-09-20T16:56:58Z",
     )
-    with pytest.raises(barrier.ShardWaitError, match=f"Python shard {index} inherited execution"):
+    with pytest.raises(barrier.ShardWaitError, match=f"Python coverage shard {index} inherited execution"):
         _run([jobs])
 
 
@@ -196,13 +213,13 @@ def test_pending_shards_need_not_have_execution_timestamps_yet() -> None:
         job.pop("completed_at")
     _, logs = _run([queued, _jobs()])
     assert f"{barrier.SHARD_COUNT} queued" in logs[1]
-    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python shards succeeded")
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out"])
 def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
-    plan = dict(_job(1000), name="test-plan", conclusion=conclusion)
-    with pytest.raises(barrier.ShardWaitError, match=f"Python test-plan completed with {conclusion}"):
+    plan = dict(_job(1000), name="coverage-plan", conclusion=conclusion)
+    with pytest.raises(barrier.ShardWaitError, match=f"Python coverage-plan completed with {conclusion}"):
         _run([[plan]])
 
 
@@ -307,9 +324,10 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
     assert barrier.SHARD_COUNT == 128
-    assert jobs["tests"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
+    assert jobs["coverage"]["name"] == "coverage (3.14, ${{ matrix.shard-index }})"
+    assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
     producer = next(
-        step for step in jobs["tests"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
     )
     sonar_steps = jobs["sonar"]["steps"]
     consumer = next(step for step in sonar_steps if step.get("name") == "Download pytest coverage data")

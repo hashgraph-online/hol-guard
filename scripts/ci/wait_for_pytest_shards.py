@@ -21,7 +21,7 @@ SHARD_COUNT = 128
 # delay successful producers or define the CI performance target.
 _DEFAULT_TIMEOUT_SECONDS = 660.0
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-_SHARD_NAME = re.compile(r"tests \(3\.12, (0|[1-9][0-9]*)\)")
+_SHARD_NAME = re.compile(r"coverage \(3\.14, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
 _MAX_JOBS = 1000
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -108,7 +108,7 @@ def _require_current_execution(job: Mapping[str, object], label: str) -> None:
     # success, but preserves its old execution times. Attempt-qualified
     # coverage artifacts cannot come from that earlier execution.
     if started < created:
-        raise ShardWaitError(f"{label} inherited execution from an earlier attempt; rerun all Python shards")
+        raise ShardWaitError(f"{label} inherited execution from an earlier attempt; rerun all Python coverage shards")
 
 
 def _snapshot(
@@ -128,7 +128,7 @@ def _snapshot(
     for page in range(1, _MAX_JOBS // 100 + 1):
         remaining = deadline - clock()
         if remaining <= 0:
-            raise ShardWaitError("Timed out waiting for Python shard jobs")
+            raise ShardWaitError("Timed out waiting for Python coverage shard jobs")
         path = f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page={page}"
         payload = fetch_json(path, min(10.0, remaining))
         if not isinstance(payload, dict):
@@ -152,21 +152,21 @@ def _snapshot(
                 raise ShardWaitError("GitHub jobs API returned a job from another run")
             if "run_attempt" in job and (type(job["run_attempt"]) is not int or job["run_attempt"] != attempt):
                 raise ShardWaitError("GitHub jobs API returned a job from another attempt")
-            if name == "test-plan":
+            if name == "coverage-plan":
                 if plan_seen:
-                    raise ShardWaitError("GitHub jobs API returned duplicate test-plan jobs")
+                    raise ShardWaitError("GitHub jobs API returned duplicate coverage-plan jobs")
                 plan_seen = True
-                _job_state(job, "Python test-plan")
-            if not name.startswith("tests (3.12,"):
+                _job_state(job, "Python coverage-plan")
+            if not name.startswith("coverage (3.14,"):
                 continue
             match = _SHARD_NAME.fullmatch(name)
             if match is None or int(match[1]) >= SHARD_COUNT:
-                raise ShardWaitError("GitHub jobs API returned an invalid Python shard index")
+                raise ShardWaitError("GitHub jobs API returned an invalid Python coverage shard index")
             index = int(match[1])
             if index in seen_shards:
-                raise ShardWaitError(f"GitHub jobs API returned duplicate Python shard {index}")
+                raise ShardWaitError(f"GitHub jobs API returned duplicate Python coverage shard {index}")
             seen_shards.add(index)
-            label = f"Python shard {index}"
+            label = f"Python coverage shard {index}"
             states[index] = _job_state(job, label)
             if states[index] == "success":
                 _require_current_execution(job, label)
@@ -200,20 +200,20 @@ def wait_for_shards(
         raise ShardWaitError("Poll interval must be between 0 and 30 seconds")
     deadline = clock() + timeout_seconds
     previous: tuple[str, ...] | None = None
-    log(f"Waiting for {SHARD_COUNT} Python shards in run {run_id}, attempt {attempt}")
+    log(f"Waiting for {SHARD_COUNT} Python coverage shards in run {run_id}, attempt {attempt}")
     while True:
         states = _snapshot(repository, run_id, attempt, fetch_json=fetch_json, deadline=deadline, clock=clock)
         if clock() >= deadline:
-            raise ShardWaitError("Timed out waiting for Python shard jobs")
+            raise ShardWaitError("Timed out waiting for Python coverage shard jobs")
         if states != previous:
             counts = Counter(states)
             log(
-                f"Python shards: {counts['success']}/{SHARD_COUNT} succeeded, "
+                f"Python coverage shards: {counts['success']}/{SHARD_COUNT} succeeded, "
                 f"{counts['running']} running, {counts['queued']} queued, {counts['absent']} not yet scheduled"
             )
             previous = states
         if all(state == "success" for state in states):
-            log(f"All {SHARD_COUNT} Python shards succeeded in run {run_id}, attempt {attempt}")
+            log(f"All {SHARD_COUNT} Python coverage shards succeeded in run {run_id}, attempt {attempt}")
             return
         sleep(min(poll_seconds, max(0.0, deadline - clock())))
 
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
             poll_seconds=args.poll_seconds,
         )
     except (ShardWaitError, OSError, urllib.error.URLError) as error:
-        print(f"Python shard barrier failed: {error}", file=sys.stderr)
+        print(f"Python coverage shard barrier failed: {error}", file=sys.stderr)
         return 1
     return 0
 
