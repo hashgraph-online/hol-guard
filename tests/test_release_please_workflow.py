@@ -82,9 +82,11 @@ def test_release_please_config_versions_python_and_synced_metadata() -> None:
         "src/codex_plugin_scanner/version.py",
         "uv.lock",
     ]
-    assert manifest == {".": "3.0.193"}
-    assert 'version = "3.0.193"  # x-release-please-version' in lockfile
-    assert '__version__ = "3.0.193"  # x-release-please-version' in version_module
+    expected = manifest.get(".")
+    assert isinstance(expected, str) and expected
+    assert manifest == {".": expected}
+    assert f'version = "{expected}"  # x-release-please-version' in lockfile
+    assert f'__version__ = "{expected}"  # x-release-please-version' in version_module
 
 
 def test_stable_dispatch_allows_actions_bot_while_alpha_stays_maintainer_only() -> None:
