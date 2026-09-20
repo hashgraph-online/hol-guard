@@ -9,14 +9,12 @@ from .command_extension_matchers import executable_matcher, executable_names, wi
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
-from .command_option_parsing import argument_semantics, flags_present_in_all_option_parses
+from .command_option_parsing import argument_semantics, flags_present_in_all_option_parses, known_option_advance
 from .command_rules import (
     AnyMatcher,
     CommandSafetyRule,
     CommandSafeVariant,
     ExecutableMatcher,
-    _after_leading_options,
-    _without_options,
 )
 
 # CLI surface verified against PromptBranch CLI 0.2.x (apps/cli/src/index.ts):
@@ -41,10 +39,92 @@ _SUGGEST_OPTIONS_WITH_VALUES = frozenset(
 )
 _PUBLISH_FLAGS = frozenset({"--full-history", "--preview", "--yes"})
 _NPX_LEADING_FLAGS = frozenset({"-y", "--yes"})
-_XARGS_LEADING_OPTIONS_WITH_VALUES = frozenset({"-I", "-L", "-n", "-P", "-s"})
+_PACKAGE_LAUNCHER_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "-c",
+        "--call",
+        "--allow-scripts",
+        "--cache",
+        "-p",
+        "--package",
+        "--registry",
+        "--script-shell",
+        "--shell",
+        "--userconfig",
+        "-w",
+        "--workspace",
+    }
+)
+_PACKAGE_LAUNCHER_FLAGS = frozenset(
+    {
+        "--bun",
+        "--dangerously-allow-all-scripts",
+        "-h",
+        "--help",
+        "--include-workspace-root",
+        "--no-install",
+        "--offline",
+        "--prefer-offline",
+        "--prefer-online",
+        "-q",
+        "--quiet",
+        "--silent",
+        "--strict-allow-scripts",
+        "-v",
+        "--verbose",
+        "--version",
+        "--workspaces",
+        *_NPX_LEADING_FLAGS,
+    }
+)
+_WRAPPER_OPTIONS_WITH_VALUES = frozenset({"-a", "-E", "-I", "-J", "-L", "-n", "-P", "-R", "-S", "-s"})
+_WRAPPER_FLAGS = frozenset({"-0", "-c", "-l", "-o", "-p", "-t", "-x"})
+_XARGS_LEADING_OPTIONS_WITH_VALUES = _WRAPPER_OPTIONS_WITH_VALUES - {"-a"}
 _PROMPTBRANCH_PACKAGE_LAUNCHERS = executable_names("npx") | executable_names("bunx")
 _PROMPTBRANCH_WRAPPER_EXECUTABLES = executable_names("exec") | executable_names("xargs")
 _PROMPTBRANCH_XARGS_EXECUTABLES = executable_names("xargs")
+
+
+def _leading_operand_suffixes(
+    arguments: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str],
+    flags: frozenset[str],
+) -> tuple[tuple[str, ...], ...]:
+    """Return every bounded parse that can reach a leading non-option operand."""
+
+    pending = [0]
+    visited: set[int] = set()
+    suffixes: list[tuple[str, ...]] = []
+    while pending:
+        index = pending.pop()
+        if index in visited or index >= len(arguments):
+            continue
+        visited.add(index)
+        argument = arguments[index]
+        if argument == "--":
+            if index + 1 < len(arguments):
+                suffixes.append(arguments[index + 1 :])
+            continue
+        if len(argument) <= 1 or not argument.startswith("-"):
+            suffixes.append(arguments[index:])
+            continue
+        advance = known_option_advance(
+            argument,
+            options_with_values=options_with_values,
+            known_flags=flags,
+        )
+        if advance is not None:
+            pending.append(index + advance)
+            continue
+        # Unknown options are conservatively explored as either flags or
+        # value-taking options. Matching either parse keeps a risky launch
+        # review-gated without guessing a future npx, bunx, exec, or xargs
+        # option contract.
+        pending.append(index + 1)
+        if "=" not in argument and index + 1 < len(arguments):
+            pending.append(index + 2)
+    return tuple(suffixes)
 
 
 @final
@@ -62,6 +142,9 @@ class PromptBranchVersionedPackageMatcher:
     package_launchers: frozenset[str]
     wrapper_executables: frozenset[str]
     wrapper_options_with_values: frozenset[str]
+    wrapper_flags: frozenset[str]
+    package_launcher_options_with_values: frozenset[str]
+    package_launcher_flags: frozenset[str]
     package_prefix: str = "@promptbranch/cli@"
     excluded_qualifiers: frozenset[str] = frozenset({"latest"})
     required_flags: frozenset[str] = frozenset()
@@ -80,6 +163,13 @@ class PromptBranchVersionedPackageMatcher:
         wrapper_options_with_values = frozenset(
             value.strip().lower() for value in self.wrapper_options_with_values if value.strip()
         )
+        wrapper_flags = frozenset(value.strip().lower() for value in self.wrapper_flags if value.strip())
+        package_launcher_options_with_values = frozenset(
+            value.strip().lower() for value in self.package_launcher_options_with_values if value.strip()
+        )
+        package_launcher_flags = frozenset(
+            value.strip().lower() for value in self.package_launcher_flags if value.strip()
+        )
         if not package_launchers or not wrapper_executables:
             raise ValueError("PromptBranchVersionedPackageMatcher requires launchers")
         if not subcommand or not package_prefix.endswith("@"):
@@ -93,11 +183,16 @@ class PromptBranchVersionedPackageMatcher:
         object.__setattr__(self, "options_with_values", options_with_values)
         object.__setattr__(self, "flags", flags)
         object.__setattr__(self, "wrapper_options_with_values", wrapper_options_with_values)
+        object.__setattr__(self, "wrapper_flags", wrapper_flags)
+        object.__setattr__(self, "package_launcher_options_with_values", package_launcher_options_with_values)
+        object.__setattr__(self, "package_launcher_flags", package_launcher_flags)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
-        all_options_with_values = self.options_with_values | self.wrapper_options_with_values
-        known_flags = self.flags | self.required_flags
+        all_options_with_values = (
+            self.options_with_values | self.wrapper_options_with_values | self.package_launcher_options_with_values
+        )
+        known_flags = self.flags | self.required_flags | self.wrapper_flags | self.package_launcher_flags
         for index, segment in enumerate(command.segments):
             if segment.executable is None:
                 continue
@@ -105,27 +200,42 @@ class PromptBranchVersionedPackageMatcher:
             if executable not in self.package_launchers and executable not in self.wrapper_executables:
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
-            package_arguments = _without_options(
-                lowered_arguments,
-                self.options_with_values,
-                self.flags | _NPX_LEADING_FLAGS,
-            )
+            launcher_invocations: list[tuple[str, tuple[str, ...]]] = []
             if executable in self.wrapper_executables:
-                package_arguments = _after_leading_options(
-                    package_arguments,
-                    self.wrapper_options_with_values if executable in _PROMPTBRANCH_XARGS_EXECUTABLES else frozenset(),
-                    self.flags | _NPX_LEADING_FLAGS,
+                wrapper_options = (
+                    self.wrapper_options_with_values
+                    if executable in _PROMPTBRANCH_XARGS_EXECUTABLES
+                    else frozenset({"-a"})
                 )
-                if not package_arguments or package_arguments[0] not in self.package_launchers:
-                    continue
-                package_arguments = package_arguments[1:]
-            if len(package_arguments) < 2:
-                continue
-            package, subcommand = package_arguments[:2]
-            if not package.startswith(self.package_prefix):
-                continue
-            qualifier = package[len(self.package_prefix) :]
-            if not qualifier or qualifier in self.excluded_qualifiers or subcommand != self.subcommand:
+                for wrapper_suffix in _leading_operand_suffixes(
+                    lowered_arguments,
+                    options_with_values=wrapper_options,
+                    flags=self.wrapper_flags,
+                ):
+                    if wrapper_suffix and wrapper_suffix[0] in self.package_launchers:
+                        launcher_invocations.append((wrapper_suffix[0], wrapper_suffix[1:]))
+            else:
+                launcher_invocations.append((executable, lowered_arguments))
+
+            matched_launch = False
+            for _launcher, launcher_arguments in launcher_invocations:
+                for package_arguments in _leading_operand_suffixes(
+                    launcher_arguments,
+                    options_with_values=self.package_launcher_options_with_values,
+                    flags=self.package_launcher_flags,
+                ):
+                    if len(package_arguments) < 2:
+                        continue
+                    package, subcommand = package_arguments[:2]
+                    if not package.startswith(self.package_prefix):
+                        continue
+                    qualifier = package[len(self.package_prefix) :]
+                    if qualifier and qualifier not in self.excluded_qualifiers and subcommand == self.subcommand:
+                        matched_launch = True
+                        break
+                if matched_launch:
+                    break
+            if not matched_launch:
                 continue
             if self.required_flags:
                 semantics = argument_semantics(lowered_arguments, options_with_values=all_options_with_values)
@@ -157,7 +267,10 @@ def _promptbranch_versioned_package_matcher(
         subcommand=subcommand,
         package_launchers=_PROMPTBRANCH_PACKAGE_LAUNCHERS,
         wrapper_executables=_PROMPTBRANCH_WRAPPER_EXECUTABLES,
-        wrapper_options_with_values=_XARGS_LEADING_OPTIONS_WITH_VALUES,
+        wrapper_options_with_values=_WRAPPER_OPTIONS_WITH_VALUES,
+        wrapper_flags=_WRAPPER_FLAGS,
+        package_launcher_options_with_values=_PACKAGE_LAUNCHER_OPTIONS_WITH_VALUES,
+        package_launcher_flags=_PACKAGE_LAUNCHER_FLAGS,
         options_with_values=options_with_values,
         flags=flags,
     )

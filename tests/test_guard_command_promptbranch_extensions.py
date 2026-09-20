@@ -37,7 +37,47 @@ _SENSITIVE_TOKENS = (
     "private rewrite.md",
 )
 
+PROMPTBRANCH_VERSIONED_LAUNCHER_OPTION_CASES: tuple[tuple[str, str, str], ...] = (
+    (
+        "bunx --bun @promptbranch/cli@0.2.8 publish security-audit",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
+        "npx --prefer-offline @promptbranch/cli@0.2.8 publish security-audit",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
+        "npx -p helper @promptbranch/cli@0.2.8 import https://example.test/p/share-id",
+        _IMPORT_ACTION,
+        _IMPORT_RULE,
+    ),
+    (
+        "exec npx --package helper @promptbranch/cli@0.2.8 add-note --prompt security-audit --body works-well",
+        _ADD_NOTE_ACTION,
+        _ADD_NOTE_RULE,
+    ),
+    (
+        "xargs -n 1 npx --registry https://registry.example.test "
+        "@promptbranch/cli@0.2.8 report-run --prompt security-audit --tool cli",
+        _REPORT_RUN_ACTION,
+        _REPORT_RUN_RULE,
+    ),
+    (
+        "exec bunx --verbose @promptbranch/cli@next suggest --prompt security-audit --content rewritten",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "npx --future-launcher-option helper @promptbranch/cli@0.2.8 publish security-audit",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+)
+
 PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
+    *PROMPTBRANCH_VERSIONED_LAUNCHER_OPTION_CASES,
     ('promptbranch publish "security-audit"', _PUBLISH_ACTION, _PUBLISH_RULE),
     (
         'promptbranch publish "security-audit" --full-history --yes --json',
@@ -229,6 +269,7 @@ PROMPTBRANCH_SUGGEST_FILE_CASES: tuple[str, ...] = (
     "promptbranch.exe suggest --file rewrite.md --prompt security-audit --json",
     "npx -y @promptbranch/cli suggest --prompt security-audit --file rewrite.md",
     "exec bunx @promptbranch/cli@0.2.8 suggest --prompt security-audit --file rewrite.md",
+    "xargs -n 1 bunx --package helper @promptbranch/cli@0.2.8 suggest --prompt security-audit --file rewrite.md",
     "bunx @promptbranch/cli@latest suggest --file rewrite.md --prompt security-audit",
     "zsh -lc 'promptbranch suggest --prompt security-audit --file rewrite.md'",
     "exec promptbranch suggest --prompt security-audit --file rewrite.md",
@@ -314,6 +355,8 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
     "npx @promptbranch/cli publish security-audit --preview",
     "npx @promptbranch/cli@0.2.8 publish security-audit --preview",
     "exec bunx @promptbranch/cli@next publish security-audit --preview",
+    "bunx --bun @promptbranch/cli@0.2.8 publish security-audit --preview",
+    "npx --prefer-offline @promptbranch/cli@0.2.8 publish security-audit --preview",
     "npx -y @promptbranch/cli get security-audit",
     "echo promptbranch publish security-audit",
     "grep 'promptbranch publish security-audit' docs",
@@ -327,6 +370,8 @@ PROMPTBRANCH_EXTENSION_SAFE_COMMANDS = (
     "bunx @promptbranch/client@next import share-id",
     "exec npx @promptbranch/cli@ publish security-audit",
     "xargs -n 1 bunx @promptbranch/cli-tools@beta report-run --prompt security-audit --tool cli",
+    "bunx --bun @promptbranch/cli-helper@0.2.8 publish security-audit",
+    "npx --prefer-offline @promptbranch/client@0.2.8 publish security-audit",
 )
 
 
