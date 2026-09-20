@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.formicx",
+  "version": "1.0.0",
+  "name": "formicx",
+  "description": "Reviews Formicx mutation lifecycle commands (register, start, stop, restart) while leaving read-only queries automatic.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.formicx",
+    "displayName": "Community"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#4338CA" },
+  "license": "MIT",
+  "executables": ["formicx"],
+  "ecosystemIds": ["formicx"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "formicx agent registration command",
+    "formicx agent process start command",
+    "formicx agent process stop command",
+    "formicx agent process restart command"
+  ],
+  "saferAlternatives": [
+    "Validate agents using formicx agent validate <path> before registering.",
+    "Check agent status using formicx agent status <agent>."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_formicx_extensions"
+  }
+}

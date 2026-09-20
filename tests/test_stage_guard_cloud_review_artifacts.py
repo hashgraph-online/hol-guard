@@ -35,6 +35,15 @@ def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None
     assert not (data_root / "guard-cloud-review" / "__init__.py").exists()
 
 
+def test_stage_artifacts_includes_every_extension_contribution_manifest() -> None:
+    contributions_dir = Path(__file__).resolve().parents[1] / "contributions/extensions"
+    manifest_paths = sorted(contributions_dir.glob("command.*.json"))
+    staged_sources = set(MODULE._ARTIFACTS.keys())
+    for path in manifest_paths:
+        relative = f"contributions/extensions/{path.name}"
+        assert relative in staged_sources, f"{path.name} is missing from frozen staging _ARTIFACTS"
+
+
 def test_stage_artifacts_fails_closed_when_source_is_missing(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
     (tmp_path / "contracts/guard-cloud-review/v2/contract.json").unlink()
