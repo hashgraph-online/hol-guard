@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import urllib.error
 import urllib.request
@@ -25,6 +26,9 @@ def _job(index: int, *, status: str = "completed", conclusion: str | None = "suc
         "run_id": _RUN_ID,
         "status": status,
         "conclusion": conclusion,
+        "created_at": "2026-09-20T16:56:28Z",
+        "started_at": "2026-09-20T16:56:31Z",
+        "completed_at": "2026-09-20T16:57:35Z",
     }
 
 
@@ -32,7 +36,9 @@ def _jobs() -> list[dict[str, object]]:
     return [_job(index) for index in range(barrier.SHARD_COUNT)]
 
 
-def _run(snapshots: list[list[dict[str, object]]], *, timeout_seconds: float = 240) -> tuple[list[str], list[str]]:
+def _run(
+    snapshots: list[list[dict[str, object]]], *, timeout_seconds: float = barrier._DEFAULT_TIMEOUT_SECONDS
+) -> tuple[list[str], list[str]]:
     now = [0.0]
     calls: list[str] = []
     logs: list[str] = []
@@ -73,6 +79,33 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
     assert f"{barrier.SHARD_COUNT} not yet scheduled" in logs[1]
     assert f"{barrier.SHARD_COUNT} queued" in logs[2]
     assert "1 running" in logs[3]
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())["jobs"]
+    producer_limit = 60 * (jobs["test-plan"]["timeout-minutes"] + jobs["tests"]["timeout-minutes"])
+    default_timeout = inspect.signature(barrier.wait_for_shards).parameters["timeout_seconds"].default
+    assert default_timeout == producer_limit + 60
+    captured: dict[str, float] = {}
+
+    def capture_wait(_repository: str, _run_id: int, _attempt: int, **kwargs: float) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(barrier, "wait_for_shards", capture_wait)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_RUN_ID", str(_RUN_ID))
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    assert barrier.main([]) == 0
+    assert captured == {"timeout_seconds": default_timeout, "poll_seconds": 5.0}
+
+
+def test_default_wait_accepts_healthy_shards_after_full_planning_and_execution_limits() -> None:
+    running = [_job(index, status="in_progress", conclusion=None) for index in range(barrier.SHARD_COUNT)]
+    # Advance only the injected clock: five minutes planning, five minutes
+    # execution, and one polling interval for the complete success to appear.
+    _, logs = _run([[]] * 60 + [running] * 61 + [_jobs()])
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python shards succeeded in run {_RUN_ID}, attempt 2"
 
 
@@ -123,6 +156,49 @@ def test_rejects_jobs_from_another_run_or_attempt(field: str, value: object, ind
         _run([jobs])
 
 
+@pytest.mark.parametrize("index", [0, barrier.SHARD_COUNT - 1])
+def test_rejects_inherited_success_with_new_job_id_and_current_attempt(index: int) -> None:
+    jobs = _jobs()
+    # Actual GitHub partial-rerun behavior: the attempt-2 endpoint returns
+    # a new ID and run_attempt=2 while retaining attempt-1 execution times.
+    jobs[index].update(
+        id=106114322689,
+        run_attempt=2,
+        created_at="2026-09-20T17:01:44Z",
+        started_at="2026-09-20T16:55:15Z",
+        completed_at="2026-09-20T16:56:58Z",
+    )
+    with pytest.raises(barrier.ShardWaitError, match=f"Python shard {index} inherited execution"):
+        _run([jobs])
+
+
+@pytest.mark.parametrize("field", ["created_at", "started_at", "completed_at"])
+@pytest.mark.parametrize("value", [None, 123, "2026-09-20", "2026-02-30T16:55:15Z", "secret-response"])
+def test_success_requires_valid_complete_execution_timestamps(field: str, value: object) -> None:
+    jobs = _jobs()
+    jobs[0][field] = value
+    with pytest.raises(barrier.ShardWaitError, match="invalid execution timestamps") as captured:
+        _run([jobs])
+    assert "secret-response" not in str(captured.value)
+
+
+def test_success_cannot_complete_before_starting() -> None:
+    jobs = _jobs()
+    jobs[0]["completed_at"] = "2026-09-20T16:56:30Z"
+    with pytest.raises(barrier.ShardWaitError, match="invalid execution timestamps"):
+        _run([jobs])
+
+
+def test_pending_shards_need_not_have_execution_timestamps_yet() -> None:
+    queued = [_job(index, status="queued", conclusion=None) for index in range(barrier.SHARD_COUNT)]
+    for job in queued:
+        job.pop("started_at")
+        job.pop("completed_at")
+    _, logs = _run([queued, _jobs()])
+    assert f"{barrier.SHARD_COUNT} queued" in logs[1]
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python shards succeeded")
+
+
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out"])
 def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
     plan = dict(_job(1000), name="test-plan", conclusion=conclusion)
@@ -151,7 +227,7 @@ def test_success_received_after_deadline_cannot_pass() -> None:
         page = int(path.rsplit("=", 1)[1])
         jobs = _jobs()
         if page == 2:
-            now[0] = 241
+            now[0] = barrier._DEFAULT_TIMEOUT_SECONDS + 1
         return {"total_count": len(jobs), "jobs": jobs[(page - 1) * 100 : page * 100]}
 
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
@@ -169,7 +245,7 @@ def test_rejects_invalid_run_inputs_before_network(repository: str, run_id: int,
         )
 
 
-@pytest.mark.parametrize("timeout", [0, -1, 601, float("inf"), float("nan")])
+@pytest.mark.parametrize("timeout", [0, -1, barrier._DEFAULT_TIMEOUT_SECONDS + 1, float("inf"), float("nan")])
 def test_rejects_unbounded_wait(timeout: float) -> None:
     with pytest.raises(barrier.ShardWaitError, match="timeout"):
         barrier.wait_for_shards("owner/repo", _RUN_ID, 2, timeout_seconds=timeout)

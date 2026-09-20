@@ -45,7 +45,9 @@ def test_mixed_wave_requires_exact_counter_proof_for_every_response() -> None:
 def test_native_counter_cannot_reuse_explicit_overload_events(overload_delta: int) -> None:
     observations = [replace(item, allowed=False) for item in _mixed_observations()]
 
-    classified = capacity._classify_native_overloads(observations, overload_delta=overload_delta)
+    classified = capacity._classify_native_overloads(
+        observations, overload_delta=overload_delta, errors=0, before=Counter(), after=Counter(native_fail_safe=64)
+    )
 
     assert sum(item.overloaded for item in classified) == 32
     assert all(not item.overloaded for item in classified[:32])
@@ -53,14 +55,85 @@ def test_native_counter_cannot_reuse_explicit_overload_events(overload_delta: in
 
 def test_native_counter_cannot_label_allowed_response_as_overload() -> None:
     observations = _mixed_observations()[:32]
-    classified = capacity._classify_native_overloads(observations, overload_delta=32)
+    classified = capacity._classify_native_overloads(
+        observations, overload_delta=32, errors=0, before=Counter(), after=Counter(native_resident=32)
+    )
     assert not any(item.overloaded for item in classified)
 
 
 def test_native_counter_preserves_unambiguous_denied_overload_cohort() -> None:
     observations = [replace(item, allowed=False) for item in _mixed_observations()[:32]]
-    classified = capacity._classify_native_overloads(observations, overload_delta=32)
+    classified = capacity._classify_native_overloads(
+        observations, overload_delta=32, errors=0, before=Counter(), after=Counter(native_fail_safe=32)
+    )
     assert all(item.overloaded and not item.allowed for item in classified)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "request_error",
+        "missing_resident",
+        "extra_resident",
+        "missing_fail_safe",
+        "extra_fail_safe",
+        "other_route",
+        "counter_reset",
+        "missing_overload",
+        "extra_overload",
+        "another_denial",
+        "explicit_overload",
+        "denied_resident",
+        "legacy_observation",
+    ],
+)
+def test_mixed_native_counter_inference_requires_complete_unambiguous_wave(failure: str) -> None:
+    observations = [
+        Observation("codex", "PreToolUse", "1k", 1.0, "native_fail_safe", True),
+        Observation("pi", "PreToolUse", "1k", 1.0, "native_fail_safe", False),
+    ]
+    before: Counter[str] = Counter()
+    after = Counter(native_resident=1, native_fail_safe=1)
+    errors, overload_delta = 0, 1
+    if failure == "request_error":
+        errors = 1
+    elif failure == "missing_resident":
+        after["native_resident"] = 0
+    elif failure == "extra_resident":
+        after["native_resident"] = 2
+    elif failure == "missing_fail_safe":
+        after["native_fail_safe"] = 0
+    elif failure == "extra_fail_safe":
+        after["native_fail_safe"] = 2
+    elif failure == "other_route":
+        after["python_semantic"] = 1
+    elif failure == "counter_reset":
+        before["native_oneshot"] = 1
+    elif failure == "missing_overload":
+        overload_delta = 0
+    elif failure == "extra_overload":
+        overload_delta = 2
+    elif failure == "another_denial":
+        observations.append(observations[-1])
+        after["native_fail_safe"] = 2
+    elif failure == "explicit_overload":
+        observations.append(replace(observations[-1], overloaded=True))
+        after["native_fail_safe"] = 2
+    elif failure == "denied_resident":
+        observations[-1] = replace(observations[-1], route="native_resident")
+    else:
+        observations[0] = replace(observations[0], route="native_oneshot")
+    original_overloads = sum(item.overloaded for item in observations)
+
+    classified = capacity._classify_native_overloads(
+        observations, overload_delta=overload_delta, errors=errors, before=before, after=after
+    )
+    reconciled = capacity._reconcile_wave_routes(classified, errors=errors, before=before, after=after)
+
+    assert classified is observations
+    assert reconciled is observations
+    assert sum(item.overloaded for item in reconciled) == original_overloads
+    assert not reconciled[1].overloaded
 
 
 @pytest.mark.parametrize(
@@ -102,11 +175,13 @@ def test_unexplained_response_error_or_counter_reset_keeps_wave_fail_closed(fail
     assert capacity._reconcile_wave_routes(observations, errors=errors, before=before, after=after) is observations
 
 
-def test_real_interleaving_preserves_explicit_overload_and_proves_other_response_resident(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("explicit", [True, False])
+def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], explicit: bool
 ) -> None:
     metrics = HookMetricsRecorder()
     barrier = threading.Barrier(2, timeout=1)
+    native_overloads = [0]
 
     def request(_daemon: object, *, harness: str, **_kwargs: object) -> dict[str, str]:
         # Both observations have taken their initial snapshots. Both route
@@ -117,7 +192,11 @@ def test_real_interleaving_preserves_explicit_overload_and_proves_other_response
             response = {"decision": "allow"}
         else:
             metrics.record_route("native_fail_safe")
-            response = {"decision": "deny", "reason_code": "daemon_capacity"}
+            if explicit:
+                response = {"decision": "deny", "reason_code": "daemon_capacity"}
+            else:
+                native_overloads[0] += 1
+                response = {"decision": "deny", "reason_code": "native_hook_edge_unavailable"}
         barrier.wait()
         return response
 
@@ -131,7 +210,7 @@ def test_real_interleaving_preserves_explicit_overload_and_proves_other_response
                 workspace=tmp_path,
                 _connection=None,
                 _owner_thread_id=threading.get_ident(),
-                native_overload_count=lambda: 0,
+                native_overload_count=lambda: native_overloads[0],
             ),
         ),
     )
@@ -161,7 +240,8 @@ def test_real_interleaving_preserves_explicit_overload_and_proves_other_response
     assert diagnostic["observed_routes"] == {"native_fail_safe": 2}
     assert diagnostic["route_counters_after"] == {"native_fail_safe": 1, "native_resident": 1}
     assert diagnostic["reconciled_routes"] == {"native_fail_safe": 1, "native_resident": 1}
-    assert diagnostic["native_overloads_before"] == diagnostic["native_overloads_after"] == 0
-    assert diagnostic["explicit_overload_responses"] == 1
+    assert diagnostic["native_overloads_before"] == 0
+    assert diagnostic["native_overloads_after"] == (0 if explicit else 1)
+    assert diagnostic["explicit_overload_responses"] == int(explicit)
     assert diagnostic["classified_overload_responses"] == 1
     assert str(tmp_path) not in json.dumps(diagnostic)

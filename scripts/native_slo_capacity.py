@@ -133,6 +133,9 @@ def _classify_native_overloads(
     observations: list[Observation],
     *,
     overload_delta: int,
+    errors: int,
+    before: Counter[str],
+    after: Counter[str],
 ) -> list[Observation]:
     # A native overload event may already belong to an explicit response.
     # Generic 503 responses do not identify the counter source, so neither
@@ -142,13 +145,40 @@ def _classify_native_overloads(
     candidates = [
         index
         for index, observation in enumerate(observations)
-        if observation.route == "native_fail_safe" and not observation.overloaded
+        if observation.route == "native_fail_safe" and not observation.allowed
     ]
-    if overload_delta != len(candidates) or any(observations[index].allowed for index in candidates):
+    if not candidates or overload_delta != len(candidates):
         return observations
-    for index in candidates:
-        observations[index] = replace(observations[index], overloaded=True)
-    return observations
+    allowed = sum(item.allowed for item in observations)
+    if allowed + len(candidates) != len(observations):
+        return observations
+    # The native counter increments once before a terminal fail-safe return.
+    # Prove every denied candidate and every allowed response against the
+    # complete quiet wave before assigning any inferred overload provenance.
+    if not _wave_routes_match(
+        observations,
+        errors=errors,
+        before=before,
+        after=after,
+        expected=Counter({"native_resident": allowed, "native_fail_safe": len(candidates)}),
+    ):
+        return observations
+    return [replace(item, overloaded=True) if index in candidates else item for index, item in enumerate(observations)]
+
+
+def _wave_routes_match(
+    observations: list[Observation],
+    *,
+    errors: int,
+    before: Counter[str],
+    after: Counter[str],
+    expected: Counter[str],
+) -> bool:
+    if errors or not observations or any(after[key] < before[key] for key in before):
+        return False
+    if any(observation.route not in {"native_resident", "native_fail_safe"} for observation in observations):
+        return False
+    return after - before == expected
 
 
 def _reconcile_wave_routes(
@@ -161,22 +191,18 @@ def _reconcile_wave_routes(
     """Prove mixed-wave provenance without attributing overlapping counters.
 
     This private session has no other hook callers during a capacity wave.
-    Every explicit, denied overload must have its own fail-safe counter, and
+    Every proven, denied overload must have its own fail-safe counter, and
     every remaining response must be allowed and have its own resident counter.
     A missing/extra/reset counter or an unexplained denial leaves the original
     fail-closed observation unchanged. No overload is inferred here.
     """
 
-    if errors or not observations or any(after[key] < before[key] for key in before):
-        return observations
-    if any(observation.route not in {"native_resident", "native_fail_safe"} for observation in observations):
-        return observations
     overloaded = [observation for observation in observations if observation.overloaded]
     resident = [observation for observation in observations if not observation.overloaded]
     if any(observation.allowed for observation in overloaded) or not all(item.allowed for item in resident):
         return observations
     expected = Counter({"native_resident": len(resident), "native_fail_safe": len(overloaded)})
-    if after - before != expected:
+    if not _wave_routes_match(observations, errors=errors, before=before, after=after, expected=expected):
         return observations
     return [replace(item, route="native_resident") if not item.overloaded else item for item in observations]
 
@@ -195,8 +221,14 @@ def _measure_classified_wave(
     after = route_counts(metrics.snapshot())
     original_routes = Counter(item.route for item in observations)
     explicit_overloads = sum(item.overloaded for item in observations)
+    observations = _classify_native_overloads(
+        observations,
+        overload_delta=overloads_after - overloads_before,
+        errors=errors,
+        before=before,
+        after=after,
+    )
     observations = _reconcile_wave_routes(observations, errors=errors, before=before, after=after)
-    observations = _classify_native_overloads(observations, overload_delta=overloads_after - overloads_before)
     # Aggregate-only evidence explains failed capacity gates without exposing
     # response bodies, workspace paths, credentials or request content.
     print(

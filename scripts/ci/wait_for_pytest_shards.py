@@ -13,8 +13,13 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from collections.abc import Callable, Mapping
+from datetime import datetime
 
 SHARD_COUNT = 128
+# The planner and each dependent shard have separate five-minute watchdogs.
+# Include one minute for polling and scheduling overhead; this bound does not
+# delay successful producers or define the CI performance target.
+_DEFAULT_TIMEOUT_SECONDS = 660.0
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _SHARD_NAME = re.compile(r"tests \(3\.12, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
@@ -84,6 +89,28 @@ def _job_state(job: Mapping[str, object], label: str) -> str:
     raise ShardWaitError(f"{label} has an invalid job state")
 
 
+def _require_current_execution(job: Mapping[str, object], label: str) -> None:
+    """Reject prior-attempt successes cloned into GitHub's current jobs list."""
+
+    timestamps: list[datetime] = []
+    for field in ("created_at", "started_at", "completed_at"):
+        value = job.get(field)
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}(-[0-9]{2}){2}T[0-9]{2}(:[0-9]{2}){2}Z", value):
+            raise ShardWaitError(f"{label} has invalid execution timestamps")
+        try:
+            timestamps.append(datetime.fromisoformat(value.replace("Z", "+00:00")))
+        except ValueError:
+            raise ShardWaitError(f"{label} has invalid execution timestamps") from None
+    created, started, completed = timestamps
+    if completed < started:
+        raise ShardWaitError(f"{label} has invalid execution timestamps")
+    # A partial rerun creates a new job ID/run_attempt for each inherited
+    # success, but preserves its old execution times. Attempt-qualified
+    # coverage artifacts cannot come from that earlier execution.
+    if started < created:
+        raise ShardWaitError(f"{label} inherited execution from an earlier attempt; rerun all Python shards")
+
+
 def _snapshot(
     repository: str,
     run_id: int,
@@ -139,7 +166,10 @@ def _snapshot(
             if index in seen_shards:
                 raise ShardWaitError(f"GitHub jobs API returned duplicate Python shard {index}")
             seen_shards.add(index)
-            states[index] = _job_state(job, f"Python shard {index}")
+            label = f"Python shard {index}"
+            states[index] = _job_state(job, label)
+            if states[index] == "success":
+                _require_current_execution(job, label)
         if len(job_ids) == total_count:
             return tuple(states)
         if len(jobs) != 100 or len(job_ids) > total_count:
@@ -153,7 +183,7 @@ def wait_for_shards(
     attempt: int,
     *,
     fetch_json: FetchJson = github_json,
-    timeout_seconds: float = 240.0,
+    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
     poll_seconds: float = 5.0,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -164,8 +194,8 @@ def wait_for_shards(
         raise ShardWaitError("Invalid GITHUB_REPOSITORY")
     if any(type(value) is not int or value <= 0 for value in (run_id, attempt)):
         raise ShardWaitError("Workflow run and attempt IDs must be positive integers")
-    if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 600:
-        raise ShardWaitError("Wait timeout must be between 0 and 600 seconds")
+    if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= _DEFAULT_TIMEOUT_SECONDS:
+        raise ShardWaitError(f"Wait timeout must be between 0 and {_DEFAULT_TIMEOUT_SECONDS:g} seconds")
     if not math.isfinite(poll_seconds) or not 0 < poll_seconds <= 30:
         raise ShardWaitError("Poll interval must be between 0 and 30 seconds")
     deadline = clock() + timeout_seconds
@@ -190,7 +220,7 @@ def wait_for_shards(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--timeout-seconds", type=float, default=240.0)
+    parser.add_argument("--timeout-seconds", type=float, default=_DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--poll-seconds", type=float, default=5.0)
     args = parser.parse_args(argv)
     try:
