@@ -7,6 +7,7 @@ import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
     SCHEDULING_ONLY_NODE_IDS,
+    _split_file_nodes,
     build_affinity_node_shards,
     estimate_node_durations,
     node_file,
@@ -99,6 +100,43 @@ def test_affinity_plan_splits_only_an_oversized_file() -> None:
     assert max(loads) - min(loads) <= 1.0
 
 
+def test_file_packing_adds_bins_when_total_duration_lower_bound_is_insufficient() -> None:
+    file_path = "tests/test_reports.py"
+    estimates = {
+        f"{file_path}::test_report[utc]": 47.0,
+        f"{file_path}::test_report[pacific]": 47.0,
+        f"{file_path}::test_source_binding": 41.0,
+    }
+
+    groups = _split_file_nodes(file_path, list(estimates), estimates, target_seconds=75.0)
+
+    assert len(groups) == 3
+    assert sorted(node for _path, _index, nodes, _load in groups for node in nodes) == sorted(estimates)
+    assert all(load <= 75.0 for _path, _index, _nodes, load in groups)
+
+
+def test_file_packing_allows_only_individually_oversized_nodes_to_exceed_target() -> None:
+    file_path = "tests/test_soak.py"
+    estimates = {f"{file_path}::test_soak": 100.0}
+    estimates.update({f"{file_path}::test_small_{index}": 10.0 for index in range(4)})
+
+    groups = _split_file_nodes(file_path, list(estimates), estimates, target_seconds=50.0)
+
+    assert sorted(node for _path, _index, nodes, _load in groups for node in nodes) == sorted(estimates)
+    assert all(load <= 50.0 or len(nodes) == 1 for _path, _index, nodes, load in groups)
+
+
+def test_file_packing_preserves_existing_small_whole_file_allowance() -> None:
+    file_path = "tests/test_small.py"
+    estimates = {f"{file_path}::test_{index}": 40.0 for index in range(2)}
+
+    groups = _split_file_nodes(file_path, list(estimates), estimates, target_seconds=75.0)
+
+    assert len(groups) == 1
+    assert groups[0][2] == sorted(estimates)
+    assert groups[0][3] == 80.0
+
+
 def test_affinity_plan_caps_large_files_without_duration_telemetry() -> None:
     large = [f"tests/test_slow.py::test_{index}" for index in range(148)]
     filler = [f"tests/test_filler_{index}.py::test_one" for index in range(148)]
@@ -156,3 +194,14 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
         "node_counts": [1, 2],
         "file_counts": [1, 1],
     }
+
+
+def test_large_matrix_response_names_match_three_digit_workflow_format(tmp_path: Path) -> None:
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(128)]
+
+    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 128, manifest_used=True)
+
+    assert len(list(tmp_path.glob("shard-*.txt"))) == 128
+    assert [
+        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(128)
+    ] == shards

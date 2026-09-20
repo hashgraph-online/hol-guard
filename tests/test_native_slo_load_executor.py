@@ -24,7 +24,7 @@ def test_timed_out_capacity_wave_returns_without_waiting_for_running_worker(
         time.sleep(0.2)
         return object()
 
-    session = cast(AdapterSession, SimpleNamespace(observe=slow_observe))
+    session = cast(AdapterSession, cast(object, SimpleNamespace(observe=slow_observe)))
     monkeypatch.setattr(capacity, "_CONCURRENT_WAVE_TIMEOUT_SECONDS", 0.01)
     executor = ThreadPoolExecutor(max_workers=1)
     started = time.perf_counter()
@@ -45,7 +45,8 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
     class FakeSession:
         def __init__(self) -> None:
             runner = SimpleNamespace(stats=lambda: {})
-            self.daemon = SimpleNamespace(_server=SimpleNamespace(hook_process_runner=runner))
+            worker = SimpleNamespace(metrics=SimpleNamespace(snapshot=lambda: {"routes": {}}))
+            self.daemon = SimpleNamespace(_server=SimpleNamespace(hook_process_runner=runner, hook_worker=worker))
 
         def native_overload_count(self) -> int:
             return 0
@@ -85,7 +86,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
     monkeypatch.setattr(capacity, "_run_concurrent", fake_concurrent)
     monkeypatch.setattr(capacity, "process_rss_bytes", lambda: 100)
 
-    session = cast(AdapterSession, FakeSession())
+    session = cast(AdapterSession, cast(object, FakeSession()))
     capacity.measure_capacity(session, (("codex", "PreToolUse"),), include_capacity=True)
 
     assert [name for name, _ in calls] == [

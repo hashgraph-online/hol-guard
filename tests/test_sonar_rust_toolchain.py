@@ -23,8 +23,9 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     wait_index = next(
         i for i, step in enumerate(steps) if step.get("name") == "Wait for successful pytest coverage producers"
     )
-    setup_index = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Prepare coverage and pinned Rust analysis"
+    setup_index = next(i for i, step in enumerate(steps) if step.get("name") == "Prepare Python coverage")
+    clippy_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check Rust workspace with pinned Clippy"
     )
     scan_index = next(i for i, step in enumerate(steps) if step.get("name") == "Analyze with SonarQube Cloud")
     setup = steps[setup_index]
@@ -42,13 +43,19 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
     assert '"rust/rust-toolchain.toml"' in script
     assert script.index(install) < script.index(default)
-    assert clippy in PREPARE_SCRIPT.read_text(encoding="utf-8")
+    assert steps[clippy_index]["run"] == clippy
+    assert steps[clippy_index]["shell"] == "bash"
+    assert not steps[clippy_index].get("continue-on-error", False)
+    assert "if" not in steps[clippy_index]
+    assert steps[clippy_index].get("env", {}) == {}
+    assert "SONAR_TOKEN" not in job.get("env", {})
+    assert "SONAR_TOKEN" not in workflow.get("env", {})
     toolchain_index = next(
         i for i, step in enumerate(steps) if step.get("name") == "Initialize pinned Rust analysis toolchain"
     )
     cache_index = next(i for i, step in enumerate(steps) if step.get("name") == "Cache Rust analysis dependencies")
     assert steps[toolchain_index]["run"] == "bash scripts/ci/setup_sonar_rust.sh"
-    assert toolchain_index < cache_index < wait_index
+    assert toolchain_index < cache_index < clippy_index < wait_index
     assert "set -euo pipefail" in script
     assert setup["shell"] == "bash"
     assert not job.get("continue-on-error", False)
@@ -96,20 +103,36 @@ def _run_preparation(
     return result, log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
 
-def test_preparation_combines_all_shards_before_installing_and_running_clippy(tmp_path: Path) -> None:
-    result, commands = _run_preparation(tmp_path, 96)
+def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: Path) -> None:
+    result, commands = _run_preparation(tmp_path, 128)
     assert result.returncode == 0, result.stderr
-    assert len(commands) == 3
+    assert len(commands) == 2
     assert commands[0].split() == [
         "uv",
         "run",
         "--no-sync",
         "coverage",
         "combine",
-        *(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(96)),
+        *sorted(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(128)),
     ]
     assert commands[1] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
-    assert commands[2] == "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
+
+
+@pytest.mark.parametrize("fail_command", ["", "cargo clippy"])
+def test_early_clippy_runs_without_coverage_and_propagates_failure(tmp_path: Path, fail_command: str) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    step = next(
+        step
+        for step in workflow["jobs"]["sonar"]["steps"]
+        if step.get("name") == "Check Rust workspace with pinned Clippy"
+    )
+    inline_script = tmp_path / "clippy.sh"
+    inline_script.write_text(step["run"] + "\n", encoding="utf-8")
+
+    result, commands = _run_preparation(tmp_path, 0, fail_command, inline_script)
+
+    assert result.returncode == (7 if fail_command else 0), result.stderr
+    assert commands == ["cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"]
 
 
 def test_setup_initializes_pinned_toolchain_before_cache(tmp_path: Path) -> None:
@@ -122,7 +145,7 @@ def test_setup_initializes_pinned_toolchain_before_cache(tmp_path: Path) -> None
     ]
 
 
-@pytest.mark.parametrize("shard_count", [0, 95, 97])
+@pytest.mark.parametrize("shard_count", [0, 96, 127, 129])
 def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
     tmp_path: Path, shard_count: int
 ) -> None:
@@ -136,11 +159,10 @@ def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
     [
         "uv run --no-sync coverage combine",
         "uv run --no-sync python scripts/ci/parallel_coverage_xml.py",
-        "cargo clippy",
     ],
 )
 def test_preparation_stops_at_each_failed_command(tmp_path: Path, failed_command: str) -> None:
-    result, commands = _run_preparation(tmp_path, 96, failed_command)
+    result, commands = _run_preparation(tmp_path, 128, failed_command)
     assert result.returncode == 7
     assert commands[-1].startswith(failed_command)
 

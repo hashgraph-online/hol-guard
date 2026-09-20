@@ -93,7 +93,21 @@ def _split_file_nodes(
     chunks: list[list[str]] = [[] for _ in range(split_count)]
     loads = [0.0] * split_count
     for node_id in sorted(node_ids, key=lambda node: (-estimates[node], node)):
-        index = min(range(split_count), key=lambda item: (loads[item], item))
+        eligible = [
+            index
+            for index, chunk in enumerate(chunks)
+            if len(chunk) < MAX_NODES_PER_AFFINITY_GROUP
+            and (not chunk or split_count == 1 or loads[index] + estimates[node_id] <= target_seconds)
+        ]
+        if eligible:
+            index = min(eligible, key=lambda item: (loads[item], item))
+        else:
+            # ceil(total / target) is only a lower bound on the bins needed:
+            # e.g. 47, 47, 41 cannot fit in two bins with a 75-second target.
+            # An individually oversized node may occupy one bin by itself.
+            index = len(chunks)
+            chunks.append([])
+            loads.append(0.0)
         chunks[index].append(node_id)
         loads[index] += estimates[node_id]
 

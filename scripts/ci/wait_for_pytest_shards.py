@@ -14,7 +14,7 @@ import urllib.request
 from collections import Counter
 from collections.abc import Callable, Mapping
 
-SHARD_COUNT = 96
+SHARD_COUNT = 128
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _SHARD_NAME = re.compile(r"tests \(3\.12, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
@@ -159,7 +159,7 @@ def wait_for_shards(
     sleep: Callable[[float], None] = time.sleep,
     log: Callable[[str], None] = _progress,
 ) -> None:
-    """Accept exactly 96 successful shards, scoped to the current run attempt."""
+    """Accept every expected successful shard, scoped to the current run attempt."""
     if _REPOSITORY.fullmatch(repository) is None or any(part in {".", ".."} for part in repository.split("/")):
         raise ShardWaitError("Invalid GITHUB_REPOSITORY")
     if any(type(value) is not int or value <= 0 for value in (run_id, attempt)):

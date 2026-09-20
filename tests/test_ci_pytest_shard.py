@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import yaml
+
 from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,10 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
     assert "actions: read" in workflow
     assert "**/pyproject.toml" not in workflow
-    assert "--shard-count 96" in plan_job
+    assert "--shard-count 128" in plan_job
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert jobs["tests"]["strategy"]["matrix"]["shard-index"] == list(range(128))
+    assert 'test "${#reports[@]}" -eq 128' in _workflow_job(workflow, "duration-manifest-candidate", "sonar-guard")
     assert "build_pytest_shard_plan.py" in plan_job
     assert "Restore latest trusted duration telemetry" in plan_job
     assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in plan_job
@@ -58,11 +63,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert 'test "$workflow_path" = ".github/workflows/ci.yml"' in plan_job
     assert "needs: test-plan" in tests_job
     assert "name: pytest-shard-plan" in tests_job
-    assert "shard-%02d.txt" in tests_job
+    assert "shard-%03d.txt" in tests_job
     assert "python scripts/ci/pytest_shard.py" not in tests_job
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
-    assert 'test "${#reports[@]}" -eq 96' in sonar_setup
+    assert 'test "${#reports[@]}" -eq 128' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
