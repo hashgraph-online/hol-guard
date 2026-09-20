@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.syngraphe",
+  "version": "1.0.0",
+  "name": "Syngraphe",
+  "description": "Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.suffro",
+    "displayName": "Lorenzo"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#4338CA" },
+  "license": "Apache-2.0",
+  "executables": ["syngraphe", "syg"],
+  "ecosystemIds": ["syngraphe"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "Syngraphe initialization command",
+    "Syngraphe agent policy command",
+    "Syngraphe document creation command",
+    "Syngraphe state archive command"
+  ],
+  "saferAlternatives": [
+    "Run the same command with --dry-run first to inspect the exact plan without modifying files.",
+    "Read the existing AGENT-POLICY.md before --force replaces it; Syngraphe does not manage or restore its contents."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_syngraphe_extensions"
+  }
+}

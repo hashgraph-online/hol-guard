@@ -71,6 +71,7 @@ def _reviewed_types() -> dict[type[object], str]:
         OptionValueKeyMatcher,
         SubcommandOperandPrefixMatcher,
     )
+    from .command_syngraphe_extensions import SyngrapheSafeFlagMatcher
 
     return {
         ExecutableMatcher: "executable.v1",
@@ -95,6 +96,7 @@ def _reviewed_types() -> dict[type[object], str]:
         CurlElasticsearchDeleteMatcher: "curl-elasticsearch-delete.v1",
         Repo2nbUnresolvedExpansionMatcher: "repo2nb-expansion.v1",
         ErrandCommandMatcher: "errand-command.v1",
+        SyngrapheSafeFlagMatcher: "syngraphe-safe-flag.v1",
         ReviewedLiteralCommandMatcher: "reviewed-literal.v1",
     }
 
