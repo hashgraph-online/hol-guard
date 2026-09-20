@@ -64,23 +64,33 @@ _AFFIRMATIVE_FEEDERS = frozenset({"yes", "echo", "printf"})
 _AFFIRMATIVE_VALUES = frozenset({"y", "yes", "y\n", "yes\n", "y\\n", "yes\\n"})
 
 
-def _feeds_affirmative_input(segment_executable: str | None, arguments: tuple[str, ...]) -> bool:
+# `cat` with no operand forwards stdin unchanged, so consent survives it.
+_TRANSPARENT_FORWARDERS = frozenset({"cat"})
+
+
+def _feeds_affirmative_input(
+    segment_executable: str | None,
+    arguments: tuple[str, ...],
+    *,
+    feeders: frozenset[str],
+    values: frozenset[str],
+) -> bool:
     """Report whether one pipeline segment answers a yes/no prompt with consent."""
 
     if segment_executable is None:
         return False
     name = segment_executable.rsplit("/", 1)[-1].lower()
-    if name not in _AFFIRMATIVE_FEEDERS:
+    if name not in feeders:
         return False
     operands = tuple(argument for argument in arguments if not argument.startswith("-"))
     if not operands:
         # Bare `yes` emits an endless stream of `y`; bare `echo`/`printf` emit
         # nothing a prompt would read as consent.
         return name == "yes"
-    return all(operand.strip().strip("'\"").lower() in _AFFIRMATIVE_VALUES for operand in operands)
+    return all(operand.strip().strip("'\"").lower() in values for operand in operands)
 
 
-def _reads_affirmative_here_string(arguments: tuple[str, ...]) -> bool:
+def _reads_affirmative_here_string(arguments: tuple[str, ...], *, values: frozenset[str]) -> bool:
     """Report whether a here-string answers this segment's prompt with consent.
 
     ``ctc --all <<< y`` reaches the same one-line prompt as ``yes | ctc --all``
@@ -99,7 +109,7 @@ def _reads_affirmative_here_string(arguments: tuple[str, ...]) -> bool:
         value = operator[3:]
         if not value and index + 1 < len(arguments):
             value = arguments[index + 1]
-        if value.strip().strip("'\"").lower() in _AFFIRMATIVE_VALUES:
+        if value.strip().strip("'\"").lower() in values:
             return True
     return False
 
@@ -118,16 +128,24 @@ class ConfirmationFedMatcher:
     share no standard input, so they are not a feed.
     """
 
-    matcher: AnyMatcher
+    # The child is named `consumer` because that is what it is: the stage whose
+    # prompt the consent reaches. The trusted compiler recognises that name as a
+    # child matcher, so this rule compiles to the native IR like any combinator.
+    consumer: AnyMatcher
+    feeders: frozenset[str] = _AFFIRMATIVE_FEEDERS
+    values: frozenset[str] = _AFFIRMATIVE_VALUES
+    forwarders: frozenset[str] = _TRANSPARENT_FORWARDERS
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         fed_contexts = {
             (segment.execution_context, segment.pipeline_index)
             for segment in command.segments
-            if _feeds_affirmative_input(segment.executable, segment.arguments)
+            if _feeds_affirmative_input(segment.executable, segment.arguments, feeders=self.feeders, values=self.values)
         }
         here_string_segments = {
-            index for index, segment in enumerate(command.segments) if _reads_affirmative_here_string(segment.arguments)
+            index
+            for index, segment in enumerate(command.segments)
+            if _reads_affirmative_here_string(segment.arguments, values=self.values)
         }
         if not fed_contexts and not here_string_segments:
             return ()
@@ -136,14 +154,14 @@ class ConfirmationFedMatcher:
         for segment in sorted(command.segments, key=lambda item: item.pipeline_index):
             if (
                 segment.executable is not None
-                and segment.executable.rsplit("/", 1)[-1] == "cat"
+                and segment.executable.rsplit("/", 1)[-1] in self.forwarders
                 and not segment.arguments
                 and (segment.execution_context, segment.pipeline_index - 1) in fed_contexts
             ):
                 fed_contexts.add((segment.execution_context, segment.pipeline_index))
         evidence = tuple(
             item
-            for item in self.matcher.match(command)
+            for item in self.consumer.match(command)
             if item.segment_index in here_string_segments
             or any(
                 context == command.segments[item.segment_index].execution_context
@@ -162,13 +180,13 @@ _CTC_ANY_PRUNE = AnyMatcher(matchers=_cleanup_variants(_PRUNE_FLAGS))
 _CTC_SESSION_TEARDOWN = AnyMatcher(
     matchers=(
         *_cleanup_variants(_FORCE_FLAGS),
-        ConfirmationFedMatcher(matcher=_CTC_ANY_RUN),
+        ConfirmationFedMatcher(consumer=_CTC_ANY_RUN),
     ),
 )
 _CTC_PROCESS_PRUNE = AnyMatcher(
     matchers=(
         *_cleanup_variants(_PRUNE_FLAGS, _FORCE_FLAGS),
-        ConfirmationFedMatcher(matcher=_CTC_ANY_PRUNE),
+        ConfirmationFedMatcher(consumer=_CTC_ANY_PRUNE),
     ),
 )
 # The preview is the flag on its own: `ctc --all --force --prune --dry-run`

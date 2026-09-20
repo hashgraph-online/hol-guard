@@ -64,11 +64,65 @@ fn decision(
 }
 
 #[test]
+fn fed_confirmation_is_read_natively_the_same_way_the_authoring_matcher_reads_it() {
+    let enabled = binding(&[("extension", "command.claude-tmux", "enabled")], false);
+    let teardown = |command: &str| {
+        decision(command, &enabled)
+            .command_extensions
+            .unwrap()
+            .observations
+            .iter()
+            .any(|item| item.rule_id == "command.claude-tmux.session-teardown")
+    };
+    let prune = |command: &str| {
+        decision(command, &enabled)
+            .command_extensions
+            .unwrap()
+            .observations
+            .iter()
+            .any(|item| item.rule_id == "command.claude-tmux.process-prune")
+    };
+
+    // Consent that reaches the prompt without a person: a pipe, a pipe through
+    // bare `cat`, or a here-string on the run itself.
+    assert!(teardown("yes | ctc --all"));
+    assert!(teardown("printf 'y\\n' | ctc api"));
+    assert!(teardown("yes | cat | ctc --all"));
+    assert!(prune("yes | ctc --all --prune"));
+
+    // A here-string carries the same consent, and the authoring matcher reads
+    // it, but this parser refuses every redirect
+    // (`command_redirect_not_yet_supported`), so such a command never reaches
+    // native evaluation and is decided by the authoring path instead. The
+    // runtime keeps its here-string reading so the two agree the moment the
+    // parser admits redirects; this assertion fails loudly if that day comes
+    // and the coupling is forgotten.
+    assert!(redirects_defer_to_the_authoring_path("ctc --all <<< y"));
+    assert!(redirects_defer_to_the_authoring_path(
+        "ctc --all < consent.txt"
+    ));
+
+    // A refusal, unknown piped data, an intervening consumer, a separate
+    // execution context, and unreadable redirect content are not consent.
+    assert!(!teardown("ctc --all"));
+    assert!(!teardown("yes n | ctc --all"));
+    assert!(!teardown("cat notes | ctc --all"));
+    assert!(!teardown("yes | cat notes | ctc --all"));
+    assert!(!teardown("yes && ctc --all"));
+}
+
+fn redirects_defer_to_the_authoring_path(command: &str) -> bool {
+    let parsed = model(command);
+    parsed.segments.is_empty()
+        && parsed.uncertainty_reason.as_deref() == Some("command_redirect_not_yet_supported")
+}
+
+#[test]
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    assert_eq!(first.extensions.len(), 71);
-    assert_eq!(first.rules.len(), 234);
+    assert_eq!(first.extensions.len(), 72);
+    assert_eq!(first.rules.len(), 236);
     assert_eq!(
         first
             .rules

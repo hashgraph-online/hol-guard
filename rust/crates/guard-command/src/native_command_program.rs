@@ -151,6 +151,17 @@ struct ArgumentsNode {
     required_arguments: BTreeSet<String>,
 }
 
+/// Configuration for the fed-confirmation matcher. The sets arrive from the
+/// compiled program rather than being restated here, so the authoring
+/// semantics and this runtime cannot drift apart.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfirmationFedNode {
+    feeders: BTreeSet<String>,
+    values: BTreeSet<String>,
+    forwarders: BTreeSet<String>,
+}
+
 #[derive(Debug)]
 enum Matcher {
     Executable(ExecutableNode),
@@ -163,6 +174,7 @@ enum Matcher {
     CommonCli(CommonCliMatcher),
     Database(DatabaseMatcher),
     Specialized(SpecializedMatcher),
+    ConfirmationFed(usize, ConfirmationFedNode),
 }
 
 #[derive(Debug)]
