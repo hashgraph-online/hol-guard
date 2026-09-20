@@ -286,10 +286,37 @@ where
     }
 }
 
+pub(crate) struct ResidentAdmission {
+    primary: SyncSender<BoxedResidentStream>,
+    overflow: SyncSender<BoxedResidentStream>,
+}
+
+fn retry_overflow_admissions(
+    primary: SyncSender<BoxedResidentStream>,
+    overflow: Receiver<BoxedResidentStream>,
+) {
+    while let Ok(mut stream) = overflow.recv() {
+        let deadline = Instant::now() + crate::AUTH_TIMEOUT;
+        loop {
+            match primary.try_send(stream) {
+                Ok(()) => break,
+                Err(TrySendError::Disconnected(_)) => return,
+                Err(TrySendError::Full(returned)) => {
+                    stream = returned;
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
-) -> SyncSender<BoxedResidentStream> {
+) -> ResidentAdmission {
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
     let evaluation_policy_store = policy_store.clone();
@@ -339,28 +366,31 @@ pub(crate) fn start_resident_workers(
             }
         },
     );
-    authentication_sender
+    let overflow_primary = authentication_sender.clone();
+    let (overflow_sender, overflow_receiver) = sync_channel(crate::auth_queue_capacity());
+    thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_receiver));
+    ResidentAdmission {
+        primary: authentication_sender,
+        overflow: overflow_sender,
+    }
 }
 
 pub(crate) fn admit_connection(
-    sender: &SyncSender<BoxedResidentStream>,
-    mut stream: BoxedResidentStream,
+    admission: &ResidentAdmission,
+    stream: BoxedResidentStream,
 ) -> Result<(), String> {
-    let deadline = Instant::now() + crate::AUTH_TIMEOUT;
-    loop {
-        match sender.try_send(stream) {
-            Ok(()) => return Ok(()),
-            Err(TrySendError::Disconnected(_stream)) => {
-                return Err("native_resident_worker_pool_stopped".to_owned());
-            }
-            Err(TrySendError::Full(returned)) => {
-                stream = returned;
-                if Instant::now() >= deadline {
-                    return Ok(());
-                }
-                thread::sleep(Duration::from_millis(1));
-            }
+    match admission.primary.try_send(stream) {
+        Ok(()) => Ok(()),
+        Err(TrySendError::Disconnected(_stream)) => {
+            Err("native_resident_worker_pool_stopped".to_owned())
         }
+        Err(TrySendError::Full(stream)) => match admission.overflow.try_send(stream) {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Disconnected(_stream)) => {
+                Err("native_resident_worker_pool_stopped".to_owned())
+            }
+            Err(TrySendError::Full(_stream)) => Ok(()),
+        },
     }
 }
 
@@ -403,23 +433,29 @@ mod tests {
     }
 
     #[test]
-    fn admit_connection_waits_for_auth_capacity_instead_of_dropping() {
-        let (sender, receiver) = sync_channel(1);
-        sender
+    fn admit_connection_does_not_block_accept_on_full_auth_queue() {
+        let (primary, primary_rx) = sync_channel(1);
+        primary
             .try_send(Box::new(NullStream) as BoxedResidentStream)
             .expect("seed occupancy");
+        let overflow_primary = primary.clone();
+        let (overflow, overflow_rx) = sync_channel(1);
+        thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_rx));
+        let admission = ResidentAdmission { primary, overflow };
+        let started = Instant::now();
+        admit_connection(&admission, Box::new(NullStream)).expect("overflow handoff");
+        assert!(
+            started.elapsed() < Duration::from_millis(20),
+            "accept must keep moving when auth workers are busy"
+        );
         let worker = thread::spawn(move || {
             thread::sleep(Duration::from_millis(30));
-            let occupied = receiver.recv().expect("drain occupancy");
-            let admitted = receiver.recv().expect("queued admission");
+            let occupied = primary_rx.recv().expect("drain occupancy");
+            let admitted = primary_rx.recv().expect("overflow retry");
             (occupied, admitted)
         });
-        let started = Instant::now();
-        admit_connection(&sender, Box::new(NullStream)).expect("admit after drain");
-        assert!(started.elapsed() >= Duration::from_millis(20));
-        assert!(started.elapsed() < crate::AUTH_TIMEOUT);
-        drop(sender);
-        drop(worker.join().expect("occupancy drain"));
+        drop(worker.join().expect("overflow delivered"));
+        drop(admission);
     }
 
     #[test]
