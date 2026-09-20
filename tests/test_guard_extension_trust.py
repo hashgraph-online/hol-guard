@@ -85,6 +85,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.mcp-instapods",
         "command.noodle",
         "command.ollama",
+        "command.omairc",
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",

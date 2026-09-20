@@ -5,6 +5,7 @@ from __future__ import annotations
 from .command_blitcp_extensions import BLITCP_ACTION_RISK_CLASSES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES
 from .command_ollama_extensions import OLLAMA_ACTION_RISK_CLASSES
+from .command_omairc_extensions import OMAIRC_ACTION_RISK_CLASSES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "local secret read shell command": ("local_secret_read",),
@@ -72,4 +73,5 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
+    **OMAIRC_ACTION_RISK_CLASSES,
 }

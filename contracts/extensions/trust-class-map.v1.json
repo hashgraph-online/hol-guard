@@ -83,6 +83,7 @@
       "command.mcp-instapods",
       "command.noodle",
       "command.ollama",
+      "command.omairc",
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",

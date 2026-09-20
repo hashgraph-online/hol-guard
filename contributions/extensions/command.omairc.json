@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.omairc",
+  "version": "1.0.0",
+  "name": "omairc",
+  "description": "Reviews omairc commands that send IRC messages or raise the running window. Read-only inventory commands stay automatic.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.fredimachado",
+    "displayName": "Fredi Machado",
+    "url": "https://github.com/fredimachado"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#1D4ED8" },
+  "homepage": "https://github.com/fredimachado/omairc",
+  "license": "MIT",
+  "executables": ["omairc"],
+  "ecosystemIds": ["omairc"],
+  "riskClasses": ["network_egress", "execution"],
+  "actionClasses": [
+    "Omairc message send command",
+    "Omairc window raise command"
+  ],
+  "referenceUrls": ["https://github.com/fredimachado/omairc"],
+  "saferAlternatives": [
+    "Confirm the network, target, and exact message text before sending.",
+    "Use omairc read, names, status, or connections to inspect state first."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_omairc_extensions"
+  }
+}

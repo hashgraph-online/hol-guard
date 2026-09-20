@@ -60,6 +60,7 @@ def _reviewed_types() -> dict[type[object], str]:
     )
     from .command_path_set_matcher import ExecutablePathSetMatcher
     from .command_platform_extensions import _ZeroOperandFlagMatcher
+    from .command_omairc_extensions import OmaircSendHelpMatcher, OmaircWrapperSubcommandMatcher
     from .command_repo2nb_extensions import Repo2nbUnresolvedExpansionMatcher
     from .command_reviewed_literal_matcher import ReviewedLiteralCommandMatcher
     from .command_rules import AllMatcher, AnyMatcher, ArgumentMatcher, ExecutableMatcher, PipelineMatcher
@@ -92,6 +93,8 @@ def _reviewed_types() -> dict[type[object], str]:
         _ZeroOperandFlagMatcher: "zero-operand-flags.v1",
         PhpArtisanScriptMatcher: "php-artisan-script.v1",
         CurlElasticsearchDeleteMatcher: "curl-elasticsearch-delete.v1",
+        OmaircSendHelpMatcher: "omairc-send-help.v1",
+        OmaircWrapperSubcommandMatcher: "omairc-wrapper-subcommand.v1",
         Repo2nbUnresolvedExpansionMatcher: "repo2nb-expansion.v1",
         ReviewedLiteralCommandMatcher: "reviewed-literal.v1",
     }

@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "1d822cce55cbb8afcb6541ea96e70070b36047133249e52bde79c6b31f181901",
+  "catalog_digest": "3a3522c07683e49dc979ef240b1342c9fef846ab4112e01ea2539909a54ff930",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -66,6 +66,7 @@
     "command.monitoring",
     "command.noodle",
     "command.ollama",
+    "command.omairc",
     "command.package.go",
     "command.package.jvm",
     "command.package.node",
@@ -97,7 +98,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 250,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -272,6 +273,8 @@
     "command.noodle.permission.run": "noodle request run users/get --collection ./my-api",
     "command.ollama.permission.push": "ollama push",
     "command.ollama.permission.rm": "ollama rm",
+    "command.omairc.permission.raise": "omairc raise",
+    "command.omairc.permission.send": "omairc send",
     "command.package.go.permission.package-protection": "go install golang.org/x/tools/cmd/goimports@latest",
     "command.package.jvm.permission.package-protection": "mvn dependency:copy-dependencies",
     "command.package.node.permission.package-protection": "npm install left-pad",
@@ -618,6 +621,8 @@
     "command.noodle.permission.run",
     "command.ollama.permission.push",
     "command.ollama.permission.rm",
+    "command.omairc.permission.raise",
+    "command.omairc.permission.send",
     "command.package.go.permission.package-protection",
     "command.package.jvm.permission.package-protection",
     "command.package.node.permission.package-protection",
@@ -704,7 +709,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 236,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -873,6 +878,8 @@
     "command.noodle.run",
     "command.ollama.push",
     "command.ollama.rm",
+    "command.omairc.send",
+    "command.omairc.raise",
     "command.payment.delete",
     "command.platform.heroku.app-destruction",
     "command.platform.heroku.release-change",

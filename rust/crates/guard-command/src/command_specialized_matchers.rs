@@ -17,8 +17,12 @@ use crate::command_ascii_comparison::{self as ascii_comparison, lowercase_for_as
 
 #[path = "command_curl_operations.rs"]
 mod curl;
+#[path = "command_omairc_matchers.rs"]
+mod omairc;
 #[path = "command_reviewed_literal.rs"]
 mod literal;
+
+use omairc::{OmaircSendHelpConfig, OmaircWrapperSubcommandConfig};
 
 use literal::ReviewedLiteralConfig;
 
@@ -81,6 +85,8 @@ pub(crate) enum SpecializedMatcher {
     ZeroOperand(ZeroOperandConfig),
     CurlElasticsearch(CurlElasticsearchConfig),
     Repo2nbExpansion(Repo2nbExpansionConfig),
+    OmaircWrapperSubcommand(OmaircWrapperSubcommandConfig),
+    OmaircSendHelp(OmaircSendHelpConfig),
     ReviewedLiteral(ReviewedLiteralConfig),
 }
 
@@ -142,6 +148,12 @@ impl SpecializedMatcher {
                     .collect();
                 Ok(Self::Repo2nbExpansion(config))
             }
+            "omairc-wrapper-subcommand.v1" => Ok(Self::OmaircWrapperSubcommand(
+                OmaircWrapperSubcommandConfig::from_config(config)?,
+            )),
+            "omairc-send-help.v1" => Ok(Self::OmaircSendHelp(
+                OmaircSendHelpConfig::from_config(config)?,
+            )),
             "reviewed-literal.v1" => {
                 let config: ReviewedLiteralConfig =
                     serde_json::from_value(config).map_err(invalid)?;
@@ -200,6 +212,8 @@ impl SpecializedMatcher {
                     )?
                 }
                 Self::Repo2nbExpansion(config) => config.matches(segment, deadline)?,
+                Self::OmaircWrapperSubcommand(config) => config.matches(segment, deadline)?,
+                Self::OmaircSendHelp(config) => config.matches(segment, deadline)?,
                 Self::ReviewedLiteral(_) => unreachable!("handled before segment iteration"),
             };
             check_deadline(deadline)?;
