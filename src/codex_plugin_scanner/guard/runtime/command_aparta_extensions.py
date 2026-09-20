@@ -11,10 +11,12 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 # folder and injects it into terminal AI agents. Three command families leave
 # the read-only surface:
 #
-# * `apply`, `remove` and `fallback --secure|--restore` write identity files on
-#   the host (gitconfig includes, the gh config dir, the isolated gcloud dir,
-#   agent config files, the global ADC), always with backups. `--dry-run` is
-#   the documented side-effect-free preview and `--help` exits immediately.
+# * `apply`, `remove`, `init`, `add`, `doctor --fix`, `shell-install` and
+#   `fallback --secure|--restore` write identity files on the host (profile
+#   and workspace records, gitconfig includes, the gh config dir, the isolated
+#   gcloud dir, agent config files, the zsh startup file, the global ADC),
+#   always with backups. `--dry-run` is the documented side-effect-free
+#   preview and `--help` exits immediately.
 # * `run --profile <name>` / `run -p <name>` executes an arbitrary command with
 #   another profile's credentials, which is the one deliberate way to cross
 #   the identity scope of the current folder.
@@ -22,9 +24,15 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 #   keyring and materializes it as GITHUB_TOKEN in a child process or on
 #   stdout; it is strictly opt-in for that reason.
 #
-# `scan`, `doctor`, `status`, `check`, `list`, `env` without the token flag,
-# `run` without `--profile`, `login` (interactive, opens a browser) and the
-# bare `fallback` report are not reviewed. Global options (`--dry-run`,
+# `scan`, `doctor` without `--fix`, `status`, `check`, `list`, `help`, `env`
+# without the token flag, `run` without `--profile`, `login` (interactive,
+# opens a browser, renews credentials inside the profile's own scope) and the
+# bare `fallback` report are not reviewed: since aparta 0.9.3 inspection
+# commands never write, they only print a notice when a profile is stale.
+# `update` upgrades the package through uv, pipx or pip and then reapplies
+# every profile with the new binary; the package-manager step is owned by the
+# package extensions, and the reapply it triggers runs as `aparta apply
+# --all`, which this extension reviews. Global options (`--dry-run`,
 # `--verbose`/`-v`) may precede the subcommand.
 # https://github.com/lucascarvalhal/aparta
 
@@ -57,16 +65,17 @@ def _aparta(*subcommands: str, **kwargs: object) -> AnyMatcher:
     )
 
 
-_APARTA_APPLY = _aparta("apply")
-_APARTA_REMOVE = _aparta("remove")
-_APARTA_FALLBACK_SECURE = _aparta("fallback", required_flags=frozenset({"--secure"}))
-_APARTA_FALLBACK_RESTORE = _aparta("fallback", required_flags=frozenset({"--restore"}))
 _APARTA_IDENTITY_WRITE = AnyMatcher(
     matchers=(
-        *_APARTA_APPLY.matchers,
-        *_APARTA_REMOVE.matchers,
-        *_APARTA_FALLBACK_SECURE.matchers,
-        *_APARTA_FALLBACK_RESTORE.matchers,
+        *_aparta("apply").matchers,
+        *_aparta("remove").matchers,
+        *_aparta("init").matchers,
+        *_aparta("add").matchers,
+        *_aparta("shell-install").matchers,
+        *_aparta("doctor", required_flags=frozenset({"--fix"})).matchers,
+        *_aparta("doctor", required_flags=frozenset({"-f"})).matchers,
+        *_aparta("fallback", required_flags=frozenset({"--secure"})).matchers,
+        *_aparta("fallback", required_flags=frozenset({"--restore"})).matchers,
     )
 )
 
@@ -113,8 +122,9 @@ APARTA_COMMAND_RULES = (
         rule_id="command.aparta.identity-write",
         title="aparta identity file write",
         description=(
-            "Identifies aparta apply, remove, and fallback --secure/--restore invocations that rewrite "
-            "Git, GitHub CLI, gcloud, AWS and agent identity files on the host."
+            "Identifies aparta apply, remove, init, add, doctor --fix, shell-install and fallback "
+            "--secure/--restore invocations that rewrite profile records and Git, GitHub CLI, gcloud, "
+            "AWS, agent and shell identity files on the host."
         ),
         severity="high",
         risk_classes=APARTA_ACTION_RISK_CLASSES[_IDENTITY_WRITE_ACTION],
