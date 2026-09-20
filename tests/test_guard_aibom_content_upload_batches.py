@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     upload_primary_content_sources,
 )
+from tests.guard_aibom_authority_support import content_aibom_authority
 
 
 def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
@@ -59,12 +60,14 @@ def test_primary_content_upload_batches_exact_bodies_and_item_count(tmp_path: Pa
         _urlopen_json_with_timeout_retry=respond,
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=sources,
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary == {
@@ -106,17 +109,20 @@ def test_primary_content_upload_failure_is_nonfatal(tmp_path: Path) -> None:
         _urlopen_json_with_timeout_retry=fail,
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=(source,),
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary["attempted"] == 1
     assert summary["uploaded"] == 0
     assert summary["failed"] == 1
+    assert "reason" in summary
     assert summary["reason"] == "endpoint_unavailable"
 
 
@@ -131,12 +137,14 @@ def test_primary_content_upload_accounts_for_partial_batch_failure(tmp_path: Pat
         },
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=sources,
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary["attempted"] == 2
@@ -154,12 +162,14 @@ def test_primary_content_upload_skips_changed_body(tmp_path: Path) -> None:
         _urlopen_json_with_timeout_retry=lambda **_kwargs: {},
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=(source,),
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary["eligible"] == 1
@@ -183,12 +193,14 @@ def test_primary_content_upload_accepts_an_empty_primary_file(tmp_path: Path) ->
         },
     )
 
+    store, operation = content_aibom_authority(tmp_path)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=(source,),
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary["attempted"] == 1

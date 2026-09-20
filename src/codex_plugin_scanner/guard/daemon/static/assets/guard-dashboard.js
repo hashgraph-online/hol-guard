@@ -15729,6 +15729,11 @@ function normalizeSupplyChainRepairResult(result) {
     message: stringValue$2(result.message) ?? "Supply-chain repair finished."
   };
 }
+function assertGuardCloudConnectStatus(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("connect_required" in value) || typeof value.connect_required !== "boolean") {
+    throw new Error("Guard returned an invalid connection status. Try again.");
+  }
+}
 const now = "2026-04-11T12:00:00Z";
 const demoPresentationSettings = {
   presentation_mode: "everyday",
@@ -17787,11 +17792,9 @@ async function publishInsightsShare(input) {
   throw new Error("Invalid insights share response");
 }
 function normalizeGuardCloudConnectStatus(value) {
-  if (!isRecord$2(value)) {
-    return { connect_required: false, connect_flow: null };
-  }
+  assertGuardCloudConnectStatus(value);
   return {
-    connect_required: value.connect_required === true,
+    connect_required: value.connect_required,
     connect_flow: normalizePackageFirewallConnectFlow(value.connect_flow)
   };
 }
@@ -19268,8 +19271,9 @@ function parseGuardCloudConnectHttp(status, payload) {
     const message = typeof record2.message === "string" && record2.message.trim() ? record2.message : typeof record2.error === "string" && record2.error.trim() ? `${record2.error} (${status})` : `Request failed with ${status}`;
     throw new Error(message);
   }
+  assertGuardCloudConnectStatus(record2);
   return {
-    connect_required: record2.connect_required === true,
+    connect_required: record2.connect_required,
     connect_flow: connectFlowFromPayload(record2.connect_flow),
     dashboard_url: dashboardUrl
   };

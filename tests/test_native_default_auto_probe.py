@@ -5,10 +5,14 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus, wait_for_route_corpus
+
+if TYPE_CHECKING:
+    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
 def test_receipt_corpus_complete_requires_processed_count() -> None:
@@ -136,6 +140,62 @@ def test_wait_for_route_corpus_observes_completion_before_snapshot() -> None:
 
     complete = wait_for_route_corpus(FakeMetrics(), expected=21, timeout_seconds=1.0)
     assert complete["routes"] == {"native_resident": 21}
+
+
+@pytest.mark.parametrize(
+    ("observed_routes", "reason", "accepted"),
+    [
+        ({"native_resident": 1}, "native_exact_safe_command", True),
+        ({}, "harness_not_managed", False),
+        ({"native_degraded": 1}, "native_degraded_emergency_safe", False),
+    ],
+)
+def test_installed_route_requires_observed_native_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    observed_routes: dict[str, int],
+    reason: str,
+    accepted: bool,
+) -> None:
+    from ci.native_runtime import probe_native_default_auto as probe
+    from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+
+    metrics = HookMetricsRecorder()
+    for route, count in observed_routes.items():
+        for _ in range(count):
+            metrics.record_route(route)
+    daemon = cast(
+        "GuardDaemonServer",
+        cast(object, SimpleNamespace(_server=SimpleNamespace(hook_worker=SimpleNamespace(metrics=metrics)))),
+    )
+    monkeypatch.setattr(
+        probe,
+        "_installed_hook_request",
+        lambda *args: {
+            "continue": True,
+            "policy_action": "allow",
+            "reason_code": reason,
+            "hookSpecificOutput": {"permissionDecision": "allow"},
+        },
+    )
+    monkeypatch.setattr(
+        probe,
+        "wait_for_route_corpus",
+        lambda recorder, **kwargs: wait_for_route_corpus(recorder, **kwargs, timeout_seconds=0),
+    )
+    routes = {"claude-code": {"pre_tool_use": "installed_canonical", "post_tool_use": "unavailable"}}
+    receipts: list[dict[str, str]] = []
+    reasons: dict[str, int] = {}
+    if accepted:
+        probe._exercise_installed_routes(daemon, tmp_path, tmp_path, routes, receipts, reasons)
+        assert receipts == [{"harness": "claude-code", "event": "PreToolUse", "route": "native_resident"}]
+    else:
+        with pytest.raises(RuntimeError, match=reason) as error:
+            probe._exercise_installed_routes(daemon, tmp_path, tmp_path, routes, receipts, reasons)
+        assert "expected_native_routes" in str(error.value)
+        assert "claude-code" in str(error.value)
+        assert receipts == []
+    assert reasons == {reason: 1}
 
 
 def test_wait_for_route_corpus_does_not_hide_a_wrong_route() -> None:
@@ -356,3 +416,57 @@ def test_stop_native_process_accepts_only_documented_idempotent_exit(
     )
 
     assert probe._stop_native_process(runtime, guard_home) is expected
+
+
+@pytest.mark.parametrize("aliased_parent", [False, True])
+def test_probe_preregisters_the_workspace_presented_by_the_hook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, aliased_parent: bool
+) -> None:
+    from contextlib import closing
+
+    from ci.native_runtime import probe_native_default_auto as probe
+    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    parent = tmp_path / "owned-parent"
+    parent.mkdir()
+    if aliased_parent:
+        alias = tmp_path / "parent-alias"
+        alias.symlink_to(parent, target_is_directory=True)
+        parent = alias
+    roots: list[Path] = []
+    stopped: list[Path] = []
+
+    def corpus(root: Path) -> dict[str, int]:
+        roots.append(root)
+        workspace = root / "hook-workspace"
+        workspace.mkdir()
+        store = GuardStore(root / "hook-home")
+        handler = object.__new__(_GuardDaemonHandler)
+        with closing(NativePolicySnapshotPublisher(store=store)) as publisher:
+            assert publisher.register_workspace(workspace)
+            epoch = publisher._epoch
+            presented = handler._validated_hook_directory_string("workspace", str(workspace), roots=(tmp_path,))
+            assert presented is not None
+            # The real path validator must not make the same fixture directory
+            # look like a newly discovered workspace and revoke publication.
+            assert not publisher.register_workspace(Path(presented))
+            assert publisher._epoch == epoch
+            assert Path(presented) == workspace
+        return {"route_count": 21}
+
+    health = SimpleNamespace(state="healthy", reason="native_ready", resident_failures=0, oneshot_failures=0)
+    monkeypatch.setattr(probe, "_short_temp_parent", lambda: str(parent))
+    monkeypatch.setattr(probe, "_run_native_smoke", lambda _root: None)
+    monkeypatch.setattr(probe, "native_runtime_health", lambda _home: health)
+    monkeypatch.setattr(probe, "_native_state_files", lambda _home: [tmp_path / "generation.json"])
+    monkeypatch.setattr(probe, "_installed_hook_corpus", corpus)
+    monkeypatch.setattr(probe, "_stop_native_runtime", lambda _runtime, home: stopped.append(home))
+    identity = probe.NativeRuntimeIdentity(path=tmp_path / "hol-guard-runtime", size=0, mtime_ns=0, sha256="0" * 64)
+
+    assert probe._run_temporary_probe(identity) == {"route_count": 21}
+    assert len(roots) == 1
+    assert stopped == [roots[0] / "guard-home", roots[0] / "hook-home"]
+    assert not roots[0].exists()
+    assert parent.is_dir()

@@ -1,0 +1,301 @@
+{
+  "schema": "native-scoped-tool-producer-fixture.v1",
+  "cases": [
+    {
+      "name": "codex-Read",
+      "harness": "codex",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        }
+      },
+      "artifactId": "codex:project:Read"
+    },
+    {
+      "name": "codex-read_file",
+      "harness": "codex",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "codex:project:read_file"
+    },
+    {
+      "name": "codex-open_file",
+      "harness": "codex",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "codex:project:open_file"
+    },
+    {
+      "name": "codex-view_file",
+      "harness": "codex",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "codex:project:view_file"
+    },
+    {
+      "name": "codex-mcp__synthetic__inspect",
+      "harness": "codex",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {}
+      },
+      "artifactId": "codex:project:mcp__synthetic__inspect"
+    },
+    {
+      "name": "codex-mcp__synthetic__ping",
+      "harness": "codex",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__ping",
+        "tool_input": {}
+      },
+      "artifactId": "codex:project:mcp__synthetic__ping"
+    },
+    {
+      "name": "claude-code-Read",
+      "harness": "claude-code",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        }
+      },
+      "artifactId": "claude-code:project:Read"
+    },
+    {
+      "name": "claude-code-read_file",
+      "harness": "claude-code",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "claude-code:project:read_file"
+    },
+    {
+      "name": "claude-code-open_file",
+      "harness": "claude-code",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "claude-code:project:open_file"
+    },
+    {
+      "name": "claude-code-view_file",
+      "harness": "claude-code",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "claude-code:project:view_file"
+    },
+    {
+      "name": "claude-code-mcp__synthetic__inspect",
+      "harness": "claude-code",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {}
+      },
+      "artifactId": "claude-code:project:mcp:mcp__synthetic__inspect"
+    },
+    {
+      "name": "claude-code-mcp__synthetic__ping",
+      "harness": "claude-code",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__ping",
+        "tool_input": {}
+      },
+      "artifactId": "claude-code:project:mcp:mcp__synthetic__ping"
+    },
+    {
+      "name": "cline-Read",
+      "harness": "cline",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        }
+      },
+      "artifactId": "cline:project:Read"
+    },
+    {
+      "name": "cline-read_file",
+      "harness": "cline",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cline:project:read_file"
+    },
+    {
+      "name": "cline-open_file",
+      "harness": "cline",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cline:project:open_file"
+    },
+    {
+      "name": "cline-view_file",
+      "harness": "cline",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cline:project:view_file"
+    },
+    {
+      "name": "cline-mcp__synthetic__inspect",
+      "harness": "cline",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {}
+      },
+      "artifactId": "cline:project:mcp__synthetic__inspect"
+    },
+    {
+      "name": "cline-mcp__synthetic__ping",
+      "harness": "cline",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__ping",
+        "tool_input": {}
+      },
+      "artifactId": "cline:project:mcp__synthetic__ping"
+    },
+    {
+      "name": "cursor-Read",
+      "harness": "cursor",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        }
+      },
+      "artifactId": "cursor:project:Read"
+    },
+    {
+      "name": "cursor-read_file",
+      "harness": "cursor",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cursor:project:read_file"
+    },
+    {
+      "name": "cursor-open_file",
+      "harness": "cursor",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "open_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cursor:project:open_file"
+    },
+    {
+      "name": "cursor-view_file",
+      "harness": "cursor",
+      "category": "file-read",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "view_file",
+        "tool_input": {
+          "path": "guide.md"
+        }
+      },
+      "artifactId": "cursor:project:view_file"
+    },
+    {
+      "name": "cursor-mcp__synthetic__inspect",
+      "harness": "cursor",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {}
+      },
+      "artifactId": "cursor:project:mcp__synthetic__inspect"
+    },
+    {
+      "name": "cursor-mcp__synthetic__ping",
+      "harness": "cursor",
+      "category": "mcp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__synthetic__ping",
+        "tool_input": {}
+      },
+      "artifactId": "cursor:project:mcp__synthetic__ping"
+    }
+  ]
+}

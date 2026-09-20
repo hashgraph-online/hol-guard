@@ -17,11 +17,12 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,dashboard-update}",
+        metavar="{bootstrap,status,dashboard-update}",
     )
-    bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
-    _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
-    bootstrap_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    for command in ("bootstrap", "status"):
+        contract_parser = desktop_subparsers.add_parser(command, help=argparse.SUPPRESS)
+        _add_guard_common_args(contract_parser, suppress_defaults=True)
+        contract_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     dashboard_update_parser = desktop_subparsers.add_parser("dashboard-update", help=argparse.SUPPRESS)
     _add_guard_common_args(dashboard_update_parser, suppress_defaults=True)
     dashboard_update_parser.add_argument("--daemon-pid", type=int, required=True)

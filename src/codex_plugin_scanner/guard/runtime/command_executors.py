@@ -111,7 +111,7 @@ def execute_guard_command_job(
             )
         if operation in POLICY_MEMORY_OPERATIONS:
             return _result(
-                execute_review_policy_memory(payload, store=store, generated_at=generated_at),
+                execute_review_policy_memory(payload, store=store, generated_at=generated_at, job=job),
                 generated_at=generated_at,
             )
     except ValueError as error:

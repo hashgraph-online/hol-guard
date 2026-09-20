@@ -4,24 +4,23 @@ use std::sync::atomic::Ordering;
 pub(crate) struct ApprovalPolicyFence<'a> {
     pub(crate) generation: u64,
     pub(crate) policy_digest: &'a str,
+    pub(crate) source_input_digest: Option<&'a str>,
     pub(crate) rule_digest: &'a str,
     pub(crate) runtime_identity: &'a str,
 }
 
 impl PolicySnapshotStore {
-    /// Fence an approval challenge to the resident's current authenticated
-    /// snapshot. The callback runs while the state mutex is held, so action
-    /// reconstruction and binding derivation cannot observe a policy push in
-    /// between. The callback must not call APIs that reacquire `state`.
-    pub(crate) fn with_approval_fence<F, T>(
+    /// Keep source reconstruction and issuance under the current snapshot lock.
+    /// The callback cannot reacquire state; external authority is checked again
+    /// before its result is returned.
+    pub(crate) fn with_versioned_approval_fence<F, T>(
         &self,
         envelope: &guard_contracts::GuardHookEnvelopeV2,
         callback: F,
     ) -> Result<T, String>
     where
-        F: FnOnce(&AdmittedPolicySnapshot) -> Result<T, String>,
+        F: FnOnce(&AdmittedVersionedPolicySnapshot) -> Result<T, String>,
     {
-        let now = now_ms()?;
         let state = self
             .state
             .lock()
@@ -31,12 +30,20 @@ impl PolicySnapshotStore {
             &envelope.policy_snapshot,
             &envelope.source.guard_home,
             envelope.policy_generation,
-            now,
+            now_ms()?,
         )?;
-        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
-        callback(snapshot.as_ref())
+        let _command_lease =
+            self.command_authority_lease_for_binding(snapshot.command_extensions())?;
+        let result = callback(snapshot.as_ref())?;
+        self.validate_request_snapshot_locked(
+            &state,
+            &envelope.policy_snapshot,
+            &envelope.source.guard_home,
+            envelope.policy_generation,
+            now_ms()?,
+        )?;
+        Ok(result)
     }
-
     pub(crate) fn approval_v4_authority(
         &self,
     ) -> Result<&crate::policy_store::approval_v4_authority::ApprovalV4Authority, String> {
@@ -146,15 +153,17 @@ impl PolicySnapshotStore {
             .as_ref()
             .ok_or_else(|| "native_policy_snapshot_missing".to_owned())?;
         if state.invalid_on_startup
-            || snapshot.generation != expected.generation
-            || snapshot.policy_digest != expected.policy_digest
-            || snapshot.rule_digest != expected.rule_digest
-            || snapshot.runtime_identity != expected.runtime_identity
+            || *snapshot.generation() != expected.generation
+            || snapshot.policy_digest() != expected.policy_digest
+            || snapshot.source_input_digest() != expected.source_input_digest
+            || snapshot.rule_digest() != expected.rule_digest
+            || snapshot.runtime_identity() != expected.runtime_identity
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
-        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
-        if snapshot.expires_at_ms <= now {
+        let _command_lease =
+            self.command_authority_lease_for_binding(snapshot.command_extensions())?;
+        if *snapshot.expires_at_ms() <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }
         self.approval_replay_memory
@@ -187,15 +196,17 @@ impl PolicySnapshotStore {
             .as_ref()
             .ok_or_else(|| "native_policy_snapshot_missing".to_owned())?;
         if state.invalid_on_startup
-            || snapshot.generation != expected.generation
-            || snapshot.policy_digest != expected.policy_digest
-            || snapshot.rule_digest != expected.rule_digest
-            || snapshot.runtime_identity != expected.runtime_identity
+            || *snapshot.generation() != expected.generation
+            || snapshot.policy_digest() != expected.policy_digest
+            || snapshot.source_input_digest() != expected.source_input_digest
+            || snapshot.rule_digest() != expected.rule_digest
+            || snapshot.runtime_identity() != expected.runtime_identity
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
-        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
-        if snapshot.expires_at_ms <= now {
+        let _command_lease =
+            self.command_authority_lease_for_binding(snapshot.command_extensions())?;
+        if *snapshot.expires_at_ms() <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }
         self.approval_replay_memory.consume_and_emit(

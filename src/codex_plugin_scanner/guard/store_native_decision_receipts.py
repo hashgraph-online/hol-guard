@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Final, Protocol, cast
 
 from .native_decision_receipt import validate_native_decision_receipt
+from .native_policy_decision_context import NativePolicyDecisionContext
+from .native_policy_receipt_store import NativePolicyReceiptStore, persist_native_policy_receipt
 
 NATIVE_DECISION_RECEIPT_MIGRATION_VERSION: Final = 26
 NATIVE_COMMAND_RECEIPT_BINDING_MIGRATION_VERSION: Final = 28
@@ -21,7 +23,7 @@ _COMMAND_BINDING_COLUMN: Final = (
 )
 
 
-class _ConnectionOwner(Protocol):
+class _ConnectionOwner(NativePolicyReceiptStore, Protocol):
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
@@ -92,10 +94,15 @@ def native_decision_receipt_schema_statements(*prefix: str) -> tuple[str, ...]:
 
 
 class StoreNativeDecisionReceiptsMixin:
-    def record_native_decision_receipt(self: _ConnectionOwner, receipt: Mapping[str, object]) -> bool:
-        """Store one validated receipt; duplicate decision IDs are harmless."""
+    def record_native_decision_receipt(
+        self: _ConnectionOwner,
+        receipt: Mapping[str, object],
+        *,
+        policy_context: NativePolicyDecisionContext | None = None,
+    ) -> bool:
+        """Store one validated receipt; only an exact stored replay is harmless."""
 
-        _record_native_decision_receipts(self, (receipt,))
+        _record_native_decision_receipts(self, (receipt,), policy_context=policy_context)
         return True
 
     def record_native_decision_receipts(
@@ -104,7 +111,7 @@ class StoreNativeDecisionReceiptsMixin:
         """Commit a bounded batch atomically, returning acknowledged identities.
 
         Validate every input before opening a transaction. A failed commit
-        acknowledges none; replay of an already committed decision is harmless.
+        acknowledges none; replay must match the complete persisted receipt.
         """
 
         return _record_native_decision_receipts(self, receipts)
@@ -126,28 +133,50 @@ class StoreNativeDecisionReceiptsMixin:
                 "select * from native_hook_decision_receipts where decision_id = ?",
                 (decision_id,),
             ).fetchone()
-        if row is None:
+        return _validated_stored_receipt(row)
+
+
+def _validated_stored_receipt(row: sqlite3.Row | None) -> dict[str, object] | None:
+    if row is None:
+        return None
+    result = dict(row)
+    result.pop("recorded_at")
+    raw_binding = result.pop("command_extensions_json")
+    if raw_binding is not None:
+        if not isinstance(raw_binding, str) or len(raw_binding) > _MAX_COMMAND_BINDING_CHARACTERS:
             return None
-        result = dict(row)
-        result.pop("recorded_at")
-        raw_binding = result.pop("command_extensions_json")
-        if raw_binding is not None:
-            if not isinstance(raw_binding, str) or len(raw_binding) > _MAX_COMMAND_BINDING_CHARACTERS:
-                return None
-            try:
-                result["command_extensions"] = json.loads(raw_binding)
-            except (ValueError, RecursionError):
-                return None
-        for field in ("workspace_bound", "source_ref_external_allowed", "observe_mode"):
-            if result[field] not in (0, 1):
-                return None
-            result[field] = bool(result[field])
-        return validate_native_decision_receipt(result)
+        try:
+            result["command_extensions"] = json.loads(raw_binding)
+        except (ValueError, RecursionError):
+            return None
+    for field in ("workspace_bound", "source_ref_external_allowed", "observe_mode"):
+        if result[field] not in (0, 1):
+            return None
+        result[field] = bool(result[field])
+    return validate_native_decision_receipt(result)
+
+
+def _require_persisted_receipt_matches(
+    connection: sqlite3.Connection, receipts: Sequence[Mapping[str, object]]
+) -> None:
+    identities = tuple(receipt["decision_id"] for receipt in receipts)
+    placeholders = ",".join("?" for _ in identities)
+    rows = connection.execute(
+        f"select * from native_hook_decision_receipts where decision_id in ({placeholders})", identities
+    ).fetchall()
+    stored = {row["decision_id"]: _validated_stored_receipt(row) for row in rows}
+    if any(stored.get(receipt["decision_id"]) != receipt for receipt in receipts):
+        raise ValueError("native decision receipt identity conflicts")
 
 
 def _record_native_decision_receipts(
-    owner: _ConnectionOwner, receipts: Sequence[Mapping[str, object]]
+    owner: _ConnectionOwner,
+    receipts: Sequence[Mapping[str, object]],
+    *,
+    policy_context: NativePolicyDecisionContext | None = None,
 ) -> tuple[str, ...]:
+    if policy_context is not None and len(receipts) != 1:
+        raise ValueError("native policy context requires one exact receipt")
     if len(receipts) > 50:
         raise ValueError("native decision receipt batch exceeds 50 records")
     validated_receipts: list[dict[str, object]] = []
@@ -162,14 +191,16 @@ def _record_native_decision_receipts(
         validated = validate_native_decision_receipt(detached)
         if validated is None:
             raise ValueError("native decision receipt changed during capture")
+        if policy_context is not None and not policy_context.matches_receipt(validated):
+            raise ValueError("native policy context does not match its receipt")
         validated_receipts.append(validated)
     if not validated_receipts:
         return ()
-    recorded_at = datetime.now(timezone.utc).isoformat()
+    recorded_at = policy_context.recorded_at if policy_context is not None else datetime.now(timezone.utc).isoformat()
     with owner._connect() as connection:
         connection.executemany(
             """
-                insert or ignore into native_hook_decision_receipts (
+                insert into native_hook_decision_receipts (
                   decision_id, schema, version, authority, request_id,
                   request_digest, harness, event_name, payload_kind,
                   policy_generation, policy_digest, rule_digest,
@@ -179,6 +210,7 @@ def _record_native_decision_receipts(
                   reviewed_output_sha256, observe_mode, deadline_budget_ms,
                   command_extensions_json, recorded_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(decision_id) do nothing
                 """,
             [
                 (
@@ -215,6 +247,15 @@ def _record_native_decision_receipts(
                 for validated in validated_receipts
             ],
         )
+        # A duplicate ID can refer to damaged persisted bytes. Check the
+        # complete validated row under this same write transaction before
+        # acknowledging any record or allowing the caller to retire its
+        # journal copy. A conflict rolls back the whole batch without repair.
+        _require_persisted_receipt_matches(connection, validated_receipts)
+    if policy_context is not None:
+        # Keep the journal entry until both transactions succeed. Replaying a
+        # committed native row safely retries the same policy projection.
+        persist_native_policy_receipt(owner, receipt=validated_receipts[0], context=policy_context)
     return tuple(cast(str, receipt["decision_id"]) for receipt in validated_receipts)
 
 

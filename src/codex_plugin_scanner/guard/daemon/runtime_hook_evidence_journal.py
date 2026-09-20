@@ -19,6 +19,7 @@ from ..native_decision_receipt import (
     NATIVE_HOOK_DECISION_RECEIPT_SCHEMA,
     validate_native_decision_receipt,
 )
+from ..native_policy_decision_context import NativePolicyDecisionContext
 from ..runtime.command_activity_contract import CorrelationHandle, CorrelationKind
 from ..runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 
@@ -33,6 +34,7 @@ except ImportError:  # pragma: no cover - exercised only on Unix
     msvcrt = None  # type: ignore[assignment]
 
 _EVIDENCE_SCHEMA = "hol-guard-native-hook-evidence.v1"
+_POLICY_RECEIPT_RECORD_SCHEMA = "guard-native-policy-receipt-record.v1"
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -185,15 +187,25 @@ class _NativeDecisionReceiptRecord:
     receipt: dict[str, object]
     payload_bytes: int
     attempts: int = 0
+    policy_context: NativePolicyDecisionContext | None = None
 
     @property
     def record_id(self) -> str:
         return str(self.receipt["decision_id"])
 
     def serialized(self) -> bytes:
+        value = (
+            self.receipt
+            if self.policy_context is None
+            else {
+                "schema": _POLICY_RECEIPT_RECORD_SCHEMA,
+                "receipt": self.receipt,
+                "policy_context": self.policy_context.to_dict(),
+            }
+        )
         return (
             json.dumps(
-                self.receipt,
+                value,
                 ensure_ascii=False,
                 separators=(",", ":"),
                 sort_keys=True,
@@ -204,13 +216,23 @@ class _NativeDecisionReceiptRecord:
 
     @classmethod
     def from_json(cls, value: object) -> _NativeDecisionReceiptRecord | None:
-        if not isinstance(value, Mapping) or value.get("schema") != NATIVE_HOOK_DECISION_RECEIPT_SCHEMA:
+        if not isinstance(value, Mapping):
+            return None
+        context = None
+        if value.get("schema") == _POLICY_RECEIPT_RECORD_SCHEMA:
+            if set(value) != {"schema", "receipt", "policy_context"}:
+                return None
+            context = NativePolicyDecisionContext.from_mapping(value["policy_context"])
+            if context is None or not context.matches_receipt(value["receipt"]):
+                return None
+            value = value["receipt"]
+        elif value.get("schema") != NATIVE_HOOK_DECISION_RECEIPT_SCHEMA:
             return None
         receipt = validate_native_decision_receipt(value)
         if receipt is None:
             return None
-        record = cls(receipt=receipt, payload_bytes=0)
-        return cls(receipt=receipt, payload_bytes=len(record.serialized()))
+        record = cls(receipt=receipt, payload_bytes=0, policy_context=context)
+        return replace(record, payload_bytes=len(record.serialized()))
 
 
 _EvidenceRecord = _CommandActivityRecord | _NativeDecisionReceiptRecord

@@ -1,0 +1,108 @@
+{
+  "authority": {
+    "generic_precedence": "specificity-recency.v1",
+    "managed": {
+      "catalog_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "controls": [
+        {
+          "state": "disabled",
+          "target_id": "command.synthetic.permission.read",
+          "target_kind": "permission"
+        }
+      ],
+      "global_lockdown": false,
+      "managed_revision": 8,
+      "revision": 4
+    },
+    "rows": [
+      {
+        "action": "block",
+        "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "artifact_id": "synthetic-artifact",
+        "decision_id": 1,
+        "expires_at_ms": 1789689600000,
+        "harness": "codex",
+        "publisher": null,
+        "requires_exact_context": false,
+        "scope": "workspace",
+        "source_kind": "signed-bundle",
+        "updated_at_us": 1789603200000123,
+        "workspace": "synthetic-workspace-α",
+        "exact_command_sha256": null
+      },
+      {
+        "action": "review",
+        "artifact_hash": "runtime-exact:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "artifact_id": "family:tool-action",
+        "decision_id": 2,
+        "expires_at_ms": null,
+        "harness": "codex",
+        "publisher": null,
+        "requires_exact_context": true,
+        "scope": "global",
+        "source_kind": "local",
+        "updated_at_us": 1789603201000000,
+        "workspace": null,
+        "exact_command_sha256": null
+      },
+      {
+        "action": "allow",
+        "artifact_hash": null,
+        "artifact_id": null,
+        "decision_id": 3,
+        "expires_at_ms": null,
+        "harness": "*",
+        "publisher": "synthetic-publisher",
+        "requires_exact_context": false,
+        "scope": "publisher",
+        "source_kind": "signed-memory",
+        "updated_at_us": 1789603202000000,
+        "workspace": null,
+        "exact_command_sha256": null
+      }
+    ],
+    "schema": "guard-native-policy-authority.v1"
+  },
+  "content_digest": "005119c0dbf2319fabd3e1c4afbbcab5f96b28cf60c20998a480cd750954d05a",
+  "source_rows": [
+    {
+      "action": "block",
+      "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "synthetic-artifact",
+      "decision_id": 1,
+      "expires_at": "2026-09-18T00:00:00Z",
+      "harness": "codex",
+      "publisher": null,
+      "scope": "workspace",
+      "source": "policy-bundle-canonical",
+      "updated_at": "2026-09-17T00:00:00.000123Z",
+      "workspace": "synthetic-workspace-α"
+    },
+    {
+      "action": "review",
+      "artifact_hash": "runtime-exact:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_id": "family:tool-action",
+      "decision_id": 2,
+      "expires_at": null,
+      "harness": "codex",
+      "publisher": null,
+      "scope": "global",
+      "source": "local",
+      "updated_at": "2026-09-17T00:00:01Z",
+      "workspace": null
+    },
+    {
+      "action": "allow",
+      "artifact_hash": null,
+      "artifact_id": null,
+      "decision_id": 3,
+      "expires_at": null,
+      "harness": "*",
+      "publisher": "synthetic-publisher",
+      "scope": "publisher",
+      "source": "cloud-signed-memory",
+      "updated_at": "2026-09-17T00:00:02Z",
+      "workspace": null
+    }
+  ]
+}

@@ -377,13 +377,13 @@ def _publisher_key(guard_home: Path) -> str:
         return str(guard_home)
 
 
-def notify_native_policy_mutation(guard_home: Path) -> None:
+def notify_native_policy_mutation(guard_home: Path, *, require_source_authority: bool = False) -> None:
     """Invalidate publishers for a control-plane policy/config mutation."""
 
     with _PUBLISHER_LOCK:
         publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
     for publisher in publishers:
-        publisher.request_publish()
+        publisher.request_publish(require_source_authority=require_source_authority)
 
 
 def get_native_policy_snapshot_publisher(store: GuardStore) -> NativePolicySnapshotPublisher:

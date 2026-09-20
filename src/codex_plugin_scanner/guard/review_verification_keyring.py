@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .native_policy_authority_state_keys import (
+    REVIEW_VERIFICATION_KEYRING_SYNC_KEY as REVIEW_VERIFICATION_KEYRING_SYNC_KEY,
+)
 from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
     signing_key_is_current,
@@ -12,7 +15,6 @@ from .policy_bundle_trusted_keys import (
 if TYPE_CHECKING:
     from .store import GuardStore
 
-REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
 _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 
 

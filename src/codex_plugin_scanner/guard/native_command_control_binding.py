@@ -135,21 +135,29 @@ def _metadata_from_bytes(content: bytes) -> NativeCommandProgramMetadata:
                 raise NativePolicySnapshotError("native_command_program_artifact_invalid")
         # Bound structural validation before canonical re-encoding; actual
         # matcher/IR admission remains the resident's responsibility.
-        pending: list[tuple[object, int]] = [(raw, 0)]
+        # Count one complete depth at a time without allocating a stack
+        # tuple for every primitive. The next frontier remains node-bounded.
+        pending: list[object] = [raw]
         remaining = 1_000_000
+        depth = 0
         while pending:
-            value, depth = pending.pop()
-            remaining -= 1
+            remaining -= len(pending)
             if remaining < 0 or depth > 64:
                 raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-            if isinstance(value, dict):
-                if len(value) > 16_384:
+            children: list[object] = []
+            for value in pending:
+                if isinstance(value, dict):
+                    if len(value) > 16_384:
+                        raise NativePolicySnapshotError("native_command_program_artifact_invalid")
+                    children.extend(value.values())
+                elif isinstance(value, list):
+                    if len(value) > 16_384:
+                        raise NativePolicySnapshotError("native_command_program_artifact_invalid")
+                    children.extend(value)
+                if len(children) > remaining:
                     raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-                pending.extend((child, depth + 1) for child in value.values())
-            elif isinstance(value, list):
-                if len(value) > 16_384:
-                    raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-                pending.extend((child, depth + 1) for child in value)
+            pending = children
+            depth += 1
         program_digest = cast(str, raw.pop("program_digest"))
         canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode(
             "utf-8"

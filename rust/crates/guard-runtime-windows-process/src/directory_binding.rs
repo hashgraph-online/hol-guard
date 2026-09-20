@@ -70,6 +70,18 @@ impl PrivateDirectoryBinding {
         Ok(file)
     }
 
+    /// Compare a held private file with the current named child while this
+    /// directory ancestry remains bound. This does not authorize replacement.
+    pub fn matches_private_file(&self, name: &OsStr, expected: &std::fs::File) -> io::Result<bool> {
+        validate_handle(expected, false)?;
+        verify_private_file(expected)?;
+        let current = self.open_private_file(name)?;
+        Ok(
+            file_information(expected.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
+                == file_information(current.as_raw_handle() as winapi::shared::ntdef::HANDLE)?,
+        )
+    }
+
     /// Atomically replace a child with an already-written private file.
     ///
     /// Windows cannot rename a child while this directory remains open without

@@ -14,6 +14,26 @@ ManagedControlsPublish = Callable[..., object]
 _LOGGER = logging.getLogger(__name__)
 
 
+def background_cloud_sync_is_dormant(store: GuardStore) -> bool:
+    """Skip background work only when existing credential discovery proves absence.
+
+    The health reader can restore primary or recoverable credentials even when
+    no healthy profile exists yet. Configured but degraded accounts still need
+    the normal synchronization and repair path. Authentication remains owned by
+    that path; this observation never supplies credentials or admits a request.
+    """
+    from ..runtime import runner
+
+    try:
+        if runner._test_sync_auth_context_override is not None or runner._test_sync_auth_context_from_env() is not None:
+            return False
+        return not bool(store.get_oauth_local_credential_health().get("configured"))
+    except Exception:
+        # Preserve the existing sync path's error handling when absence cannot
+        # be established, including invalid test overrides and storage errors.
+        return False
+
+
 def queue_sync_with_optional_publish(
     *,
     store: GuardStore,
@@ -76,4 +96,4 @@ def maybe_queue_first_cloud_sync(
         return None
 
 
-__all__ = ["maybe_queue_first_cloud_sync", "queue_sync_with_optional_publish"]
+__all__ = ["background_cloud_sync_is_dormant", "maybe_queue_first_cloud_sync", "queue_sync_with_optional_publish"]

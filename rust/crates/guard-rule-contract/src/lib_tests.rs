@@ -1,0 +1,117 @@
+use super::*;
+
+#[test]
+fn contract_is_stable_and_complete() {
+    let first = rule_contract();
+    let second = rule_contract();
+    assert_eq!(first, second);
+    assert_eq!(first.schema, RULE_CONTRACT_SCHEMA);
+    assert_eq!(
+        first
+            .components
+            .iter()
+            .map(|component| component.name)
+            .collect::<Vec<_>>(),
+        vec![
+            "guard-rules",
+            "guard-scanner",
+            "guard-secure-fs",
+            "guard-secure-fs-source-path",
+            "guard-hook-core",
+            "guard-contracts",
+            "guard-command-pretool",
+            "guard-command-pretool-generic",
+            "guard-command-pretool-result",
+            "guard-command-pretool-extract",
+            "guard-runtime-policy-enforcement",
+            "guard-runtime-policy-enforcement-facts",
+            "guard-runtime-policy-enforcement-facts-tools",
+            "guard-runtime-policy-enforcement-policy",
+            "guard-policy-snapshot",
+            "guard-policy-snapshot-canonical",
+            "guard-policy-snapshot-crypto",
+            "guard-command-model",
+            "guard-command-exact-command",
+            "guard-policy-managed-configuration",
+            "guard-policy-scoped-authority",
+            "guard-policy-scoped-authority-decode",
+            "guard-policy-command-expression",
+            "guard-policy-scoped-command-expression",
+            "guard-policy-scoped-matcher",
+            "guard-policy-snapshot-v4",
+            "guard-runtime-policy-store-versioned",
+            "guard-runtime-policy-scoped-request",
+            "guard-runtime-policy-scoped-sensitive-read",
+            "guard-runtime-policy-sensitive-configuration",
+            "guard-runtime-policy-scoped-tool-request",
+            "guard-runtime-policy-scoped-managed",
+            "guard-runtime-policy-scoped-managed-catalog",
+            "guard-runtime-edge-v4",
+            "guard-runtime-policy-scoped-enforcement",
+            "guard-runtime-approval",
+            "guard-runtime-approval-context",
+            "guard-runtime-approval-context-scoped",
+            "guard-runtime-approval-v4",
+            "guard-runtime-policy-store-approval",
+            "guard-runtime-edge",
+            "guard-runtime-policy-enforcement-admission",
+            "guard-command-command-argument-semantics",
+            "guard-command-command-common-cli-matcher-values",
+            "guard-command-command-common-cli-matchers",
+            "guard-command-command-curl-operations",
+            "guard-command-command-curl-targets",
+            "guard-command-command-database-matchers",
+            "guard-command-command-operand-matchers",
+            "guard-command-command-option-parsing",
+            "guard-command-command-option-unicode",
+            "guard-command-command-option-unicode-ranges-a",
+            "guard-command-command-option-unicode-ranges-b",
+            "guard-command-command-reviewed-literal",
+            "guard-command-command-specialized-matchers",
+            "guard-command-command-structured-matchers-grammar",
+            "guard-command-command-structured-matchers",
+            "guard-command-executable-flag-contract",
+            "guard-command-lib",
+            "guard-command-native-command-controls",
+            "guard-command-native-command-delegated",
+            "guard-command-native-command-program",
+            "guard-command-native-command-program-admission",
+            "guard-command-native-command-program-compile",
+            "guard-command-native-command-program-evaluation",
+            "guard-command-native-command-program-observations",
+            "guard-command-native-command-program-wire",
+            "guard-command-pretool-search-glob-class",
+            "guard-command-pretool-search-hint",
+            "guard-command-pretool-search-options",
+            "guard-command-pretool-search",
+            "guard-contracts-native-command-controls",
+            "guard-contracts-native-command-observations",
+            "guard-contracts-native-hook-receipt",
+            "guard-runtime-policy-store-command-floor",
+            "native-command-program-artifact",
+            "guard-command-command-ascii-comparison",
+            "guard-command-command-compatibility-catalog",
+            "guard-command-command-compatibility-domains",
+            "guard-command-command-compatibility-git",
+            "guard-command-command-compatibility-github",
+            "guard-command-command-compatibility-github-api",
+            "guard-command-command-compatibility-github-options",
+            "guard-command-command-compatibility",
+            "guard-runtime-policy-store",
+            "guard-runtime-policy-store-command-authority",
+            "guard-runtime-policy-store-authority",
+            "guard-runtime-policy-store-migration",
+            "guard-runtime-policy-store-request",
+            "guard-runtime-policy-store-persistence",
+            "guard-runtime-native-hook-receipt",
+            "guard-runtime-policy-store-mutation",
+            "guard-runtime-policy-store-withdrawal",
+            "guard-runtime-policy-store-control-persistence",
+        ]
+    );
+    assert!(first
+        .components
+        .iter()
+        .all(|component| component.sha256.len() == 64));
+    assert_eq!(first.rule_digest.len(), 64);
+}

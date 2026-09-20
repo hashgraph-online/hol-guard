@@ -152,6 +152,45 @@ pub(crate) fn receipt_from_pre_tool(
     )
 }
 
+/// V4 caller supplies a full authenticated snapshot in the envelope.
+pub(crate) fn receipt_from_scoped_pre_tool(
+    envelope: &GuardHookEnvelopeV2,
+    request_id: &str,
+    request_digest: &str,
+    harness: &str,
+    payload_kind: &GuardHookPayloadKindV2,
+    result: &PreToolResultV1,
+    observed_policy_action: Option<&str>,
+) -> Result<NativeHookDecisionReceiptV1, String> {
+    let observe_mode = match envelope.policy_snapshot.get("mode").and_then(Value::as_str) {
+        Some("observe") => true,
+        Some("enforce") => false,
+        _ => return Err("native_policy_mode_invalid".to_owned()),
+    };
+    build_decision_receipt(
+        envelope,
+        None,
+        DecisionReceiptInputs {
+            request_id,
+            request_digest,
+            harness,
+            event_name: "PreToolUse",
+            payload_kind,
+            decision: &result.decision,
+            model_output_action: "not_applicable",
+            policy_action: Some(&result.policy_action),
+            observed_policy_action,
+            reason_code: &result.reason_code,
+            reviewed_output_sha256: None,
+            observe_mode,
+            command_extensions: result
+                .command_extensions
+                .as_ref()
+                .map(|value| &value.binding),
+        },
+    )
+}
+
 pub(crate) fn receipt_from_post_tool(
     envelope: &GuardHookEnvelopeV2,
     snapshot: Option<&PolicySnapshotV3>,

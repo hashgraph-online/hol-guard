@@ -92,8 +92,9 @@ def test_failed_partial_activation_retains_prior_complete_state(
     def replace_and_fail(
         connection: sqlite3.Connection,
         rows: Sequence[tuple[object, ...]],
+        **kwargs: object,
     ) -> None:
-        original_replace(connection, rows)
+        original_replace(connection, rows, **kwargs)
         _ = connection.execute(
             """
             create temp trigger fail_managed_activation

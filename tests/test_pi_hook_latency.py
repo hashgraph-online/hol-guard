@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
+from tests.guard_review_authority_fixtures import enroll_review_authority
 
 
 class _DaemonInternals(Protocol):
@@ -78,6 +79,7 @@ def test_review_required_pi_hook_returns_before_worker_deadline(
 ) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
+    enroll_review_authority(guard_home)
     (guard_home / "config.toml").write_text(
         'security_level = "custom"\n[risk_actions]\nlocal_secret_read = "review"\n',
         encoding="utf-8",

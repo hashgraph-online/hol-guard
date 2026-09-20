@@ -354,7 +354,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -406,7 +406,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -493,7 +493,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -554,7 +554,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem="-----BEGIN" " PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",

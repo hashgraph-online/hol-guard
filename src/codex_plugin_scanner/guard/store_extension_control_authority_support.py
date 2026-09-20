@@ -10,13 +10,19 @@ import hmac
 import sqlite3
 import sys
 from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 from .edge_events import build_policy_event
 from .extension_control_events import extension_control_change_payload
+from .managed_controls_policy_bundle import (
+    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
+    MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
+    MANAGED_CONTROLS_REVISION_STATE_KEY,
+)
+from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -39,7 +45,10 @@ from .store_base import (
     SecretStore,
     SystemKeyringSecretStore,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import (
+    captured_extension_control_schema_is_current,
+    ensure_extension_control_authority_schema,
+)
 
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
@@ -86,6 +95,91 @@ def preserve_managed_extension_control(
 
 
 class _ExtensionControlAuthoritySupportMixin:
+    def _read_unenrolled_extension_control_authority(
+        self, registry: CommandSafetyExtensionRegistry
+    ) -> ExtensionControlAuthorityView | None:
+        """Prove never-enrolled absence in one SQL view under the caller's SH lease.
+
+        Protected authority and any state needing schema/catalog preparation
+        retain the ordinary reader. This result never commits a native marker
+        or replaces the publisher's independent reservation and ACK captures.
+        """
+        if (
+            self._authority_key(required=False) is not None
+            or self._secret_store().get_secret(self._anchor_ref()) is not None
+        ):
+            return None
+        try:
+            with self._connect() as connection:
+                connection.execute("begin")
+                connection.execute("pragma query_only=on")
+                view = self._read_captured_extension_control_authority(connection, registry)
+        except sqlite3.Error:
+            # A missing legacy table still belongs to ordinary preparation.
+            # A failed capture cannot establish never-enrolled absence.
+            return None
+        return view if view.health is AuthorityHealth.UNENROLLED else None
+
+    def _read_captured_extension_control_authority(
+        self,
+        connection: sqlite3.Connection,
+        registry: CommandSafetyExtensionRegistry,
+    ) -> ExtensionControlAuthorityView:
+        """Verify prepared authority entirely within the caller's SQL snapshot.
+
+        Schema/catalog migration and event emission belong to the ordinary
+        reader before capture. A captured state needing that work refuses;
+        neither a secondary SQL view nor a repair may authorize this view.
+        """
+        from . import store_extension_control_authority as _authority_api
+
+        if not connection.in_transaction:
+            raise _authority_api.ExtensionControlAuthorityError("extension control capture requires a transaction")
+        view = self._read_extension_control_authority_locked(registry.catalog_digest, connection=connection)
+        manifest = None
+        if view.health is _authority_api.AuthorityHealth.PROTECTED:
+            manifest = self._catalog_target_manifest(registry)
+            key = self._authority_key(required=True)
+            assert key is not None
+            if self._load_catalog_manifest(registry.catalog_digest, key=key, connection=connection) != manifest:
+                raise _authority_api.ExtensionControlAuthorityError(
+                    "extension control captured catalog requires preparation"
+                )
+        return self._with_managed_controls_activation(view, current_manifest=manifest, connection=connection)
+
+    def _load_catalog_manifest(
+        self, catalog_digest: str, *, key: bytes, connection: sqlite3.Connection | None = None
+    ) -> dict[str, str] | None:
+        from . import store_extension_control_authority as _authority_api
+
+        with self._connect() if connection is None else _authority_api.nullcontext(connection) as current_connection:
+            row = current_connection.execute(
+                "select * from extension_control_catalog_manifest where catalog_digest = ?",
+                (catalog_digest,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = _authority_api.verify_authenticated_record(
+            str(row["record_json"]),
+            expected_digest=str(row["record_digest"]),
+            expected_mac=str(row["record_mac"]),
+            key=key,
+            purpose=self._catalog_manifest_purpose,
+        )
+        expected = {
+            "catalog_digest": catalog_digest,
+            "manifest_json": str(row["manifest_json"]),
+            "recorded_at": str(row["recorded_at"]),
+        }
+        if any(payload.get(name) != expected_value for name, expected_value in expected.items()):
+            raise _authority_api.ExtensionControlAuthorityError("extension control catalog manifest field mismatch")
+        value = _authority_api.json.loads(str(row["manifest_json"]))
+        if not isinstance(value, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in value.items()
+        ):
+            raise _authority_api.ExtensionControlAuthorityError("invalid extension control catalog manifest")
+        return value
+
     def _invalidate_native_extension_control_policy(self, *, explicit_recovery: bool = False) -> None:
         """Close local native readiness before a durable control mutation.
 
@@ -127,6 +221,51 @@ class _ExtensionControlAuthoritySupportMixin:
             return self._tampered_view(catalog_digest)
         except Exception:
             return self._degraded_view(catalog_digest)
+
+    def _read_extension_control_authority_records(
+        self, *, connection: sqlite3.Connection | None = None
+    ) -> tuple[sqlite3.Row | None, sqlite3.Row | None] | None:
+        with self._connect() if connection is None else nullcontext(connection) as current_connection:
+            schema_current = (
+                captured_extension_control_schema_is_current(current_connection)
+                if connection is not None
+                else ensure_extension_control_authority_schema(current_connection, require_compatible=False)
+            )
+            if not schema_current:
+                return None
+            row = current_connection.execute(
+                "select * from extension_control_authority_snapshot where singleton = 1"
+            ).fetchone()
+            prior_authority = None
+            if row is None:
+                # Residue cannot authenticate a replacement snapshot, but it
+                # disqualifies the ordinary never-enrolled policy path.
+                prior_authority = current_connection.execute(
+                    """
+                    select 1 from extension_control_authority_transition
+                    union all select 1 from extension_control_authority_proof
+                    union all select 1 from extension_control_catalog_manifest
+                    union all select 1 from extension_control_authority_recovery_archive
+                    union all select 1 from sync_state where state_key in (?, ?, ?)
+                    limit 1
+                    """,
+                    (
+                        MANAGED_CONTROLS_ACTIVE_STATE_KEY,
+                        MANAGED_CONTROLS_REVISION_STATE_KEY,
+                        MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
+                    ),
+                ).fetchone()
+        return row, prior_authority
+
+    def _read_extension_control_secret_records(
+        self, *, snapshot_missing: bool
+    ) -> tuple[bytes | None, AuthorityAnchor | None, str | None]:
+        key = self._authority_key(required=False)
+        anchor = self._read_anchor(key=key) if key is not None else None
+        unverified_anchor = (
+            self._secret_store().get_secret(self._anchor_ref()) if snapshot_missing and key is None else None
+        )
+        return key, anchor, unverified_anchor
 
     def _authority_key(self, *, required: bool) -> bytes | None:
         try:

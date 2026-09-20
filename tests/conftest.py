@@ -193,7 +193,9 @@ def _isolate_daemon_background_refresh_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Start daemon refresh workers only in tests that exercise them."""
+    from codex_plugin_scanner.guard.daemon import command_queue_worker as decision_workers
     from codex_plugin_scanner.guard.daemon import server as daemon_server
+    from codex_plugin_scanner.guard.runtime import cloud_review_sync_worker as event_workers
 
     worker_markers = {
         "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
@@ -215,6 +217,8 @@ def _isolate_daemon_background_refresh_workers(
     if request.node.get_closest_marker("daemon_service_workers") is None:
         monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
         monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(decision_workers, "start_command_queue_worker", lambda _store, existing=None: existing)
+        monkeypatch.setattr(event_workers, "start_cloud_sync_sync_worker", lambda _store, existing=None: existing)
 
 
 class _FakeSystemKeyringModule:

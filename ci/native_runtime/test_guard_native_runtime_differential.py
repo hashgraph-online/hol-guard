@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot, native_review_diagnostic
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
@@ -120,7 +120,7 @@ def _assert_parity(request: HookReviewRequest) -> None:
     python_response = _engine(store).review(request)
     with native_policy_snapshot(request.guard_home) as snapshot:
         native_response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
-    assert native_response is not None
+    assert native_response is not None, native_review_diagnostic(request.guard_home)
     _assert_native_security_floor(native_response, python_response)
 
 

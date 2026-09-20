@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
+from .connect_completion import hold_connect_connection, hold_connect_sync, take_connect_connection
 from .connect_sync_result import apply_guard_connect_sync_result
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
@@ -214,6 +215,7 @@ def _finalize_guard_connect_payload(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
+    committed = take_connect_connection(payload)
     sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
     resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
     urls = _guard_cloud_urls_for_connect(connect_url)
@@ -221,76 +223,82 @@ def _finalize_guard_connect_payload(
         payload.setdefault(key, urls[key])
     if str(payload.get("status") or "") != "connected":
         return payload
-    store.clear_cloud_sync_state_for_reconnect(now=now)
-    latest_state = store.record_guard_connect_pairing_completed(
-        sync_url=str(urls["sync_url"]),
-        allowed_origin=str(urls["allowed_origin"]),
-        now=now,
-    )
-    payload.update(
-        {
-            "status": str(latest_state.get("status") or payload.get("status") or "connected"),
-            "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
-            "completed_at": latest_state.get("completed_at") or now,
-            "latest_connect_state": latest_state,
-        }
-    )
-    oauth_health = store.get_oauth_local_credential_health()
-    oauth_state = str(oauth_health.get("state") or "")
-    if store.get_cloud_sync_profile() is None and (
-        oauth_state == "degraded" or not oauth_health.get("configured")
-    ):
-        repair_message = (
-            "Guard Cloud authorization did not persist locally. "
-            "Run hol-guard connect again to repair local sign-in."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
+    with hold_connect_sync(store, resolved_sync_auth_context, committed):
+        pass
+    committed = store.clear_cloud_sync_state_for_reconnect(now=now, expected_connection=committed)
+    with hold_connect_connection(store, committed):
+        latest_state = store.record_guard_connect_pairing_completed(
+            sync_url=str(urls["sync_url"]),
+            allowed_origin=str(urls["allowed_origin"]),
             now=now,
-            reason=repair_message,
         )
         payload.update(
             {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": repair_message,
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+                "status": str(latest_state.get("status") or payload.get("status") or "connected"),
+                "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
+                "completed_at": latest_state.get("completed_at") or now,
+                "latest_connect_state": latest_state,
             }
         )
-        return payload
-    if store.get_cloud_sync_profile() is None:
-        payload["sync_attempted"] = False
-        return payload
-    payload["sync_attempted"] = True
-    try:
-        from .progress import GuardProgress
-
-        with GuardProgress(total=2, title="Guard Sync") as sync_bar:
-            sync_bar.step("Syncing local proof to Guard Cloud...")
-            sync_payload = sync_local_guard_cloud_proof(
-                store,
-                auth_context=resolved_sync_auth_context,
-                now=now,
-                home_dir=home_dir,
-                workspace_dir=workspace_dir,
+        oauth_health = store.get_oauth_local_credential_health()
+        oauth_state = str(oauth_health.get("state") or "")
+        if store.get_cloud_sync_profile() is None and (
+            oauth_state == "degraded" or not oauth_health.get("configured")
+        ):
+            repair_message = (
+                "Guard Cloud authorization did not persist locally. "
+                "Run hol-guard connect again to repair local sign-in."
             )
-            sync_bar.step("Syncing supply chain state...")
-            try:
-                payload["supply_chain"] = sync_supply_chain_cloud_state(
+            store.record_latest_guard_connect_sync_result(
+                status="retry_required",
+                milestone="first_sync_failed",
+                now=now,
+                reason=repair_message,
+            )
+            payload.update(
+                {
+                    "status": "retry_required",
+                    "milestone": "first_sync_failed",
+                    "sync_succeeded": False,
+                    "sync_error": repair_message,
+                    "repair_message": repair_message,
+                    "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+                }
+            )
+            return payload
+        if store.get_cloud_sync_profile() is None:
+            payload["sync_attempted"] = False
+            return payload
+        payload["sync_attempted"] = True
+    try:
+        with hold_connect_sync(store, resolved_sync_auth_context, committed):
+            from .progress import GuardProgress
+
+            with GuardProgress(total=2, title="Guard Sync") as sync_bar:
+                sync_bar.step("Syncing local proof to Guard Cloud...")
+                sync_payload = sync_local_guard_cloud_proof(
                     store,
                     auth_context=resolved_sync_auth_context,
+                    now=now,
+                    home_dir=home_dir,
+                    workspace_dir=workspace_dir,
                 )
-                sync_bar.done("Guard Cloud sync complete")
-            except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
-                payload["supply_chain_error"] = str(error)
-                sync_bar.done("Guard Cloud sync complete (supply chain skipped)")
+                sync_bar.step("Syncing supply chain state...")
+                try:
+                    with hold_connect_sync(store, resolved_sync_auth_context, committed):
+                        payload["supply_chain"] = sync_supply_chain_cloud_state(
+                            store,
+                            auth_context=resolved_sync_auth_context,
+                        )
+                    sync_bar.done("Guard Cloud sync complete")
+                except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
+                    payload["supply_chain_error"] = str(error)
+                    sync_bar.done("Guard Cloud sync complete (supply chain skipped)")
     except GuardSyncNotAvailableError as error:
         return apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="connected",
@@ -301,6 +309,7 @@ def _finalize_guard_connect_payload(
         return apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="retry_required",
@@ -312,6 +321,7 @@ def _finalize_guard_connect_payload(
         return apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="connected",
@@ -322,22 +332,23 @@ def _finalize_guard_connect_payload(
             ),
             payload_status="connected",
         )
-    latest_state = store.record_latest_guard_connect_sync_success(
-        sync_payload=sync_payload,
-        now=str(sync_payload.get("synced_at") or now),
-        request_id=str(latest_state.get("request_id") or ""),
-    )
-    payload.update(
-        {
-            "status": "connected",
-            "milestone": "first_sync_succeeded",
-            "sync_succeeded": True,
-            "sync": sync_payload,
-            "last_sync_at": sync_payload.get("synced_at"),
-            "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
-        }
-    )
-    return payload
+    with hold_connect_connection(store, committed):
+        latest_state = store.record_latest_guard_connect_sync_success(
+            sync_payload=sync_payload,
+            now=str(sync_payload.get("synced_at") or now),
+            request_id=str(latest_state.get("request_id") or ""),
+        )
+        payload.update(
+            {
+                "status": "connected",
+                "milestone": "first_sync_succeeded",
+                "sync_succeeded": True,
+                "sync": sync_payload,
+                "last_sync_at": sync_payload.get("synced_at"),
+                "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
 
 def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -> list[dict[str, object]]:
     if not active_only:

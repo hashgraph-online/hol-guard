@@ -5,6 +5,7 @@ on:
     paths:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "ci/native_runtime/test_native_runtime_manifest.py"
+      - "ci/native_runtime/*scoped_policy*.py"
       - "scripts/build_native_hol_guard_wheel.py"
       - ".github/workflows/rust-native-identity.yml"
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "ci/native_runtime/test_native_runtime_manifest.py"
+      - "ci/native_runtime/*scoped_policy*.py"
       - "scripts/build_native_hol_guard_wheel.py"
       - ".github/workflows/rust-native-identity.yml"
   workflow_dispatch:
@@ -45,3 +47,9 @@ jobs:
           uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime.py
       - name: Run manifest identity contracts
         run: uv run --no-sync pytest ci/native_runtime/test_native_runtime_manifest.py --tb=short
+      - name: Check installed scoped fixture contracts
+        run: |
+          uv run --no-sync python -m ruff check ci/native_runtime/installed_scoped_policy_fixture.py ci/native_runtime/probe_installed_scoped_policy.py ci/native_runtime/test_installed_scoped_policy_fixture.py
+          uv run --no-sync python -m ruff format --check ci/native_runtime/installed_scoped_policy_fixture.py ci/native_runtime/probe_installed_scoped_policy.py ci/native_runtime/test_installed_scoped_policy_fixture.py
+          uv run --no-sync python -m basedpyright ci/native_runtime/installed_scoped_policy_fixture.py ci/native_runtime/probe_installed_scoped_policy.py ci/native_runtime/test_installed_scoped_policy_fixture.py
+          uv run --no-sync pytest ci/native_runtime/test_installed_scoped_policy_fixture.py --tb=short

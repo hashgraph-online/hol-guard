@@ -23,6 +23,9 @@ from typing import cast
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 REQUIRED_GATES = (
     "ci",
     "codeql",
@@ -163,6 +166,8 @@ def _validate_components_and_gates(payload: Mapping[str, object]) -> dict[str, o
     artifacts = _component(components.get("artifacts"), label="artifact")
     desktop_core = _component(components.get("desktop_core"), label="Desktop Core")
     installed_matrix = _component(components.get("installed_matrix"), label="installed matrix")
+    negative_outcomes = _component(components.get("negative_outcomes"), label="negative outcomes")
+    required_collection = _component(components.get("required_collection"), label="required collection")
     gates = payload.get("gates")
     if not isinstance(gates, dict) or set(gates) != set(REQUIRED_GATES):
         raise FinalEvidenceError("final gate set is incomplete")
@@ -172,6 +177,8 @@ def _validate_components_and_gates(payload: Mapping[str, object]) -> dict[str, o
         "artifacts": artifacts,
         "desktop_core": desktop_core,
         "installed_matrix": installed_matrix,
+        "negative_outcomes": negative_outcomes,
+        "required_collection": required_collection,
     }
 
 
@@ -313,6 +320,11 @@ def validate_final_evidence(
     """Validate and normalize a final evidence payload."""
 
     _safe_strings(payload)
+    evidence_kind = payload.get("evidence_kind")
+    if not isinstance(evidence_kind, str) or evidence_kind not in {"release-run", "contract-fixture"}:
+        raise FinalEvidenceError("final evidence kind is missing or unsupported")
+    if require_signature and evidence_kind == "contract-fixture":
+        raise FinalEvidenceError("contract fixtures cannot authorize a release")
     release = _validate_release_identity(
         payload,
         expected_version=expected_version,
@@ -327,6 +339,7 @@ def validate_final_evidence(
 
     normalized: dict[str, object] = {
         "schema": "hol-guard-final-release-evidence.v1",
+        "evidence_kind": evidence_kind,
         "release": release,
         "evidence": evidence,
         "gates": {key: True for key in REQUIRED_GATES},
@@ -343,8 +356,41 @@ def validate_final_evidence(
         trusted_key_id=trusted_key_id,
     )
     normalized["signature"] = signature_payload if signature_verified else {"status": "external-signer-required"}
-    normalized["release_ready"] = signature_verified
+    normalized["release_ready"] = signature_verified and evidence_kind == "release-run"
     return normalized
+
+
+def verify_component_files(payload: Mapping[str, object], directory: Path, *, source_sha: str) -> None:
+    """Check the named bytes before the CLI accepts a signed manifest."""
+    from scripts.ci.release_required_evidence import validate_collection_report
+    from scripts.ci.verify_release_negative_outcomes import validate_negative_outcomes
+
+    components = _validate_components_and_gates(payload)
+    loaded: dict[str, object] = {}
+    for label, value in components.items():
+        component = cast(dict[str, object], value)
+        path = directory / str(component["name"])
+        try:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _MAX_BYTES:
+                raise FinalEvidenceError("component evidence is not a bounded regular file")
+            content = path.read_bytes()
+            if len(content) > _MAX_BYTES or hashlib.sha256(content).hexdigest() != component["sha256"]:
+                raise FinalEvidenceError("component evidence digest does not match")
+            loaded[label] = json.loads(content.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise FinalEvidenceError("component evidence is unavailable or invalid") from error
+    negatives = loaded["negative_outcomes"]
+    collection = loaded["required_collection"]
+    if not isinstance(negatives, dict) or not isinstance(collection, dict):
+        raise FinalEvidenceError("required release evidence is not an object")
+    try:
+        normalized = validate_negative_outcomes(negatives)
+        validate_collection_report(collection, source_sha=source_sha)
+    except ValueError as error:
+        raise FinalEvidenceError("required release evidence is invalid") from error
+    if normalized["source_sha"] != source_sha:
+        raise FinalEvidenceError("negative outcome source does not match release")
 
 
 def _load(path: Path) -> Mapping[str, object]:
@@ -377,8 +423,10 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        source = _load(args.evidence)
+        verify_component_files(source, args.evidence.parent, source_sha=args.source_sha)
         normalized = validate_final_evidence(
-            _load(args.evidence),
+            source,
             expected_version=args.version,
             expected_source_sha=args.source_sha,
             expected_rule_digest=args.rule_digest,

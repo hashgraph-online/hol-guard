@@ -1,0 +1,158 @@
+{
+  "cases": [
+    {
+      "name": "codex-Bash-derived",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "printf synthetic"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "codex:project:Bash"
+    },
+    {
+      "name": "codex-Bash-explicit",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "printf synthetic"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:Bash"
+      },
+      "artifactId": "synthetic:explicit:Bash"
+    },
+    {
+      "name": "codex-Read-derived",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "codex:project:Read"
+    },
+    {
+      "name": "codex-Read-explicit",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:Read"
+      },
+      "artifactId": "synthetic:explicit:Read"
+    },
+    {
+      "name": "codex-mcp__synthetic__inspect-derived",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {},
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "codex:project:mcp__synthetic__inspect"
+    },
+    {
+      "name": "codex-mcp__synthetic__inspect-explicit",
+      "harness": "codex",
+      "payload": {
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {},
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:mcp__synthetic__inspect"
+      },
+      "artifactId": "synthetic:explicit:mcp__synthetic__inspect"
+    },
+    {
+      "name": "claude-code-Bash-derived",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "printf synthetic"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "claude-code:project:Bash"
+    },
+    {
+      "name": "claude-code-Bash-explicit",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "printf synthetic"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:Bash"
+      },
+      "artifactId": "synthetic:explicit:Bash"
+    },
+    {
+      "name": "claude-code-Read-derived",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "claude-code:project:Read"
+    },
+    {
+      "name": "claude-code-Read-explicit",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "guide.md"
+        },
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:Read"
+      },
+      "artifactId": "synthetic:explicit:Read"
+    },
+    {
+      "name": "claude-code-mcp__synthetic__inspect-derived",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {},
+        "sourceScope": "project",
+        "eventName": "PreToolUse"
+      },
+      "artifactId": "claude-code:project:mcp:mcp__synthetic__inspect"
+    },
+    {
+      "name": "claude-code-mcp__synthetic__inspect-explicit",
+      "harness": "claude-code",
+      "payload": {
+        "tool_name": "mcp__synthetic__inspect",
+        "tool_input": {},
+        "sourceScope": "project",
+        "eventName": "PreToolUse",
+        "artifactId": "synthetic:explicit:mcp__synthetic__inspect"
+      },
+      "artifactId": "synthetic:explicit:mcp__synthetic__inspect"
+    }
+  ]
+}

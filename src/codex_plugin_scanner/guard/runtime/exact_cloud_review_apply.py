@@ -18,7 +18,9 @@ from ..review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
-from ..review_exact_capability_advertisement import validate_exact_review_envelope_authority as validate_exact_authority
+from ..review_exact_capability_advertisement import (
+    validate_exact_review_envelope_authority as validate_exact_authority,
+)
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
@@ -60,6 +62,7 @@ def apply_exact_cloud_review(
     except ExactCloudReviewError as error:
         raise _reject(store, error.code, now=current) from error
     delegated_admin_mfa = remote_approval_uses_workspace_admin_mfa(envelope)
+    step_up_expires_at = None
     raw_capability: dict[str, object] | None = None
     verified_capability: dict[str, object] | None = None
     if not delegated_admin_mfa:
@@ -71,6 +74,10 @@ def apply_exact_cloud_review(
         if not isinstance(loaded_capability, dict):
             raise _reject(store, "cloud_review_capability_missing", now=current)
         raw_capability = loaded_capability
+    else:
+        step_up_expires_at = parse_utc_timestamp(envelope.get("stepUpExpiresAt"))
+        if step_up_expires_at is None or step_up_expires_at <= current:
+            raise _reject(store, "remote_exact_step_up_required", now=current)
     try:
         _ = _oauth_state(store)
     except ExactCloudReviewError as error:
@@ -79,6 +86,9 @@ def apply_exact_cloud_review(
     envelope_expires_at = parse_utc_timestamp(receipt_expires_at)
     if receipt_expires_at is None or envelope_expires_at is None or envelope_expires_at <= current:
         raise _reject(store, "remote_approval_expired", now=current)
+    if step_up_expires_at is not None:
+        # The atomic store check must honor both signed authority deadlines.
+        receipt_expires_at = min(envelope_expires_at, step_up_expires_at).isoformat()
     request_id = _text(envelope.get("localRequestId"))
     receipt_id = _text(envelope.get("receiptId"))
     if request_id is None or receipt_id is None:

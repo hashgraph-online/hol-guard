@@ -18,6 +18,8 @@ pub(crate) enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
+    PolicySnapshotObserve(Value),
+    PolicySnapshotWithdraw(Value),
     ApprovalChallenge(ApprovalChallengeRequestV3),
     ApprovalValidate(ApprovalValidateRequestV3),
     ApprovalConsume(ApprovalConsumeRequestV3),
@@ -54,7 +56,11 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::NATIVE_COMMAND_PROGRAM_CAPABILITY.into(),
         guard_contracts::NATIVE_COMMAND_CONTROL_FENCE_CAPABILITY.into(),
         "policy-snapshot-v3".into(),
+        "policy-snapshot-v4".into(),
+        "policy-scoped-authority-v1".into(),
+        "hook-envelope-v3".into(),
         "policy-snapshot-push-v1".into(),
+        "policy-snapshot-control-v1".into(),
         "policy-snapshot-resident-generation-v1".into(),
         "native-approval-artifact-v3".into(),
         "native-approval-challenge-v3".into(),
@@ -83,14 +89,19 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         build_sha: crate::BUILD_SHA.to_owned(),
         target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
         features,
+        // Catalog identity does not advertise the separate managed-authority contract.
+        extension_catalog_digest: Some(crate::policy_scoped_managed::catalog_digest().to_owned()),
     }
 }
 
-pub(crate) fn evaluate_resident_bytes(
-    bytes: &[u8],
-    policy_store: Option<&PolicySnapshotStore>,
-) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_resident_request(bytes: &[u8]) -> Result<ResidentRequestV1, String> {
     let value = strict_json_value(bytes)?;
+    if matches!(
+        value.get("operation").and_then(Value::as_str),
+        Some("policy_snapshot_observe" | "policy_snapshot_withdraw")
+    ) {
+        validate_policy_control(bytes, &value)?;
+    }
     if bytes.len() > NATIVE_APPROVAL_MAX_BYTES
         && matches!(
             value.get("operation").and_then(Value::as_str),
@@ -122,8 +133,14 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
-    let request: ResidentRequestV1 = serde_json::from_value(value)
-        .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
+    serde_json::from_value(value).map_err(|_| "native_resident_request_invalid_json".to_owned())
+}
+
+pub(crate) fn evaluate_resident_bytes(
+    bytes: &[u8],
+    policy_store: Option<&PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    let request = decode_resident_request(bytes)?;
     match request {
         ResidentRequestV1::Edge(request) => {
             let policy_store =
@@ -141,6 +158,16 @@ pub(crate) fn evaluate_resident_bytes(
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 policy_store.push(&request)
+            }
+            ResidentOperationV1::PolicySnapshotObserve(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                policy_store.observe_authority(&request)
+            }
+            ResidentOperationV1::PolicySnapshotWithdraw(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                policy_store.withdraw(&request)
             }
             ResidentOperationV1::ApprovalChallenge(request) => {
                 let policy_store =
@@ -194,6 +221,34 @@ pub(crate) fn evaluate_resident_bytes(
     }
 }
 
+fn validate_policy_control(bytes: &[u8], value: &Value) -> Result<(), String> {
+    if bytes.len() > 4 * 1024 {
+        return Err("native_policy_snapshot_control_bounds_exceeded".to_owned());
+    }
+    let object = value
+        .as_object()
+        .ok_or_else(|| "native_policy_snapshot_control_invalid".to_owned())?;
+    if !object.contains_key("request")
+        || object
+            .keys()
+            .any(|key| !matches!(key.as_str(), "operation" | "request" | "deadline_budget_ms"))
+        || object.get("deadline_budget_ms").is_some_and(|value| {
+            !value
+                .as_u64()
+                .is_some_and(|budget| (1..=9_000).contains(&budget))
+        })
+    {
+        return Err("native_policy_snapshot_control_invalid".to_owned());
+    }
+    if guard_policy_snapshot::canonical_json_bytes(value)
+        .map_err(|_| "native_policy_snapshot_control_invalid".to_owned())?
+        != bytes
+    {
+        return Err("native_policy_snapshot_control_noncanonical".to_owned());
+    }
+    Ok(())
+}
+
 pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
     crate::strict_json::parse(bytes)
 }
@@ -216,6 +271,7 @@ pub(crate) fn error_response(code: &'static str, retryable: bool) -> Vec<u8> {
 pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
     if NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES.contains(&code)
         || NATIVE_APPROVAL_ERROR_CODES.contains(&code)
+        || crate::policy_store::is_control_error(code)
         || guard_contracts::NATIVE_COMMAND_CONTROL_ERROR_CODES.contains(&code)
     {
         return serde_json::to_vec(&serde_json::json!({
@@ -231,6 +287,25 @@ pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
 mod tests {
     use super::{evaluate_resident_bytes, safe_error_response};
     use serde_json::Value;
+
+    #[test]
+    fn scoped_capabilities_do_not_advertise_unsupported_authority_variants() {
+        let advertised = super::capabilities();
+        for supported in [
+            "policy-snapshot-v4",
+            "policy-scoped-authority-v1",
+            "hook-envelope-v3",
+        ] {
+            assert!(advertised.features.iter().any(|value| value == supported));
+        }
+        for unsupported in [
+            "policy-managed-authority-v1",
+            "policy-command-expressions-v1",
+            "policy-managed-config-floor-v1",
+        ] {
+            assert!(!advertised.features.iter().any(|value| value == unsupported));
+        }
+    }
 
     #[test]
     fn approval_error_transport_is_finite() {

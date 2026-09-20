@@ -404,9 +404,10 @@ def test_recovery_waits_for_in_flight_connection(tmp_path: Path) -> None:
     release = threading.Event()
 
     def hold_connection() -> None:
-        with store._connect():  # pyright: ignore[reportPrivateUsage]
+        with pytest.raises(sqlite3.DatabaseError) as error, store._connect():  # pyright: ignore[reportPrivateUsage]
             entered.set()
             assert release.wait(timeout=2)
+        assert store._is_fatal_sqlite_error(error.value)  # pyright: ignore[reportPrivateUsage]
 
     holder = threading.Thread(target=hold_connection)
     holder.start()

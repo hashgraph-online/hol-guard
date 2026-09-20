@@ -436,3 +436,16 @@ def _try_generic_artifact(
         kind="generic_artifact_pattern",
         components=components,
     )
+
+
+def _memory_artifact_is_shell_command(
+    artifact_type: str | None,
+    artifact_name: str | None,
+) -> bool:
+    normalized_type = artifact_type.strip().casefold() if isinstance(artifact_type, str) else ""
+    if normalized_type in {"bash", "shell", "shell_command"}:
+        return True
+    if normalized_type != "tool_action_request" or not isinstance(artifact_name, str):
+        return False
+    normalized_name = artifact_name.strip().casefold()
+    return normalized_name in {"bash", "shell"} or normalized_name.startswith(("bash ", "shell "))

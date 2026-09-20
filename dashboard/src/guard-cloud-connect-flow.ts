@@ -1,5 +1,6 @@
 import type { GuardCloudConnectFlow, GuardCloudConnectStatusResponse } from "./guard-types";
 import { fetchGuardApi, fetchGuardCloudConnectStatus } from "./guard-api";
+import { assertGuardCloudConnectStatus } from "./guard-cloud-connect-contract";
 
 export type GuardCloudOpenStatus = GuardCloudConnectStatusResponse & {
   dashboard_url?: string | null;
@@ -74,8 +75,9 @@ export function parseGuardCloudConnectHttp(
         : `Request failed with ${status}`;
     throw new Error(message);
   }
+  assertGuardCloudConnectStatus(record);
   return {
-    connect_required: record.connect_required === true,
+    connect_required: record.connect_required,
     connect_flow: connectFlowFromPayload(record.connect_flow),
     dashboard_url: dashboardUrl,
   };

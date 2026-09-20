@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...models import GuardArtifact
 from ..secret_sensitivity import classify_secret_path
+from ..sensitive_read_controls import sensitive_read_control_metadata
 from .constants_core import (
     _COMMAND_KEYS,
     _DOCKER_BUILD_ARG_SECRET_MARKERS,
@@ -108,6 +109,7 @@ def build_file_read_request_artifact(
             "runtime_request_signals": ["requests access to a sensitive local file"],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": request.path_match.reason,
+            **sensitive_read_control_metadata(),
         },
     )
 

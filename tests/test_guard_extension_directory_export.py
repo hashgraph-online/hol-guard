@@ -128,9 +128,7 @@ def test_valid_contribution_with_empty_accepted_set_is_not_invitation_eligible(t
                 "extensionId": "command.blitcp",
                 "tagline": "Reviewed file-transfer operation coverage for blitcp.",
                 "category": "other",
-                "limitations": [
-                    "Coverage is limited to the reviewed operations and the surrounding Guard policy."
-                ],
+                "limitations": ["Coverage is limited to the reviewed operations and the surrounding Guard policy."],
             }
         )
     )

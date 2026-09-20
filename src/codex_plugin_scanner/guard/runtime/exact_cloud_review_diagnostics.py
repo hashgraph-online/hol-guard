@@ -14,6 +14,13 @@ def enrich_exact_cloud_review_status(store, status: dict[str, object]) -> dict[s
     queue_state = _queue_state(store)
     workspace_id = result.get("workspace_id")
     outbox = _outbox_status(store, workspace_id if isinstance(workspace_id, str) else None)
+    result["expiry"] = {
+        "consent_expired": result.get("reason") == "cloud_review_capability_expired",
+        "recovery_action": "hol-guard cloud-review enable",
+        "disconnected": False,
+    }
+    if result.get("reason") == "cloud_review_capability_expired":
+        result["recovery_action"] = "hol-guard cloud-review enable"
     result["diagnostics"] = {
         "capability": {"valid": bool(result.get("capability_valid")), "reason": result.get("reason")},
         "oauth": oauth_health,

@@ -13,6 +13,10 @@ from .managed_controls_policy_fields import (
     is_mapping,
     parse_managed_controls_policy_fields,
 )
+from .native_policy_authority_state_keys import MANAGED_CONTROLS_ACTIVE_STATE_KEY as MANAGED_CONTROLS_ACTIVE_STATE_KEY
+from .native_policy_authority_state_keys import (
+    MANAGED_CONTROLS_REVISION_STATE_KEY as MANAGED_CONTROLS_REVISION_STATE_KEY,
+)
 from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
 from .policy_bundle_v2 import validated_policy_bundle_v2_payload
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -26,10 +30,8 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 
-MANAGED_CONTROLS_ACTIVE_STATE_KEY = "managed_controls_active"
 MANAGED_CONTROLS_LAST_GOOD_STATE_KEY = "managed_controls_last_good"
 MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY = "managed_controls_negotiated_capabilities"
-MANAGED_CONTROLS_REVISION_STATE_KEY = "managed_controls_revision"
 MANAGED_CONTROLS_ACTIVATION_SCHEMA = "guard.managed-controls-activation.v1"
 MANAGED_CONTROLS_ACTIVATION_PURPOSE = "managed-controls.activation"
 MANAGED_CONTROLS_REVISION_PURPOSE = "managed-controls.revision"

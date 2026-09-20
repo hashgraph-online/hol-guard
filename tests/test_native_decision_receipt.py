@@ -183,6 +183,10 @@ def test_receipt_sqlite_failure_is_recoverable_and_bounded(tmp_path: Path) -> No
         assert failed.wait(timeout=1)
         assert first.stop(timeout_seconds=0.1)
         assert first.stats()["receipt_durable_pending"] == 1
+        assert first.stats()["receipt_failure_categories"]["sqlite-busy-or-locked"] >= 1
+        detached = first.stats()["receipt_failure_categories"]
+        detached["untrusted"] = 1
+        assert "untrusted" not in first.stats()["receipt_failure_categories"]
 
     with patch(
         "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
@@ -194,6 +198,19 @@ def test_receipt_sqlite_failure_is_recoverable_and_bounded(tmp_path: Path) -> No
     assert recovered.stats()["receipt_processed"] == 1
     assert recovered.stats()["receipt_durable_pending"] == 0
 
+
+
+def test_receipt_journal_failure_retains_only_a_bounded_category(tmp_path: Path) -> None:
+    with patch.object(
+        RuntimeHookEvidenceWriter, "_append_journal", side_effect=PermissionError("private command and path"),
+    ):
+        writer = RuntimeHookEvidenceWriter(store=GuardStore(tmp_path / "guard-home"), batch_wait_seconds=0)
+        assert writer.submit_native_decision_receipt(receipt=_receipt())
+        assert writer.stop(timeout_seconds=1)
+    stats = writer.stats()
+    assert stats["receipt_dropped"] == stats["receipt_failures"] == 1
+    assert stats["receipt_failure_categories"] == {"permission-denied": 1}
+    assert "private command" not in json.dumps(stats)
 
 def test_store_receipt_insert_is_idempotent(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")

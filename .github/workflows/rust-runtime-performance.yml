@@ -7,6 +7,7 @@ on:
       - "rust/**"
       - "scripts/bench_guard_native_full_path.py"
       - "scripts/bench_guard_native_release_gate.py"
+      - "scripts/diagnose_guard_native_warm_phases.py"
       - "scripts/bench_guard_native_installed_slo.py"
       - "scripts/native_slo_adapter.py"
       - "scripts/native_slo_contract.py"
@@ -23,6 +24,7 @@ on:
       - "rust/**"
       - "scripts/bench_guard_native_full_path.py"
       - "scripts/bench_guard_native_release_gate.py"
+      - "scripts/diagnose_guard_native_warm_phases.py"
       - "scripts/bench_guard_native_installed_slo.py"
       - "scripts/native_slo_adapter.py"
       - "scripts/native_slo_contract.py"
@@ -71,6 +73,7 @@ jobs:
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
           rust/target/release/hol-guard-runtime self-test --json
       - name: Enforce native performance gates
+        id: native_performance
         env:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
@@ -81,6 +84,17 @@ jobs:
             --cold-iterations 3 \
             --json native-performance.json \
             --enforce
+      - name: Record separate warm-phase diagnostics
+        if: ${{ failure() && steps.native_performance.outcome == 'failure' }}
+        continue-on-error: true
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/diagnose_guard_native_warm_phases.py \
+            --runtime "$HOL_GUARD_NATIVE_BINARY" \
+            --warm-iterations 100 \
+            --json native-performance-phases.json
       - name: Publish aggregate benchmark evidence
         if: always()
         run: test ! -f native-performance.json || cat native-performance.json
@@ -88,5 +102,7 @@ jobs:
         if: always()
         with:
           name: hol-guard-native-performance
-          path: native-performance.json
+          path: |
+            native-performance.json
+            native-performance-phases.json
           if-no-files-found: warn

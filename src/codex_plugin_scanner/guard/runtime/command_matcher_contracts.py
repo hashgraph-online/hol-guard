@@ -7,6 +7,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import Protocol
 
 from .command_model import CanonicalCommand
@@ -40,6 +41,20 @@ class CommandMatcher(Protocol):
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]: ...
 
 
+@lru_cache(maxsize=512)
+def _encoded_short_string(value: str) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _set_sort_key(value: object) -> str:
+    # Catalogs repeat many immutable flag names across matcher sets. Keep the
+    # exact JSON ordering, with a bounded cache only for short plain strings.
+    # Mutable values and unusual scalar subclasses retain ordinary encoding.
+    if type(value) is str and len(value) <= 256:
+        return _encoded_short_string(value)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def canonical_contract_value(value: object) -> object:
     """Serialize matcher configuration without relying on object repr output.
 
@@ -66,7 +81,7 @@ def canonical_contract_value(value: object) -> object:
         return {key: canonical_contract_value(item) for key, item in sorted(value.items())}
     if isinstance(value, (set, frozenset)):
         normalized = [canonical_contract_value(item) for item in value]
-        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+        return sorted(normalized, key=_set_sort_key)
     if isinstance(value, (tuple, list)):
         return [canonical_contract_value(item) for item in value]
     raise MatcherContractError(f"unsupported catalog contract value: {type(value).__qualname__}")

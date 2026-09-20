@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySna
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
+from tests.guard_aibom_authority_support import commit_aibom_fixture_result, seed_aibom_credentials
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -78,7 +79,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
     _write_text(workspace / "AGENTS.md", instruction_body.decode())
     context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=tmp_path / "guard")
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
     monkeypatch.setattr(
         aibom_cli,
@@ -112,7 +113,6 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
             "failedCount": 0,
         }
 
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", guard_sync_request)
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", respond)
 
@@ -326,9 +326,10 @@ def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypat
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     now = "2026-06-10T13:00:00+00:00"
-    store.set_sync_payload(
+    commit_aibom_fixture_result(
+        store,
         "aibom_sync_summary",
         {"synced": True, "synced_at": "2026-06-10T12:55:00+00:00"},
         "2026-06-10T12:55:00+00:00",
@@ -344,7 +345,7 @@ def test_sync_aibom_snapshots_if_due_rejects_changed_workspace(tmp_path: Path, m
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-beta")
+    seed_aibom_credentials(store, workspace_id="workspace-beta")
 
     summary = sync_aibom_snapshots_if_due(
         store,
@@ -363,14 +364,14 @@ def test_sync_aibom_snapshots_if_due_binds_current_workspace(tmp_path: Path, mon
     from codex_plugin_scanner.guard import aibom_cli
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-alpha")
+    seed_aibom_credentials(store, workspace_id="workspace-alpha")
     calls: list[dict[str, object]] = []
 
     def _fake_sync(*_args: object, **kwargs: object) -> dict[str, object]:
         calls.append(kwargs)
         return {"synced": True}
 
-    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
+    monkeypatch.setattr(aibom_cli, "_sync_aibom_snapshots_admitted", _fake_sync)
 
     summary = aibom_cli.sync_aibom_snapshots_if_due(
         store,
@@ -386,9 +387,10 @@ def test_sync_aibom_snapshots_if_due_skips_recent_empty_sync(tmp_path: Path, mon
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     now = "2026-06-10T12:03:00+00:00"
-    store.set_sync_payload(
+    commit_aibom_fixture_result(
+        store,
         "aibom_sync_summary",
         {
             "synced": True,
@@ -413,15 +415,16 @@ def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     calls: list[str] = []
 
     def _fake_sync(*_args, **_kwargs):
         calls.append("sync")
         return {"synced": True, "synced_at": "2026-06-10T12:06:00+00:00", "snapshots": 1, "accepted": 1}
 
-    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
-    store.set_sync_payload(
+    monkeypatch.setattr(aibom_cli, "_sync_aibom_snapshots_admitted", _fake_sync)
+    commit_aibom_fixture_result(
+        store,
         "aibom_sync_summary",
         {
             "synced": True,
@@ -446,15 +449,16 @@ def test_sync_aibom_snapshots_if_due_force_bypasses_recent_sync(
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     calls: list[str] = []
 
     def _fake_sync(*_args, **_kwargs):
         calls.append("sync")
         return {"synced": True, "synced_at": "2026-06-10T12:56:00+00:00", "snapshots": 1, "accepted": 1}
 
-    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
-    store.set_sync_payload(
+    monkeypatch.setattr(aibom_cli, "_sync_aibom_snapshots_admitted", _fake_sync)
+    commit_aibom_fixture_result(
+        store,
         "aibom_sync_summary",
         {"synced": True, "synced_at": "2026-06-10T12:55:00+00:00"},
         "2026-06-10T12:55:00+00:00",
@@ -691,7 +695,7 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     store.set_sync_payload(
         "guard_events_v1_summary",
         {"synced_at": "2026-06-10T11:00:00+00:00", "events": 12, "accepted": 12},
@@ -752,7 +756,7 @@ def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     snapshots = tuple(
         GuardAgentInventorySnapshot(
             snapshot_id=f"snapshot-{index}",
@@ -827,7 +831,7 @@ def test_sync_aibom_snapshots_skips_oversized_snapshot_and_syncs_valid_snapshot(
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -912,7 +916,7 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -999,7 +1003,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     from codex_plugin_scanner.guard.runtime import runner
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     snapshots = (
         GuardAgentInventorySnapshot(
             snapshot_id="codex:valid",
@@ -1155,7 +1159,7 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, mon
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
 
     store = GuardStore(tmp_path / "guard")
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    seed_aibom_credentials(store, workspace_id="workspace-1")
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=tmp_path / "workspace",

@@ -14,7 +14,7 @@ from .native_command_control_authority_store import (
     read_native_control_floor,
 )
 from .native_policy_snapshot_constants import NativePolicySnapshotError
-from .runtime.extension_control_authority import AuthorityHealth
+from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 
 if TYPE_CHECKING:
@@ -93,6 +93,14 @@ def read_control_projection(
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     if registry.catalog_digest != metadata.catalog_digest:
         raise NativePolicySnapshotError("native_command_control_catalog_mismatch")
+    try:
+        absent = _read_unenrolled_projection(store, metadata, runtime, read_only=True)
+    except NativeCommandControlMutationRequiredError:
+        # Release SH and prove absence again under EX before writing a marker.
+        # Enrollment during that interval must take the full catalog path.
+        absent = _read_unenrolled_projection(store, metadata, runtime, read_only=False)
+    if absent is not None:
+        return absent
     # Compile the frozen trusted target manifest before excluding native readers.
     store._catalog_target_manifest(registry)
     try:
@@ -103,6 +111,28 @@ def read_control_projection(
         return _read_control_projection_locked(store, metadata, runtime, read_only=False)
 
 
+def _read_unenrolled_projection(
+    store: GuardStore,
+    metadata: NativeCommandProgramMetadata,
+    runtime: ExtensionControlRuntime | None,
+    *,
+    read_only: bool,
+) -> tuple[dict[str, object], ExtensionControlRuntime] | None:
+    from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
+    with store._extension_control_authority_lock(shared=read_only):
+        try:
+            view = store._read_unenrolled_extension_control_authority(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+        except Exception:
+            # Uncertain observations retain the ordinary authenticated reader
+            # and its existing tampered/degraded classification.
+            return None
+        if view is None:
+            return None
+        store._extension_control_last_catalog_digest = metadata.catalog_digest
+        return _projection_from_view(store, metadata, runtime, view, read_only=read_only)
+
+
 def _read_control_projection_locked(
     store: GuardStore,
     metadata: NativeCommandProgramMetadata,
@@ -110,7 +140,6 @@ def _read_control_projection_locked(
     *,
     read_only: bool,
 ) -> tuple[dict[str, object], ExtensionControlRuntime]:
-    from .native_command_control_binding import build_native_command_control_binding
     from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     # All leases are released before the caller performs resident push IPC.
@@ -118,25 +147,39 @@ def _read_control_projection_locked(
         view = store.read_extension_control_authority_for_registry(
             BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=read_only
         )
-        snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
-        binding = build_native_command_control_binding(snapshot, metadata)
-        authority = (
-            read_committed_projection_authority(store, binding)
-            if read_only
-            else commit_native_command_control_projection(store, binding)
-        )
-        previous = runtime.authority if isinstance(runtime, NativeCommandControlRuntime) else None
-        recover = previous is not None and _recoverable_epoch(store, previous, authority, binding)
-        if runtime is None or (recover and view.health is AuthorityHealth.PROTECTED):
-            runtime = NativeCommandControlRuntime(view)
-        else:
-            try:
-                snapshot = runtime.refresh(view)
-            except ValueError as error:
-                raise NativePolicySnapshotError("native_command_control_revision_regressed") from error
-        if isinstance(runtime, NativeCommandControlRuntime) and (
-            view.health is AuthorityHealth.PROTECTED or runtime.authority is None
-        ):
-            runtime.authority = authority
-        binding["authority"] = authority
-        return binding, runtime
+        return _projection_from_view(store, metadata, runtime, view, read_only=read_only)
+
+
+def _projection_from_view(
+    store: GuardStore,
+    metadata: NativeCommandProgramMetadata,
+    runtime: ExtensionControlRuntime | None,
+    view: ExtensionControlAuthorityView,
+    *,
+    read_only: bool,
+) -> tuple[dict[str, object], ExtensionControlRuntime]:
+    """Keep marker and runtime floor validation within the caller's lease."""
+    from .native_command_control_binding import build_native_command_control_binding
+
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+    binding = build_native_command_control_binding(snapshot, metadata)
+    authority = (
+        read_committed_projection_authority(store, binding)
+        if read_only
+        else commit_native_command_control_projection(store, binding)
+    )
+    previous = runtime.authority if isinstance(runtime, NativeCommandControlRuntime) else None
+    recover = previous is not None and _recoverable_epoch(store, previous, authority, binding)
+    if runtime is None or (recover and view.health is AuthorityHealth.PROTECTED):
+        runtime = NativeCommandControlRuntime(view)
+    else:
+        try:
+            snapshot = runtime.refresh(view)
+        except ValueError as error:
+            raise NativePolicySnapshotError("native_command_control_revision_regressed") from error
+    if isinstance(runtime, NativeCommandControlRuntime) and (
+        view.health is AuthorityHealth.PROTECTED or runtime.authority is None
+    ):
+        runtime.authority = authority
+    binding["authority"] = authority
+    return binding, runtime

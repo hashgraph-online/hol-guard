@@ -123,19 +123,25 @@ fn initial_lease_lock_retries_until_the_current_holder_releases() {
     let held = acquire_directory_lock(&directory, &directory)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
-    let (busy_sender, busy_receiver) = std::sync::mpsc::channel();
-    LOCK_BUSY_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(busy_sender));
-    let releaser = thread::spawn(move || {
-        busy_receiver
-            .recv_timeout(Duration::from_secs(1))
-            .expect("retry path should observe the held lock");
-        drop(held);
+    let released = std::rc::Rc::new(std::cell::Cell::new(false));
+    let observed_release = std::rc::Rc::clone(&released);
+    LOCK_BUSY_CALLBACK.with(|callback| {
+        *callback.borrow_mut() = Some(Box::new(move || {
+            // Release only after the real OS lock reports contention. The
+            // original retry clock keeps running through the release.
+            drop(held);
+            observed_release.set(true);
+        }));
     });
 
     let acquired =
         acquire_directory_lock_with_retry(&directory, &directory, Duration::from_millis(100));
-    releaser.join().expect("lock releaser should exit cleanly");
+    LOCK_BUSY_CALLBACK.with(|callback| callback.borrow_mut().take());
+    assert!(released.get(), "retry path should observe the held lock");
     let acquired = acquired.expect("bounded retry should acquire after release");
+    assert!(acquire_directory_lock(&directory, &directory)
+        .expect("lock ownership should remain inspectable")
+        .is_none());
     drop(acquired);
     fs::remove_dir_all(directory).expect("test directory should be removable");
 }

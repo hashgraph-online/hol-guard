@@ -3,12 +3,22 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
+from scripts.ci.verify_scheduling_sensitive_outcomes import (
+    CASE_CLASS,
+    CASE_NAME,
+    REQUIRED_CASES,
+    validate_required_cases,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
 SCHEDULING_SENSITIVE_NODE = (
     "tests/test_guard_hook_process_runner.py::"
     "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial"
 )
+AUTHORITY_TIMING_NODE = f"tests/test_native_policy_snapshot_default_capture_worker.py::{CASE_NAME}"
 SPEC = importlib.util.spec_from_file_location("pytest_shard", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 pytest_shard = importlib.util.module_from_spec(SPEC)
@@ -63,6 +73,17 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "needs: [quality, test-plan, tests, compatibility, scheduling-sensitive]" in workflow
     assert f"--deselect {SCHEDULING_SENSITIVE_NODE}" in tests_job
     assert SCHEDULING_SENSITIVE_NODE in scheduling_job
+    assert f"--deselect {AUTHORITY_TIMING_NODE}" in tests_job
+    assert AUTHORITY_TIMING_NODE in scheduling_job
+    general_step, authority_step = scheduling_job.split("      - name: Run required authority timing cases untraced\n")
+    authority_step = authority_step.split("      - name: Verify required authority timing cases executed\n")[0]
+    assert AUTHORITY_TIMING_NODE not in general_step
+    assert "--no-cov --tb=short" in general_step
+    assert "--junitxml=" not in general_step
+    assert AUTHORITY_TIMING_NODE in authority_step and authority_step.count("tests/") == 1
+    assert "--no-cov --junitxml=pytest-scheduling-sensitive.xml" in authority_step
+    assert "--cov " not in scheduling_job and "GUARD_PYTEST_UNDER_COVERAGE" not in scheduling_job
+    assert "verify_scheduling_sensitive_outcomes.py --junit pytest-scheduling-sensitive.xml" in scheduling_job
 
     cache_consumers = (
         ("compatibility", "deep-compatibility", 1),
@@ -79,9 +100,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 def test_sonar_scope_includes_native_rust_workspace() -> None:
     config = (ROOT / "sonar-project.properties").read_text(encoding="utf-8")
     properties = dict(
-        line.split("=", 1)
-        for line in config.splitlines()
-        if line and not line.startswith("#") and "=" in line
+        line.split("=", 1) for line in config.splitlines() if line and not line.startswith("#") and "=" in line
     )
 
     assert properties["sonar.sources"] == "src,rust"
@@ -98,3 +117,39 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert "tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/*_tests.rs" in properties["sonar.cpd.exclusions"]
+
+
+def _timing_report(names: list[str], outcome: str = "", classname: str = CASE_CLASS) -> bytes:
+    cases = "".join(f'<testcase classname="{classname}" name="{name}">{outcome}</testcase>' for name in names)
+    return f"<testsuites><testsuite>{cases}</testsuite></testsuites>".encode()
+
+
+def test_untraced_timing_admission_requires_all_three_exact_passed_cases() -> None:
+    validate_required_cases(_timing_report(sorted(REQUIRED_CASES)))
+
+
+@pytest.mark.parametrize("outcome", ["<skipped/>", "<failure/>", "<error/>"])
+def test_untraced_timing_admission_rejects_nonexecution_and_failure(outcome: str) -> None:
+    with pytest.raises(ValueError, match="scheduling_sensitive_cases_not_passed"):
+        validate_required_cases(_timing_report(sorted(REQUIRED_CASES), outcome))
+
+
+@pytest.mark.parametrize("invalid", ["missing", "duplicate", "renamed", "foreign", "malformed", "oversized"])
+def test_untraced_timing_admission_rejects_incomplete_or_unrelated_reports(invalid: str) -> None:
+    names = sorted(REQUIRED_CASES)
+    classname = CASE_CLASS
+    if invalid == "missing":
+        _ = names.pop()
+    elif invalid == "duplicate":
+        names.append(names[0])
+    elif invalid == "renamed":
+        names[0] = CASE_NAME + "[other]"
+    elif invalid == "foreign":
+        classname = "tests.unrelated"
+    report = _timing_report(names, classname=classname)
+    if invalid == "malformed":
+        report = b"<testsuites>"
+    elif invalid == "oversized":
+        report += b" " * (512 * 1024)
+    with pytest.raises(ValueError, match="scheduling_sensitive_"):
+        validate_required_cases(report)

@@ -319,14 +319,14 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
             return self._terminal_failed_review(typed_result.get("route"), reason_code)
-        typed_response = as_string_object_dict(response)
-        if typed_response is None:
-            return HookProcessReview(None, "daemon_hook_process_invalid_json")
-        self._record_response_metrics(typed_response, envelope_reason_code=reason_code)
+        review = HookProcessReview.from_result(typed_result)
+        if review.payload is None:
+            return review
+        self._record_response_metrics(review.payload, envelope_reason_code=reason_code)
         self._record_route_metric(typed_result.get("route"))
         if time.monotonic() >= review_deadline:
             return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
-        return HookProcessReview(typed_response, None, as_string_object_dict(typed_result.get("receipt")))
+        return review
 
     def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
         if not 1 <= minimum_workers <= self._process_limit:

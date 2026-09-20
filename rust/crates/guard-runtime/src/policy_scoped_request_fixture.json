@@ -1,0 +1,384 @@
+{
+  "schema": "guard-native-scoped-request-fixtures.v1",
+  "proof": "actual-artifact-producer-parity-only",
+  "cases": [
+    {
+      "name": "codex-0",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "\tprintf 'Synthetic  exact bytes'\r\n"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "9205ee2df03662d7233140a95babe411daf3184843df1286726046a6f7f04188"
+    },
+    {
+      "name": "codex-1",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "pwd"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "a1159e9df3670d549d04524532629f5477ceb7deec9b45e47e8c009506ecb2c8"
+    },
+    {
+      "name": "codex-2",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "true"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "name": "codex-3",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "echo synthetic"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "9d576309922529fed81bd9f032e1149fe20f928c814b945d87372bd411f8a329"
+    },
+    {
+      "name": "codex-4",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "whoami"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "f25297859cf0a70af5c053a5464a5fa647a35ceee1d91397331903846d79ffc1"
+    },
+    {
+      "name": "codex-5",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "uname -a"
+        }
+      },
+      "artifactId": "codex:project:Shell",
+      "sha256": "28ba533b0f3c4df63d6b4a5ead73860697bdf735bb353e4ca928474889eb8a15"
+    },
+    {
+      "name": "claude-code-0",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "\tprintf 'Synthetic  exact bytes'\r\n"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "9205ee2df03662d7233140a95babe411daf3184843df1286726046a6f7f04188"
+    },
+    {
+      "name": "claude-code-1",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "pwd"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "a1159e9df3670d549d04524532629f5477ceb7deec9b45e47e8c009506ecb2c8"
+    },
+    {
+      "name": "claude-code-2",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "true"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "name": "claude-code-3",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "echo synthetic"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "9d576309922529fed81bd9f032e1149fe20f928c814b945d87372bd411f8a329"
+    },
+    {
+      "name": "claude-code-4",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "whoami"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "f25297859cf0a70af5c053a5464a5fa647a35ceee1d91397331903846d79ffc1"
+    },
+    {
+      "name": "claude-code-5",
+      "harness": "claude-code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "uname -a"
+        }
+      },
+      "artifactId": "claude-code:project:Shell",
+      "sha256": "28ba533b0f3c4df63d6b4a5ead73860697bdf735bb353e4ca928474889eb8a15"
+    },
+    {
+      "name": "cline-0",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "\tprintf 'Synthetic  exact bytes'\r\n"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "9205ee2df03662d7233140a95babe411daf3184843df1286726046a6f7f04188"
+    },
+    {
+      "name": "cline-1",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "pwd"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "a1159e9df3670d549d04524532629f5477ceb7deec9b45e47e8c009506ecb2c8"
+    },
+    {
+      "name": "cline-2",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "true"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "name": "cline-3",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "echo synthetic"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "9d576309922529fed81bd9f032e1149fe20f928c814b945d87372bd411f8a329"
+    },
+    {
+      "name": "cline-4",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "whoami"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "f25297859cf0a70af5c053a5464a5fa647a35ceee1d91397331903846d79ffc1"
+    },
+    {
+      "name": "cline-5",
+      "harness": "cline",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "uname -a"
+        }
+      },
+      "artifactId": "cline:project:Shell",
+      "sha256": "28ba533b0f3c4df63d6b4a5ead73860697bdf735bb353e4ca928474889eb8a15"
+    },
+    {
+      "name": "cursor-0",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "\tprintf 'Synthetic  exact bytes'\r\n"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "9205ee2df03662d7233140a95babe411daf3184843df1286726046a6f7f04188"
+    },
+    {
+      "name": "cursor-1",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "pwd"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "a1159e9df3670d549d04524532629f5477ceb7deec9b45e47e8c009506ecb2c8"
+    },
+    {
+      "name": "cursor-2",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "true"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "name": "cursor-3",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "echo synthetic"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "9d576309922529fed81bd9f032e1149fe20f928c814b945d87372bd411f8a329"
+    },
+    {
+      "name": "cursor-4",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "whoami"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "f25297859cf0a70af5c053a5464a5fa647a35ceee1d91397331903846d79ffc1"
+    },
+    {
+      "name": "cursor-5",
+      "harness": "cursor",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "uname -a"
+        }
+      },
+      "artifactId": "cursor:project:Shell",
+      "sha256": "28ba533b0f3c4df63d6b4a5ead73860697bdf735bb353e4ca928474889eb8a15"
+    },
+    {
+      "name": "container-tool_input",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "toolName": "Bash",
+        "tool_input": {
+          "command": "printf 'alias  source'"
+        }
+      },
+      "artifactId": "codex:project:Bash",
+      "sha256": "5c6d29ee02991e21572a6f54940e2e641533ebd87b434074625f881be5a50e54"
+    },
+    {
+      "name": "container-arguments",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "toolName": "Bash",
+        "arguments": {
+          "command": "printf 'alias  source'"
+        }
+      },
+      "artifactId": "codex:project:Bash",
+      "sha256": "5c6d29ee02991e21572a6f54940e2e641533ebd87b434074625f881be5a50e54"
+    },
+    {
+      "name": "container-tool_args",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "toolName": "Bash",
+        "tool_args": {
+          "command": "printf 'alias  source'"
+        }
+      },
+      "artifactId": "codex:project:Bash",
+      "sha256": "5c6d29ee02991e21572a6f54940e2e641533ebd87b434074625f881be5a50e54"
+    },
+    {
+      "name": "container-toolArgs",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "toolName": "Bash",
+        "toolArgs": {
+          "command": "printf 'alias  source'"
+        }
+      },
+      "artifactId": "codex:project:Bash",
+      "sha256": "5c6d29ee02991e21572a6f54940e2e641533ebd87b434074625f881be5a50e54"
+    },
+    {
+      "name": "original-artifact-selector",
+      "harness": "codex",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "echo synthetic"
+        },
+        "artifact_id": "synthetic:explicit-artifact"
+      },
+      "artifactId": "synthetic:explicit-artifact",
+      "sha256": "9d576309922529fed81bd9f032e1149fe20f928c814b945d87372bd411f8a329"
+    }
+  ]
+}

@@ -169,3 +169,17 @@ def most_restrictive_guard_action(
         if GUARD_ACTION_SEVERITY[candidate] > GUARD_ACTION_SEVERITY[winner]:
             winner = candidate
     return winner
+
+
+def _requested_policy_action_normalization(
+    cli_action: object | None,
+    stored_action: object | None,
+    payload: Mapping[str, object],
+) -> GuardActionNormalization | None:
+    if cli_action is not None:
+        return normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
+    if stored_action is not None:
+        return normalize_guard_action_result(stored_action, unknown_action="require-reapproval")
+    if "policy_action" in payload:
+        return normalize_guard_action_result(payload.get("policy_action"), unknown_action="require-reapproval")
+    return None

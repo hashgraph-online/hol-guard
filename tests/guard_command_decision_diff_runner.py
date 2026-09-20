@@ -53,8 +53,10 @@ from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_beni
 from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
 
-EVALUATION_SHARD_COUNT: Final = 4
-MAX_CONCURRENT_WORKERS: Final = EVALUATION_SHARD_COUNT
+# Smaller deterministic partitions distribute uneven rule costs across the same
+# bounded worker pool. Every corpus case still runs once through both evaluators.
+EVALUATION_SHARD_COUNT: Final = 32
+MAX_CONCURRENT_WORKERS: Final = 4
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 

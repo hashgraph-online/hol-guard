@@ -34,6 +34,11 @@ from codex_plugin_scanner.guard.daemon.manager import (  # noqa: E402
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
 from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
 from scripts.native_slo_contract import clear_proof_environment, proof_environment_violations  # noqa: E402
+from scripts.stress_guard_daemon_proof import (  # noqa: E402
+    measured_route_counts,
+    native_routes_passed,
+    read_route_counts,
+)
 from scripts.stress_guard_daemon_runtime import StressExecution as _StressExecution  # noqa: E402
 from scripts.stress_guard_daemon_runtime import collect_batch as _collect_batch  # noqa: E402
 from scripts.stress_guard_daemon_runtime import finalize_stress_runtime as _finalize_stress_runtime  # noqa: E402
@@ -90,6 +95,7 @@ class StressResult:
     rss_peak_bytes: int
     rss_growth: float
     transient_health_failures: int
+    native_route_delta: dict[str, int] | None = None
 
     def _health_contract_passed(self) -> bool:
         if self.health_checks <= 0 or self.health_failures > 0:
@@ -120,6 +126,7 @@ class StressResult:
             self.passed
             and self.requests >= _SOAK_MIN_REQUESTS
             and self.receipts >= _SOAK_MIN_RECEIPTS
+            and native_routes_passed(self.native_route_delta, requests=self.requests)
             and self.rss_baseline_bytes > 0
             and self.rss_growth <= _SOAK_MAX_RSS_GROWTH
             and 0 < self.max_threads <= _SOAK_MAX_THREADS
@@ -387,6 +394,7 @@ def _stress_result(
             else 0.0
         ),
         transient_health_failures=execution.transient_health_failures,
+        native_route_delta=execution.native_route_delta,
     )
 
 
@@ -396,6 +404,7 @@ def run_stress(
     receipt_count: int,
     settle_seconds: float,
     max_hook_latency_ms: float = 4_500.0,
+    require_native_routes: bool = False,
 ) -> StressResult:
     if request_count <= 0:
         raise ValueError("request_count must be positive")
@@ -418,9 +427,14 @@ def run_stress(
             if request_count >= _SOAK_MIN_REQUESTS:
                 _stabilize_full_worker_capacity(execution)
             _initialize_stress_resources(execution)
+            native_before = read_route_counts(_healthz_details(execution)) if require_native_routes else None
+            if require_native_routes and native_before is None:
+                raise RuntimeError("Native soak route baseline is unavailable.")
             _run_stress_batches(execution, request_count)
             _settle_stress_runtime(execution, guard_home, settle_seconds)
             _finalize_stress_runtime(execution, guard_home)
+            if native_before is not None:
+                execution.native_route_delta = measured_route_counts(native_before, _healthz_details(execution))
         finally:
             _ = _cleanup_stress_runtime(guard_home)
         return _stress_result(
@@ -442,7 +456,8 @@ def main() -> int:
     _ = parser.add_argument("--enforce-soak", action="store_true")
     _ = parser.add_argument("--json", type=Path)
     args = parser.parse_args()
-    if args.enforce_soak:
+    enforce_soak = cast(bool, args.enforce_soak)
+    if enforce_soak:
         if args.requests < _SOAK_MIN_REQUESTS or args.receipts < _SOAK_MIN_RECEIPTS:
             parser.error("--enforce-soak requires at least 100000 requests and 250000 receipts")
         _ = clear_proof_environment()
@@ -454,13 +469,14 @@ def main() -> int:
         receipt_count=cast(int, args.receipts),
         settle_seconds=cast(float, args.settle_seconds),
         max_hook_latency_ms=cast(float, args.max_hook_latency_ms),
+        require_native_routes=enforce_soak,
     )
     payload = {**asdict(result), "passed": result.passed, "soak_passed": result.soak_passed}
     rendered = json.dumps(payload, sort_keys=True)
     print(rendered)
     if args.json is not None:
         args.json.write_text(rendered + "\n", encoding="utf-8")
-    return 0 if (result.soak_passed if args.enforce_soak else result.passed) else 1
+    return 0 if (result.soak_passed if enforce_soak else result.passed) else 1
 
 
 if __name__ == "__main__":

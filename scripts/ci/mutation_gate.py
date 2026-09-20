@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 from typing import Final, cast
 
@@ -15,6 +17,8 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.ci.mutation_targets import TARGETS
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,8 @@ class MutationBaseline:
     source_path: str
     minimum_score: float
     expected_total: int
+    source_sha256: str
+    tool_versions: tuple[tuple[str, str], ...]
 
 
 BASELINES: Final[dict[str, MutationBaseline]] = {
@@ -32,7 +38,10 @@ BASELINES: Final[dict[str, MutationBaseline]] = {
         target="command-model",
         source_path=TARGETS["command-model"].source_path,
         minimum_score=64.0,
-        expected_total=610,
+        # The reviewed parser refactor changes the complete inventory from 610 to 588.
+        expected_total=588,
+        source_sha256="08e5cd246e20bd6e327f77d0986ac37ad89fa1ef6dd42e336addf2dfcd9d721c",
+        tool_versions=(("mutmut", "3.7.0"), ("libcst", "1.9.0")),
     ),
 }
 
@@ -49,6 +58,7 @@ _REQUIRED_COUNTS: Final[tuple[str, ...]] = (
 )
 _UNACCEPTABLE_COUNTS: Final[tuple[str, ...]] = (
     "no_tests",
+    "skipped",
     "suspicious",
     "timeout",
     "segfault",
@@ -95,6 +105,28 @@ def validation_errors(baseline: MutationBaseline, counts: Mapping[str, int]) -> 
     return tuple(errors)
 
 
+def inventory_errors(baseline: MutationBaseline) -> tuple[str, ...]:
+    """Require the reviewed source and generator versions before accepting its count."""
+
+    errors: list[str] = []
+    try:
+        source_sha256 = hashlib.sha256((ROOT / baseline.source_path).read_bytes()).hexdigest()
+    except OSError:
+        errors.append("reviewed mutation source is unavailable")
+    else:
+        if source_sha256 != baseline.source_sha256:
+            errors.append("mutation source differs from the reviewed inventory")
+    for package, expected in baseline.tool_versions:
+        try:
+            actual = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            errors.append(f"reviewed generator {package} is unavailable")
+        else:
+            if actual != expected:
+                errors.append(f"generator {package} differs from reviewed version {expected}")
+    return tuple(errors)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument("--target", choices=sorted(BASELINES), required=True)
@@ -113,10 +145,13 @@ def main() -> int:
         "source_path": baseline.source_path,
         "score": round(score, 2),
         "minimum_score": baseline.minimum_score,
+        "expected_total": baseline.expected_total,
+        "source_sha256": baseline.source_sha256,
+        "tool_versions": dict(baseline.tool_versions),
         "counts": counts,
     }
     print(json.dumps(payload, sort_keys=True))
-    errors = validation_errors(baseline, counts)
+    errors = validation_errors(baseline, counts) + inventory_errors(baseline)
     for error in errors:
         print(f"mutation gate: {error}")
     return 1 if errors else 0

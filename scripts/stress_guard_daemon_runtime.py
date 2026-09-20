@@ -19,6 +19,7 @@ from typing import Literal, cast
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.manager import guard_daemon_process_count
 from scripts.native_slo_adapter import process_resources
+from scripts.stress_guard_daemon_proof import require_allowed_response
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _HEALTH_PROBE_ATTEMPTS = 2
@@ -48,6 +49,7 @@ class StressExecution:
     rss_peak_bytes: int = 0
     max_threads: int = 0
     max_file_descriptors: int = 0
+    native_route_delta: dict[str, int] | None = None
 
 
 def process_tree_resources(pid: int) -> tuple[int, int, int] | None:
@@ -155,6 +157,7 @@ def stress_request(endpoint: str, auth_token: str) -> float:
             payload = cast(object, json.loads(body.decode("utf-8")))
             if not isinstance(payload, dict):
                 raise RuntimeError("Hook response was not an object.")
+            require_allowed_response(cast(dict[str, object], payload))
             return (time.monotonic() - started) * 1000
         except urllib.error.HTTPError:
             raise
@@ -257,9 +260,7 @@ def health_is_ready(daemon_url: str) -> bool:
     return health_probe_status(daemon_url) == "ready"
 
 
-def wait_until_health_ready(
-    daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS
-) -> None:
+def wait_until_health_ready(daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS) -> None:
     """Block until `/healthz` is ready, or raise before warmup."""
 
     deadline = time.monotonic() + timeout_seconds

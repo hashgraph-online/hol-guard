@@ -152,3 +152,16 @@ def ensure_extension_control_authority_schema(
         """
     )
     return True
+
+
+def captured_extension_control_schema_is_current(connection: sqlite3.Connection) -> bool:
+    """Inspect an already prepared schema without modifying the captured view."""
+    row = connection.execute(
+        "select version, checksum from extension_control_schema_migration where singleton = 1"
+    ).fetchone()
+    return (
+        row is not None
+        and type(row["version"]) is int
+        and row["version"] == EXTENSION_CONTROL_SCHEMA_VERSION
+        and row["checksum"] == _SCHEMA_CHECKSUM
+    )

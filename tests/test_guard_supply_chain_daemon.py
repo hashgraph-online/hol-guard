@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.aibom_operation_authority import AibomOperation
 from codex_plugin_scanner.guard.daemon import server as guard_daemon_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 from codex_plugin_scanner.guard.store import GuardStore
@@ -91,8 +92,10 @@ def test_daemon_bundle_refresh_stays_quiet_when_not_configured(
     monkeypatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    calls: list[None] = []
 
     def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        calls.append(None)
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
 
     monkeypatch.setattr(guard_daemon_module, "sync_supply_chain_bundle", _fail_sync)
@@ -111,8 +114,8 @@ def test_daemon_bundle_refresh_stays_quiet_when_not_configured(
         daemon.stop()
 
     summary = store.get_sync_payload("supply_chain_bundle_daemon")
-    assert isinstance(summary, dict)
-    assert summary["status"] == "not_configured"
+    assert summary is None
+    assert calls == []
     assert store.list_approval_requests() == []
     assert store.list_events(limit=5) == []
 
@@ -123,6 +126,7 @@ def test_daemon_bundle_refresh_reports_auth_expired(
     monkeypatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
 
     def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise GuardSyncAuthorizationExpiredError(
@@ -156,6 +160,7 @@ def test_daemon_bundle_refresh_reports_retryable_error(
     monkeypatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
 
     def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise RuntimeError("Guard OAuth token refresh failed: oauth upstream down")
@@ -211,7 +216,7 @@ def test_daemon_aibom_refresh_records_synced_on_success(
         calls.append(kwargs)
         return {"synced": True, "synced_at": "2026-06-29T00:00:00Z", "snapshots": 2, "accepted": 2}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -229,9 +234,11 @@ def test_daemon_aibom_refresh_records_synced_on_success(
         daemon.stop()
 
     assert calls
-    assert calls[0]["home_dir"] == home_dir
-    assert calls[0]["workspace_dir"] == workspace_dir
-    assert calls[0]["expected_workspace_id"] == "workspace-alpha"
+    operation = calls[0]["operation"]
+    assert isinstance(operation, AibomOperation)
+    assert operation.context().home_dir == home_dir
+    assert operation.context().workspace_dir == workspace_dir
+    assert operation.workspace_id == "workspace-alpha"
     summary = store.get_sync_payload("aibom_inventory_daemon")
     assert isinstance(summary, dict)
     assert summary["status"] == "synced"
@@ -256,7 +263,7 @@ def test_daemon_aibom_refresh_records_skipped_when_not_due(
     def _fake_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         return {"synced": False, "reason": "not_due", "skipped": True}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -299,7 +306,7 @@ def test_daemon_aibom_refresh_uses_workspace_bound_persisted_context(
         {"workspace_dir": str(workspace_dir), "workspace_id": "workspace-alpha"},
         "2026-06-29T00:00:00Z",
     )
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -314,8 +321,12 @@ def test_daemon_aibom_refresh_uses_workspace_bound_persisted_context(
     finally:
         daemon.stop()
 
-    assert calls[0]["home_dir"] is None
-    assert calls[0]["workspace_dir"] == workspace_dir
+    operation = calls[0]["operation"]
+    assert isinstance(operation, AibomOperation)
+    # The old None argument resolved to the same default home inside the body;
+    # the admitted operation now carries that resolved immutable context.
+    assert operation.context().home_dir == guard_daemon_module._resolve_operator_home_dir()
+    assert operation.context().workspace_dir == workspace_dir
     assert summary["synced"] is True
 
 
@@ -338,7 +349,7 @@ def test_daemon_aibom_refresh_rejects_mismatched_persisted_context(
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         guard_daemon_module,
-        "sync_aibom_snapshots_if_due",
+        "_sync_aibom_snapshots_if_due_admitted",
         lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
     )
     daemon = guard_daemon_module.GuardDaemonServer(
@@ -370,7 +381,7 @@ def test_daemon_aibom_refresh_rejects_explicit_context_after_repair(
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         guard_daemon_module,
-        "sync_aibom_snapshots_if_due",
+        "_sync_aibom_snapshots_if_due_admitted",
         lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
     )
     daemon = guard_daemon_module.GuardDaemonServer(
@@ -407,7 +418,7 @@ def test_daemon_aibom_refresh_skips_without_workspace_context(
 
     monkeypatch.setattr(
         guard_daemon_module,
-        "sync_aibom_snapshots_if_due",
+        "_sync_aibom_snapshots_if_due_admitted",
         lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
     )
     daemon = guard_daemon_module.GuardDaemonServer(
@@ -445,7 +456,7 @@ def test_daemon_aibom_refresh_retries_returned_error_on_backoff(
             return {"synced": False, "error": "temporary upload failure"}
         return {"synced": True, "snapshots": 2, "accepted": 2}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -482,7 +493,7 @@ def test_daemon_aibom_refresh_retries_not_configured_on_backoff(
             return {"synced": False, "reason": "not_configured", "skipped": True}
         return {"synced": True, "snapshots": 2, "accepted": 2}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -514,7 +525,7 @@ def test_daemon_aibom_refresh_records_error_on_exception(
     def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise RuntimeError("AIBOM snapshot upload failed: mirror node timeout")
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fail_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _fail_sync)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -547,7 +558,7 @@ def test_daemon_aibom_refresh_stops_cleanly(
 
     monkeypatch.setattr(
         guard_daemon_module,
-        "sync_aibom_snapshots_if_due",
+        "_sync_aibom_snapshots_if_due_admitted",
         lambda _store, **_kwargs: {"synced": True, "synced_at": "2026-06-29T00:00:00Z"},
     )
     daemon = guard_daemon_module.GuardDaemonServer(
@@ -585,7 +596,7 @@ def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
         release.wait()
         return {"synced": True}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _blocked_sync)
+    monkeypatch.setattr(guard_daemon_module, "_sync_aibom_snapshots_if_due_admitted", _blocked_sync)
     monkeypatch.setattr(guard_daemon_module, "_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS", 0.01)
     daemon = guard_daemon_module.GuardDaemonServer(
         store,

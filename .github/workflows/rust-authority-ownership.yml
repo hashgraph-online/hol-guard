@@ -2,7 +2,6 @@ name: Rust authority ownership
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -73,6 +72,7 @@ jobs:
            uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
              --root . --artifact "$BUILT_SDIST" --json python-capability-cleanup-sdist.json
       - name: Compile and lint complete Rust workspace
+        id: native_contract_build
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
@@ -84,6 +84,42 @@ jobs:
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
           rust/target/release/hol-guard-runtime self-test --json
+      - name: Require source-defined Python and native vector parity
+        if: ${{ !cancelled() && steps.native_contract_build.outcome == 'success' }}
+        timeout-minutes: 10
+        env:
+          PYTEST_ADDOPTS: ""
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p artifacts/native-policy-vector-parity
+          rm -f artifacts/native-policy-vector-parity/results.xml
+          pytest_status=0
+          uv run --no-sync pytest -o addopts=--strict-markers -q \
+            tests/test_native_policy_vector_source_parity.py \
+            --junitxml=artifacts/native-policy-vector-parity/results.xml || pytest_status=$?
+          validator_status=0
+          uv run --no-sync python - <<'PY' || validator_status=$?
+          import json
+          import xml.etree.ElementTree as ET
+
+          cases = list(ET.parse("artifacts/native-policy-vector-parity/results.xml").getroot().iter("testcase"))
+          observed = [{
+              "classname": case.attrib.get("classname"),
+              "name": case.attrib.get("name"),
+              "nonpass": [child.tag for child in case if child.tag in {"failure", "error", "skipped"}],
+          } for case in cases]
+          print(json.dumps({"nativePolicyVectorParityCases": observed}, sort_keys=True))
+          assert len(observed) == 1, "Expected exactly one source/native parity case"
+          assert observed[0] == {
+              "classname": "tests.test_native_policy_vector_source_parity",
+              "name": "test_source_defined_native_policy_vectors_match_actual_python",
+              "nonpass": [],
+          }, "Source/native parity case did not complete successfully"
+          PY
+          if [[ "$pytest_status" -ne 0 ]]; then
+            exit "$pytest_status"
+          fi
+          exit "$validator_status"
       - name: Run compiled PreToolUse adversarial integration
         run: |
           uv run --no-sync python scripts/ci/rust_pretool_authority_integration.py \
@@ -106,6 +142,7 @@ jobs:
             ci/native_runtime/test_guard_native_runtime_mutation_differential.py \
             --tb=short
       - name: Enforce native performance
+        id: native_performance
         env:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
@@ -114,12 +151,27 @@ jobs:
             --runtime "$HOL_GUARD_NATIVE_BINARY" \
             --warm-iterations 30 --cold-iterations 2 \
             --json rust-authority-performance.json --enforce
+      - name: Record separate warm-phase diagnostics
+        if: ${{ failure() && steps.native_performance.outcome == 'failure' }}
+        continue-on-error: true
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/diagnose_guard_native_warm_phases.py \
+            --runtime "$HOL_GUARD_NATIVE_BINARY" \
+            --warm-iterations 30 \
+            --json rust-authority-performance-phases.json
       - name: Run installed native-wheel execution proof
         env:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           uv run --no-sync pytest -q ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
+      - name: Require exact managed, origin, and retirement resident contracts
+        if: ${{ !cancelled() && steps.native_contract_build.outcome == 'success' }}
+        timeout-minutes: 20
+        run: uv run --no-sync python scripts/ci/native_resident_contract.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -129,9 +181,41 @@ jobs:
             rust-pretool-authority.json
             rust-posttool-authority.json
             rust-authority-performance.json
+            rust-authority-performance-phases.json
             native-receipt-persistence.json
             python-capability-cleanup.json
             python-capability-cleanup-wheel.json
             python-capability-cleanup-sdist.json
+            artifacts/native-managed-resident/
+            artifacts/native-sensitive-resident/
+            artifacts/native-installation-retirement/
+            artifacts/native-policy-vector-parity/
           if-no-files-found: error
           retention-days: 30
+
+  policy-source-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+        partition: ["policy", "maintenance"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - name: Prepare owned contract interpreter
+        run: python -I scripts/ci/policy_contract_interpreter.py prepare
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
+      - name: Verify owned contract interpreter
+        run: python -I scripts/ci/policy_contract_interpreter.py verify
+      - name: Check policy source contracts
+        run: bash scripts/ci/policy_source_contract.sh '${{ matrix.python }}' '${{ matrix.partition }}'

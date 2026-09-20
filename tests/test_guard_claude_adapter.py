@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     ClaudeCodeHarnessAdapter,
     _shell_command,
 )
+from tests.claude_hook_diagnostics import assert_claude_hook_asks_for_permission
+from tests.guard_review_authority_fixtures import enroll_review_authority
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -426,9 +429,11 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
 
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
+    enroll_review_authority(context.guard_home)
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command(context)
 
+    started_at = time.monotonic()
     result = subprocess.run(
         ["/bin/sh", "-c", command],
         input=json.dumps(
@@ -443,12 +448,8 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
         timeout=40,
         check=False,
     )
-    payload = json.loads(result.stdout)
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    elapsed_seconds = time.monotonic() - started_at
+    assert_claude_hook_asks_for_permission(result, elapsed_seconds=elapsed_seconds)
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

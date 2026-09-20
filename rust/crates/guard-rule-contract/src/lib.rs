@@ -20,6 +20,10 @@ const COMPONENTS: &[(&str, &[u8])] = &[
         include_bytes!("../../guard-secure-fs/src/lib.rs"),
     ),
     (
+        "guard-secure-fs-source-path",
+        include_bytes!("../../guard-secure-fs/src/source_path.rs"),
+    ),
+    (
         "guard-hook-core",
         include_bytes!("../../guard-hook-core/src/lib.rs"),
     ),
@@ -48,10 +52,6 @@ const COMPONENTS: &[(&str, &[u8])] = &[
         include_bytes!("../../guard-runtime/src/policy_enforcement.rs"),
     ),
     (
-        "guard-runtime-policy-enforcement-admission",
-        include_bytes!("../../guard-runtime/src/policy_enforcement_admission.rs"),
-    ),
-    (
         "guard-runtime-policy-enforcement-facts",
         include_bytes!("../../guard-runtime/src/policy_enforcement_facts.rs"),
     ),
@@ -74,6 +74,106 @@ const COMPONENTS: &[(&str, &[u8])] = &[
     (
         "guard-policy-snapshot-crypto",
         include_bytes!("../../guard-policy-snapshot/src/policy_snapshot_crypto.rs"),
+    ),
+    (
+        "guard-command-model",
+        include_bytes!("../../guard-command/src/lib.rs"),
+    ),
+    (
+        "guard-command-exact-command",
+        include_bytes!("../../guard-command/src/exact_command.rs"),
+    ),
+    (
+        "guard-policy-managed-configuration",
+        include_bytes!("../../guard-policy-snapshot/src/managed_configuration.rs"),
+    ),
+    (
+        "guard-policy-scoped-authority",
+        include_bytes!("../../guard-policy-snapshot/src/scoped_authority.rs"),
+    ),
+    (
+        "guard-policy-scoped-authority-decode",
+        include_bytes!("../../guard-policy-snapshot/src/scoped_authority_decode.rs"),
+    ),
+    (
+        "guard-policy-command-expression",
+        include_bytes!("../../guard-policy-snapshot/src/command_expression.rs"),
+    ),
+    (
+        "guard-policy-scoped-command-expression",
+        include_bytes!("../../guard-policy-snapshot/src/scoped_command_expression.rs"),
+    ),
+    (
+        "guard-policy-scoped-matcher",
+        include_bytes!("../../guard-policy-snapshot/src/scoped_authority_match.rs"),
+    ),
+    (
+        "guard-policy-snapshot-v4",
+        include_bytes!("../../guard-policy-snapshot/src/policy_snapshot_v4.rs"),
+    ),
+    (
+        "guard-runtime-policy-store-versioned",
+        include_bytes!("../../guard-runtime/src/policy_store_versioned.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-request",
+        include_bytes!("../../guard-runtime/src/policy_scoped_request.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-sensitive-read",
+        include_bytes!("../../guard-runtime/src/policy_scoped_sensitive_read.rs"),
+    ),
+    (
+        "guard-runtime-policy-sensitive-configuration",
+        include_bytes!("../../guard-runtime/src/policy_sensitive_configuration.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-tool-request",
+        include_bytes!("../../guard-runtime/src/policy_scoped_tool_request.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-managed",
+        include_bytes!("../../guard-runtime/src/policy_scoped_managed.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-managed-catalog",
+        include_bytes!("../../guard-runtime/src/policy_scoped_managed_catalog.json"),
+    ),
+    (
+        "guard-runtime-edge-v4",
+        include_bytes!("../../guard-runtime/src/edge_v4.rs"),
+    ),
+    (
+        "guard-runtime-policy-scoped-enforcement",
+        include_bytes!("../../guard-runtime/src/policy_scoped_enforcement.rs"),
+    ),
+    (
+        "guard-runtime-approval",
+        include_bytes!("../../guard-runtime/src/approval.rs"),
+    ),
+    (
+        "guard-runtime-approval-context",
+        include_bytes!("../../guard-runtime/src/approval_context.rs"),
+    ),
+    (
+        "guard-runtime-approval-context-scoped",
+        include_bytes!("../../guard-runtime/src/approval_context_scoped.rs"),
+    ),
+    (
+        "guard-runtime-approval-v4",
+        include_bytes!("../../guard-runtime/src/approval_v4.rs"),
+    ),
+    (
+        "guard-runtime-policy-store-approval",
+        include_bytes!("../../guard-runtime/src/policy_store_approval.rs"),
+    ),
+    (
+        "guard-runtime-edge",
+        include_bytes!("../../guard-runtime/src/edge.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-admission",
+        include_bytes!("../../guard-runtime/src/policy_enforcement_admission.rs"),
     ),
     (
         "guard-command-command-argument-semantics",
@@ -252,10 +352,6 @@ const COMPONENTS: &[(&str, &[u8])] = &[
         include_bytes!("../../guard-runtime/src/policy_store_command_authority.rs"),
     ),
     (
-        "guard-runtime-policy-store-approval",
-        include_bytes!("../../guard-runtime/src/policy_store_approval.rs"),
-    ),
-    (
         "guard-runtime-policy-store-authority",
         include_bytes!("../../guard-runtime/src/policy_store_authority.rs"),
     ),
@@ -276,8 +372,16 @@ const COMPONENTS: &[(&str, &[u8])] = &[
         include_bytes!("../../guard-runtime/src/native_hook_receipt.rs"),
     ),
     (
-        "guard-runtime-edge",
-        include_bytes!("../../guard-runtime/src/edge.rs"),
+        "guard-runtime-policy-store-mutation",
+        include_bytes!("../../guard-runtime/src/policy_store_mutation.rs"),
+    ),
+    (
+        "guard-runtime-policy-store-withdrawal",
+        include_bytes!("../../guard-runtime/src/policy_store_withdrawal.rs"),
+    ),
+    (
+        "guard-runtime-policy-store-control-persistence",
+        include_bytes!("../../guard-runtime/src/policy_store_control_persistence.rs"),
     ),
 ];
 
@@ -328,96 +432,5 @@ pub fn rule_digest() -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn contract_is_stable_and_complete() {
-        let first = rule_contract();
-        let second = rule_contract();
-        assert_eq!(first, second);
-        assert_eq!(first.schema, RULE_CONTRACT_SCHEMA);
-        assert_eq!(
-            first
-                .components
-                .iter()
-                .map(|component| component.name)
-                .collect::<Vec<_>>(),
-            vec![
-                "guard-rules",
-                "guard-scanner",
-                "guard-secure-fs",
-                "guard-hook-core",
-                "guard-contracts",
-                "guard-command-pretool",
-                "guard-command-pretool-generic",
-                "guard-command-pretool-result",
-                "guard-command-pretool-extract",
-                "guard-runtime-policy-enforcement",
-                "guard-runtime-policy-enforcement-admission",
-                "guard-runtime-policy-enforcement-facts",
-                "guard-runtime-policy-enforcement-facts-tools",
-                "guard-runtime-policy-enforcement-policy",
-                "guard-policy-snapshot",
-                "guard-policy-snapshot-canonical",
-                "guard-policy-snapshot-crypto",
-                "guard-command-command-argument-semantics",
-                "guard-command-command-common-cli-matcher-values",
-                "guard-command-command-common-cli-matchers",
-                "guard-command-command-curl-operations",
-                "guard-command-command-curl-targets",
-                "guard-command-command-database-matchers",
-                "guard-command-command-operand-matchers",
-                "guard-command-command-option-parsing",
-                "guard-command-command-option-unicode",
-                "guard-command-command-option-unicode-ranges-a",
-                "guard-command-command-option-unicode-ranges-b",
-                "guard-command-command-reviewed-literal",
-                "guard-command-command-specialized-matchers",
-                "guard-command-command-structured-matchers-grammar",
-                "guard-command-command-structured-matchers",
-                "guard-command-executable-flag-contract",
-                "guard-command-lib",
-                "guard-command-native-command-controls",
-                "guard-command-native-command-delegated",
-                "guard-command-native-command-program",
-                "guard-command-native-command-program-admission",
-                "guard-command-native-command-program-compile",
-                "guard-command-native-command-program-evaluation",
-                "guard-command-native-command-program-observations",
-                "guard-command-native-command-program-wire",
-                "guard-command-pretool-search-glob-class",
-                "guard-command-pretool-search-hint",
-                "guard-command-pretool-search-options",
-                "guard-command-pretool-search",
-                "guard-contracts-native-command-controls",
-                "guard-contracts-native-command-observations",
-                "guard-contracts-native-hook-receipt",
-                "guard-runtime-policy-store-command-floor",
-                "native-command-program-artifact",
-                "guard-command-command-ascii-comparison",
-                "guard-command-command-compatibility-catalog",
-                "guard-command-command-compatibility-domains",
-                "guard-command-command-compatibility-git",
-                "guard-command-command-compatibility-github",
-                "guard-command-command-compatibility-github-api",
-                "guard-command-command-compatibility-github-options",
-                "guard-command-command-compatibility",
-                "guard-runtime-policy-store",
-                "guard-runtime-policy-store-command-authority",
-                "guard-runtime-policy-store-approval",
-                "guard-runtime-policy-store-authority",
-                "guard-runtime-policy-store-migration",
-                "guard-runtime-policy-store-request",
-                "guard-runtime-policy-store-persistence",
-                "guard-runtime-native-hook-receipt",
-                "guard-runtime-edge",
-            ]
-        );
-        assert!(first
-            .components
-            .iter()
-            .all(|component| component.sha256.len() == 64));
-        assert_eq!(first.rule_digest.len(), 64);
-    }
-}
+#[path = "lib_tests.rs"]
+mod tests;

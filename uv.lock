@@ -1178,6 +1178,7 @@ name = "hol-guard"
 version = "3.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "cryptography" },
     { name = "idna" },
     { name = "jsonschema" },
@@ -1221,6 +1222,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.14.2" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.39.8" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "~=2.0.12" },

@@ -130,9 +130,11 @@ def test_serve_base_exception_is_contained_when_stop_races_serve_loop(
         daemon.stop()
 
 
+@pytest.mark.parametrize("record_notes", (True, False))
 def test_failed_start_retains_ownership_when_serve_join_returns_a_live_thread(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    record_notes: bool,
 ) -> None:
     daemon = GuardDaemonServer(
         GuardStore(tmp_path / "guard-home"),
@@ -144,10 +146,18 @@ def test_failed_start_retains_ownership_when_serve_join_returns_a_live_thread(
     finish_calls: list[int] = []
     original_finish = daemon._finish_service
 
+    class StartupFailure(RuntimeError):
+        def add_note(self, note: str) -> None:
+            self.__notes__ = [*getattr(self, "__notes__", []), note]
+
+    failure = StartupFailure("startup boom")
+    if not record_notes:
+        monkeypatch.setattr(failure, "add_note", None)
+
     def boom(generation: int | None = None, **kwargs: object) -> None:
         del generation, kwargs
         daemon._thread = leftover
-        raise RuntimeError("startup boom")
+        raise failure
 
     monkeypatch.setattr(daemon, "_begin_owned_service", boom)
     monkeypatch.setattr(
@@ -160,11 +170,18 @@ def test_failed_start_retains_ownership_when_serve_join_returns_a_live_thread(
         "_finish_service",
         lambda: finish_calls.append(1) or True,
     )
-    with pytest.raises(RuntimeError, match="startup boom") as caught:
-        daemon.start()
-    notes = getattr(caught.value, "__notes__", [])
-    assert any("serve thread did not exit" in note for note in notes)
-    assert finish_calls == []
-    assert daemon._owner_lock is not None
-    daemon._finish_service = original_finish
-    daemon.stop()
+    try:
+        with pytest.raises(RuntimeError, match="startup boom") as caught:
+            daemon.start()
+        assert caught.value is failure
+        notes = getattr(caught.value, "__notes__", [])
+        if record_notes:
+            assert any("serve thread did not exit" in note for note in notes)
+        else:
+            assert notes == []
+        assert finish_calls == []
+        assert daemon._owner_lock is not None
+        assert daemon._thread is leftover
+    finally:
+        daemon._finish_service = original_finish
+        daemon.stop()

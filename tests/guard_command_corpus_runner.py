@@ -26,6 +26,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+from tests.guard_command_corpus_diagnostics import CorpusDiagnosticError, corpus_failure_boundary  # noqa: E402
+
+
 class WorkerReport(TypedDict):
     groups: dict[str, list[str]]
     elapsed: float
@@ -152,14 +155,16 @@ def _decode_worker(stdout: str) -> WorkerReport:
 
 
 def _run_worker(worker_index: int) -> WorkerReport:
-    completed = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=WORKER_TIMEOUT_SECONDS,
-    )
-    return _decode_worker(completed.stdout)
+    with corpus_failure_boundary("worker_process", worker_index):
+        completed = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=WORKER_TIMEOUT_SECONDS,
+        )
+    with corpus_failure_boundary("worker_report", worker_index):
+        return _decode_worker(completed.stdout)
 
 
 def _iter_reports() -> Iterator[WorkerReport]:
@@ -189,10 +194,20 @@ def _coordinator_report() -> dict[str, object]:
     }
 
 
+def _main() -> None:
+    try:
+        if len(sys.argv) == 3 and sys.argv[1] == "--worker":
+            with corpus_failure_boundary("worker_evaluation", int(sys.argv[2])):
+                print(json.dumps(_worker_report(int(sys.argv[2]), EVALUATION_SHARD_COUNT), sort_keys=True))
+        elif len(sys.argv) == 1:
+            with corpus_failure_boundary("coordinator_evaluation"):
+                print(json.dumps(_coordinator_report(), sort_keys=True))
+        else:
+            raise SystemExit("usage: guard_command_corpus_runner.py [--worker INDEX]")
+    except CorpusDiagnosticError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--worker":
-        print(json.dumps(_worker_report(int(sys.argv[2]), EVALUATION_SHARD_COUNT), sort_keys=True))
-    elif len(sys.argv) == 1:
-        print(json.dumps(_coordinator_report(), sort_keys=True))
-    else:
-        raise SystemExit("usage: guard_command_corpus_runner.py [--worker INDEX]")
+    _main()

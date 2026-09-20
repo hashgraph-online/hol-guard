@@ -1,0 +1,151 @@
+{
+  "signingBytesSha256": "ea468cdf398d4340914ec1265f4eddb2bff5530e5004953ec9374380211b33fa",
+  "snapshot": {
+    "config_digest": "461e7371b4e23f68a2e384062faaa021fcc1e7cb8b789c96f6f124a65487cd07",
+    "effective_policy": {
+      "artifact_actions": {},
+      "changed_hash_action": "require-reapproval",
+      "default_action": "warn",
+      "harness_actions": {},
+      "harness_risk_actions": {},
+      "new_network_domain_action": "warn",
+      "protection_posture": "protected",
+      "publisher_actions": {},
+      "receipt_redaction_level": "full",
+      "risk_actions": {
+        "prompt_injection": "block"
+      },
+      "sandbox_analysis": "off",
+      "security_level": "balanced",
+      "subprocess_action": "warn",
+      "unknown_publisher_action": "review"
+    },
+    "expires_at_ms": 2000,
+    "generation": 7,
+    "integrity": {
+      "algorithm": "hmac-sha256",
+      "key_id": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+      "mac": "337f43be503998eb6ab6791c5924de3fa700d8804e05953129d13a4afe60d90e"
+    },
+    "issued_at_ms": 1000,
+    "mode": "enforce",
+    "policy_digest": "4429a5b456e8039de82201539d0f9e8234ef574589bf131943d7e98023e7cb95",
+    "protocol_version": 1,
+    "rule_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schema": "hol-guard-native-policy.v4",
+    "scope_contract": {
+      "kind": "guard-home",
+      "schema": "guard-native-scope.v1",
+      "scope_digest": "f7c27df8ce7ad72369e1b134ef2aa93fb87b8febe712a760dffdaddde6d6f5a8",
+      "workspace_binding": "request-source"
+    },
+    "scoped_authority": {
+      "generic_precedence": "specificity-recency.v1",
+      "managed": {
+        "catalog_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "controls": [
+          {
+            "state": "disabled",
+            "target_id": "command.synthetic.permission.read",
+            "target_kind": "permission"
+          }
+        ],
+        "global_lockdown": false,
+        "managed_revision": 8,
+        "revision": 4
+      },
+      "managed_config": {
+        "default_action_present": false,
+        "effective_policy": {
+          "artifact_actions": {},
+          "changed_hash_action": "allow",
+          "default_action": "allow",
+          "harness_actions": {},
+          "harness_risk_actions": {},
+          "new_network_domain_action": "allow",
+          "protection_posture": "protected",
+          "publisher_actions": {},
+          "receipt_redaction_level": "none",
+          "risk_actions": {
+            "cloud_advisory": "allow",
+            "credential_exfiltration": "allow",
+            "data_flow_exfiltration": "allow",
+            "destructive_shell": "allow",
+            "encoded_execution": "allow",
+            "encoded_exfiltration": "allow",
+            "execution": "allow",
+            "guard_bypass": "allow",
+            "local_secret_read": "block",
+            "malicious_skill": "allow",
+            "mcp_dangerous_tool": "allow",
+            "network_egress": "allow",
+            "package_script": "allow",
+            "persistence": "allow",
+            "policy_bypass": "allow",
+            "prompt_injection": "allow",
+            "supply_chain": "allow"
+          },
+          "sandbox_analysis": "off",
+          "security_level": "custom",
+          "subprocess_action": "allow",
+          "unknown_publisher_action": "allow"
+        },
+        "mode": "enforce",
+        "schema": "guard-native-managed-config.v1",
+        "source_digest": "8483ec1fc570651db6c1877a2d9e20b13404239a7862d1d610d4849bc56c05eb"
+      },
+      "rows": [
+        {
+          "action": "block",
+          "artifact_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "artifact_id": "synthetic-artifact",
+          "decision_id": 1,
+          "exact_command_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "expires_at_ms": 1789689600000,
+          "harness": "codex",
+          "publisher": null,
+          "requires_exact_context": false,
+          "scope": "workspace",
+          "source_kind": "signed-bundle",
+          "updated_at_us": 1789603200000123,
+          "workspace": "synthetic-workspace-\u03b1"
+        },
+        {
+          "action": "review",
+          "artifact_hash": "runtime-exact:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "artifact_id": "family:tool-action",
+          "decision_id": 2,
+          "exact_command_sha256": null,
+          "expires_at_ms": null,
+          "harness": "codex",
+          "publisher": null,
+          "requires_exact_context": true,
+          "scope": "global",
+          "source_kind": "local",
+          "updated_at_us": 1789603201000000,
+          "workspace": null
+        },
+        {
+          "action": "allow",
+          "artifact_hash": null,
+          "artifact_id": null,
+          "decision_id": 3,
+          "exact_command_sha256": null,
+          "expires_at_ms": null,
+          "harness": "*",
+          "publisher": "synthetic-publisher",
+          "requires_exact_context": false,
+          "scope": "publisher",
+          "source_kind": "signed-memory",
+          "updated_at_us": 1789603202000000,
+          "workspace": null
+        }
+      ],
+      "schema": "guard-native-policy-authority.v1"
+    },
+    "source_input_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "version": 4
+  },
+  "verifierKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+}

@@ -2,11 +2,16 @@
 
 mod approval;
 mod edge;
+mod edge_v4;
 mod hardening;
 mod managed_resident;
 mod native_hook_receipt;
 mod oneshot;
 mod policy_enforcement;
+mod policy_scoped_enforcement;
+mod policy_scoped_managed;
+mod policy_scoped_request;
+mod policy_scoped_sensitive_read;
 mod policy_store;
 mod resident_client;
 mod resident_process_identity;
@@ -168,7 +173,14 @@ fn run() -> Result<(), String> {
                 && flag == "--stdin" =>
         {
             let bytes = read_stdin_bounded()?;
-            let timeout = managed_resident::client_timeout(&bytes);
+            let timeout = match managed_resident::client_timeout(&bytes) {
+                Ok(timeout) => timeout,
+                Err(error) => {
+                    return write_bytes_response(&resident_protocol::safe_error_response(
+                        &error, false,
+                    ));
+                }
+            };
             let response = managed_resident::client_request(
                 std::path::Path::new(state_dir),
                 &bytes,

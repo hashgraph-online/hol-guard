@@ -10,11 +10,12 @@ import os
 import platform
 import plistlib
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Literal, cast
 
-from ..action_lattice import is_guard_action, most_restrictive_guard_action, normalize_guard_action
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     InstallOwner,
@@ -28,9 +29,18 @@ from .contracts import (
     default_machine_paths,
 )
 from .managed_file_trust import posix_path_is_root_owned_and_restricted
+from .policy_composition import (
+    _compose_managed_value,
+    _is_action_setting_path,
+)
+from .policy_composition import (
+    _merge_strongest_actions as _merge_strongest_actions,
+)
+from .policy_composition import (
+    _strongest_security_value as _strongest_security_value,
+)
 
 _MAX_POLICY_BYTES = 1024 * 1024
-_MODE_STRENGTH = {"observe": 0, "prompt": 1, "enforce": 2}
 _TOP_LEVEL_KEYS = {
     "schemaVersion",
     "settings",
@@ -43,6 +53,24 @@ _TOP_LEVEL_KEYS = {
     "integrityTrust",
 }
 _NETWORK_KEYS = {"proxyMode", "proxyUrl", "caBundlePath", "allowPublicRegistries"}
+_CACHE_UPDATES_ENABLED: ContextVar[bool] = ContextVar("managed_policy_cache_updates_enabled", default=True)
+
+
+@contextmanager
+def managed_policy_cache_read_only() -> Iterator[None]:
+    """Authenticate normal machine authority without refreshing its cache.
+
+    Observation includes indirect signing-key and configuration readers. This
+    task-local scope preserves those reads and trust checks while preventing a
+    cache rewrite from invalidating the observer's own source fingerprint.
+    Publisher and synchronization callers outside the scope keep their normal
+    cache behavior, including after an exception or a nested observation.
+    """
+    token = _CACHE_UPDATES_ENABLED.set(False)
+    try:
+        yield
+    finally:
+        _CACHE_UPDATES_ENABLED.reset(token)
 
 
 class ManagedPolicyError(ValueError):
@@ -383,7 +411,7 @@ def load_managed_policy(
                 )
             payload = _read_policy_file(native_path)
         policy = parse_managed_policy(payload)
-        if policy_path is None and write_cache:
+        if policy_path is None and write_cache and _CACHE_UPDATES_ENABLED.get():
             _write_policy_cache(payload, resolved_system)
         return ManagedPolicyState("active", source, policy=policy)
     except PermissionError:
@@ -420,44 +448,6 @@ def _set_path(payload: dict[str, object], path: str, value: object) -> None:
     current[parts[-1]] = value
 
 
-def _merge_strongest_actions(local: object, managed: object) -> object:
-    if isinstance(managed, dict):
-        merged = dict(local) if isinstance(local, dict) else {}
-        for key, value in managed.items():
-            merged[key] = _merge_strongest_actions(merged.get(key), value)
-        return merged
-    if local is None:
-        return normalize_guard_action(managed, unknown_action="block")
-    if managed is None:
-        return normalize_guard_action(local, unknown_action="block")
-    return most_restrictive_guard_action(local, managed, unknown_action="block")
-
-
-def _strongest_security_value(local: object, managed: object) -> object:
-    if isinstance(local, str) and isinstance(managed, str):
-        if is_guard_action(local) or is_guard_action(managed):
-            return most_restrictive_guard_action(local, managed, unknown_action="block")
-        if local in _MODE_STRENGTH and managed in _MODE_STRENGTH:
-            return max((local, managed), key=_MODE_STRENGTH.__getitem__)
-    return managed
-
-
-def _is_action_setting_path(path: str) -> bool:
-    parts = tuple(path.split("."))
-    return any(part == "actions" or part.endswith(("_actions", "Actions")) for part in parts) or parts[-1].endswith(
-        ("_action", "Action")
-    )
-
-
-def _compose_managed_value(local: object, managed: object) -> object:
-    if isinstance(local, dict) and isinstance(managed, dict):
-        composed = dict(local)
-        for key, managed_value in managed.items():
-            composed[key] = _compose_managed_value(composed.get(key), managed_value)
-        return composed
-    return _strongest_security_value(local, managed)
-
-
 def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPolicy) -> dict[str, object]:
     """Compose local configuration without allowing a managed requirement to weaken."""
 
@@ -465,9 +455,9 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
     for key, managed_value in policy.settings.items():
         local_value = composed.get(key)
         if _is_action_setting_path(key):
-            composed[key] = _merge_strongest_actions(local_value, managed_value)
+            composed[key] = _merge_strongest_actions(local_value, managed_value, setting_path=(key,))
         elif key in composed:
-            composed[key] = _compose_managed_value(local_value, managed_value)
+            composed[key] = _compose_managed_value(local_value, managed_value, setting_path=(key,))
         else:
             composed[key] = managed_value
     for setting_path in policy.locked_settings:
@@ -475,9 +465,9 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
         if managed_value is not _MISSING:
             local_value = _get_path(composed, setting_path)
             strongest_value = (
-                _merge_strongest_actions(local_value, managed_value)
+                _merge_strongest_actions(local_value, managed_value, setting_path=tuple(setting_path.split(".")))
                 if _is_action_setting_path(setting_path)
-                else _strongest_security_value(local_value, managed_value)
+                else _compose_managed_value(local_value, managed_value, setting_path=tuple(setting_path.split(".")))
             )
             _set_path(composed, setting_path, strongest_value)
     return composed

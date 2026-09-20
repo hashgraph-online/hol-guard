@@ -42,6 +42,11 @@ def _configure_guard_policy_parsers(
 
     policy_validate_parser = policy_subparsers.add_parser("validate", help="Validate a policy document")
     policy_validate_parser.add_argument("file")
+    policy_validate_parser.add_argument(
+        "--runtime-lane",
+        choices=("generic-local-sqlite", "native-intrinsic", "native-scoped-v4"),
+        help="Check complete rule representation for one lane without asserting active enforcement",
+    )
     _add_guard_common_args(policy_validate_parser)
     policy_validate_parser.add_argument("--json", action="store_true")
 

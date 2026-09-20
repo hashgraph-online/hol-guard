@@ -10,6 +10,7 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
+from ..store_review_remote_checkpoint import apply_review_remote_checkpoint
 from .cloud_review_batching import (
     CloudReviewBatchLimits,
     CloudReviewEventTooLargeError,
@@ -307,6 +308,9 @@ def sync_cloud_review_events_once(
                 continue
             try:
                 response, auth_context = _post_events_with_oauth_refresh(store, auth_context, events)
+                settled_through = apply_review_remote_checkpoint(
+                    store, acknowledged_through=response.get("acknowledgedThrough"), binding=delivery_binding
+                )
             except Exception as error:
                 store.retry_review_events(
                     sequences,
@@ -347,7 +351,11 @@ def sync_cloud_review_events_once(
                     ):
                         valid_results = False
                         break
-                    if item["accepted"] or _is_terminally_superseded_result(item):
+                    if (
+                        sequences[index] <= settled_through
+                        or item["accepted"]
+                        or _is_terminally_superseded_result(item)
+                    ):
                         acknowledged_sequences.append(sequences[index])
                     else:
                         retry_sequences.append(sequences[index])

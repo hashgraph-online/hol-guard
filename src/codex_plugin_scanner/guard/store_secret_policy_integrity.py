@@ -11,6 +11,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_policy_rows import policy_row_payload
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -420,9 +421,17 @@ class StoreSecretPolicyIntegrityMixin:
             return "unavailable"
         return _secret_store_backend_name(secret_store)
 
-    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+    def _policy_integrity_secret_material(
+        self, *, create: bool, connection: sqlite3.Connection | None = None
+    ) -> tuple[bytes | None, str | None]:
+        if connection is not None and connection.in_transaction:
+            raise RuntimeError("Policy integrity observations require an autocommit connection.")
         cached = self._cached_policy_integrity_secret_material
-        marker = self._policy_integrity_cache_marker()
+        marker = (
+            self._policy_integrity_cache_marker()
+            if connection is None
+            else self._load_policy_integrity_state_cache_marker(connection)
+        )
         now = time.monotonic()
         if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
             return cached[2]
@@ -487,9 +496,17 @@ class StoreSecretPolicyIntegrityMixin:
             "version": version,
         }
 
-    def _load_policy_integrity_control_state(self, *, create: bool) -> dict[str, object] | None:
+    def _load_policy_integrity_control_state(
+        self, *, create: bool, connection: sqlite3.Connection | None = None
+    ) -> dict[str, object] | None:
+        if connection is not None and connection.in_transaction:
+            raise RuntimeError("Policy integrity observations require an autocommit connection.")
         cached = self._cached_policy_integrity_control_state
-        marker = self._policy_integrity_cache_marker()
+        marker = (
+            self._policy_integrity_cache_marker()
+            if connection is None
+            else self._load_policy_integrity_state_cache_marker(connection)
+        )
         now = time.monotonic()
         if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
             return dict(cached[2])
@@ -1121,44 +1138,7 @@ class StoreSecretPolicyIntegrityMixin:
             trusted_generation=trusted_generation,
         )
 
-    @staticmethod
-    def _policy_row_payload(
-        row: sqlite3.Row,
-        *,
-        integrity_result: PolicyIntegrityVerificationResult | None = None,
-        state: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        source = str(row["source"])
-        payload: dict[str, object] = {
-            "action": str(row["action"]),
-            "artifact_hash": row["artifact_hash"],
-            "artifact_id": row["artifact_id"],
-            "decision_id": int(row["decision_id"]) if row["decision_id"] is not None else None,
-            "expires_at": row["expires_at"],
-            "harness": str(row["harness"]),
-            "owner": row["owner"],
-            "publisher": row["publisher"],
-            "reason": row["reason"],
-            "scope": str(row["scope"]),
-            "source": source,
-            "updated_at": str(row["updated_at"]),
-            "workspace": row["workspace"],
-        }
-        if integrity_result is not None and not is_remote_policy_source(source):
-            payload["integrity_status"] = integrity_result.status
-            payload["integrity_message"] = integrity_result.message
-        if state is not None and not is_remote_policy_source(source):
-            payload["integrity_mode"] = state.get("mode")
-            payload["integrity_enforcement"] = state.get("enforcement")
-        if row["integrity_version"] is not None:
-            payload["integrity_version"] = int(row["integrity_version"])
-        if row["integrity_generation"] is not None:
-            payload["integrity_generation"] = int(row["integrity_generation"])
-        if row["integrity_key_id"] is not None:
-            payload["integrity_key_id"] = str(row["integrity_key_id"])
-        if row["signed_at"] is not None:
-            payload["signed_at"] = str(row["signed_at"])
-        return payload
+    _policy_row_payload = staticmethod(policy_row_payload)
 
     def _repair_store_permissions(self) -> None:
         _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)

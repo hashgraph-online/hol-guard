@@ -285,6 +285,7 @@ def test_verified_reader_retains_independent_protected_revision_floors(
     store = GuardStore(tmp_path)
     monkeypatch.setattr(binding_module, "load_native_command_program_metadata", _metadata)
     current = _view()
+    monkeypatch.setattr(store, "_read_unenrolled_extension_control_authority", lambda _registry: None)
     monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: current)
     first, runtime = read_native_command_control_binding(store)
     for candidate in [replace(current, revision=2), replace(current, managed_revision=6), replace(current, layers=())]:

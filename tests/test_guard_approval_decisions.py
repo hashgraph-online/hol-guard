@@ -175,10 +175,19 @@ def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
     def fail_refresh(*_args, **_kwargs):
         raise AssertionError("policy integrity refresh should not run for remote-only policy lookups")
 
+    original_secret_material = store._policy_integrity_secret_material
+    key_reads: list[bool] = []
+
+    def read_existing_materialization_key(*, create: bool):
+        assert create is False
+        key_reads.append(create)
+        return original_secret_material(create=False)
+
     monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", read_existing_materialization_key)
 
     assert store.resolve_policy("codex", artifact_id, artifact_hash) == "allow"
+    assert key_reads
 
 
 @pytest.mark.parametrize("policy_action", ["allow", "block"])

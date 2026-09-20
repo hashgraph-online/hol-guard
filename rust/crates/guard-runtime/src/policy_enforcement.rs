@@ -24,16 +24,26 @@ use serde_json::Value;
 mod policy_enforcement_facts;
 #[path = "policy_enforcement_policy.rs"]
 mod policy_enforcement_policy;
+#[path = "policy_generic_configuration.rs"]
+mod policy_generic_configuration;
+pub(crate) use policy_generic_configuration::generic_command_configuration;
+#[path = "policy_sensitive_configuration.rs"]
+mod policy_sensitive_configuration;
+pub(crate) use policy_sensitive_configuration::sensitive_read_configuration_with_origin;
 
 use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
     PolicyFacts, PATH_KEYS,
 };
-use policy_enforcement_policy::{policy_map_action, CompiledEffectivePolicy};
+pub(crate) use policy_enforcement_policy::configured_pre_tool_policy_action;
+pub(crate) use policy_enforcement_policy::CompiledEffectivePolicy;
+use policy_enforcement_policy::{policy_map_action, policy_override_reason};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
-pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
+pub(crate) use policy_enforcement_admission::{
+    AdmittedPolicySnapshot, AdmittedScopedPolicySnapshot,
+};
 
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
@@ -242,57 +252,39 @@ fn policy_floor(
     Ok(floor)
 }
 
-fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
-    match action {
-        "block" => (
-            "native_policy_block",
-            "HOL Guard blocked this hook action under the installed native policy.",
-        ),
-        "sandbox-required" => (
-            "native_policy_sandbox_required",
-            "HOL Guard requires sandbox enforcement under the installed native policy.",
-        ),
-        "require-reapproval" => (
-            "native_policy_reapproval_required",
-            "HOL Guard requires fresh approval under the installed native policy.",
-        ),
-        "review" => (
-            "native_policy_review_required",
-            "HOL Guard requires review under the installed native policy.",
-        ),
-        _ => (
-            "native_policy_warning",
-            "HOL Guard raised this action under the installed native policy.",
-        ),
-    }
-}
-
 /// Apply the authenticated policy to a generic native PreTool result.
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
     result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
+    apply_pre_tool_defaults(
+        &snapshot.effective_policy,
+        &snapshot.compiled,
+        &snapshot.mode,
+        payload,
+        result,
+    )
+}
+
+/// Reused only after the caller has authenticated its complete snapshot.
+pub(crate) fn apply_pre_tool_defaults(
+    policy: &EffectiveNativePolicyV3,
+    compiled: &CompiledEffectivePolicy,
+    mode: &str,
+    payload: &Value,
+    result: PreToolResultV1,
+) -> Result<PreToolResultV1, String> {
+    if !matches!(mode, "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
     validate_pre_tool_result_matrix(&result)?;
-    let harness = normalized_harness(&result.action.harness);
-    let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
-    facts.sensitive_target |= result.action.sensitive_target;
-    let policy_floor = policy_floor(
-        &snapshot.effective_policy,
-        &snapshot.compiled,
-        &harness,
-        result.action.action_type,
-        &facts,
-        &result.reason_code,
-    )?;
+    let policy_floor = configured_pre_tool_policy_action(policy, compiled, payload, &result)?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;
     let policy_raised = action_rank(&effective) > action_rank(&result.minimum_action);
     let mut output = result;
 
-    if snapshot.mode == "observe" {
+    if mode == "observe" {
         // Observe suppresses only an escalation introduced by the installed
         // policy. Every intrinsic review, reapproval, sandbox, block, and
         // malformed/unknown result remains authoritative. A native block
@@ -390,9 +382,28 @@ pub(crate) fn apply_post_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
+    response: HookReviewResponseV1,
+) -> Result<HookReviewResponseV1, String> {
+    apply_post_tool_defaults(
+        &snapshot.effective_policy,
+        &snapshot.compiled,
+        &snapshot.mode,
+        request,
+        payload_kind,
+        response,
+    )
+}
+
+/// Reused only after the caller has authenticated its complete snapshot.
+pub(crate) fn apply_post_tool_defaults(
+    policy: &EffectiveNativePolicyV3,
+    compiled: &CompiledEffectivePolicy,
+    mode: &str,
+    request: &NativeHookRequestV1,
+    payload_kind: GuardHookPayloadKindV2,
     mut response: HookReviewResponseV1,
 ) -> Result<HookReviewResponseV1, String> {
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
+    if !matches!(mode, "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
     let action_type = post_action_type(request, payload_kind)?;
@@ -413,8 +424,8 @@ pub(crate) fn apply_post_tool_policy(
     }
     let facts = payload_facts(&request.payload, action_type, &response.reason_code)?;
     let floor = policy_floor(
-        &snapshot.effective_policy,
-        &snapshot.compiled,
+        policy,
+        compiled,
         &normalized_harness(&request.harness),
         action_type,
         &facts,
@@ -422,10 +433,10 @@ pub(crate) fn apply_post_tool_policy(
     )?;
     let effective = join_action(&intrinsic, &floor)?;
     response.policy_action = Some(effective.clone());
-    if snapshot.mode == "observe" && intrinsic != "block" {
+    if mode == "observe" && intrinsic != "block" {
         return Ok(response);
     }
-    if snapshot.mode == "observe" && intrinsic == "block" && response.decision == "allow" {
+    if mode == "observe" && intrinsic == "block" && response.decision == "allow" {
         // Observe suppresses policy-only floors, but it cannot turn an
         // intrinsic native source/content block into an allow.
         let mut denied = HookReviewResponseV1::deny(

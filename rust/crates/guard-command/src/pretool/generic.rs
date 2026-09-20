@@ -317,9 +317,45 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
 ) -> PreToolResultV1 {
+    let (result, context) = prepare_pre_tool(harness, event, payload);
+    apply_extensions(result, context, controls, deadline)
+}
+
+/// Compose authenticated scoped policy before joining independent extension
+/// floors. Extraction and command parsing happen once, under the same deadline.
+/// A scoped allow can satisfy a fallback review but cannot erase a command floor.
+pub fn evaluate_pre_tool_envelope_with_composition<F, T>(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    compose: F,
+) -> Result<(PreToolResultV1, T), String>
+where
+    F: FnOnce(PreToolResultV1) -> Result<(PreToolResultV1, T), String>,
+{
+    let (intrinsic, context) = prepare_pre_tool(harness, event, payload);
+    let (result, metadata) = compose(intrinsic)?;
+    Ok((
+        apply_extensions(result, context, controls, deadline),
+        metadata,
+    ))
+}
+
+struct ExtensionContext {
+    signals: GenericSignals,
+    command: Option<CanonicalCommandV1>,
+}
+
+fn prepare_pre_tool(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+) -> (PreToolResultV1, Option<ExtensionContext>) {
     let signals = match extract_generic_signals(payload) {
         Ok(value) => value,
-        Err(error) => return generic_error_result(harness, event, error),
+        Err(error) => return (generic_error_result(harness, event, error), None),
     };
     let command_decision = signals.command.as_deref().map(|command| {
         evaluate_pre_tool(&CommandModelRequestV1 {
@@ -330,19 +366,24 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
         })
     });
     let result = evaluate_signals(harness, event, &signals, command_decision.as_ref());
-    match (controls, command_decision) {
-        (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
-            Some(&decision.command_model),
+    let command = command_decision
+        .and_then(Result::ok)
+        .map(|value| value.command_model);
+    (result, Some(ExtensionContext { signals, command }))
+}
+
+fn apply_extensions(
+    result: PreToolResultV1,
+    context: Option<ExtensionContext>,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+) -> PreToolResultV1 {
+    match (controls, context) {
+        (Some(controls), Some(context)) => controls.apply_with_tool(
+            context.command.as_ref(),
             result,
-            signals.tool_name.as_deref(),
-            &signals.package_values,
-            deadline,
-        ),
-        (Some(controls), _) => controls.apply_with_tool(
-            None,
-            result,
-            signals.tool_name.as_deref(),
-            &signals.package_values,
+            context.signals.tool_name.as_deref(),
+            &context.signals.package_values,
             deadline,
         ),
         _ => result,

@@ -1,5 +1,6 @@
 use super::approval_replay_memory::ApprovalReplayBinding;
 use super::{ACTION_IDENTITY_MAX_BYTES, APPROVAL_RUNTIME_PACKAGE, APPROVAL_RUNTIME_VERSION};
+use crate::policy_store::AuthenticatedPolicySnapshot;
 use guard_contracts::{
     GuardHookEdgeResultV2, NativeActionIdentityV3, NativeApprovalFloorClassV3, PreToolActionTypeV1,
     PreToolOperationV1, NATIVE_ACTION_IDENTITY_V3_SCHEMA, NATIVE_APPROVAL_CHALLENGE_V3_SCHEMA,
@@ -7,6 +8,10 @@ use guard_contracts::{
     NATIVE_APPROVAL_MAX_STRING_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_policy_snapshot::{canonical_json_bytes, digest_bytes};
+
+#[path = "approval_context_scoped.rs"]
+mod scoped;
+pub(super) use scoped::derive_context_with_versioned_snapshot;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -23,6 +28,7 @@ pub(super) struct ApprovalContext {
     pub(super) minimum_action: String,
     pub(super) policy_generation: u64,
     pub(super) policy_digest: String,
+    pub(super) source_input_digest: Option<String>,
     pub(super) rule_digest: String,
     pub(super) runtime_identity: String,
     pub(super) harness: String,
@@ -256,11 +262,31 @@ pub(super) fn derive_context_with_snapshot(
     }
     let result: guard_contracts::PreToolResultV1 = serde_json::from_value(edge_result.result)
         .map_err(|_| "native_approval_result_invalid".to_owned())?;
+    context_from_result(
+        envelope,
+        store,
+        &AuthenticatedPolicySnapshot::V3(snapshot.snapshot().clone()),
+        request_id,
+        request_digest,
+        edge_result.harness,
+        result,
+    )
+}
+
+fn context_from_result(
+    envelope: &guard_contracts::GuardHookEnvelopeV2,
+    store: &crate::policy_store::PolicySnapshotStore,
+    snapshot: &AuthenticatedPolicySnapshot,
+    request_id: String,
+    request_digest: String,
+    harness: String,
+    result: guard_contracts::PreToolResultV1,
+) -> Result<ApprovalContext, String> {
     crate::policy_enforcement::validate_pre_tool_result_matrix(&result)
         .map_err(|_| "native_approval_action_reconstruction_failed".to_owned())?;
     let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope(
-        &edge_result.harness,
-        &edge_result.event_name,
+        &harness,
+        "PreToolUse",
         &envelope.raw_payload,
     );
     if result.action != intrinsic.action
@@ -292,7 +318,7 @@ pub(super) fn derive_context_with_snapshot(
     let scope_binding = binding_digest(
         "scope",
         &[
-            snapshot.scope_contract.scope_digest.as_str(),
+            snapshot.scope_contract().scope_digest.as_str(),
             workspace_binding.as_str(),
         ],
     )?;
@@ -334,18 +360,19 @@ pub(super) fn derive_context_with_snapshot(
         operation: result.action.operation,
         intrinsic_action: intrinsic.minimum_action,
         minimum_action: result.minimum_action,
-        policy_generation: snapshot.generation,
-        policy_digest: snapshot.policy_digest.clone(),
-        rule_digest: snapshot.rule_digest.clone(),
-        runtime_identity: snapshot.runtime_identity.clone(),
-        harness: edge_result.harness,
+        policy_generation: *snapshot.generation(),
+        policy_digest: snapshot.policy_digest().clone(),
+        source_input_digest: snapshot.source_input_digest().map(str::to_owned),
+        rule_digest: snapshot.rule_digest().clone(),
+        runtime_identity: snapshot.runtime_identity().clone(),
+        harness,
         workspace_binding: Some(workspace_binding),
         device_binding: Some(device_binding),
         installation_binding: Some(installation_binding),
         publisher_binding,
         artifact_binding,
-        scope_contract_version: snapshot.scope_contract.schema.clone(),
-        scope_contract_digest: snapshot.scope_contract.scope_digest.clone(),
+        scope_contract_version: snapshot.scope_contract().schema.clone(),
+        scope_contract_digest: snapshot.scope_contract().scope_digest.clone(),
         scope_binding: Some(scope_binding),
         action_identity,
     })

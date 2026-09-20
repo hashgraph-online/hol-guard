@@ -184,9 +184,12 @@ def _is_today(value: object, today: str) -> bool:
 
 
 def _cloud_projection(status_payload: dict[str, object]) -> dict[str, object]:
-    state = _text(status_payload.get("cloud_state")) or "local_only"
+    state = _text(status_payload.get("cloud_state"))
     last_sync = _text(status_payload.get("last_sync_at"))
-    if state == "local_only":
+    if state is None:
+        status = "unknown"
+        detail = "Cloud state could not be checked."
+    elif state == "local_only":
         status = "not_connected"
         detail = "Cloud is optional. Local protection remains available without it."
     elif state == "paired_waiting":
@@ -308,6 +311,8 @@ def build_desktop_bootstrap_payload(
     return {
         "schema": DESKTOP_BOOTSTRAP_SCHEMA,
         "coreVersion": core_version,
+        "observedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "statusReadSupported": True,
         "status": desktop_status,
         "runtimeSource": "adopted_running" if runtime_status == "active" else "external",
         "message": message,
@@ -366,8 +371,9 @@ def _run_guard_desktop_command(
         if bool(getattr(args, "alpha", False)):
             argv.append("--alpha")
         return dashboard_update_main(argv)
-    if getattr(args, "desktop_command", None) != "bootstrap":
-        print("Choose desktop bootstrap.", file=sys.stderr)
+    command = getattr(args, "desktop_command", None)
+    if command not in {"bootstrap", "status"}:
+        print("Choose desktop bootstrap or status.", file=sys.stderr)
         return 2
     if context is None or store is None or config is None:
         raise RuntimeError("Guard Desktop bootstrap requires local Guard context")
@@ -375,7 +381,7 @@ def _run_guard_desktop_command(
     resolved_guard_home = guard_home or context.guard_home
     # Start/adopt the matching local runtime before projecting protection.
     # Candidate preflight must not spawn a disposable-home daemon.
-    if desktop_bootstrap_is_preflight():
+    if command == "status" or desktop_bootstrap_is_preflight():
         session_url = None
     else:
         session_url = build_desktop_dashboard_session_url(
@@ -413,8 +419,16 @@ def _run_guard_desktop_command(
         resolved_today_count=resolved_today_count,
         receipt_summary=receipt_summary,
     )
+    from .desktop_policy_status import read_policy_application_evidence
+
+    cloud = payload.get("cloud")
+    if isinstance(cloud, dict):
+        cloud.update(read_policy_application_evidence(store))
     dashboard = payload.get("dashboard")
+    daemon = payload.get("daemon")
     if isinstance(dashboard, dict):
+        if command == "status" and isinstance(daemon, dict):
+            dashboard["available"] = bool(daemon.get("running"))
         if session_url is not None:
             dashboard["sessionUrl"] = session_url
         dashboard["canonical"] = True

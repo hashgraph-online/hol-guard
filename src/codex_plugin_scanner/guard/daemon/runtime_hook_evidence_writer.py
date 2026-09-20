@@ -19,6 +19,7 @@ from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
 from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_policy_decision_context import NativePolicyDecisionContext
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
@@ -29,6 +30,7 @@ from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
+from .runtime_hook_evidence_diagnostics import receipt_failure_category
 from .runtime_hook_evidence_journal import (
     _CommandActivityRecord,
     _EvidenceRecord,
@@ -40,13 +42,15 @@ from .runtime_hook_evidence_journal import (
 )
 
 
-def persist_native_decision_receipt(*, store: GuardStore, receipt: Mapping[str, object]) -> bool:
+def persist_native_decision_receipt(
+    *, store: GuardStore, receipt: Mapping[str, object], policy_context: NativePolicyDecisionContext | None = None
+) -> bool:
     """Persist a validated receipt through the control-plane store only."""
 
     recorder = getattr(store, "record_native_decision_receipt", None)
     if not callable(recorder):
         raise RuntimeError("native receipt persistence is unavailable")
-    result = recorder(receipt)
+    result = recorder(receipt) if policy_context is None else recorder(receipt, policy_context=policy_context)
     return result is not False
 
 
@@ -66,6 +70,7 @@ class RuntimeHookEvidenceWriterStats(TypedDict):
     receipt_deduped: int
     receipt_dropped: int
     receipt_failures: int
+    receipt_failure_categories: dict[str, int]
     receipt_durable_pending: int
 
 
@@ -94,7 +99,7 @@ class RuntimeHookEvidenceWriter:
         self._condition = threading.Condition()
         self._records: deque[_EvidenceRecord] = deque()
         self._durable: OrderedDict[str, _EvidenceRecord] = OrderedDict()
-        self._receipt_seen: OrderedDict[str, None] = OrderedDict()
+        self._receipt_seen: OrderedDict[str, str] = OrderedDict()
         self._retry_attempts: dict[str, int] = {}
         self._in_flight = False
         self._queued_bytes = 0
@@ -109,6 +114,7 @@ class RuntimeHookEvidenceWriter:
         self._receipt_deduped = 0
         self._receipt_dropped = 0
         self._receipt_failures = 0
+        self._receipt_failure_categories: dict[str, int] = {}
         self._stopping = False
         self._drain_deadline: float | None = None
         self._sqlite_timeout_seconds = 0.05
@@ -182,21 +188,29 @@ class RuntimeHookEvidenceWriter:
             self._condition.notify()
         return True
 
-    def submit_native_decision_receipt(self, receipt: Mapping[str, object]) -> bool:
+    def submit_native_decision_receipt(
+        self, receipt: Mapping[str, object], *, policy_context: NativePolicyDecisionContext | None = None
+    ) -> bool:
         """Queue one Rust receipt without touching SQLite or waiting on I/O."""
 
         validated = validate_native_decision_receipt(receipt)
-        if validated is None:
+        if validated is None or (policy_context is not None and not policy_context.matches_receipt(validated)):
             with self._condition:
                 self._receipt_dropped += 1
                 self._dropped += 1
                 self._degraded = True
             return False
-        record = _NativeDecisionReceiptRecord(receipt=validated, payload_bytes=0)
-        record = _NativeDecisionReceiptRecord(receipt=validated, payload_bytes=len(record.serialized()))
+        record = _NativeDecisionReceiptRecord(receipt=validated, payload_bytes=0, policy_context=policy_context)
+        record = replace(record, payload_bytes=len(record.serialized()))
         receipt_id = record.record_id
+        record_digest = hashlib.sha256(record.serialized()).hexdigest()
         with self._condition:
             if receipt_id in self._receipt_seen:
+                if self._receipt_seen[receipt_id] != record_digest:
+                    self._receipt_dropped += 1
+                    self._dropped += 1
+                    self._degraded = True
+                    return False
                 self._receipt_deduped += 1
                 return True
             if (
@@ -210,7 +224,7 @@ class RuntimeHookEvidenceWriter:
                 return False
             self._records.append(record)
             self._queued_bytes += record.payload_bytes
-            self._receipt_seen[receipt_id] = None
+            self._receipt_seen[receipt_id] = record_digest
             while len(self._receipt_seen) > self._max_records * 4:
                 self._receipt_seen.popitem(last=False)
             self._accepted += 1
@@ -236,6 +250,11 @@ class RuntimeHookEvidenceWriter:
             self._correlation_key = key
             return derive_proven_request_correlation(harness=harness, event=event, payload=payload, key=key)
 
+    def _record_receipt_failure(self, error: Exception) -> None:
+        self._receipt_failures += 1
+        category = receipt_failure_category(error)
+        self._receipt_failure_categories[category] = self._receipt_failure_categories.get(category, 0) + 1
+
     def stats(self) -> RuntimeHookEvidenceWriterStats:
         with self._condition:
             return {
@@ -254,6 +273,7 @@ class RuntimeHookEvidenceWriter:
                 "receipt_deduped": self._receipt_deduped,
                 "receipt_dropped": self._receipt_dropped,
                 "receipt_failures": self._receipt_failures,
+                "receipt_failure_categories": dict(self._receipt_failure_categories),
                 "receipt_durable_pending": sum(
                     isinstance(record, _NativeDecisionReceiptRecord) for record in self._durable.values()
                 ),
@@ -283,13 +303,13 @@ class RuntimeHookEvidenceWriter:
                 if not already_durable:
                     try:
                         self._append_journal(record)
-                    except OSError:
+                    except OSError as error:
                         with self._condition:
                             self._dropped += 1
                             self._failures += 1
                             if isinstance(record, _NativeDecisionReceiptRecord):
                                 self._receipt_dropped += 1
-                                self._receipt_failures += 1
+                                self._record_receipt_failure(error)
                             self._degraded = True
                             self._in_flight = False
                         continue
@@ -310,6 +330,7 @@ class RuntimeHookEvidenceWriter:
                             persisted = persist_native_decision_receipt(
                                 store=self._store,
                                 receipt=record.receipt,
+                                policy_context=record.policy_context,
                             )
                             if not persisted:
                                 raise RuntimeError("native receipt persistence was not acknowledged")
@@ -360,11 +381,11 @@ class RuntimeHookEvidenceWriter:
                                 succeeded=record.succeeded,
                                 invocation_preview=record.invocation_preview,
                             )
-                except Exception:
+                except Exception as error:
                     with self._condition:
                         self._failures += 1
                         if isinstance(record, _NativeDecisionReceiptRecord):
-                            self._receipt_failures += 1
+                            self._record_receipt_failure(error)
                         self._degraded = True
                         if not self._stopping:
                             attempt = self._retry_attempts.get(record.record_id, 0) + 1
@@ -430,7 +451,7 @@ class RuntimeHookEvidenceWriter:
                     self._degraded = True
                     self._failures += 1
                     continue
-                self._receipt_seen[record.record_id] = None
+                self._receipt_seen[record.record_id] = hashlib.sha256(record.serialized()).hexdigest()
             self._durable[record.record_id] = record
             self._records.append(record)
             self._queued_bytes += record.payload_bytes

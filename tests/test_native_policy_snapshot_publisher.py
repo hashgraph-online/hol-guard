@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import ParamSpec, TypeVar
 
 import pytest
 
@@ -24,12 +26,17 @@ from .native_policy_snapshot_test_fixtures import _ack, _config, _status
 # their test functions so the historical test path keeps identical collection.
 __test__ = False
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
 
 def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"k" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls: list[bytes] = []
 
     def client_request(**kwargs: object) -> bytes:
@@ -62,6 +69,8 @@ def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: py
             time.sleep(0.01)
         current = publisher.current_snapshot()
         assert current is not None and current["mode"] == "observe"
+        assert isinstance(current["generation"], int)
+        assert isinstance(first["generation"], int)
         assert current["generation"] > first["generation"]
         assert len(calls) >= 2
     finally:
@@ -74,7 +83,9 @@ def test_publisher_does_not_ack_snapshot_after_concurrent_mutation(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"r" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     entered = threading.Event()
     release = threading.Event()
 
@@ -111,7 +122,9 @@ def test_publisher_repushes_after_resident_generation_change(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"s" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls: list[bytes] = []
 
     def client_request(**kwargs: object) -> bytes:
@@ -149,7 +162,9 @@ def test_publisher_does_not_republish_for_generation_created_by_own_ack(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"v" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
     calls: list[bytes] = []
 
     def client_request(**kwargs: object) -> bytes:
@@ -183,17 +198,23 @@ def test_publisher_rejects_ack_after_resident_restart_before_barrier(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"y" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
-    resident_fingerprints = iter(
-        (
-            (),
-            (("resident-v3-test/generation-00000000000000000001.json", 1, 1),),
-        )
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
     )
+    runtime = guard_home / "native-runtime"
+    runtime.mkdir(mode=0o700)
+    resident_directory = runtime / "resident-v3-test"
+    resident_directory.mkdir(mode=0o700)
+    generation = resident_directory / "generation-00000000000000000001.json"
+    generation.write_text("{}")
+    generation.chmod(0o600)
 
     def client_request(**kwargs: object) -> bytes:
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
+        # The reply belongs to the prior resident. Change actual generation
+        # state during transport so additional source observations remain valid.
+        (resident_directory / "generation-00000000000000000002.json").write_text("{}")
         return _ack(payload, resident_generation=1)
 
     publisher = NativePolicySnapshotPublisher(
@@ -202,12 +223,13 @@ def test_publisher_rejects_ack_after_resident_restart_before_barrier(
         client_request=client_request,
         poll_interval_seconds=0.05,
     )
-    monkeypatch.setattr(publisher, "_current_resident_fingerprint", lambda: next(resident_fingerprints))
     publisher._epoch = 1
     publisher._publish_once()
     try:
         assert not publisher.is_ready()
         assert publisher.current_snapshot() is None
+        assert (resident_directory / "generation-00000000000000000002.json").is_file()
+        assert publisher.last_error == "native_policy_snapshot_resident_changed"
     finally:
         publisher.close()
 
@@ -219,7 +241,9 @@ def test_publisher_rejects_mutated_ack_without_opening_barrier(
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     master = b"t" * 32
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda *, create, connection=None: (master, "master-id")
+    )
 
     def client_request(**kwargs: object) -> bytes:
         payload = kwargs["payload"]
@@ -439,12 +463,15 @@ def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
     build_calls = 0
     original_builder = snapshot_module.build_policy_snapshot_v3
 
-    def counted_builder(**kwargs: object) -> dict[str, object]:
-        nonlocal build_calls
-        build_calls += 1
-        return original_builder(**kwargs)
+    def count_calls(builder: Callable[_P, _R]) -> Callable[_P, _R]:
+        def counted_builder(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            nonlocal build_calls
+            build_calls += 1
+            return builder(*args, **kwargs)
 
-    monkeypatch.setattr(snapshot_module, "build_policy_snapshot_v3", counted_builder)
+        return counted_builder
+
+    monkeypatch.setattr(snapshot_module, "build_policy_snapshot_v3", count_calls(original_builder))
     first = snapshot_module.native_policy_snapshot_v3(
         config=_config(),
         guard_home=guard_home,

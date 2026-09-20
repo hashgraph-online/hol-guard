@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from typing_extensions import NotRequired, TypedDict
 
+from ..oauth_connection_authority import OAuthConnectAttempt, OAuthConnectionSnapshot
 from ..store import GuardStore
 from .oauth_client import GuardDpopKeyMaterial
 
@@ -19,6 +20,8 @@ class OAuthCredentialUpdateParams(TypedDict):
     refresh_token: str
     dpop_key_material: GuardDpopKeyMaterial
     now: str
+    expected_attempt: NotRequired[OAuthConnectAttempt]
+    expected_connection: NotRequired[OAuthConnectionSnapshot]
     grant_id: NotRequired[str | None]
     machine_id: NotRequired[str | None]
     device_id: NotRequired[str | None]
@@ -49,14 +52,16 @@ def persist_oauth_local_credentials(
     runtime_label: str | None = None,
     access_token: str | None = None,
     access_token_expires_at: str | None = None,
+    expected_attempt: OAuthConnectAttempt | None = None,
+    expected_connection: OAuthConnectionSnapshot | None = None,
     reconcile: Callable[[GuardStore], object],
-) -> None:
+) -> OAuthConnectionSnapshot | None:
     entitlement = supply_chain_entitlement if isinstance(supply_chain_entitlement, dict) else {}
     expires_at = entitlement.get("supply_chain_entitlement_expires_at")
     firewall = entitlement.get("supply_chain_firewall")
     plan_id = entitlement.get("supply_chain_plan_id")
     with store.hold_oauth_refresh_lock():
-        store.set_oauth_local_credentials(
+        committed = store.set_oauth_local_credentials(
             issuer=issuer,
             client_id=client_id,
             refresh_token=refresh_token,
@@ -76,8 +81,16 @@ def persist_oauth_local_credentials(
             access_token=access_token,
             access_token_expires_at=access_token_expires_at,
             now=now,
+            expected_attempt=expected_attempt,
+            expected_connection=expected_connection,
         )
-        reconcile(store)
+        with store.hold_oauth_credential_lock():
+            if expected_attempt is not None or expected_connection is not None:
+                if committed is None:
+                    raise RuntimeError("The authorized connection was not captured.")
+                store._require_oauth_connection_unlocked(committed)
+            reconcile(store)
+        return committed
 
 
 __all__ = ["persist_oauth_local_credentials"]

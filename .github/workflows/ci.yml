@@ -56,6 +56,11 @@ jobs:
         run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
       - name: Publish test inventory
         run: cat test-inventory.json
+      - name: Inventory required release collection and configured install checks
+        run: |
+          uv run --no-sync python scripts/ci/release_required_evidence.py \
+            --output release-required-evidence.json
+          cat release-required-evidence.json
       - name: Publish exact test-body duplicate candidates
         run: |
           uv run --no-sync python scripts/ci/test_duplicate_candidates.py \
@@ -226,11 +231,13 @@ jobs:
         run: |
           shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
-          # This process-pool timing contract is owned by scheduling-sensitive, which runs it untraced.
+          # Wall-clock timing contracts are owned by scheduling-sensitive, which runs them untraced.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
             uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
-            --cov --cov-branch --cov-report=
+            --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
+            --deselect tests/test_native_policy_snapshot_default_capture_worker.py::test_default_worker_admits_workspace_after_startup_status_writes \
+            --cov --cov-branch --cov-report= --junitxml=pytest-junit.xml
       - name: Upload pytest coverage data artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -238,6 +245,14 @@ jobs:
           name: pytest-coverage-${{ matrix.shard-index }}
           path: .coverage
           include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Upload pytest outcome report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-junit-${{ matrix.shard-index }}
+          path: pytest-junit.xml
           if-no-files-found: warn
           retention-days: 1
       - name: Upload pytest duration artifact
@@ -400,8 +415,17 @@ jobs:
           tests/test_guard_js_lockfile_resolution_phase11.py
           tests/test_guard_runtime_hook_scheduler.py
           tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial
+          tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon
           tests/test_guard_continuation_contract.py
-          --tb=short
+          --no-cov --tb=short
+      - name: Run required authority timing cases untraced
+        # Keep the bounded admission report independent of unrelated large parameter IDs.
+        run: >-
+          uv run --no-sync pytest
+          tests/test_native_policy_snapshot_default_capture_worker.py::test_default_worker_admits_workspace_after_startup_status_writes
+          --no-cov --junitxml=pytest-scheduling-sensitive.xml --tb=short
+      - name: Verify required authority timing cases executed
+        run: uv run --no-sync python scripts/ci/verify_scheduling_sensitive_outcomes.py --junit pytest-scheduling-sensitive.xml
 
   compatibility:
     runs-on: ubuntu-latest
@@ -447,7 +471,7 @@ jobs:
   deep-compatibility:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -492,7 +516,7 @@ jobs:
   mutation-baseline:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

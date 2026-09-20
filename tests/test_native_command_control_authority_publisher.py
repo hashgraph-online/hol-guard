@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import subprocess
-import threading
 import sys
+import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -80,13 +81,13 @@ def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _marker(home: Path) -> dict:
+def _marker(home: Path) -> dict[str, object]:
     encoded = read_private_state(home, AUTHORITY_FILE_NAME, AUTHORITY_MAX_BYTES)
     assert encoded is not None
     return decode_authority(encoded, KEY)
 
 
-def _persist_native_floor(home: Path, snapshot: dict) -> dict:
+def _persist_native_floor(home: Path, snapshot: dict[str, Any]) -> dict[str, object]:
     binding = snapshot["command_extensions"]
     floor = {
         "revision": binding["revision"],
@@ -145,7 +146,7 @@ import os, pathlib, sys
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.native_command_control_authority_store import begin_native_command_control_mutation
 store = GuardStore(pathlib.Path(sys.argv[1]))
-store._policy_integrity_secret_material = lambda *, create: (b'k' * 32, 'test')
+store._policy_integrity_secret_material = lambda *, create, connection=None: (b'k' * 32, 'test')
 with store._extension_control_authority_lock():
     begin_native_command_control_mutation(store)
     with store._connect() as connection:
@@ -160,7 +161,8 @@ with store._extension_control_authority_lock():
         assert marker["mutation_revision"] > first_authority["mutation_revision"]
         # Foreign processes do not share the in-memory publisher callback.
         # The resident lease/marker protocol must reject this still-old binding.
-        assert publisher.current_snapshot_binding()["generation"] == first["generation"]
+        retained_binding = publisher.current_snapshot_binding()
+        assert retained_binding is not None and retained_binding["generation"] == first["generation"]
         assert store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY).revision == 0
         publisher.request_publish()
         second = _publish_ready(publisher)
@@ -192,10 +194,12 @@ def test_explicit_recovery_links_exact_retained_floor_and_preserves_link_on_muta
         assert closed["phase"] == "closed"
         assert closed["epoch"] > first["command_extensions"]["authority"]["epoch"]
         recovery = closed["recovery"]
+        prior_authority = prior_floor["authority"]
+        assert isinstance(recovery, dict) and isinstance(prior_authority, dict)
         assert recovery["previous_floor_digest"] == floor_link_digest(prior_floor)
-        assert recovery["previous_epoch"] == prior_floor["authority"]["epoch"]
-        assert recovery["previous_mutation_revision"] == prior_floor["authority"]["mutation_revision"]
-        assert recovery["previous_authority_key_id"] == prior_floor["authority"]["authority_key_id"]
+        assert recovery["previous_epoch"] == prior_authority["epoch"]
+        assert recovery["previous_mutation_revision"] == prior_authority["mutation_revision"]
+        assert recovery["previous_authority_key_id"] == prior_authority["authority_key_id"]
         published = _publish_ready(publisher)
         assert published["command_extensions"]["revision"] == 0
         assert published["command_extensions"]["authority"]["recovery"] == recovery
@@ -321,8 +325,9 @@ with hold_command_control_authority_lock(pathlib.Path(sys.argv[1]), shared=True)
             [sys.executable, "-c", script, str(tmp_path)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
         )
         assert process.stdout is not None
+        stdout = process.stdout
         ready: list[str] = []
-        reader = threading.Thread(target=lambda: ready.append(process.stdout.readline()), daemon=True)
+        reader = threading.Thread(target=lambda: ready.append(stdout.readline()), daemon=True)
         reader.start()
         reader.join(10.0)
         assert ready == ["leased\n"], "child never acquired the shared authority lease"

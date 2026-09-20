@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot_publisher as publisher_module
+from codex_plugin_scanner.guard.native_cloud_policy_inputs import NativeCloudPolicyInputs
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -40,12 +41,20 @@ def test_resident_fingerprint_mismatch_enters_bounded_retry_backoff(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda *, publish_epoch=None, prepared_command_extensions=None: (
+            None,
+            None,
+            b"key",
+            {},
+            lambda **_kwargs: b"unused",
+            NativeCloudPolicyInputs(),
+            {},
+        ),
     )
     monkeypatch.setattr(
         publisher_module,
         "_publish_snapshot_v3",
-        lambda **_kwargs: ({}, 2),
+        lambda **_kwargs: ({}, 2, _kwargs["context"][5]),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     try:
@@ -84,10 +93,19 @@ def test_run_loop_backs_off_after_resident_mismatch_at_expired_deadline(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda *, publish_epoch=None, prepared_command_extensions=None: (
+            None,
+            None,
+            b"key",
+            {},
+            lambda **_kwargs: b"unused",
+            NativeCloudPolicyInputs(),
+            {},
+        ),
     )
+    monkeypatch.setattr(publisher_module, "_publish_snapshot_v3", lambda **_kwargs: ({}, 2, _kwargs["context"][5]))
+
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
-    monkeypatch.setattr(publisher_module, "_publish_snapshot_v3", lambda **_kwargs: ({}, 2))
 
     class StopAfterResidentRetry:
         def __init__(self) -> None:
@@ -285,8 +303,8 @@ def test_config_change_revokes_readiness_before_compilation_and_preserves_retry(
         wall_clock=clock.wall_time,
         monotonic_clock=clock.monotonic_time,
     )
-    enforce_policy = {"mode": "enforce", "blocked_capabilities": ["network"]}
-    config_policy = {"mode": config_mode, "blocked_capabilities": ["network"]}
+    enforce_policy: dict[str, object] = {"mode": "enforce", "blocked_capabilities": ["network"]}
+    config_policy: dict[str, object] = {"mode": config_mode, "blocked_capabilities": ["network"]}
     database_change = {str(publisher.guard_home / "guard.db-wal")}
     config_change = {str(publisher.guard_home / "config.toml")}
     policies = iter((enforce_policy, config_policy, config_policy))
@@ -330,9 +348,14 @@ def test_invalid_policy_observation_then_valid_recovery_rearms_publication(
         client_request=lambda **_kwargs: b"unused",
         poll_interval_seconds=0.05,
     )
-    policy = {"mode": "enforce", "blocked_capabilities": ["network"]}
+    policy: dict[str, object] = {"mode": "enforce", "blocked_capabilities": ["network"]}
     database_change = {str(publisher.guard_home / "guard.db-wal")}
-    observations: list[object] = [OSError("invalid policy"), OSError("invalid policy"), policy, policy]
+    observations: list[BaseException | dict[str, object]] = [
+        OSError("invalid policy"),
+        OSError("invalid policy"),
+        policy,
+        policy,
+    ]
 
     def observe_policy() -> dict[str, object]:
         observation = observations.pop(0)

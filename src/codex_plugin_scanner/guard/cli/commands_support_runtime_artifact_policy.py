@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 
 from ..action_lattice import coerce_guard_action, most_restrictive_guard_action, normalize_guard_action
 from ..config import GuardConfig, resolve_risk_action
+from ..config_action_resolution import managed_runtime_floor, resolve_configured_risk_action
 from ..models import GuardAction, GuardArtifact
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION
 from .commands_support_prompts import _prompt_requires_hard_block
@@ -22,12 +23,7 @@ def _resolve_harness_risk_action(config: GuardConfig, risk_class: str, *, harnes
 
 
 def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
-    harness_action = _resolve_harness_risk_action(config, risk_class, harness=harness)
-    if harness_action is not None:
-        return harness_action
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return None
+    return resolve_configured_risk_action(config, risk_class, harness=harness)
 
 
 def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
@@ -106,7 +102,14 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         effective_command_floor = (
             None if action == "sandbox-required" and pytest_restricted_sandbox else command_action_floor
         )
-        actions = (action, current_config_action, effective_command_floor)
+        managed_floor = managed_runtime_floor(
+            config,
+            harness=canonical_harness,
+            artifact_id=artifact.artifact_id,
+            publisher=artifact.publisher,
+            risk_classes=_runtime_artifact_risk_classes(artifact),
+        )
+        actions = (action, current_config_action, effective_command_floor, managed_floor)
         return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
     risk_classes = _runtime_artifact_risk_classes(artifact)

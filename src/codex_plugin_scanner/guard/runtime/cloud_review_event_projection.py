@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from ..continuation_runtime import continuation_offer_payload
@@ -15,10 +16,13 @@ from ..review_contracts import (
     GuardReviewOAuthMetadata,
     build_local_review_request_claim,  # pyright: ignore[reportUnknownVariableType]
 )
+from ..review_event_integrity import review_event_payload_digest
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
 from .local_request_snapshots import (
+    _bounded_cloud_value,
     _cloud_safe_local_request_payload,  # pyright: ignore[reportPrivateUsage]
+    _cloud_scrub_text,
 )
 from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
 from .review_event_display import build_display_command, resolve_display_provenance
@@ -165,24 +169,65 @@ def project_cloud_review_event(
         _ = store.quarantine_review_event(
             sequence,
             reason=error.reason,
-            error=str(error),
+            error=_cloud_scrub_text(str(error)),
             **delivery_binding,
         )
         return None
+    payload_json = _cloud_safe_event_payload_json(stored_event.payload_json, redaction_level=redaction_level)
     event.update(
         {
             "eventId": stored_event.event_id,
             "eventSchemaVersion": REVIEW_EVENT_SCHEMA_VERSION,
             "eventType": stored_event.wire_event_type,
-            "eventPayloadJson": stored_event.payload_json,
+            "eventPayloadJson": payload_json,
             "localEventSequence": stored_event.request_sequence,
             "localStreamSequence": stored_event.stream_sequence,
-            "payloadHash": stored_event.payload_hash,
+            "payloadHash": review_event_payload_digest(
+                payload_json, oauth_source=outbox_row.get("oauth_source"), **delivery_binding
+            ),
         }
     )
     if terminal_projection is not None:
         terminal_result, terminal_capability, terminal_completed_at = terminal_projection
-        event["continuationResult"] = terminal_result
+        event["continuationResult"] = _bounded_cloud_value(terminal_result)
         event["continuationCapability"] = terminal_capability
         event["localUpdatedAt"] = terminal_completed_at
     return sequence, event
+
+
+def _cloud_safe_event_payload_json(payload_json: object, *, redaction_level: str) -> str:
+    """Reproject a stored outbox payload so retries never send a less-redacted snapshot."""
+
+    if not isinstance(payload_json, str) or not payload_json:
+        return "{}"
+    try:
+        payload = json.loads(payload_json)
+    except json.JSONDecodeError:
+        return "{}"
+    if not isinstance(payload, dict):
+        return "{}"
+    snapshot = payload.get("requestSnapshot")
+    if isinstance(snapshot, dict):
+        safe_snapshot = _cloud_safe_local_request_payload(snapshot, redaction_level=redaction_level)
+        safe_snapshot["oauth_source"] = snapshot.get("oauth_source")
+        payload["requestSnapshot"] = safe_snapshot
+    safe_payload = {
+        key: _bounded_cloud_value(payload[key], field_name=key)
+        for key in (
+            "schema",
+            "localRequestId",
+            "eventType",
+            "occurredAt",
+            "status",
+            "resolutionAction",
+            "resolutionScope",
+            "reason",
+            "oauthSource",
+            "continuationResult",
+        )
+        if key in payload
+    }
+    # The request projection already applies its own field and size bounds.
+    # Reapplying generic mapping limits would drop required identity fields.
+    safe_payload["requestSnapshot"] = payload.get("requestSnapshot")
+    return json.dumps(safe_payload, sort_keys=True, separators=(",", ":"))

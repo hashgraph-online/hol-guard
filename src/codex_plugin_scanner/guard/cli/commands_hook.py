@@ -8,11 +8,14 @@ from typing import TYPE_CHECKING
 
 from ..daemon.hook_availability_policy import availability_harness_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
+from ..policy_memory_source import CapturedPolicyMemorySource, capture_hook_policy_memory_source
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     use_extension_control_snapshot,
 )
+from .hook_exact_policy import HookExactCommandSource, HookPolicyClaim, capture_hook_exact_command_source
+from .hook_runtime_refresh import _fresh_runtime_artifact_evaluation
 
 if TYPE_CHECKING:
     from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
@@ -93,7 +96,7 @@ def _run_guard_hook_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
     _claim_saved_approval: bool = True,
-    _claimed_saved_allow_hash: str | None = None,
+    _claimed_saved_allow_hash: HookPolicyClaim | None = None,
     _claimed_trusted_request_override: bool = False,
     _claimed_approval_request_id: str | None = None,
 ) -> int:
@@ -140,6 +143,8 @@ def _run_guard_hook_command(
         return 0
     globals().update(compatibility_surface)
     config = _require_guard_config(config)
+    exact_command_source = capture_hook_exact_command_source(payload)
+    policy_memory_source = capture_hook_policy_memory_source(store, payload=payload)
     payload = hydrate_hook_payload_reference(payload)
     payload = _normalize_hook_payload(payload, harness=args.harness)
     (
@@ -302,13 +307,15 @@ def _run_guard_hook_command(
             managed_install=managed_install,
             output_stream=output_stream,
             workspace=workspace,
+            _exact_command_source=exact_command_source,
+            _policy_memory_source=policy_memory_source,
             _claimed_saved_allow_hash=_claimed_saved_allow_hash,
             _claimed_trusted_request_override=_claimed_trusted_request_override,
             _claimed_approval_request_id=_claimed_approval_request_id,
             _claim_saved_approval=_claim_saved_approval,
         )
 
-    def revalidate_generic_after_claim(claimed_artifact_hash: str) -> int:
+    def revalidate_generic_after_claim(claimed_artifact_hash: HookPolicyClaim) -> int:
         fresh_config = overlay_synced_guard_policy(
             load_guard_config(guard_home, workspace=runtime_workspace),
             _synced_policy_payload(store),
@@ -329,6 +336,8 @@ def _run_guard_hook_command(
             runtime_artifact_checked=True,
             runtime_workspace=runtime_workspace,
             store=store,
+            _exact_command_source=exact_command_source,
+            _policy_memory_source=policy_memory_source,
             _claimed_saved_allow_hash=claimed_artifact_hash,
             _claim_saved_approval=False,
         )
@@ -344,71 +353,11 @@ def _run_guard_hook_command(
         runtime_workspace=runtime_workspace,
         store=store,
         post_claim_revalidator=revalidate_generic_after_claim,
+        _exact_command_source=exact_command_source,
+        _policy_memory_source=policy_memory_source,
         _claimed_saved_allow_hash=_claimed_saved_allow_hash,
         _claim_saved_approval=_claim_saved_approval,
-    )
-
-
-def _fresh_runtime_artifact_evaluation(
-    args: argparse.Namespace,
-    *,
-    context: HarnessContext,
-    guard_home: Path,
-    payload: dict[str, object],
-    runtime_workspace: Path | None,
-    store: GuardStore,
-    claim_saved_approval: bool,
-    claimed_saved_allow_hash: str | None = None,
-    claimed_trusted_request_override: bool = False,
-    claimed_package_approval_consumed: bool = False,
-    claimed_approval_request_id: str | None = None,
-    trusted_request_override_hash: str | None = None,
-    post_claim_revalidator=None,
-):
-    fresh_config = overlay_synced_guard_policy(
-        load_guard_config(guard_home, workspace=runtime_workspace),
-        _synced_policy_payload(store),
-    )
-    fresh_action_envelope = _hook_action_envelope(
-        harness=args.harness,
-        payload=payload,
-        home_dir=context.home_dir,
-        workspace=runtime_workspace,
-    )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
-    fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    )
-    with use_extension_control_snapshot(fresh_snapshot):
-        fresh_runtime_artifact = _hook_runtime_artifact(
-            harness=args.harness,
-            payload=payload,
-            action_envelope=fresh_action_envelope,
-            data_flow_signals=fresh_data_flow_signals,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-            workspace=runtime_workspace,
-        )
-    if fresh_runtime_artifact is None:
-        return None
-    return _evaluate_runtime_artifact_hook(
-        args,
-        action_envelope=fresh_action_envelope,
-        config=fresh_config,
-        context=context,
-        data_flow_signals=fresh_data_flow_signals,
-        guard_home=guard_home,
-        payload=payload,
-        runtime_artifact=fresh_runtime_artifact,
-        runtime_workspace=runtime_workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-        post_claim_revalidator=post_claim_revalidator if claimed_saved_allow_hash is None else None,
-        _claimed_saved_allow_hash=claimed_saved_allow_hash,
-        _claimed_trusted_request_override=claimed_trusted_request_override,
-        _claimed_package_approval_consumed=claimed_package_approval_consumed,
-        _claimed_approval_request_id=claimed_approval_request_id,
-        _claim_saved_approval=claimed_saved_allow_hash is None and claim_saved_approval,
+        _control_snapshot=extension_control_snapshot,
     )
 
 
@@ -427,10 +376,12 @@ def _run_runtime_artifact_hook_flow(
     runtime_workspace: Path | None,
     store: GuardStore,
     workspace: Path | None,
-    _claimed_saved_allow_hash: str | None,
+    _claimed_saved_allow_hash: HookPolicyClaim | None,
     _claimed_trusted_request_override: bool,
     _claimed_approval_request_id: str | None,
     _claim_saved_approval: bool,
+    _exact_command_source: HookExactCommandSource | None,
+    _policy_memory_source: CapturedPolicyMemorySource | None,
 ) -> int:
     def revalidate_runtime_after_claim(claimed_hash, trusted_override, approval_request_id, package_consumed):
         return _fresh_runtime_artifact_evaluation(
@@ -441,6 +392,7 @@ def _run_runtime_artifact_hook_flow(
             runtime_workspace=runtime_workspace,
             store=store,
             claim_saved_approval=_claim_saved_approval,
+            exact_command_source=_exact_command_source,
             claimed_saved_allow_hash=claimed_hash,
             claimed_trusted_request_override=trusted_override,
             claimed_package_approval_consumed=package_consumed,
@@ -460,6 +412,7 @@ def _run_runtime_artifact_hook_flow(
         runtime_workspace=runtime_workspace,
         store=store,
         post_claim_revalidator=revalidate_runtime_after_claim,
+        _exact_command_source=_exact_command_source,
         _claimed_saved_allow_hash=_claimed_saved_allow_hash,
         _claimed_trusted_request_override=_claimed_trusted_request_override,
         _claimed_approval_request_id=_claimed_approval_request_id,
@@ -476,6 +429,7 @@ def _run_runtime_artifact_hook_flow(
         managed_install=managed_install,
         output_stream=output_stream,
         payload=payload,
+        _policy_memory_source=_policy_memory_source,
         store=store,
         workspace=workspace,
     )
@@ -492,6 +446,7 @@ def _run_runtime_artifact_hook_flow(
             store=store,
             claim_saved_approval=_claim_saved_approval,
             trusted_request_override_hash=evaluated.runtime_artifact_hash,
+            exact_command_source=_exact_command_source,
         )
         return fresh if isinstance(fresh, RuntimeArtifactHookState) else None
 

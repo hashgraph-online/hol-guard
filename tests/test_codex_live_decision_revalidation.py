@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
     _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_review_authority_fixtures import enroll_review_authority
 
 
 def test_daemon_server_import_is_order_independent() -> None:
@@ -192,6 +193,7 @@ def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
 
 
 def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Path) -> None:
+    enroll_review_authority(tmp_path / "guard-home")
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"

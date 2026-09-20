@@ -518,7 +518,9 @@ def test_quarantine_retry_uses_one_deadline_for_all_processes(
 
     monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", threading.Event())
     quarantined = [
-        launch_runtime._QuarantinedHookProcess(cast("subprocess.Popen[bytes]", StubbornProcess()), None, ())
+        launch_runtime._QuarantinedHookProcess(
+            cast("subprocess.Popen[bytes]", cast(object, StubbornProcess())), None, ()
+        )
         for _ in range(20)
     ]
 
@@ -557,7 +559,7 @@ def test_quarantine_retry_releases_windows_job_handle_once(
     closed_jobs: list[object] = []
     job = object()
     quarantined = launch_runtime._QuarantinedHookProcess(
-        cast("subprocess.Popen[bytes]", ExitedProcess()),
+        cast("subprocess.Popen[bytes]", cast(object, ExitedProcess())),
         cast("launch_runtime.WindowsHookJob", job),
         (),
     )

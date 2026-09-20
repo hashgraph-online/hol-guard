@@ -14,12 +14,15 @@ fn generation_parser_rejects_zero_and_non_numeric() {
 #[test]
 fn client_deadline_is_bounded() {
     assert_eq!(
-        client_timeout(br#"{"deadline_budget_ms":999999}"#),
+        client_timeout(br#"{"deadline_budget_ms":999999}"#).unwrap(),
         Duration::from_secs(9)
     );
-    assert_eq!(client_timeout(br#"{}"#), Duration::from_millis(750));
     assert_eq!(
-        client_timeout(br#"{"deadline_budget_ms":250}"#),
+        client_timeout(br#"{}"#).unwrap(),
+        Duration::from_millis(750)
+    );
+    assert_eq!(
+        client_timeout(br#"{"deadline_budget_ms":250}"#).unwrap(),
         Duration::from_millis(250)
     );
 }

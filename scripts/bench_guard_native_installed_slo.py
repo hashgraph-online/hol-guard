@@ -15,8 +15,9 @@ import sys
 import tempfile
 import time
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -37,6 +38,7 @@ from scripts.bench_guard_native_installed_slo_runtime import (  # noqa: E402
     _require,
     _runtime_summary,
 )
+from scripts.native_recovery_diagnostic import RecoveryObservation  # noqa: E402
 from scripts.native_slo_adapter import (  # noqa: E402
     Observation,
     payload,
@@ -193,18 +195,60 @@ def _run_cold(runtime: Path, session: AdapterSession, iterations: int) -> list[f
     return values
 
 
-def _run_recovery(session: AdapterSession, iterations: int) -> list[float]:
+class _RecoverySession(Protocol):
+    def observe(self, harness: str, event: str, size_class: str) -> Observation: ...
+
+    def stop_resident(self) -> bool: ...
+
+    def rearm_policy_after_resident_stop(self) -> None: ...
+
+
+def _run_recovery(
+    session: _RecoverySession,
+    iterations: int,
+    *,
+    rearm_policy: bool = False,
+    diagnostics: list[dict[str, object]] | None = None,
+) -> list[float]:
+    """Measure the first post-stop hook, with explicit rearm only when selected."""
+
     values: list[float] = []
     for index in range(iterations):
-        _ = session.observe("claude-code", "PostToolUse", "1k")
-        _require(
-            session.stop_resident(),
-            f"resident stop failed during recovery sample {index}",
-        )
-        started = time.perf_counter()
-        observation = session.observe("claude-code", "PostToolUse", "1k")
-        values.append((time.perf_counter() - started) * 1_000.0)
-        _require(observation.allowed and observation.route == "native_resident", f"recovery sample {index} failed")
+        diagnostic = RecoveryObservation(session)
+        # Install observers before the existing pre-stop request. Nothing is
+        # prepared between the contained stop and the original measurement clock.
+        with diagnostic.attach():
+            _ = session.observe("claude-code", "PostToolUse", "1k")
+            _require(
+                session.stop_resident(),
+                f"resident stop failed during recovery sample {index}",
+            )
+            started = time.perf_counter()
+            diagnostic.begin()
+            try:
+                if rearm_policy:
+                    session.rearm_policy_after_resident_stop()
+                observation = session.observe("claude-code", "PostToolUse", "1k")
+            except BaseException:
+                with suppress(BaseException):
+                    diagnostic.finish(
+                        index=index,
+                        rearmed=rearm_policy,
+                        elapsed_ms=(time.perf_counter() - started) * 1_000.0,
+                        response=None,
+                    )
+                raise
+            elapsed_ms = (time.perf_counter() - started) * 1_000.0
+            values.append(elapsed_ms)
+            # Diagnostics neither replace the first response nor participate in
+            # the pass predicate. Their own failures cannot mask that response.
+            with suppress(BaseException):
+                report = diagnostic.finish(
+                    index=index, rearmed=rearm_policy, elapsed_ms=elapsed_ms, response=observation
+                )
+                if diagnostics is not None and len(diagnostics) < 16:
+                    diagnostics.append(report)
+            _require(observation.allowed and observation.route == "native_resident", f"recovery sample {index} failed")
     return values
 
 
@@ -226,22 +270,40 @@ def _measure_slo(
     with AdapterSession(runtime) as session:
         warm = _run_warm(session, routes, warm_iterations)
         sizes = _run_sizes(session, routes)
-        recovery = _run_recovery(session, recovery_iterations)
+        recovery_diagnostics: list[dict[str, object]] = []
+        recovery = _run_recovery(session, recovery_iterations, diagnostics=recovery_diagnostics)
         warmup_harness, warmup_event = routes[0]
         serialized_warmup = session.observe(warmup_harness, warmup_event, "1k")
         _require(
             serialized_warmup.allowed and serialized_warmup.route == "native_resident",
-            "serialized resident pool warmup did not stay on the allowed native route",
+            {
+                "stage": "serialized_resident_warmup",
+                "harness": serialized_warmup.harness,
+                "event": serialized_warmup.event,
+                "allowed": serialized_warmup.allowed,
+                "route": serialized_warmup.route,
+                "overloaded": serialized_warmup.overloaded,
+                "reason_code": serialized_warmup.reason_code,
+            },
         )
         capacity = measure_capacity(session, routes, include_capacity=include_capacity)
         readiness = [session.readiness_ms]
     if readiness_samples > 1:
         readiness.extend(_readiness_samples(runtime, readiness_samples - 1))
     rss_peak = max(capacity.rss_peak, process_rss_bytes())
+    # Retain the explicit notification case independently of the original
+    # autonomous recovery contract and its resident restart budget. All main
+    # measurements, including RSS, are captured before this extra session.
+    with AdapterSession(runtime) as rearmed_session:
+        rearmed_recovery = _run_recovery(
+            rearmed_session, recovery_iterations, rearm_policy=True, diagnostics=recovery_diagnostics
+        )
     return SloMeasurements(
         warm=warm,
         sizes=sizes,
         recovery=recovery,
+        rearmed_recovery=rearmed_recovery,
+        recovery_diagnostics=recovery_diagnostics,
         cold=cold,
         concurrent_16=capacity.concurrent_16,
         concurrent_64=capacity.concurrent_64,

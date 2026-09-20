@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
     sync_receipts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.optional_uploads import prepare_optional_uploads
 
 
 def _decode_transport_command(envelope: dict[str, object]) -> str | None:
@@ -175,6 +176,11 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
     tmp_path,
 ) -> None:
     store = GuardStore(tmp_path)
+    prepare_optional_uploads(store, monkeypatch, receipt_redaction_level="none")
+    capture, allowed, level = guard_runner._prepare_optional_receipt_selection(
+        store, store.capture_oauth_connection(), synced_at="2026-07-03T00:00:00+00:00"
+    )
+    assert capture is not None and allowed and level == "none"
     for index in range(6):
         _store_command_receipt(
             store,
@@ -184,12 +190,21 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
     monkeypatch.setattr(guard_runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 6)
     monkeypatch.setattr(guard_runner, "_RECEIPT_SYNC_BATCH_SIZE", 2)
     monkeypatch.setattr(guard_runner, "_resolve_cloud_receipt_redaction_level", lambda _store: "none")
-    monkeypatch.setattr(guard_runner, "_guard_sync_request", lambda *args, **kwargs: object())
-    monkeypatch.setattr(guard_runner, "_receipt_sync_rows_for_upload", lambda _store, cursor_rowid: [])
+    store.set_sync_payload(
+        "receipt_sync_cursor",
+        {"last_rowid": store.latest_receipt_rowid(), "synced_at": "2026-07-03T00:00:00+00:00"},
+        "2026-07-03T00:00:00+00:00",
+    )
 
     attempted_batches = {"count": 0}
 
     def _fake_sync(**kwargs):
+        prepare_request = kwargs.get("prepare_request")
+        if prepare_request is not None:
+            prepare_request(kwargs["request"])
+        validate_request = kwargs.get("validate_request")
+        if validate_request is not None:
+            validate_request()
         attempted_batches["count"] += 1
         if attempted_batches["count"] == 1:
             return {"syncedAt": "2026-07-04T00:00:00+00:00", "receiptsStored": 2}
@@ -212,7 +227,6 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
             store,
             persist_sync_summary=False,
             persist_connect_state=False,
-            auth_context={"sync_url": "https://hol.org/api/guard/receipts/sync", "access_token": "token"},
         )
     except RuntimeError as error:
         assert "network down" in str(error)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from ..oauth_connection_authority import OAuthConnectionSnapshot
 from ..store import GuardStore
+from .connect_completion import hold_connect_connection
 
 
 def apply_guard_connect_sync_result(
@@ -15,26 +17,28 @@ def apply_guard_connect_sync_result(
     recorded_milestone: str,
     repair_message: str,
     payload_status: str | None = None,
+    expected_connection: OAuthConnectionSnapshot | None = None,
 ) -> dict[str, object]:
     """Record one connect-sync failure and mirror it onto the caller payload."""
 
-    store.record_latest_guard_connect_sync_result(
-        status=recorded_status,
-        milestone=recorded_milestone,
-        now=now,
-        reason=str(error),
-    )
-    update: dict[str, object] = {
-        "milestone": recorded_milestone,
-        "sync_succeeded": False,
-        "sync_error": str(error),
-        "repair_message": repair_message,
-        "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-    }
-    if payload_status is not None:
-        update["status"] = payload_status
-    payload.update(update)
-    return payload
+    with hold_connect_connection(store, expected_connection):
+        store.record_latest_guard_connect_sync_result(
+            status=recorded_status,
+            milestone=recorded_milestone,
+            now=now,
+            reason=str(error),
+        )
+        update: dict[str, object] = {
+            "milestone": recorded_milestone,
+            "sync_succeeded": False,
+            "sync_error": str(error),
+            "repair_message": repair_message,
+            "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+        }
+        if payload_status is not None:
+            update["status"] = payload_status
+        payload.update(update)
+        return payload
 
 
 def headless_sync_retry_summary(

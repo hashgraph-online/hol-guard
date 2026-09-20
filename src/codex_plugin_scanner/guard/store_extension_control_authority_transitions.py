@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import nullcontext
 from typing import cast
 
 from .runtime.extension_control_authority import (
@@ -170,8 +171,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         *,
         current_snapshot_digest: str,
         key: bytes,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
-        with self._connect() as connection:
+        with self._connect() if connection is None else nullcontext(connection) as connection:
             rows = cast(
                 list[sqlite3.Row],
                 connection.execute("select * from extension_control_authority_transition order by revision").fetchall(),
@@ -315,8 +317,8 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
         )
 
-    def _pending_transition(self, revision: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
+    def _pending_transition(self, revision: int, *, connection: sqlite3.Connection | None = None) -> sqlite3.Row | None:
+        with self._connect() if connection is None else nullcontext(connection) as connection:
             return connection.execute(
                 "select * from extension_control_authority_transition where revision = ?",
                 (revision,),

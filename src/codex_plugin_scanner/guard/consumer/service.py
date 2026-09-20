@@ -39,9 +39,11 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_NO_SAVED_DECISION,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    bind_saved_policy_identity,
     evaluate_approval_reuse,
 )
 from ..runtime.decisions import build_authoritative_decision, evaluation_authority_error
+from ..runtime.detector_context_signals import _runtime_detector_risk_signals
 from ..runtime.signals import RiskSignalV2
 from ..schemas import build_consumer_mode_contract
 from ..skill_directory_identity import validated_complete_skill_directory_hash
@@ -852,6 +854,7 @@ def _compose_consumer_saved_policy(
         saved_decision_present=True,
         validation_reason=validation_reason,
     )
+    reuse = bind_saved_policy_identity(reuse, saved_decision, validation_reason=validation_reason)
     if reuse.should_claim and saved_decision is not None and pending_approval_claims is not None:
         pending_approval_claims.append((saved_decision, artifact_id, artifact_hash))
     return reuse, True
@@ -878,30 +881,6 @@ def _runtime_detector_scanner_evidence(block_reason: str | None) -> tuple[dict[s
             "reason": block_reason,
         },
     )
-
-
-def _runtime_detector_risk_signals(
-    runtime_detector_context: Mapping[str, object] | None,
-) -> tuple[RiskSignalV2, ...]:
-    if runtime_detector_context is None:
-        return ()
-    raw_signals = runtime_detector_context.get("signals_v2")
-    if not isinstance(raw_signals, list):
-        return ()
-    signals: list[RiskSignalV2] = []
-    seen: set[str] = set()
-    for raw_signal in raw_signals:
-        if not isinstance(raw_signal, Mapping):
-            continue
-        try:
-            signal = RiskSignalV2.from_dict(raw_signal)
-        except (TypeError, ValueError):
-            continue
-        if signal.signal_id in seen:
-            continue
-        seen.add(signal.signal_id)
-        signals.append(signal)
-    return tuple(signals)
 
 
 def _runtime_detector_context_authority(
@@ -1262,6 +1241,12 @@ def evaluate_detection(
         )
         policy_composition = {
             "configured_action": configured_action,
+            **approval_reuse.policy_rule_evidence(
+                policy_action,
+                overridden=trusted_request_override
+                or bool(runtime_detector_block_reason)
+                or runtime_context_action == policy_action,
+            ),
             "current_action": current_policy_action,
             "saved_action": approval_reuse.saved_action,
             "saved_state_present": has_saved_state,
@@ -1564,6 +1549,12 @@ def evaluate_detection(
         )
         policy_composition = {
             "configured_action": configured_action,
+            **approval_reuse.policy_rule_evidence(
+                policy_action,
+                overridden=trusted_request_override
+                or bool(runtime_detector_block_reason)
+                or runtime_context_action == policy_action,
+            ),
             "current_action": current_policy_action,
             "saved_action": approval_reuse.saved_action,
             "saved_state_present": has_saved_state,

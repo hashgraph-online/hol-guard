@@ -87,6 +87,11 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Verify synthetic fixture detection boundaries
+        run: python scripts/ci/check_gitleaks_fixture_boundaries.py --gitleaks "$RUNNER_TEMP/bin/gitleaks"
       - name: Determine Gitleaks scope
         id: gitleaks-scope
         env:

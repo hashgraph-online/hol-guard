@@ -4,7 +4,9 @@
 use super::policy_store_persistence::read_private_json;
 use super::PolicySnapshotStore;
 use guard_contracts::{NativeCommandControlAuthorityV1, NativeCommandControlRecoveryV1};
-use guard_policy_snapshot::{canonical_json_bytes, PolicySnapshotV3};
+use guard_policy_snapshot::canonical_json_bytes;
+#[cfg(test)]
+use guard_policy_snapshot::PolicySnapshotV3;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::Path;
@@ -32,11 +34,19 @@ pub(crate) struct CommandAuthorityLease {
 }
 
 impl PolicySnapshotStore {
+    #[cfg(test)]
     pub(crate) fn command_authority_lease(
         &self,
         snapshot: &PolicySnapshotV3,
     ) -> Result<Option<CommandAuthorityLease>, String> {
-        let Some(binding) = &snapshot.command_extensions else {
+        self.command_authority_lease_for_binding(snapshot.command_extensions.as_ref())
+    }
+
+    pub(crate) fn command_authority_lease_for_binding(
+        &self,
+        binding: Option<&guard_contracts::NativeCommandControlBindingV1>,
+    ) -> Result<Option<CommandAuthorityLease>, String> {
+        let Some(binding) = binding else {
             return Ok(None);
         };
         let expected = binding

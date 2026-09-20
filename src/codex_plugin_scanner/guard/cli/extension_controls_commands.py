@@ -18,7 +18,7 @@ from ..approval_gate import (
 from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from ..daemon.runtime_peer import load_guard_daemon_endpoint
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_control_authority import ExtensionControlAuthorityError
+from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityError
 from ..runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlProofError,
@@ -154,10 +154,13 @@ def _recover_authority(
             subject=subject,
             session_nonce=session_nonce,
         )
-        view = store.recover_extension_control_authority(
+        _ = store.recover_extension_control_authority(
             catalog_digest=catalog_digest,
             migration_registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         )
+        view = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+        if view.health is not AuthorityHealth.PROTECTED:
+            raise ExtensionControlAuthorityError("Extension-control authority recovery is incomplete.")
         with contextlib.suppress(GuardDaemonRequestError):
             _ = _client(guard_home).refresh_extension_controls()
         response: dict[str, object] = {

@@ -16,6 +16,10 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "approval_authority_record.rs"]
+mod record;
+use record::read_authority_record;
+
 pub(super) const APPROVAL_AUTHORITY_FILE_NAME: &str = "approval-authority.v1.json";
 const APPROVAL_AUTHORITY_SCHEMA: &str = "guard-native-approval-authority.v1";
 const APPROVAL_AUTHORITY_VERSION: u16 = 1;
@@ -136,34 +140,18 @@ fn verify_enrollment(record: &ApprovalAuthorityRecordV1) -> Result<[u8; 32], Str
     Ok(public_key)
 }
 
-fn read_authority_record(
-    path: &Path,
-    private_root: &Path,
-) -> Result<Option<(ApprovalAuthorityRecordV1, Vec<u8>, String)>, String> {
-    let Some((value, bytes)) = super::read_private_json(
-        path,
-        APPROVAL_AUTHORITY_MAX_BYTES,
-        "approval_authority",
-        private_root,
-    )?
-    else {
-        return Ok(None);
-    };
-    let canonical =
-        canonical_json_bytes(&value).map_err(|_| "native_approval_authority_invalid".to_owned())?;
-    if canonical != bytes {
-        return Err("native_approval_authority_noncanonical".to_owned());
-    }
-    let record: ApprovalAuthorityRecordV1 = serde_json::from_value(value)
-        .map_err(|_| "native_approval_authority_invalid".to_owned())?;
-    let _ = verify_enrollment(&record)?;
-    let fingerprint = super::authority_fingerprint(path)
-        .ok_or_else(|| "native_approval_authority_invalid".to_owned())?;
-    Ok(Some((record, bytes, fingerprint)))
-}
-
 fn authority_record_digest(bytes: &[u8]) -> String {
     guard_policy_snapshot::digest_bytes(bytes)
+}
+
+// Read only the public record. The resident retains secure-store provenance checks.
+pub(super) fn public_record_fingerprint(state_base: &Path) -> Result<Option<String>, String> {
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    Ok(read_authority_record(
+        &state_base.join(APPROVAL_AUTHORITY_FILE_NAME),
+        &private_root,
+    )?
+    .map(|(_, _, fingerprint)| fingerprint))
 }
 
 pub(super) fn load(state_base: &Path) -> Result<Option<ApprovalAuthority>, String> {

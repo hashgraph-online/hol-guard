@@ -104,6 +104,8 @@ SUITES = (
             "tests/test_guard_mdm_policy.py",
             "tests/test_guard_mdm_offline_lifecycle.py",
             "tests/test_guard_cloud_local_sync.py",
+            "tests/test_guard_cloud_local_sync_snapshot.py",
+            "tests/test_guard_cloud_local_sync_session.py",
             "tests/test_guard_update_isolation.py",
             "tests/test_guard_supply_chain_bundle.py",
         ),

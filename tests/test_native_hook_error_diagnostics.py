@@ -29,3 +29,13 @@ def test_known_native_error_is_diagnostic_only(retryable: bool) -> None:
 def test_unknown_or_malformed_native_errors_are_not_exposed(payload: object) -> None:
     assert _native_error_code(payload) is None
     assert _decode_edge(payload) is None
+
+
+def test_command_mutation_error_remains_a_refusal_in_both_decoders() -> None:
+    from codex_plugin_scanner.guard.native_response_decoder import native_error, response_from_payload
+
+    payload = {"error": "native_command_control_mutation_in_progress", "retryable": False}
+    assert _native_error_code(payload) == "native_command_control_mutation_in_progress"
+    assert native_error(payload) == "native_command_control_mutation_in_progress"
+    assert _decode_edge(payload) is None
+    assert response_from_payload(payload) is None

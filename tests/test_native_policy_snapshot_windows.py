@@ -268,6 +268,7 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
             ("apply", (applied_handle, applied_descriptor, applied_dacl, directory))
         ),
     )
+
     def verify_dacl(verified_handle: object, *, owner_sid: str, directory: bool) -> None:
         events.append(("verify", (verified_handle, owner_sid, directory)))
         if sum(1 for event in events if event[0] == "verify") == 1:
@@ -348,7 +349,11 @@ def test_windows_private_descriptor_deduplicates_system_owner_ace(
 def test_windows_cache_read_rejects_ancestor_reparse_before_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(snapshot_module.os, "name", "nt")
+    monkeypatch.setattr(
+        storage_module,
+        "os",
+        types.SimpleNamespace(**{**vars(storage_module.os), "name": "nt"}),
+    )
     monkeypatch.setattr(snapshot_module, "_windows_path_has_reparse_component", lambda _path: True)
     monkeypatch.setattr(
         snapshot_module,

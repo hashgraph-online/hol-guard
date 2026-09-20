@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
+from ..native_policy_decision_context import NativePolicyDecisionContext
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus, native_output_sha256
+from ..native_scoped_result import scoped_result_is_current
 from ..runtime.hook_output_text import extract_payload_output
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_availability_policy import (
@@ -20,12 +22,16 @@ from .hook_availability_policy import (
     hook_review_is_recording_only,
     recording_only_pre_tool_response,
 )
+from .hook_native_activity import _record_native_pre_activity, _record_unavailable_native
+from .hook_native_policy_context import capture_result_context
 from .hook_native_review_approval import pause_native_pre_tool_for_approval
 from .hook_native_review_fence import native_review_fence
+from .hook_policy_authority import legacy_source_binding_is_current, policy_authority_required
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
     harness_json_from_native_pre_tool,
+    integrity_fail_closed_hook_response,
 )
 
 _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
@@ -126,6 +132,7 @@ class _HookWorkerNativeHost(Protocol):
     def activity_writer(self) -> object | None: ...
 
     _last_native_decision_receipt: dict[str, object] | None
+    _last_native_policy_context: NativePolicyDecisionContext | None
     _native_policy_snapshot: Callable[..., dict[str, object] | None]
     _review_pre_tool_native: Callable[..., dict[str, object] | None]
     _native_runtime_status: Callable[[], NativeRuntimeStatus]
@@ -135,73 +142,23 @@ class _HookWorkerNativeHost(Protocol):
     _record_native_decision_receipt: Callable[[object], Mapping[str, object] | None]
 
 
-def _record_native_pre_activity(
-    host: _HookWorkerNativeHost,
-    harness: str,
-    payload: Mapping[str, object],
-    response: dict[str, object],
-    receipt: Mapping[str, object] | None = None,
+def _scoped_authority_unavailable(
+    host: _HookWorkerNativeHost, harness: str, event_name: str = "PreToolUse"
 ) -> dict[str, object]:
-    submit = getattr(host.activity_writer, "submit_command_activity", None)
-    if callable(submit):
-        with suppress(Exception):
-            submit(
-                harness=harness,
-                event="PreToolUse",
-                payload=payload,
-                succeeded=True,
-                policy_action=response.get("policy_action"),
-                receipt_id=receipt.get("decision_id") if receipt is not None else None,
-                prompted=response.get("prompted") is True,
-                approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
-            )
-    return response
-
-
-def _record_unavailable_native(
-    host: _HookWorkerNativeHost,
-    payload: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
-    reason_code: str,
-    workspace: Path | None,
-    home_dir: Path,
-    guard_home: Path,
-    recording_only: bool,
-) -> dict[str, object]:
-    response = availability_harness_response(
-        payload,
-        harness=harness,
+    host.metrics.record_route("native_fail_safe")
+    return integrity_fail_closed_hook_response(
+        harness,
         event_name=event_name,
-        reason_code=reason_code,
-        reason="HOL Guard could not complete the native hook decision safely.",
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        recording_only=recording_only,
+        reason="HOL Guard could not verify the current scoped policy authority.",
+        reason_code="native_scoped_authority_unavailable",
     )
-    route = "native_degraded" if response.get("reason_code") == "native_degraded_emergency_safe" else "native_fail_safe"
-    host.metrics.record_route(route)
-    if event_name == "PreToolUse":
-        writer = host.activity_writer
-        submit = getattr(writer, "submit_command_activity", None)
-        if callable(submit):
-            with suppress(Exception):
-                _ = submit(
-                    harness=harness,
-                    event=event_name,
-                    payload=payload,
-                    succeeded=str(response.get("policy_action") or "") != "block",
-                    policy_action=response.get("policy_action"),
-                )
-    return response
 
 
 class HookWorkerNativeMixin:
     """Native edge and explicit-oracle paths kept out of the worker facade."""
 
     _last_native_decision_receipt: dict[str, object] | None = None
+    _last_native_policy_context: NativePolicyDecisionContext | None = None
 
     def _mode_surface_response(
         self: _HookWorkerNativeHost,
@@ -319,12 +276,33 @@ class HookWorkerNativeMixin:
         workspace: Path | None,
         deadline: float | None,
     ) -> dict[str, object]:
-        policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-        # Native evaluation and Python delivery use the same acknowledged
-        # posture. A local Watch edit cannot weaken an enforcing snapshot
-        # before its replacement is accepted. A missing binding already takes
-        # the existing unavailable route, whose response is posture-independent.
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        publisher = getattr(self, "policy_snapshot_publisher", None)
+        required = policy_authority_required(publisher)
+        try:
+            policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
+        except Exception:
+            if required or policy_authority_required(publisher):
+                return _scoped_authority_unavailable(self, harness, event_name)
+            raise
+        required = policy_authority_required(publisher)
+        if required and policy_snapshot is None:
+            return _scoped_authority_unavailable(self, harness, event_name)
+        scoped = getattr(publisher, "requires_scoped_authority", False) is True or (
+            policy_snapshot is not None and "source_input_digest" in policy_snapshot
+        )
+        if scoped and (policy_snapshot is None or "source_input_digest" not in policy_snapshot):
+            return _scoped_authority_unavailable(self, harness, event_name)
+        # Delivery uses the exact acknowledged posture. Pending local edits
+        # cannot weaken the accepted decision while its replacement is unready.
+        # Bound native policy already applies Observe to discretionary defaults.
+        # Its remaining decisions include independent command and intrinsic floors.
+        recording_only = (
+            not scoped
+            and policy_snapshot is not None
+            and policy_snapshot.get("mode") == "observe"
+            and policy_snapshot.get("command_extensions_bound") is not True
+            and not isinstance(policy_snapshot.get("command_extensions"), Mapping)
+        )
         fenced: bool | None = None
         try:
             with native_review_fence(
@@ -358,6 +336,8 @@ class HookWorkerNativeMixin:
                 self.metrics.record_route("native_resident")
             return response
         except TimeoutError:
+            if required or scoped or policy_authority_required(publisher):
+                return _scoped_authority_unavailable(self, harness, event_name)
             return _record_unavailable_native(
                 self,
                 payload,
@@ -370,6 +350,8 @@ class HookWorkerNativeMixin:
                 recording_only=recording_only,
             )
         except (OSError, NativePolicySnapshotError):
+            if required or scoped or policy_authority_required(publisher):
+                return _scoped_authority_unavailable(self, harness, event_name)
             if fenced is False:
                 raise
             return _record_unavailable_native(
@@ -398,18 +380,42 @@ class HookWorkerNativeMixin:
         policy_snapshot: Mapping[str, object] | None,
         recording_only: bool,
     ) -> tuple[dict[str, object], bool]:
-        edge = self._review_raw_hook_native(
-            payload=payload,
-            harness=harness,
-            event=event_name,
-            guard_home=guard_home,
-            home_dir=home_dir,
-            cwd=workspace,
-            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-            observe_mode=recording_only,
-            deadline=deadline,
-            policy_snapshot=policy_snapshot,
+        publisher = getattr(self, "policy_snapshot_publisher", None)
+        required = policy_authority_required(publisher)
+        scoped = getattr(publisher, "requires_scoped_authority", False) is True or (
+            policy_snapshot is not None and "source_input_digest" in policy_snapshot
         )
+        try:
+            edge = self._review_raw_hook_native(
+                payload=payload,
+                harness=harness,
+                event=event_name,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                cwd=workspace,
+                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
+                observe_mode=recording_only,
+                deadline=deadline,
+                policy_snapshot=policy_snapshot,
+            )
+        except Exception:
+            if required or scoped or policy_authority_required(publisher):
+                return _scoped_authority_unavailable(self, harness, event_name), False
+            raise
+        required |= policy_authority_required(publisher)
+        if (
+            required
+            and not scoped
+            and (edge is None or not legacy_source_binding_is_current(publisher, policy_snapshot))
+        ):
+            return _scoped_authority_unavailable(self, harness, event_name), False
+        if scoped and (edge is None or not scoped_result_is_current(publisher, edge)):
+            return _scoped_authority_unavailable(self, harness, event_name), False
+        self._last_native_policy_context = None
+        if scoped and edge is not None:
+            accepted, self._last_native_policy_context = capture_result_context(publisher, edge)
+            if not accepted:
+                return _scoped_authority_unavailable(self, harness, event_name), False
         if edge is None:
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
@@ -508,11 +514,16 @@ class HookWorkerNativeMixin:
         self._last_native_decision_receipt = None
         accepted = validate_native_decision_receipt(receipt)
         if accepted is None:
+            self._last_native_policy_context = None
             return None
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
         if callable(submit):
             with suppress(Exception):
-                submit(receipt=accepted)
+                context = getattr(self, "_last_native_policy_context", None)
+                if context is None:
+                    submit(receipt=accepted)
+                else:
+                    submit(receipt=accepted, policy_context=context)
         self._last_native_decision_receipt = accepted
         return accepted

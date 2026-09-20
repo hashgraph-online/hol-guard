@@ -18,6 +18,7 @@ from ..native_mode import native_mode_requires_rust as _native_mode_requires_rus
 from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
+from .hook_native_policy_context import native_process_result
 from .hook_process_protocol import (
     applied_hook_environment,
     as_string_object_dict,
@@ -134,6 +135,20 @@ def _terminate_guardian_group() -> None:
             os.killpg(os.getpid(), getattr(signal, "SIGKILL", 9))
 
 
+def _prepare_hook_oracle_imports() -> None:
+    """Finish explicit oracle dependency imports without evaluating a request."""
+    if not python_oracle_surface_enabled():
+        return
+    from ..cli.commands_hook_compat_loader import load_hook_compatibility_surface
+
+    if load_hook_compatibility_surface() is None:
+        return
+    from ..adapters import list_adapters
+
+    list_adapters()
+    _ = importlib.import_module("codex_plugin_scanner.guard.cli.render")
+
+
 def _hook_evaluator_main(connection: Connection, configured_guard_home: str | None) -> None:
     os.environ[_HOOK_SQLITE_TIMEOUT_ENV] = "250"
     for module_name in (
@@ -145,6 +160,8 @@ def _hook_evaluator_main(connection: Connection, configured_guard_home: str | No
         "codex_plugin_scanner.guard.store",
     ):
         _ = importlib.import_module(module_name)
+    if python_oracle_surface_enabled():
+        _prepare_hook_oracle_imports()
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
     # Store construction stays on the first request. Readiness must only prove
@@ -308,15 +325,7 @@ def _run_resident_hook_request(
                 )
             raise
         else:
-            response: dict[str, object] = {
-                "payload": worker_payload,
-                "reason_code": None,
-                "route": _current_decision_route(),
-            }
-            receipt = getattr(worker, "last_native_decision_receipt", None)
-            if isinstance(receipt, dict):
-                response["receipt"] = receipt
-            return response
+            return native_process_result(worker, worker_payload, _current_decision_route())
     with applied_hook_environment(request):
         config = overlay_synced_guard_policy(
             load_guard_config(parsed.guard_home, workspace=parsed.workspace),

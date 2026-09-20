@@ -89,6 +89,8 @@ def extract_heredocs(command: str) -> tuple[ShellHeredoc, ...]:
 
 
 def _heredoc_declarations(line: str) -> tuple[re.Match[str], ...]:
+    if "<<" not in line:
+        return ()
     matches: list[re.Match[str]] = []
     state = ShellScanState()
     index = 0

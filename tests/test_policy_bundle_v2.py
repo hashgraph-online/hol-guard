@@ -58,12 +58,20 @@ def _signed_bundle(
     verification_key: PolicyBundleVerificationKey,
     *,
     bundle_version: int = 8,
+    workspace_id: str = "workspace-alpha",
     rollback: dict[str, object] | None = None,
     payload_base: dict[str, object] | None = None,
     payload_extensions: dict[str, object] | None = None,
+    rollout_state: str | None = None,
 ) -> dict[str, object]:
     document = load_policy_document(_FIXTURE)
-    payload = dict(payload_base) if payload_base is not None else document.to_mapping()
+    payload: dict[str, object] = dict(payload_base) if payload_base is not None else dict(document.to_mapping())
+    if rollout_state is not None:
+        spec = payload.get("spec")
+        if isinstance(spec, dict):
+            spec = dict(spec)
+            spec["rolloutState"] = rollout_state
+            payload["spec"] = spec
     if payload_extensions is not None:
         payload.update(payload_extensions)
     bundle: dict[str, object] = {
@@ -74,7 +82,7 @@ def _signed_bundle(
         "payloadHash": "",
         "issuedAt": "2026-07-15T12:00:00Z",
         "expiresAt": "2030-07-15T12:00:00Z",
-        "workspaceId": "workspace-alpha",
+        "workspaceId": workspace_id,
         "canonicalization": POLICY_BUNDLE_V2_CANONICALIZATION,
         "verifier": {
             "algorithm": "rsa-pss-sha256",
@@ -294,7 +302,7 @@ def test_v2_bundle_rejects_unanchored_rotated_key() -> None:
 def test_v2_bundle_rejects_malformed_rollback_hashes() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     verification_key = _verification_key(private_key)
-    rollback = {
+    rollback: dict[str, object] = {
         "rollbackOfBundleHash": "sha256:not-a-digest",
         "rollbackOfBundleVersion": 8,
         "lastGoodBundleHash": f"sha256:{'a' * 64}",
@@ -427,7 +435,7 @@ def test_v2_acknowledgement_rejects_sequence_conflicts_and_terminal_reapply() ->
 
 
 def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
-    policy_bundle = {
+    policy_bundle: dict[str, object] = {
         "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
         "payload": {
             "apiVersion": "guard.hashgraphonline.com/v1alpha1",
@@ -475,20 +483,15 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
     )
 
     assert legacy == []
-    assert [decision.to_dict() for decision in canonical] == [
-        {
-            "harness": "codex",
-            "scope": "artifact",
-            "action": "block",
-            "artifact_id": "command:npm-test",
-            "artifact_hash": None,
-            "workspace": None,
-            "publisher": None,
-            "reason": None,
-            "owner": "rule.block-command",
-            "source": "policy-bundle-canonical",
-            "expires_at": None,
-        }
+    assert canonical == [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id="command:npm-test",
+            owner="rule.block-command",
+            source="policy-bundle-canonical",
+        )
     ]
 
 

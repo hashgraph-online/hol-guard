@@ -16,6 +16,7 @@ from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
 from ..synced_policy import synced_policy_bundle_validation
+from . import product_guidance as _product_guidance
 from .connect_flow import (
     CONNECT_COMMAND,
     CONNECT_REPAIR_COMMAND,
@@ -29,6 +30,7 @@ from .connect_flow import (
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
+from .policy_sync_status import cloud_policy_sync_fields
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
@@ -293,27 +295,18 @@ def _resolve_next_action(detection: HarnessDetection, managed: bool, review_coun
 
 
 def _build_next_steps(recommended: dict[str, object] | None, payload: dict[str, object]) -> list[dict[str, str]]:
-    if recommended is None:
-        return [
-            {
-                "title": "Install a supported harness",
-                "command": f"{GUARD_COMMAND} detect",
-                "detail": (
-                    "Guard did not find a local harness config yet. Start by installing "
-                    "Codex, Claude Code, Copilot CLI, Hermes, Cursor, Antigravity, Gemini, or OpenCode."
-                ),
-            }
-        ]
-    steps = [_install_or_review_step(recommended), _run_step(recommended), _receipts_step()]
-    steps.append(_approvals_step())
-    steps.append(
-        _connect_or_dashboard_step(
-            str(payload.get("cloud_state") or "local_only"),
-            str(payload.get("connect_url") or GUARD_CONNECT_URL),
-            str(payload.get("dashboard_url") or GUARD_DASHBOARD_URL),
-        )
+    return _product_guidance.build_next_steps(
+        recommended,
+        payload,
+        guard_command=GUARD_COMMAND,
+        default_connect_url=GUARD_CONNECT_URL,
+        default_dashboard_url=GUARD_DASHBOARD_URL,
+        install_or_review_step=_install_or_review_step,
+        run_step=_run_step,
+        receipts_step=_receipts_step,
+        approvals_step=_approvals_step,
+        connect_or_dashboard_step=_connect_or_dashboard_step,
     )
-    return steps
 
 
 def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_center_url: str | None) -> str:
@@ -395,11 +388,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "advisory_count": len(advisories),
         "advisory_headline": _advisory_headline(advisories),
         "remote_policy_active": bool(remote_policy),
-        "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
-        "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
-        "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
-        "cloud_policy_sync_error": cached_policy_bundle_error
-        or _optional_string(policy_bundle_last_error.get("reason")),
+        **cloud_policy_sync_fields(policy_bundle, policy_bundle_last_error, sync_summary, cached_policy_bundle_error),
         "alert_preferences_active": bool(alert_preferences),
         "watchlist_enabled": bool(alert_preferences.get("watchlistEnabled")),
         "team_alerts_enabled": bool(alert_preferences.get("teamAlertsEnabled")),
@@ -410,142 +399,28 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
 
 
 def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
-    cloud_state = str(payload.get("cloud_state") or "local_only")
-    recommended = _recommended_summary(payload)
-    dashboard_url = str(payload.get("dashboard_url") or GUARD_DASHBOARD_URL)
-    connect_url = str(payload.get("connect_url") or GUARD_CONNECT_URL)
-    inbox_url = str(payload.get("inbox_url") or GUARD_INBOX_URL)
-    fleet_url = str(payload.get("fleet_url") or GUARD_FLEET_URL)
-    steps: list[dict[str, str]]
-    if cloud_state == "local_only":
-        steps = [
-            {
-                "title": "Run Guard connect",
-                "command": str(payload.get("connect_command") or f"{GUARD_COMMAND} connect"),
-                "detail": (
-                    "Start the local pairing flow, open the browser automatically, and wait for Guard Cloud to pair "
-                    "this machine."
-                ),
-            },
-            {
-                "title": "Complete browser sign-in",
-                "command": connect_url,
-                "detail": (
-                    "Sign in on the Guard connect page if prompted. Guard will resume and run the first sync once the "
-                    "browser pairing finishes."
-                ),
-            },
-        ]
-        if recommended is not None:
-            steps.append(_run_step(recommended))
-        steps.append(
-            {
-                "title": "Open Guard Home",
-                "command": dashboard_url,
-                "detail": (
-                    "Home stays useful before sync is on. Use it to watch this machine "
-                    "and decide when shared memory becomes worth it."
-                ),
-            }
-        )
-        return steps
-    if cloud_state == "paired_waiting":
-        steps = [
-            {
-                "title": "Finish the first cloud sync",
-                "command": str(payload.get("sync_command") or f"{GUARD_COMMAND} sync"),
-                "detail": (
-                    "Keep Local Guard running so it can finish the first cloud sync automatically. "
-                    "Use the sync command only when you want to force the retry now."
-                ),
-            }
-        ]
-        if _int_payload_value(payload, "receipt_count", 0) == 0 and recommended is not None:
-            steps.append(_run_step(recommended))
-        steps.append(
-            {
-                "title": "Open Guard Fleet",
-                "command": fleet_url,
-                "detail": (
-                    "Fleet is the fastest place to confirm the connected machine while "
-                    "the first shared proof is still warming up."
-                ),
-            }
-        )
-        return steps
-    if _int_payload_value(payload, "pending_approvals", 0) > 0:
-        steps = [
-            {
-                "title": "Open Guard Inbox",
-                "command": inbox_url,
-                "detail": "Inbox is the fastest place to resolve live review pressure after this machine connects.",
-            },
-            _approvals_step(),
-        ]
-    elif recommended is not None and str(recommended.get("next_action")) == "review":
-        steps = [
-            {
-                "title": "Open Guard Inbox",
-                "command": inbox_url,
-                "detail": (
-                    "Guard already sees review pressure. Start in Inbox, then drop back "
-                    "to the local approval center only when needed."
-                ),
-            },
-            _install_or_review_step(recommended),
-        ]
-    else:
-        steps = [
-            {
-                "title": "Check local Guard status",
-                "command": f"{GUARD_COMMAND} status",
-                "detail": "Review local protection health, recent sync, and Guard's recommended next step.",
-            }
-        ]
-    steps.insert(
-        0,
-        {
-            "title": "Open Guard Home",
-            "command": dashboard_url,
-            "detail": "Review Home, Inbox, Fleet, Evidence, and upgrade prompts from the signed-in command center.",
-        },
+    return _product_guidance.build_connect_steps(
+        payload,
+        guard_command=GUARD_COMMAND,
+        default_dashboard_url=GUARD_DASHBOARD_URL,
+        default_connect_url=GUARD_CONNECT_URL,
+        default_inbox_url=GUARD_INBOX_URL,
+        default_fleet_url=GUARD_FLEET_URL,
+        recommended_summary=_recommended_summary,
+        run_step=_run_step,
+        int_payload_value=_int_payload_value,
+        approvals_step=_approvals_step,
+        install_or_review_step=_install_or_review_step,
     )
-    if bool(payload.get("team_policy_active")):
-        steps.append(
-            {
-                "title": "Inspect synced team policy",
-                "command": f"{GUARD_COMMAND} policies",
-                "detail": "Confirm the shared workspace policy Guard pulled down for this machine.",
-            }
-        )
-    elif _int_payload_value(payload, "advisory_count", 0) > 0:
-        steps.append(
-            {
-                "title": "Review Guard advisories",
-                "command": f"{GUARD_COMMAND} advisories",
-                "detail": "Inspect the latest premium trust signals and publisher changes Guard cached locally.",
-            }
-        )
-    return steps
 
 
 def _connect_or_dashboard_step(cloud_state: str, connect_url: str, dashboard_url: str) -> dict[str, str]:
-    if cloud_state == "local_only":
-        return {
-            "title": "Optional cloud connect",
-            "command": f"{GUARD_COMMAND} connect",
-            "detail": (
-                "Keep local protection free by default, then run one command when you want shared inbox state, "
-                "fleet continuity, evidence, or team policy."
-            ),
-        }
-    return {
-        "title": "Open Guard Home",
-        "command": dashboard_url,
-        "detail": (
-            "Guard Cloud is already paired. Use the signed-in command center for Home, Fleet, Evidence, and upgrades."
-        ),
-    }
+    return _product_guidance.connect_or_dashboard_step(
+        cloud_state,
+        connect_url,
+        dashboard_url,
+        guard_command=GUARD_COMMAND,
+    )
 
 
 def _recommended_summary(payload: dict[str, object]) -> dict[str, object] | None:
@@ -593,42 +468,16 @@ def _cloud_state_detail(
     connect_retry_refresh_race: bool = False,
     shared_proof_recorded: bool = False,
 ) -> str:
-    if oauth_repair_required:
-        return (
-            "Guard Cloud sign-in on this machine is incomplete. "
-            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
-        )
-    if connect_retry_refresh_race:
-        return (
-            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token "
-            f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
-        )
-    if connect_retry_required:
-        return resolve_guard_cloud_repair_detail(
-            shared_proof_recorded=shared_proof_recorded,
-            first_sync_message=(
-                "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
-                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
-            ),
-            resume_message=(
-                "Guard Cloud connection on this machine needs repair before shared proof can resume. "
-                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to restore sync."
-            ),
-        )
-    if cloud_state == "paired_waiting":
-        return (
-            "Guard Cloud credentials are saved, but this machine has not finished the first shared sync yet. "
-            f"Keep Local Guard running so it can retry automatically, or run "
-            f"`{GUARD_COMMAND} sync` to force a retry now."
-        )
-    if cloud_state == "paired_active":
-        return (
-            "Guard is paired with Guard Cloud. Use the local CLI for protection and the signed-in command center "
-            f"at {dashboard_url} for Home, Inbox, Fleet, Evidence, upgrades, and team workflows."
-        )
-    return (
-        "Local Guard is active and keeps receipts on this machine. Guard Cloud is optional; "
-        f"run `{GUARD_COMMAND} connect` when you want shared history, live advisories, or team policy."
+    return _product_guidance.cloud_state_detail(
+        cloud_state,
+        connect_url,
+        dashboard_url,
+        oauth_repair_required=oauth_repair_required,
+        connect_retry_required=connect_retry_required,
+        connect_retry_refresh_race=connect_retry_refresh_race,
+        shared_proof_recorded=shared_proof_recorded,
+        guard_command=GUARD_COMMAND,
+        resolve_guard_cloud_repair_detail=resolve_guard_cloud_repair_detail,
     )
 
 

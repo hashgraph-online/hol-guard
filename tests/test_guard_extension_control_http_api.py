@@ -37,9 +37,13 @@ def test_http_repair_converges_when_store_recovered_after_daemon_cached_failure(
         BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         (),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: stale)
+    monkeypatch.setattr(
+        store, "read_extension_control_authority_for_registry", lambda _registry, *, read_only=False: stale
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: protected)
+    monkeypatch.setattr(
+        store, "read_extension_control_authority_for_registry", lambda _registry, *, read_only=False: protected
+    )
     daemon.start()
     try:
         auth_token = load_guard_daemon_auth_token(store.guard_home)

@@ -135,6 +135,7 @@ def test_receipt_sync_context_uploads_v2_policy_bundle_acknowledgement(tmp_path:
     acknowledgement = {
         "contractVersion": "guard-policy-bundle.v2",
         **_v2_delivery(bundle_version=3),
+        "deviceId": store.get_or_create_installation_id(),
         "sequence": 1,
         "status": "applied",
         "observedAt": "2026-04-19T00:00:11Z",
@@ -345,6 +346,12 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
     }
     context = runner._receipt_sync_context(store, local_guard_online_at="2026-08-25T12:00:02Z")
     assert context["policyBundleAcknowledgementV2"] == acknowledgement
+    snapshot = runtime.current()
+    resident = store.read_extension_control_authority_for_registry(registry)
+    assert acknowledgement["appliedExtensionAuthorityRevision"] == snapshot.managed_revision
+    assert acknowledgement["appliedEffectiveProjectionDigest"] == f"sha256:{snapshot.effective_digest}"
+    assert resident.managed_revision == snapshot.managed_revision
+    assert effective_projection_digest(resident) == f"sha256:{snapshot.effective_digest}"
 
 
 def test_receipt_sync_rejects_managed_bundle_without_delivery_and_makes_no_ack(

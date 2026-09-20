@@ -9,8 +9,11 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Final, cast
 
+from .exact_command import EXACT_COMMAND_CONTRACT
+from .exact_command_policy import exact_command_policy_digest
 from .models import DecisionScope, GuardAction, PolicyDecision
 from .policy_document import GuardPolicyDocument
+from .policy_document_export import coalesce_exported_rules
 from .policy_document_types import CompiledPolicyRow, PolicyCompilationError
 
 _POLICY_API_VERSION: Final = "guard.hashgraphonline.com/v1alpha1"
@@ -22,7 +25,9 @@ _UTC_TIMESTAMP_RE: Final = re.compile(
     r"^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T" + r"([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?Z$"
 )
 _REDACTED_TIMESTAMP: Final = "1970-01-01T00:00:00Z"
-_SUPPORTED_MATCH_KEYS: Final = frozenset({"artifacts", "harnesses", "publishers", "tools", "workspaces"})
+_SUPPORTED_MATCH_KEYS: Final = frozenset(
+    {"artifacts", "harnesses", "publishers", "tools", "workspaces", "exactCommand"}
+)
 _TOOL_SELECTOR_FAMILIES: Final = {
     "file-read": "file-read",
     "mcp": "mcp",
@@ -107,6 +112,13 @@ def _rule_match_from_row(row: Mapping[str, object], *, include_provenance: bool)
         match["publishers"] = [publisher]
     if include_provenance and workspace is not None:
         match["workspaces"] = [workspace]
+    if row.get("exact_command_sha256") is not None:
+        selector = {"contractVersion": EXACT_COMMAND_CONTRACT, "sha256": row["exact_command_sha256"]}
+        try:
+            _ = exact_command_policy_digest(selector, artifact_id, scope=row.get("scope"))
+        except ValueError as error:
+            raise PolicyCompilationError("invalid_exact_command_policy", _stable_rule_id(row)) from error
+        match["exactCommand"] = selector
     return match
 
 
@@ -116,7 +128,9 @@ def _rule_from_policy_row(row: Mapping[str, object], *, include_provenance: bool
     if workspace is not None and not include_provenance:
         raise PolicyCompilationError("sensitive_local_policy_requires_provenance", rule_id)
     action = row.get("action")
-    if action not in {"allow", "block"}:
+    if action == "ignore":
+        raise PolicyCompilationError("inert_ignore_has_no_local_row", rule_id)
+    if action not in {"allow", "block", "review"}:
         raise PolicyCompilationError("unsupported_local_policy_action", rule_id)
     expires_at = _normalized_expiry(
         row.get("expires_at"),
@@ -193,13 +207,22 @@ def build_policy_document_from_rows(
             json.dumps(row, sort_keys=True, separators=(",", ":"), default=str),
         ),
     )
+    origins: dict[str, object] = {}
+    for row in ordered:
+        rule_id = _stable_rule_id(row)
+        origin = row.get("policy_document_id")
+        if rule_id in origins and origins[rule_id] != origin:
+            raise PolicyCompilationError("policy_rule_identity_conflict", rule_id)
+        origins[rule_id] = origin
     mapping: dict[str, object] = {
         "apiVersion": _POLICY_API_VERSION,
         "kind": _POLICY_KIND,
         "metadata": {"id": document_id, "name": name[:256], "revision": revision},
         "spec": {
             "defaults": {"mode": "prompt"},
-            "rules": [_rule_from_policy_row(row, include_provenance=include_provenance) for row in ordered],
+            "rules": coalesce_exported_rules(
+                [_rule_from_policy_row(row, include_provenance=include_provenance) for row in ordered]
+            ),
         },
     }
     return GuardPolicyDocument.from_mapping(mapping)
@@ -257,10 +280,10 @@ def _local_scope(
     preferred = extension.get("scope")
     if isinstance(preferred, str) and preferred in _LOCAL_SCOPES:
         return cast(DecisionScope, preferred)
-    if artifact_id is not None:
-        return "artifact"
     if workspace is not None:
         return "workspace"
+    if artifact_id is not None:
+        return "artifact"
     if publisher is not None:
         return "publisher"
     if harness is not None:
@@ -279,17 +302,23 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
     if not isinstance(rules, list):
         raise PolicyCompilationError("invalid_policy_rules", document.metadata.id)
     compiled: list[CompiledPolicyRow] = []
+    seen_rule_ids: set[str] = set()
     for raw_rule in rules:
         if not isinstance(raw_rule, Mapping):
             raise PolicyCompilationError("invalid_policy_rule", document.metadata.id)
         rule_id = str(raw_rule.get("id", "unknown"))
+        if rule_id in seen_rule_ids:
+            raise PolicyCompilationError("duplicate_policy_rule_id", rule_id)
+        seen_rule_ids.add(rule_id)
         enabled = raw_rule.get("enabled")
         if not isinstance(enabled, bool):
             raise PolicyCompilationError("invalid_policy_enabled", rule_id)
         if not enabled:
             continue
         effect = raw_rule.get("effect")
-        if effect not in {"allow", "block"}:
+        if effect == "ignore":
+            continue
+        if effect not in {"allow", "block", "review"}:
             raise PolicyCompilationError("unsupported_policy_effect", rule_id)
         lifetime = raw_rule.get("lifetime")
         if not isinstance(lifetime, Mapping) or lifetime.get("mode") not in {"permanent", "until"}:
@@ -299,6 +328,8 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
             raise PolicyCompilationError("unsupported_policy_match", rule_id)
         if isinstance(match.get("commands"), Mapping):
             raise PolicyCompilationError("command_expression_requires_guard_3_1_runtime", rule_id)
+        if isinstance(match.get("devices"), list) and match.get("devices"):
+            raise PolicyCompilationError("unsupported_policy_device_selector", rule_id)
         unsupported = {
             key
             for key, value in match.items()
@@ -332,6 +363,22 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
                 publisher=publisher,
                 harness=harness,
             )
+            if (
+                (workspace is not None and scope != "workspace")
+                or (publisher is not None and scope != "publisher")
+                or (
+                    artifact_id is not None
+                    and scope not in {"artifact", "workspace"}
+                    and not (artifact_id.startswith("family:") and scope == "harness")
+                )
+            ):
+                raise PolicyCompilationError("unsupported_policy_scope_projection", rule_id)
+            exact_digest = None
+            if "exactCommand" in match:
+                try:
+                    exact_digest = exact_command_policy_digest(match["exactCommand"], artifact_id, scope=scope)
+                except ValueError as error:
+                    raise PolicyCompilationError("invalid_exact_command_policy", rule_id) from error
             compiled.append(
                 CompiledPolicyRow(
                     decision=PolicyDecision(
@@ -340,6 +387,7 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
                         action=cast(GuardAction, effect),
                         artifact_id=artifact_id,
                         artifact_hash=_optional_string(extension.get("artifactHash")),
+                        exact_command_sha256=exact_digest,
                         workspace=workspace,
                         publisher=publisher,
                         reason=_optional_string(raw_rule.get("description")),

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..approval_link_output import native_review_reason
-from .hook_availability_policy import hook_action_is_emergency_safe
+from .hook_availability_policy import hook_action_is_emergency_safe, hook_event_is_permission_request
 
 
 def prepare_native_hook_policy(
@@ -32,6 +32,23 @@ def prepare_native_hook_policy(
     )
     if prepared_policy is not None:
         return True
+    publisher = getattr(daemon_server.hook_worker, "policy_snapshot_publisher", None)
+    if (
+        getattr(publisher, "requires_policy_authority", False) is True
+        or getattr(publisher, "requires_scoped_authority", False) is True
+    ):
+        from .hook_request_parsing import runtime_hook_event_name
+
+        daemon_server.hook_worker.metrics.record_route("native_fail_safe")
+        handler._write_json(
+            integrity_fail_closed_hook_response(
+                harness,
+                event_name=runtime_hook_event_name(payload),
+                reason="HOL Guard could not verify the current scoped policy authority.",
+                reason_code="native_scoped_authority_unavailable",
+            )
+        )
+        return False
     if hook_action_is_emergency_safe(payload, workspace=workspace_path):
         return True
     daemon_server.hook_worker.metrics.record_route("native_fail_safe")
@@ -356,6 +373,48 @@ def post_tool_fail_safe_response(
         event_name="PostToolUse",
         reason_code=reason_code,
     )
+
+
+def integrity_fail_closed_hook_response(
+    harness: str, *, event_name: str, reason: str, reason_code: str
+) -> dict[str, object]:
+    """Render an authority refusal without changing its terminal decision."""
+    if event_name == "PostToolUse":
+        return harness_json_from_native_post_tool(
+            harness,
+            {
+                "decision": "deny",
+                "model_output_action": "block",
+                "policy_action": "block",
+                "notice": "warning",
+                "reason": reason,
+                "reason_code": reason_code,
+            },
+        )
+    if hook_event_is_permission_request(event_name):
+        canonical = _canonical_hook_harness(harness)
+        if canonical == "copilot":
+            return {
+                "behavior": "deny",
+                "message": reason,
+                "interrupt": False,
+                "reason_code": reason_code,
+            }
+        decision: dict[str, object] = {
+            "behavior": "deny",
+            "message": reason,
+        }
+        if canonical != "codex":
+            decision["interrupt"] = False
+        return {
+            "policy_action": "block",
+            "reason_code": reason_code,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "decision": decision,
+            },
+        }
+    return integrity_fail_closed_pre_tool_response(harness, reason=reason, reason_code=reason_code)
 
 
 def integrity_fail_closed_pre_tool_response(

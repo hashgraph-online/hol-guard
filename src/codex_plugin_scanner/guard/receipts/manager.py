@@ -8,7 +8,9 @@ from uuid import uuid4
 
 from ..action_lattice import normalize_guard_action
 from ..models import GuardAction, GuardReceipt
+from ..native_policy_decision_context import safe_native_policy_decision
 from ..runtime.actions import GuardActionEnvelope
+from .policy_execution_outcome import safe_policy_execution_outcome
 
 
 def _redacted_envelope_dict(
@@ -25,7 +27,17 @@ def _redacted_envelope_dict(
     """
     if isinstance(envelope, Mapping):
         policy_fields = {key: envelope[key] for key in ("policy_action", "policyAction") if key in envelope}
-        typed_payload = {key: value for key, value in envelope.items() if key not in {"policy_action", "policyAction"}}
+        witness = safe_policy_execution_outcome(envelope.get("policyExecutionOutcome"))
+        if witness is not None:
+            policy_fields["policyExecutionOutcome"] = witness
+        native_context = safe_native_policy_decision(envelope.get("nativePolicyDecision"))
+        if native_context is not None:
+            policy_fields["nativePolicyDecision"] = native_context
+        typed_payload = {
+            key: value
+            for key, value in envelope.items()
+            if key not in {"policy_action", "policyAction", "policyExecutionOutcome", "nativePolicyDecision"}
+        }
         try:
             typed_envelope = GuardActionEnvelope.from_dict(typed_payload)
         except (TypeError, ValueError):
@@ -124,6 +136,12 @@ def _redacted_legacy_envelope_dict(
                 safe[key] = list(value)
         if isinstance(package_name, str) and package_name:
             safe["package_name"] = package_name
+    witness = safe_policy_execution_outcome(envelope.get("policyExecutionOutcome"))
+    if witness is not None:
+        safe["policyExecutionOutcome"] = witness
+    native_context = safe_native_policy_decision(envelope.get("nativePolicyDecision"))
+    if native_context is not None:
+        safe["nativePolicyDecision"] = native_context
     return safe
 
 

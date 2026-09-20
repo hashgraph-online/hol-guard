@@ -41,7 +41,14 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
     // Hold the client lease for the stream lifetime so idle holders keep the
     // resident alive. Still wait for a request before answering, so a lease
     // failure is framed instead of exiting with an empty stdout.
+    let _diagnostic = super::diagnostic::begin();
+    super::diagnostic::record(super::diagnostic::Stage::StreamEntry);
     let client_lease = super::lease::acquire(state_base);
+    if client_lease.is_ok() {
+        super::diagnostic::record(super::diagnostic::Stage::LeaseAcquired);
+    } else {
+        super::diagnostic::record(super::diagnostic::Stage::LeaseRefused);
+    }
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut input = stdin.lock();
@@ -50,16 +57,14 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
         let Some(payload) = read_frame(&mut input)? else {
             return Ok(());
         };
-        let timeout = super::client_timeout(&payload);
-        let response = match client_lease.as_ref() {
-            Ok(lease) => {
-                match super::client_request_with_lease(state_base, &payload, timeout, lease) {
-                    Ok(response) => response,
-                    Err(error) => crate::resident_protocol::safe_error_response(&error, false),
-                }
-            }
-            Err(error) => crate::resident_protocol::safe_error_response(error, false),
-        };
+        super::diagnostic::record(super::diagnostic::Stage::FrameRead);
+        let response = super::client_timeout(&payload).and_then(|timeout| {
+            let lease = client_lease.as_ref().map_err(|error| error.clone())?;
+            super::client_request_with_lease(state_base, &payload, timeout, lease)
+        });
+        let response = response
+            .unwrap_or_else(|error| crate::resident_protocol::safe_error_response(&error, false));
         write_frame(&mut output, &response)?;
+        super::diagnostic::record(super::diagnostic::Stage::FrameWritten);
     }
 }

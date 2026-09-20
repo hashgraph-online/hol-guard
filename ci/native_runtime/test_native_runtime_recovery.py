@@ -16,7 +16,8 @@ from ci.native_runtime.test_native_hook_client import (
     _request as _native_request,
 )
 from ci.native_runtime.test_native_hook_client import _state_files
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot, native_review_diagnostic
+from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
@@ -112,7 +113,7 @@ def test_runtime_rejects_symlink_binary(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 @pytest.mark.skipif(not _NATIVE_BINARY or os.name == "nt", reason="compiled POSIX resident runtime is required")
-def test_poisoned_socket_symlink_falls_back_without_touching_target(tmp_path: Path) -> None:
+def test_unused_legacy_socket_symlink_does_not_affect_native_authority(tmp_path: Path) -> None:
     status = native_runtime_status()
     assert status.available and status.compatible and status.identity is not None
     with tempfile.TemporaryDirectory(prefix="hgr-poison-", dir=tempfile.gettempdir()) as short_tmp:
@@ -127,8 +128,10 @@ def test_poisoned_socket_symlink_falls_back_without_touching_target(tmp_path: Pa
         socket_path.symlink_to(victim)
         try:
             with native_policy_snapshot(guard_home) as snapshot:
+                reset_native_hook_route()
                 response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
-            assert response is not None
+            assert response is not None, native_review_diagnostic(guard_home)
+            assert native_hook_route() == "native_resident"
             assert response.decision == "allow"
             assert victim.read_text(encoding="utf-8") == "keep"
             assert socket_path.is_symlink()
@@ -171,6 +174,7 @@ def test_resident_runtime_restarts_after_contained_shutdown(tmp_path: Path) -> N
 
 @pytest.mark.skipif(not _NATIVE_BINARY or os.name == "nt", reason="compiled POSIX resident runtime is required")
 def test_native_clients_share_one_generation_across_processes(tmp_path: Path) -> None:
+    assert _NATIVE_BINARY is not None
     runtime = Path(_NATIVE_BINARY).resolve(strict=True)
     state_dir = tmp_path / "native-runtime"
     state_dir.mkdir(mode=0o700)
@@ -185,7 +189,7 @@ def test_native_clients_share_one_generation_across_processes(tmp_path: Path) ->
         )
         for _ in range(8)
     ]
-    process_ids: tuple[int, int] = ()
+    process_ids: tuple[int, ...] = ()
     try:
         for process in processes:
             assert process.stdin is not None

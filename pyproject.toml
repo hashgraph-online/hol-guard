@@ -46,6 +46,7 @@ classifiers = [
 dependencies = [
     "rich>=14.0,<15",
     "cryptography>=50.0.0",
+    "anyio>=4.14.2",
     "keyring>=25.0",
     "packaging>=24.0",
     "idna==3.15",
@@ -208,13 +209,15 @@ relative_files = true
 source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
 also_copy = [
   "src/codex_plugin_scanner",
-  "contracts/guard-cloud-review",
-  "docs/guard/contracts/guard-cloud-review.md",
+  "contracts",
+  "contributions",
+  "docs/guard/contracts",
 ]
 pytest_add_cli_args_test_selection = [
   "tests/test_guard_command_model.py",
   "tests/test_guard_command_critical_floors.py",
   "tests/test_guard_command_corpus.py",
+  "tests/test_guard_shell_read_syntax_fidelity.py::test_raw_parser_keeps_invalid_execution_prefix",
 ]
 
 [tool.basedpyright]

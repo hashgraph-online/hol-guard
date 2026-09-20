@@ -8,8 +8,8 @@
 //! replay entry. Python only forwards the browser response.
 
 use super::approval_context::{
-    derive_context_with_snapshot, ensure_context_approvable, is_lower_hex, now_ms, replay_binding,
-    ApprovalContext,
+    derive_context_with_versioned_snapshot, ensure_context_approvable, is_lower_hex, now_ms,
+    replay_binding, ApprovalContext,
 };
 use super::approval_v4_crypto::{encode_base64url, verify_assertion, VerifiedAssertion};
 use crate::policy_store::approval_v4_authority as authority;
@@ -195,8 +195,8 @@ fn context_and_store(
     store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<ApprovalContext, String> {
     store
-        .with_approval_fence(envelope, |snapshot| {
-            derive_context_with_snapshot(envelope, store, snapshot)
+        .with_versioned_approval_fence(envelope, |snapshot| {
+            derive_context_with_versioned_snapshot(envelope, store, snapshot)
         })
         .map_err(|error| {
             if matches!(
@@ -217,8 +217,8 @@ pub(crate) fn create_challenge(
     if request.schema != NATIVE_APPROVAL_CHALLENGE_REQUEST_V4_SCHEMA || request.version != 4 {
         return Err("native_approval_v4_challenge_request_invalid".to_owned());
     }
-    store.with_approval_fence(&request.envelope, |snapshot| {
-        let context = derive_context_with_snapshot(&request.envelope, store, snapshot)?;
+    store.with_versioned_approval_fence(&request.envelope, |snapshot| {
+        let context = derive_context_with_versioned_snapshot(&request.envelope, store, snapshot)?;
         ensure_context_approvable(&context)?;
         let authority = store.approval_v4_authority()?;
         if !authority_bindings_match(&context, authority) {
@@ -355,6 +355,7 @@ pub(crate) fn validate_approval(
     let fence = crate::policy_store::ApprovalPolicyFence {
         generation: context.policy_generation,
         policy_digest: &context.policy_digest,
+        source_input_digest: context.source_input_digest.as_deref(),
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };
@@ -416,6 +417,7 @@ pub(crate) fn consume_approval(
     let fence = crate::policy_store::ApprovalPolicyFence {
         generation: context.policy_generation,
         policy_digest: &context.policy_digest,
+        source_input_digest: context.source_input_digest.as_deref(),
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };

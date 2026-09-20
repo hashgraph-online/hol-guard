@@ -188,6 +188,7 @@ NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES = frozenset(
         "native_client_timeout_failed",
         "native_client_transport_invalid",
         "native_client_unix_unavailable",
+        "native_command_control_mutation_in_progress",
         "native_frame_header_failed",
         "native_frame_read_failed",
         "native_frame_timeout_failed",

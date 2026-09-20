@@ -8,6 +8,7 @@ import time
 import types
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 
 def _config() -> dict[str, object]:
@@ -37,6 +38,7 @@ def _status() -> SimpleNamespace:
         compatible=True,
         identity=SimpleNamespace(path=Path("/tmp/hol-guard-runtime"), sha256="a" * 64),
         capabilities=SimpleNamespace(
+            extension_catalog_digest=None,
             rule_digest="b" * 64,
             features=(
                 "resident-protocol-v2",
@@ -98,8 +100,8 @@ def _fake_windows_snapshot_kernel(
         if not read_result:
             return 0
         chunk = data[offset : offset + request_size]
-        ctypes.memmove(buffer, chunk, len(chunk))
-        ctypes.cast(count_pointer, ctypes.POINTER(ctypes.c_uint32)).contents.value = len(chunk)
+        ctypes.memmove(cast(ctypes.c_void_p, buffer), chunk, len(chunk))
+        ctypes.cast(cast(ctypes.c_void_p, count_pointer), ctypes.POINTER(ctypes.c_uint32)).contents.value = len(chunk)
         offset += len(chunk)
         return 1
 

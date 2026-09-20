@@ -63,3 +63,8 @@ Thumbs.db
 /docs/guard/extension-builder/*.[mM][dD]
 !/docs/guard/extension-builder/README.md
 !/docs/guard/extension-builder/VALIDATION.md
+
+# Regenerated policy evaluation dumps; tests generate these at runtime.
+/rust/crates/guard-runtime/tests/fixtures/generic-origin-policy.json
+/rust/crates/guard-runtime/tests/fixtures/sensitive-read-mixed-origin-policy.json
+/rust/crates/guard-runtime/tests/fixtures/sensitive-read-policy.json

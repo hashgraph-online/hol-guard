@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, call
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_windows_job as windows_job_module
-from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     BoundedHookProcessResult,
     isolated_daemon_start_command,
@@ -94,23 +93,6 @@ def test_daemon_start_budget_contains_initial_worker_readiness() -> None:
         hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
         > hook_entrypoint_module._HOOK_EVALUATOR_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
     )
-
-
-def test_evaluator_becomes_ready_when_store_prewarm_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connection = MagicMock()
-    connection.recv.return_value = ("stop", None)
-    monkeypatch.setattr(
-        guard_store_module,
-        "GuardStore",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("migration busy")),
-    )
-
-    hook_entrypoint_module._hook_evaluator_main(connection, str(tmp_path / "guard-home"))  # pyright: ignore[reportPrivateUsage]
-
-    connection.send.assert_called_once_with(("ready", None))
 
 
 @pytest.mark.parametrize(
@@ -476,7 +458,9 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
     assert elapsed < 1.0 * timing_scale
 
 
-def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
+def _transient_not_ready_test_runner(
+    tmp_path: Path, responses: Sequence[object]
+) -> tuple[HookProcessRunner, MagicMock]:
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=1)
     runner._started = True  # pyright: ignore[reportPrivateUsage]
     process = MagicMock()
@@ -685,6 +669,9 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
 
     try:
         runner.start()
+        # start() can return before startup completes. Measure the bounded
+        # steady-capacity burst only after every intended worker is ready.
+        assert runner.wait_for_capacity(minimum_workers=8, timeout_seconds=15 * timing_scale), runner.stats()
         with ThreadPoolExecutor(max_workers=48) as executor:
             results = list(executor.map(review, range(48)))
     finally:

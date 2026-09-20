@@ -163,11 +163,12 @@ def managed_controls_runtime_sync_posture(
         )
     except (TypeError, ValueError):
         return {"managedControlsCapabilities": []}
-    protected, authority_revision, effective_digest = _authority_posture(store, flags=flags)
+    protected, authority_revision, managed_revision, effective_digest = _authority_posture(store, flags=flags)
     return dict(
         build_managed_controls_runtime_posture(
             catalog_digest=catalog["catalogDigest"],
             extension_authority_revision=authority_revision,
+            managed_extension_authority_revision=managed_revision,
             effective_projection_digest=effective_digest,
             capabilities=flags.runtime_capabilities(protected_authority=protected),
         )
@@ -214,15 +215,16 @@ def _authority_posture(
     store: GuardStore,
     *,
     flags: ManagedControlsFeatureFlags,
-) -> tuple[bool, int | None, str | None]:
+) -> tuple[bool, int | None, int | None, str | None]:
     if not flags.managed_extension_controls:
-        return False, None, None
+        return False, None, None, None
     authority = _read_protected_authority(store)
     if authority is None:
-        return False, None, None
+        return False, None, None, None
     return (
         True,
         authority.revision,
+        authority.managed_revision,
         f"sha256:{ExtensionControlRuntimeSnapshot.from_authority_view(authority).effective_digest}",
     )
 

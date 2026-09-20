@@ -382,6 +382,9 @@
               "password-fields"
             ]
           }
+        },
+        "exactCommand": {
+          "$ref": "#/$defs/exactCommand"
         }
       },
       "patternProperties": {
@@ -609,6 +612,25 @@
           }
         }
       ]
+    },
+    "exactCommand": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "sha256"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "guard.exact-command.v1"
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

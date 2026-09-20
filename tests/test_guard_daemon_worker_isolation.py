@@ -19,7 +19,14 @@ def _skip_unrelated_hook_worker_startup(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.daemon_headless_refresh
 def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        runner,
+        "_test_sync_auth_context_override",
+        {"sync_url": "https://hol.org/api/guard/receipts/sync", "access_token": "synthetic-access"},
+    )
     synced = threading.Event()
 
     def _fake_sync(*, store: GuardStore) -> dict[str, object]:

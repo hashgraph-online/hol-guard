@@ -11,6 +11,7 @@ from .action_lattice import (
     normalize_guard_action_result,
 )
 from .models import GuardAction
+from .policy_rule_identity import PolicyRuleIdentity
 from .runtime.decisions import (
     AUTHORITATIVE_DECISION_INCONSISTENT,
     GuardDecisionAction,
@@ -137,6 +138,9 @@ def canonical_approval_decision(
         canonical_v2["dashboard_primary_detail"] = raw_decision["dashboard_primary_detail"]
         canonical_v2["detail_reason_code"] = _DEGRADED_TRUST_DETAIL_REASON
     if raw_decision is not None:
+        identity = PolicyRuleIdentity.from_mapping(raw_decision) if contract_error is None else None
+        if identity is not None:
+            canonical_v2.update(identity.to_dict())
         policy_version = raw_decision.get("policyVersion")
         if isinstance(policy_version, str) and policy_version.strip():
             canonical_v2["policyVersion"] = policy_version

@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.hook_producer_fixtures import patch_runtime_hook_producers
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
@@ -443,8 +444,7 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
         "source_scope": "project",
     }
     args = _hook_args("codex", json_output=True)
-    monkeypatch.setattr(hook_command, "load_guard_config", lambda *_args, **_kwargs: config)
-    monkeypatch.setattr(hook_command, "_hook_runtime_artifact", lambda **_kwargs: artifact)
+    patch_runtime_hook_producers(monkeypatch, config=config, artifact=artifact)
     monkeypatch.setattr(hook_command, "_review_runtime_artifact_hook", lambda *_args, **_kwargs: None)
 
     hook_command._run_guard_hook_command(

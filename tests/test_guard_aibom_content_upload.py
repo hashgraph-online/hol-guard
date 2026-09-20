@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -18,6 +19,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.guard_aibom_authority_support import content_aibom_authority
 
 
 def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
@@ -139,12 +141,14 @@ def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path
             "failedCount": 0,
         },
     )
+    store, operation = content_aibom_authority(tmp_path, context=context)
     summary, _auth_context = upload_primary_content_sources(
-        object(),
+        store,
         runner,
         {"sync_url": "https://hol.test/api/v1/guard/events"},
         sources=sources,
         workspace_id="workspace-1",
+        operation=operation,
     )
 
     assert summary["eligible"] == 1
@@ -309,6 +313,8 @@ def test_openclaw_supplementary_skill_files_stay_out_of_cloud_inventory(tmp_path
         home_dir=tmp_path,
     )
 
+    assert all(isinstance(artifact, GuardArtifact) for artifact in cloud_artifacts)
+    cloud_artifacts = cast(tuple[GuardArtifact, ...], cloud_artifacts)
     assert [artifact.artifact_id for artifact in cloud_artifacts] == [primary.artifact_id]
 
 

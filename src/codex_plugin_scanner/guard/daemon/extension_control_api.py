@@ -45,6 +45,7 @@ from ..runtime.extension_control_proof import (
 from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime
 from .extension_control_errors import ExtensionControlApiError
+from .extension_control_observation import read_observed_extension_control_authority
 from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
 from .managed_controls_api import effective_controls_payload
@@ -112,7 +113,7 @@ class ExtensionControlApiService:
         return effective_controls_payload(self._registry, snapshot, self._store)
 
     def refresh(self) -> dict[str, object]:
-        view = self._store.read_extension_control_authority_for_registry(self._registry)
+        view = read_observed_extension_control_authority(self._store, self._registry)
         _ = self._runtime.refresh(view)
         return self.effective()
 
@@ -186,6 +187,11 @@ class ExtensionControlApiService:
             )
         except ExtensionControlAuthorityError as exc:
             raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
+        if view.health is not AuthorityHealth.PROTECTED:
+            raise ExtensionControlApiError(503, "authority_recovery_incomplete")
+        # Local repair does not authenticate the retained catalog or managed layer.
+        # Keep the failed runtime until their complete composition is protected.
+        view = self._store.read_extension_control_authority_for_registry(self._registry)
         if view.health is not AuthorityHealth.PROTECTED:
             raise ExtensionControlApiError(503, "authority_recovery_incomplete")
         try:

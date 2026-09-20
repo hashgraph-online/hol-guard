@@ -33,7 +33,9 @@ from ...version import __version__
 from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
+from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, _resolve_operator_home_dir
+from ..aibom_commands import _sync_aibom_snapshots_if_due_admitted
+from ..aibom_daemon_authority import capture_aibom_daemon_attempt, commit_aibom_daemon_result
 from ..approval_gate import (
     ApprovalGateError,
     begin_totp_enrollment,
@@ -68,6 +70,12 @@ from ..approvals import (
     bulk_allow_read_only_once,
 )
 from ..browser_opener import open_browser_url
+from ..cli.connect_completion import (
+    CONNECT_CONNECTION_KEY,
+    hold_connect_connection,
+    hold_connect_sync,
+    take_connect_connection,
+)
 from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
@@ -133,6 +141,7 @@ from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_mode import python_oracle_surface_enabled
+from ..oauth_connection_authority import OAuthConnectAttempt
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -153,7 +162,6 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
-from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
@@ -195,6 +203,7 @@ from ..runtime.runner import (
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..runtime.trust_attestation import trust_attestation_v2_enabled
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
     repair_failing_managed_harness_hooks,
@@ -221,8 +230,8 @@ from ..store_evidence import (
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
 from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
-from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
+from .cloud_sync_summary import headless_cloud_sync_summary
 from .command_activity_api import (
     handle_command_activity_analytics,
     handle_command_activity_diagnostics,
@@ -255,7 +264,14 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
+from .extension_control_observation import read_observed_extension_control_authority
+from .first_cloud_sync import (
+    background_cloud_sync_is_dormant,
+    maybe_queue_first_cloud_sync,
+    queue_sync_with_optional_publish,
+)
+from .hook_health import hook_worker_health
+from .hook_native_policy_context import submit_native_review_receipt
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker_responses import prepare_native_hook_policy
@@ -668,7 +684,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         try:
             self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
             self.extension_control_runtime = ExtensionControlRuntime(
-                self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+                read_observed_extension_control_authority(self.store, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
             self.extension_control_api = ExtensionControlApiService(
                 store=self.store,
@@ -705,7 +721,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+        view = read_observed_extension_control_authority(self.store, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
         return self.extension_control_runtime.refresh(view)
 
     def process_request(self, request: Any, client_address: Any) -> None:
@@ -767,6 +783,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         if was_active:
             self.connection_capacity.release()
             self._guard_release_request()
+
+    def release_handler_capacity(self, request: socket.socket) -> None:
+        with self.request_capacity_lock:
+            capacity_kind = self.request_capacity_kinds.pop(id(request), None)
+        if capacity_kind is not None:
+            self._request_capacity_for_kind(capacity_kind).release()
 
     def _register_unclassified_connection(self, request: socket.socket) -> None:
         accepted_at = time.monotonic()
@@ -1242,15 +1264,7 @@ def _run_headless_cloud_sync(
             now=recorded_at,
             request_id=request_id if isinstance(request_id, str) and request_id else None,
         )
-        return {
-            "status": "synced",
-            "synced_at": sync_payload.get("synced_at"),
-            "receipts_stored": sync_payload.get("receipts_stored", 0),
-            "runtime_session_id": sync_payload.get("runtime_session_id"),
-            "runtime_session_synced_at": sync_payload.get("runtime_session_synced_at"),
-            "runtime_sessions_visible": sync_payload.get("runtime_sessions_visible"),
-            "supply_chain": supply_chain_payload,
-        }
+        return headless_cloud_sync_summary(sync_payload, supply_chain_payload)
 
     def _safe_storage_repair() -> dict[str, object]:
         try:
@@ -1861,6 +1875,7 @@ def _finalize_daemon_guard_connect_payload(
     now: str,
     managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
 ) -> dict[str, object]:
+    committed = take_connect_connection(payload)
     sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
     resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
@@ -1873,77 +1888,85 @@ def _finalize_daemon_guard_connect_payload(
     payload.setdefault("fleet_url", f"{dashboard_url}/protect")
     if str(payload.get("status") or "") != "connected":
         return payload
-    store.clear_cloud_sync_state_for_reconnect(
+    with hold_connect_sync(store, resolved_sync_auth_context, committed):
+        pass
+    committed = store.clear_cloud_sync_state_for_reconnect(
         now=now,
+        expected_connection=committed,
         managed_controls_publish=managed_controls_publish,
     )
-    latest_state = store.record_guard_connect_pairing_completed(
-        sync_url=sync_url,
-        allowed_origin=allowed_origin,
-        now=now,
-    )
-    payload.update(
-        {
-            "status": str(latest_state.get("status") or payload.get("status") or "connected"),
-            "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
-            "completed_at": latest_state.get("completed_at") or now,
-            "latest_connect_state": latest_state,
-        }
-    )
-    oauth_health = store.get_oauth_local_credential_health()
-    if store.get_cloud_sync_profile() is None and (
-        oauth_health.get("state") == "degraded" or not oauth_health.get("configured")
-    ):
-        repair_message = (
-            "Guard Cloud authorization did not persist locally. "
-            "Start Guard Cloud connect again to repair local sign-in."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
+    with hold_connect_connection(store, committed):
+        latest_state = store.record_guard_connect_pairing_completed(
+            sync_url=sync_url,
+            allowed_origin=allowed_origin,
             now=now,
-            reason=repair_message,
         )
         payload.update(
             {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": repair_message,
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+                "status": str(latest_state.get("status") or payload.get("status") or "connected"),
+                "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
+                "completed_at": latest_state.get("completed_at") or now,
+                "latest_connect_state": latest_state,
             }
         )
-        return payload
-    if store.get_cloud_sync_profile() is None:
-        payload["sync_attempted"] = False
-        return payload
-    payload["sync_attempted"] = True
+        oauth_health = store.get_oauth_local_credential_health()
+        if store.get_cloud_sync_profile() is None and (
+            oauth_health.get("state") == "degraded" or not oauth_health.get("configured")
+        ):
+            repair_message = (
+                "Guard Cloud authorization did not persist locally. "
+                "Start Guard Cloud connect again to repair local sign-in."
+            )
+            store.record_latest_guard_connect_sync_result(
+                status="retry_required",
+                milestone="first_sync_failed",
+                now=now,
+                reason=repair_message,
+            )
+            payload.update(
+                {
+                    "status": "retry_required",
+                    "milestone": "first_sync_failed",
+                    "sync_succeeded": False,
+                    "sync_error": repair_message,
+                    "repair_message": repair_message,
+                    "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+                }
+            )
+            return payload
+        if store.get_cloud_sync_profile() is None:
+            payload["sync_attempted"] = False
+            return payload
+        payload["sync_attempted"] = True
     try:
-        sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
-            store,
-            resolved_sync_auth_context,
-            managed_controls_publish,
-        )
+        with hold_connect_sync(store, resolved_sync_auth_context, committed):
+            sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
+                store,
+                resolved_sync_auth_context,
+                managed_controls_publish,
+            )
     except GuardSyncNotAvailableError as error:
         payload = apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="connected",
             recorded_milestone="sync_not_available",
             repair_message=str(error),
         )
-        reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
-        if reconciled_state is not None:
-            payload["milestone"] = str(reconciled_state.get("milestone") or "first_sync_pending")
-            payload["latest_connect_state"] = reconciled_state
-        return payload
+        with hold_connect_connection(store, committed):
+            reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
+            if reconciled_state is not None:
+                payload["milestone"] = str(reconciled_state.get("milestone") or "first_sync_pending")
+                payload["latest_connect_state"] = reconciled_state
+            return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         return apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="retry_required",
@@ -1955,6 +1978,7 @@ def _finalize_daemon_guard_connect_payload(
         return apply_guard_connect_sync_result(
             store,
             payload,
+            expected_connection=committed,
             now=now,
             error=error,
             recorded_status="connected",
@@ -1965,29 +1989,32 @@ def _finalize_daemon_guard_connect_payload(
             ),
             payload_status="connected",
         )
-    latest_state = store.record_latest_guard_connect_sync_success(
-        sync_payload=sync_payload,
-        now=str(sync_payload.get("synced_at") or now),
-        request_id=str(latest_state.get("request_id") or ""),
-    )
-    payload.update(
-        {
-            "status": "connected",
-            "milestone": "first_sync_succeeded",
-            "sync_succeeded": True,
-            "sync": sync_payload,
-            "last_sync_at": sync_payload.get("synced_at"),
-            "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
-        }
-    )
-    try:
-        payload["supply_chain"] = _sync_supply_chain_cloud_state_with_optional_auth_context(
-            store,
-            resolved_sync_auth_context,
+    with hold_connect_connection(store, committed):
+        latest_state = store.record_latest_guard_connect_sync_success(
+            sync_payload=sync_payload,
+            now=str(sync_payload.get("synced_at") or now),
+            request_id=str(latest_state.get("request_id") or ""),
         )
+        payload.update(
+            {
+                "status": "connected",
+                "milestone": "first_sync_succeeded",
+                "sync_succeeded": True,
+                "sync": sync_payload,
+                "last_sync_at": sync_payload.get("synced_at"),
+                "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
+            }
+        )
+    try:
+        with hold_connect_sync(store, resolved_sync_auth_context, committed):
+            payload["supply_chain"] = _sync_supply_chain_cloud_state_with_optional_auth_context(
+                store,
+                resolved_sync_auth_context,
+            )
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
-    return payload
+    with hold_connect_connection(store, committed):
+        return payload
 
 
 def _complete_browser_oauth_connect(
@@ -1996,6 +2023,7 @@ def _complete_browser_oauth_connect(
     session: Any,
     connect_url: str,
     browser_opened: bool,
+    attempt: OAuthConnectAttempt,
     managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None),
 ) -> dict[str, object]:
     _, allowed_origin = resolve_connect_url(connect_url)
@@ -2014,7 +2042,7 @@ def _complete_browser_oauth_connect(
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = _now()
-    _persist_oauth_local_credentials(
+    committed = _persist_oauth_local_credentials(
         store=store,
         issuer=oauth_client.issuer,
         client_id=oauth_client.client_id,
@@ -2029,12 +2057,14 @@ def _complete_browser_oauth_connect(
         access_token=token_result.access_token,
         access_token_expires_at=token_result.access_token_expires_at,
         now=timestamp,
+        expected_attempt=attempt,
     )
     sync_url = f"{allowed_origin}/api/guard/receipts/sync"
     return _finalize_daemon_guard_connect_payload(
         store=store,
         connect_url=connect_url,
         payload={
+            CONNECT_CONNECTION_KEY: committed,
             "status": "connected",
             "connect_mode": "browser_oauth",
             "browser_opened": browser_opened,
@@ -2111,6 +2141,14 @@ _GuardDaemonHttpServer = _GuardDaemonHTTPServer
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    def handle_one_request(self) -> None:
+        try:
+            super().handle_one_request()
+        finally:
+            # Request work has ended; keep socket admission owned until actual
+            # teardown, including the authenticated challenge's keep-alive wait.
+            self._daemon_server().release_handler_capacity(self.request)
 
     def parse_request(self) -> bool:
         parsed = super().parse_request()
@@ -2324,9 +2362,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
         if parsed.path == "/v1/cloud-review":
-            from .cloud_review_settings import cloud_review_settings_status
+            from .cloud_review_settings_route import handle_cloud_review_status
 
-            self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            handle_cloud_review_status(self._daemon_server(), self._write_json)
             return
         if parsed.path == "/v1/update/status":
             self._write_json(
@@ -3936,6 +3974,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         try:
             prepare_guard_cloud_connect_authorization(store)
+            attempt = store.begin_oauth_connect_attempt()
             device = store.get_device_metadata()
             session = start_guard_browser_session(
                 connect_url=connect_url,
@@ -3983,6 +4022,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     session=session,
                     connect_url=connect_url,
                     browser_opened=browser_opened,
+                    attempt=attempt,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 resolved_entitlement = resolve_package_firewall_entitlement(store)
@@ -4058,6 +4098,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         try:
             prepare_guard_cloud_connect_authorization(store)
+            attempt = store.begin_oauth_connect_attempt()
             device = store.get_device_metadata()
             session = start_guard_browser_session(
                 connect_url=connect_url,
@@ -4108,6 +4149,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     session=session,
                     connect_url=connect_url,
                     browser_opened=browser_opened,
+                    attempt=attempt,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 if _guard_cloud_connect_succeeded(store):
@@ -5836,44 +5878,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         reason_code: str,
         native_authoritative: bool = False,
     ) -> dict[str, object]:
-        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
-        harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
-        event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
-        daemon_server = getattr(self, "server", None)
-        workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
-        guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
-        try:
-            loaded = None if guard_home is None else load_guard_config(guard_home, workspace=workspace_path)
-            observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
-        except (OSError, RuntimeError, TypeError, ValueError):
-            observe_mode = False
-        if observe_mode and not native_authoritative:
-            if harness in {"pi", "omp"}:
-                return {"decision": "allow", "reason_code": reason_code, "observed_review_failure": True}
-            if event == "PermissionRequest":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "decision": {"behavior": "allow"}},
-                }
-            if event == "PreToolUse":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
-                }
-            return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
-        from .hook_availability_policy import availability_harness_response
+        from .hook_failure_response import runtime_hook_failure_response
 
-        payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
-        return availability_harness_response(
-            payload_dict,
-            harness=harness,
-            event_name=event,
-            reason_code=reason_code,
+        return runtime_hook_failure_response(
+            self,
+            payload,
+            params,
+            default_harness=default_harness,
             reason=reason,
-            workspace=workspace_path,
-            home_dir=home_path,
-            guard_home=guard_home,
-            recording_only=observe_mode,
+            reason_code=reason_code,
+            native_authoritative=native_authoritative,
         )
 
     def _validated_fail_safe_hook_paths(
@@ -6100,11 +6114,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         if review.payload is not None and time.monotonic() < process_deadline:
             receipt_accepted = False
-            if review.receipt is not None:
-                with suppress(Exception):
-                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
-                        review.receipt
-                    )
+            with suppress(Exception):
+                receipt_accepted = submit_native_review_receipt(daemon_server.runtime_hook_evidence_writer, review)
             with suppress(Exception):
                 activity_action = review.payload.get("policy_action")
                 event = payload.get("hook_event_name", payload.get("hookEventName"))
@@ -7200,9 +7211,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "state": load_state,
                 "detail": load_detail,
             },
-            "hook_process_capacity": process_scheduler_stats,
-            "hook_workers": daemon_server.hook_process_runner.stats(),
-            "request_capacity": request_capacity,
+            **hook_worker_health(daemon_server, process_scheduler_stats, request_capacity),
         }
 
     def _operator_health_payload(self) -> dict[str, object]:
@@ -7837,6 +7846,7 @@ class GuardDaemonServer:
 
     _quarantine_lock: ClassVar[threading.Lock] = threading.Lock()
     _quarantined_services: ClassVar[dict[str, GuardDaemonServer]] = {}
+    _initial_storage_maintenance_complete: bool | None = None
 
     @staticmethod
     def _quarantine_key(guard_home: Path) -> str:
@@ -7935,7 +7945,11 @@ class GuardDaemonServer:
         self._headless_cloud_sync_interval_seconds = _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS
         self._aibom_home_dir = home_dir.expanduser() if home_dir is not None else None
         self._aibom_workspace_dir = workspace_dir.expanduser() if workspace_dir is not None else None
-        self._aibom_context_workspace_id = store.get_cloud_workspace_id() if self._aibom_workspace_dir else None
+        self._aibom_context_source = (
+            store.capture_oauth_connection(allow_primary=True, allow_recoverable=True)
+            if self._aibom_workspace_dir is not None
+            else None
+        )
         self._aibom_refresh_thread: threading.Thread | None = None
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
@@ -8084,6 +8098,9 @@ class GuardDaemonServer:
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
         self._maintain_command_activity_best_effort()
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._initial_storage_maintenance_complete = self._maintain_storage_best_effort()
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
         self._persist_aibom_inventory_context()
@@ -8240,21 +8257,40 @@ class GuardDaemonServer:
     def _command_activity_maintenance_loop(self) -> None:
         if self._shutdown_started.is_set():
             return
-        self._maintain_command_activity_best_effort()
-        storage_complete = self._maintain_storage_best_effort()
+        storage_complete = self._initial_storage_maintenance_complete
+        self._initial_storage_maintenance_complete = None
+        if storage_complete is None:
+            self._maintain_command_activity_best_effort()
+            storage_complete = self._maintain_storage_best_effort()
         while not self._shutdown_started.wait(3_600 if storage_complete else 5):
             self._maintain_command_activity_best_effort()
             storage_complete = self._maintain_storage_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
-        persist_aibom_inventory_context(
-            store=self._server.store,
-            cached_workspace_id=self._aibom_context_workspace_id,
-            workspace_dir=self._aibom_workspace_dir,
-            home_dir=self._aibom_home_dir,
-            now=_now(),
-            record_diagnostic=self._diagnostics.record,
-        )
+        if self._aibom_workspace_dir is None or self._aibom_context_source is None:
+            return
+        store = self._server.store
+        try:
+            with store.hold_oauth_credential_lock():
+                source = store._capture_oauth_connection_unlocked(allow_primary=True, allow_recoverable=True)
+                if source is None or not self._aibom_context_source.same_authority(source):
+                    return
+                workspace_id = source.credentials().get("workspace_id")
+                if not isinstance(workspace_id, str) or not workspace_id.strip():
+                    return
+                payload: dict[str, object] = {
+                    "workspace_dir": str(self._aibom_workspace_dir),
+                    "workspace_id": workspace_id,
+                }
+                if self._aibom_home_dir is not None:
+                    payload["home_dir"] = str(self._aibom_home_dir)
+                store._set_sync_payload_unlocked("aibom_inventory_context", payload, _now())
+        except sqlite3.DatabaseError as error:
+            with suppress(Exception):
+                self._diagnostics.record(
+                    "aibom_inventory_context_persist_failed",
+                    detail=type(error).__name__,
+                )
 
     def _serve_forever(self) -> None:
         stop_reason = "serve_loop_returned"
@@ -8464,6 +8500,10 @@ class GuardDaemonServer:
             else interval_seconds
         )
         while not self._shutdown_started.is_set():
+            if background_cloud_sync_is_dormant(self._server.store):
+                if self._shutdown_started.wait(backoff_seconds):
+                    return
+                continue
             summary = _run_headless_cloud_sync_with_optional_publish(
                 store=self._server.store,
                 managed_controls_publish=_managed_controls_publish_for(self._server),
@@ -8527,6 +8567,10 @@ class GuardDaemonServer:
             self._bundle_refresh_backoff_seconds if self._bundle_refresh_backoff_seconds > 0 else interval_seconds
         )
         while not self._shutdown_started.is_set():
+            if background_cloud_sync_is_dormant(self._server.store):
+                if self._shutdown_started.wait(backoff_seconds):
+                    return
+                continue
             refreshed_at = _now()
             try:
                 summary = sync_supply_chain_bundle(self._server.store)
@@ -8596,33 +8640,59 @@ class GuardDaemonServer:
         )
         self._aibom_refresh_thread.start()
 
-    def _aibom_inventory_context_dirs(self) -> tuple[Path | None, Path | None, str | None]:
-        payload = self._server.store.get_sync_payload("aibom_inventory_context")
-        current_workspace_id = self._server.store.get_cloud_workspace_id()
-        bound_payload: dict[str, object] | None = None
-        if (
-            current_workspace_id is not None
-            and isinstance(payload, dict)
-            and payload.get("workspace_id") == current_workspace_id
-        ):
-            bound_payload = payload
-        if bound_payload is not None:
-            home_value = bound_payload.get("home_dir")
-            workspace_value = bound_payload.get("workspace_dir")
-        else:
-            home_value = None
-            workspace_value = None
-        explicit_context_is_bound = (
-            self._aibom_workspace_dir is not None and self._aibom_context_workspace_id == current_workspace_id
+    def _refresh_aibom_inventory_attempt(self, *, refreshed_at: str, interval_seconds: float) -> bool:
+        """Commit one captured terminal outcome while the caller retains admission."""
+        store = self._server.store
+        fallback_home = _resolve_operator_home_dir()
+        attempt = capture_aibom_daemon_attempt(
+            store,
+            now=refreshed_at,
+            explicit=HarnessContext(
+                home_dir=self._aibom_home_dir or fallback_home,
+                workspace_dir=self._aibom_workspace_dir,
+                guard_home=store.guard_home,
+            ),
+            explicit_source=self._aibom_context_source,
+            fallback_home=fallback_home,
+            bind_installation=trust_attestation_v2_enabled(),
         )
-        home_dir = self._aibom_home_dir if explicit_context_is_bound else None
-        if home_dir is None and isinstance(home_value, str) and home_value.strip():
-            home_dir = Path(home_value).expanduser()
-        workspace_dir = self._aibom_workspace_dir if explicit_context_is_bound else None
-        if workspace_dir is None and isinstance(workspace_value, str) and workspace_value.strip():
-            workspace_dir = Path(workspace_value).expanduser()
-        bound_workspace_id = current_workspace_id if workspace_dir is not None else None
-        return home_dir, workspace_dir, bound_workspace_id
+        use_backoff = True
+        try:
+            if attempt.context().workspace_dir is None:
+                payload: dict[str, object] = {
+                    "status": "missing_workspace_context",
+                    "reason": "missing_workspace_context",
+                    "skipped": True,
+                    "refreshed_at": refreshed_at,
+                }
+            elif attempt.operation is None:
+                payload = {"status": "not_configured", "refreshed_at": refreshed_at}
+            else:
+                summary = _sync_aibom_snapshots_if_due_admitted(
+                    store,
+                    operation=attempt.operation,
+                    generated_at=refreshed_at,
+                    min_interval_seconds=max(int(interval_seconds), 1),
+                )
+                has_error = bool(summary.get("error"))
+                if has_error:
+                    status = "error"
+                elif summary.get("synced") is True:
+                    status = "synced"
+                else:
+                    status = str(summary.get("reason") or "skipped")
+                payload = {**summary, "status": status, "refreshed_at": refreshed_at}
+                use_backoff = has_error or status == "not_configured"
+        except GuardSyncAuthorizationExpiredError as error:
+            payload = {"status": "auth_expired", "refreshed_at": refreshed_at, "message": str(error)}
+        except GuardSyncNotConfiguredError:
+            payload = {"status": "not_configured", "refreshed_at": refreshed_at}
+        except Exception as error:
+            payload = {"error": str(error), "refreshed_at": refreshed_at, "status": "error"}
+        # Never recapture after an exception: a result belongs to the attempt
+        # that produced it, including errors and unavailable-source outcomes.
+        committed = commit_aibom_daemon_result(store, attempt, payload, now=refreshed_at)
+        return use_backoff or not committed
 
     def _refresh_aibom_inventory_loop(self) -> None:
         interval_seconds = self._aibom_refresh_interval_seconds
@@ -8632,77 +8702,17 @@ class GuardDaemonServer:
             self._aibom_refresh_backoff_seconds if self._aibom_refresh_backoff_seconds > 0 else interval_seconds
         )
         while not self._shutdown_started.is_set():
-            refreshed_at = _now()
+            use_backoff = True
             try:
-                home_dir, workspace_dir, bound_workspace_id = self._aibom_inventory_context_dirs()
-                if workspace_dir is None:
-                    self._server.store.set_sync_payload(
-                        "aibom_inventory_daemon",
-                        {
-                            "status": "missing_workspace_context",
-                            "reason": "missing_workspace_context",
-                            "skipped": True,
-                            "refreshed_at": refreshed_at,
-                        },
-                        refreshed_at,
+                with self._server.store.hold_aibom_sync_lock():
+                    use_backoff = self._refresh_aibom_inventory_attempt(
+                        refreshed_at=_now(), interval_seconds=interval_seconds
                     )
-                    if self._shutdown_started.wait(backoff_seconds):
-                        return
-                    continue
-                auth_context = _resolve_guard_sync_auth_context(self._server.store)
-                with self._server.store.hold_cloud_sync_lock():
-                    summary = sync_aibom_snapshots_if_due(
-                        self._server.store,
-                        generated_at=refreshed_at,
-                        min_interval_seconds=max(int(interval_seconds), 1),
-                        auth_context=auth_context,
-                        expected_workspace_id=bound_workspace_id,
-                        home_dir=home_dir,
-                        workspace_dir=workspace_dir,
-                    )
-                has_error = bool(summary.get("error"))
-                if has_error:
-                    status = "error"
-                elif summary.get("synced") is True:
-                    status = "synced"
-                else:
-                    status = str(summary.get("reason") or "skipped")
-                self._server.store.set_sync_payload(
-                    "aibom_inventory_daemon",
-                    {**summary, "status": status, "refreshed_at": refreshed_at},
-                    refreshed_at,
-                )
-                wait_seconds = backoff_seconds if has_error or status == "not_configured" else interval_seconds
-            except GuardSyncAuthorizationExpiredError as error:
-                self._server.store.set_sync_payload(
-                    "aibom_inventory_daemon",
-                    {
-                        "status": "auth_expired",
-                        "refreshed_at": refreshed_at,
-                        "message": str(error),
-                    },
-                    refreshed_at,
-                )
-                wait_seconds = backoff_seconds
-            except GuardSyncNotConfiguredError:
-                self._server.store.set_sync_payload(
-                    "aibom_inventory_daemon",
-                    {"status": "not_configured", "refreshed_at": refreshed_at},
-                    refreshed_at,
-                )
-                wait_seconds = backoff_seconds
-            except Exception as error:
-                self._server.store.set_sync_payload(
-                    "aibom_inventory_daemon",
-                    {
-                        "error": str(error),
-                        "refreshed_at": refreshed_at,
-                        "status": "error",
-                    },
-                    refreshed_at,
-                )
-                wait_seconds = backoff_seconds
-            if self._shutdown_started.wait(wait_seconds):
+            except Exception:
+                # Admission/capture/commit failure has no new authority to
+                # overwrite another attempt's terminal result.
+                pass
+            if self._shutdown_started.wait(backoff_seconds if use_backoff else interval_seconds):
                 return
 
 
