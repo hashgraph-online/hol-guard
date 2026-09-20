@@ -32,6 +32,7 @@ import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-view
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import {
   isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceRequiredError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
   resolveSupplyChainAuditFailure,
@@ -168,8 +169,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   props: {
   approvalGate: GuardApprovalGatePublicConfig | null;
   auditWorkspaceDir?: string | null;
+  managedAuditWorkspaceDir?: string | null;
   onAuditConnectGateChange?: (state: AuditConnectGateViewState | null) => void;
   onAuditErrorChange?: (message: string | null) => void;
+  onAuditWorkspaceRequired?: () => void;
   onStateChanged?: () => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
   onAuditStarted?: () => void;
@@ -182,8 +185,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const {
     approvalGate,
     auditWorkspaceDir,
+    managedAuditWorkspaceDir,
     onAuditConnectGateChange,
     onAuditErrorChange,
+    onAuditWorkspaceRequired,
     onStateChanged,
     onAuditCompleted,
     onAuditStarted,
@@ -303,7 +308,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       const statusWorkspaceDir =
         panelLoad.phase === "loaded" ? panelLoad.data.audit_workspace_dir ?? null : null;
       const workspaceDir = resolveSupplyChainAuditWorkspaceTarget({
-        managedWorkspaceDir: auditWorkspaceDir,
+        selectedWorkspaceDir: auditWorkspaceDir,
+        managedWorkspaceDir: managedAuditWorkspaceDir,
         statusWorkspaceDir,
       });
       try {
@@ -342,6 +348,9 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           openAuditConnectGate(true);
           return false;
         }
+        if (isSupplyChainAuditWorkspaceRequiredError(err)) {
+          onAuditWorkspaceRequired?.();
+        }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
         setLastFailed({ op: "audit", manager: null, message });
         onAuditErrorChange?.(message);
@@ -360,9 +369,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       onAuditCompleted,
       onAuditStarted,
       onAuditErrorChange,
+      onAuditWorkspaceRequired,
       onAuditRunningChange,
       onStateChanged,
       openAuditConnectGate,
+      managedAuditWorkspaceDir,
       panelLoad,
       refreshAfterOp,
     ],

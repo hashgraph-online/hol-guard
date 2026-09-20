@@ -663,6 +663,54 @@ def test_daemon_workspace_audit_requires_workspace_when_uninferable(
     assert payload["error"] == "workspace_dir_required"
 
 
+def test_daemon_workspace_audit_accepts_an_explicit_project_folder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "packages": {
+                    "": {"dependencies": {"minimist": "^1.2.0"}},
+                    "node_modules/minimist": {"version": "1.2.8"},
+                }
+            }
+        ),
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_run_cloud_workspace_audit",
+        lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
+    )
+    monkeypatch.chdir(empty_dir)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(workspace_dir)},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["operation"] == "audit"
+
+
 def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:
     metadata = audit_receipt_metadata(
         {

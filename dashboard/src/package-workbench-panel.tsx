@@ -30,7 +30,10 @@ type PackageWorkbenchPanelProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
   auditError?: string | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
+  auditWorkspaceDir?: string;
+  auditWorkspaceSelectionRequired?: boolean;
   onRunAudit?: () => void;
+  onAuditWorkspaceDirChange?: (workspaceDir: string) => void;
   auditRunning?: boolean;
   auditPhase?: AuditRunPhase;
   cloudState?: string | null;
@@ -89,6 +92,34 @@ function WorkbenchAuditErrorBanner({ message }: { message: string }) {
   );
 }
 
+function WorkspaceAuditFolderField(props: {
+  value: string;
+  onChange?: (workspaceDir: string) => void;
+}) {
+  return (
+    <div className="border-y border-slate-100 py-4" data-testid="workspace-audit-folder-field">
+      <label className="block text-sm font-semibold text-brand-dark" htmlFor="workspace-audit-folder">
+        Project folder
+      </label>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        Enter the project folder you want Guard to audit. It must contain a supported package manifest or lockfile.
+      </p>
+      <input
+        id="workspace-audit-folder"
+        data-testid="workspace-audit-folder-input"
+        type="text"
+        inputMode="text"
+        autoComplete="off"
+        spellCheck={false}
+        value={props.value}
+        onChange={(event) => props.onChange?.(event.target.value)}
+        placeholder="<project-folder>"
+        className="mt-3 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark shadow-sm outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+      />
+    </div>
+  );
+}
+
 function WorkbenchEmptyState({ auditConnectGate }: WorkbenchEmptyStateProps) {
   if (auditConnectGate !== null && auditConnectGate !== undefined) {
     return (
@@ -119,7 +150,10 @@ export function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
   auditSnapshot,
+  auditWorkspaceDir = "",
+  auditWorkspaceSelectionRequired = false,
   onRunAudit,
+  onAuditWorkspaceDirChange,
   auditRunning = false,
   auditPhase = "idle",
   cloudState = null,
@@ -142,6 +176,7 @@ export function PackageWorkbenchPanel({
 
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
+  const workspacePathMissing = auditWorkspaceSelectionRequired && !auditWorkspaceDir.trim();
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);
@@ -275,8 +310,10 @@ export function PackageWorkbenchPanel({
             <ActionButton
               variant="outline"
               onClick={handleRunAudit}
-              disabled={auditRunning}
+              disabled={auditRunning || workspacePathMissing}
+              aria-disabled={auditRunning || workspacePathMissing}
               aria-busy={auditRunning}
+              data-testid="workspace-audit-run"
             >
               {auditRunning ? (
                 <HiMiniArrowPath className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -305,6 +342,13 @@ export function PackageWorkbenchPanel({
         ) : (
           <>
             {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
+
+            {auditWorkspaceSelectionRequired ? (
+              <WorkspaceAuditFolderField
+                value={auditWorkspaceDir}
+                onChange={onAuditWorkspaceDirChange}
+              />
+            ) : null}
 
             {progressActive ? (
               <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4">

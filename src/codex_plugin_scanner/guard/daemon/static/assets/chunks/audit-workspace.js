@@ -591,6 +591,27 @@ function WorkbenchAuditErrorBanner({ message }) {
     }
   );
 }
+function WorkspaceAuditFolderField(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-100 py-4", "data-testid": "workspace-audit-folder-field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "workspace-audit-folder", children: "Project folder" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Enter the project folder you want Guard to audit. It must contain a supported package manifest or lockfile." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: "workspace-audit-folder",
+        "data-testid": "workspace-audit-folder-input",
+        type: "text",
+        inputMode: "text",
+        autoComplete: "off",
+        spellCheck: false,
+        value: props.value,
+        onChange: (event) => props.onChange?.(event.target.value),
+        placeholder: "<project-folder>",
+        className: "mt-3 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark shadow-sm outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] });
+}
 function WorkbenchEmptyState({ auditConnectGate }) {
   if (auditConnectGate !== null && auditConnectGate !== void 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -621,7 +642,10 @@ function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
   auditSnapshot,
+  auditWorkspaceDir = "",
+  auditWorkspaceSelectionRequired = false,
   onRunAudit,
+  onAuditWorkspaceDirChange,
   auditRunning = false,
   auditPhase = "idle",
   cloudState = null
@@ -640,6 +664,7 @@ function PackageWorkbenchPanel({
   const [filterModalOpen, setFilterModalOpen] = reactExports.useState(false);
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
+  const workspacePathMissing = auditWorkspaceSelectionRequired && !auditWorkspaceDir.trim();
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === void 0);
@@ -750,8 +775,10 @@ function PackageWorkbenchPanel({
           {
             variant: "outline",
             onClick: handleRunAudit,
-            disabled: auditRunning,
+            disabled: auditRunning || workspacePathMissing,
+            "aria-disabled": auditRunning || workspacePathMissing,
             "aria-busy": auditRunning,
+            "data-testid": "workspace-audit-run",
             children: [
               auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-4 w-4 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
               auditSnapshot === null ? "Run audit" : "Run audit again"
@@ -771,6 +798,13 @@ function PackageWorkbenchPanel({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4 space-y-4", children: auditConnectGate !== null && auditConnectGate !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
+      auditWorkspaceSelectionRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WorkspaceAuditFolderField,
+        {
+          value: auditWorkspaceDir,
+          onChange: onAuditWorkspaceDirChange
+        }
+      ) : null,
       progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AuditProgressStepList, { phase: auditPhase, running: auditRunning }) }) : null,
       auditSnapshot === null && !progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate: null }) : null,
       showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1300,10 +1334,13 @@ function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }) {
         auditConnectGate: auditSession.auditConnectGate,
         auditError: auditSession.auditError,
         auditSnapshot: auditSession.auditSnapshot,
+        auditWorkspaceDir: auditSession.auditWorkspaceDir,
+        auditWorkspaceSelectionRequired: auditSession.auditWorkspaceSelectionRequired,
         auditRunning: auditSession.auditRunning,
         auditPhase: auditSession.auditPhase,
         cloudState: snapshot.cloud_state,
-        onRunAudit: auditSession.handleRunAudit
+        onRunAudit: auditSession.handleRunAudit,
+        onAuditWorkspaceDirChange: auditSession.setAuditWorkspaceDir
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [

@@ -3,6 +3,7 @@ import { GuardHarnessActionError } from "./guard-api";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
 import {
   isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceRequiredError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
   supplyChainAuditConnectUserMessage,
@@ -85,8 +86,12 @@ const workspaceError = new GuardHarnessActionError(400, {
   operation: "audit",
 });
 assert(
-  supplyChainAuditUserMessage(workspaceError)?.includes("hol-guard supply-chain audit --json"),
-  "workspace audit errors should provide the exact project-folder fallback command",
+  isSupplyChainAuditWorkspaceRequiredError(workspaceError),
+  "workspace audit errors should activate the project-folder recovery flow",
+);
+assert(
+  supplyChainAuditUserMessage(workspaceError)?.includes("Enter the project folder"),
+  "workspace audit errors should direct users to the dashboard recovery field",
 );
 assert(
   !isSupplyChainAuditConnectError(workspaceError),

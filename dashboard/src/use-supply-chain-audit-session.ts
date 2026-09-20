@@ -15,6 +15,8 @@ export type SupplyChainAuditSession = {
   auditSnapshot: SupplyChainAuditSnapshot | null;
   auditRunning: boolean;
   auditError: string | null;
+  auditWorkspaceDir: string;
+  auditWorkspaceSelectionRequired: boolean;
   auditConnectGate: AuditConnectGateViewState | null;
   auditPhase: AuditRunPhase;
   runAuditRef: MutableRefObject<(() => void) | null>;
@@ -22,6 +24,8 @@ export type SupplyChainAuditSession = {
   handleAuditStarted: () => void;
   handleAuditCompleted: (resultDetail: Record<string, unknown>) => void;
   handleAuditErrorChange: (message: string | null) => void;
+  handleAuditWorkspaceRequired: () => void;
+  setAuditWorkspaceDir: (workspaceDir: string) => void;
   handleAuditRunningChange: (running: boolean) => void;
   handleRunAudit: () => void;
 };
@@ -38,6 +42,8 @@ export function useSupplyChainAuditSession({
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditWorkspaceDir, setAuditWorkspaceDir] = useState("");
+  const [auditWorkspaceSelectionRequired, setAuditWorkspaceSelectionRequired] = useState(false);
   const [auditConnectGate, setAuditConnectGate] = useState<AuditConnectGateViewState | null>(null);
   const [auditPhase, setAuditPhase] = useState<AuditRunPhase>("idle");
   const runAuditRef = useRef<(() => void) | null>(null);
@@ -129,6 +135,10 @@ export function useSupplyChainAuditSession({
     [clearPhaseTimers, setAuditPhaseLive],
   );
 
+  const handleAuditWorkspaceRequired = useCallback(() => {
+    setAuditWorkspaceSelectionRequired(true);
+  }, []);
+
   const handleAuditRunningChange = useCallback(
     (running: boolean) => {
       setAuditRunning(running);
@@ -148,6 +158,8 @@ export function useSupplyChainAuditSession({
     auditSnapshot,
     auditRunning,
     auditError,
+    auditWorkspaceDir,
+    auditWorkspaceSelectionRequired,
     auditConnectGate,
     auditPhase,
     runAuditRef,
@@ -155,6 +167,8 @@ export function useSupplyChainAuditSession({
     handleAuditStarted,
     handleAuditCompleted,
     handleAuditErrorChange,
+    handleAuditWorkspaceRequired,
+    setAuditWorkspaceDir,
     handleAuditRunningChange,
     handleRunAudit,
   };
