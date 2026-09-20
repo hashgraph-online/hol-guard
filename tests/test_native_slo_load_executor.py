@@ -40,7 +40,7 @@ def test_timed_out_capacity_wave_returns_without_waiting_for_running_worker(
 def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, int | None]] = []
+    calls: list[tuple[str, ThreadPoolExecutor | None]] = []
 
     class FakeSession:
         def __init__(self) -> None:
@@ -52,7 +52,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
             return 0
 
     def fake_prime(executor: ThreadPoolExecutor, concurrency: int) -> int:
-        calls.append((f"prime-{concurrency}", id(executor)))
+        calls.append((f"prime-{concurrency}", executor))
         return concurrency
 
     def fake_prewarm(
@@ -61,7 +61,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         concurrency: int,
         executor: ThreadPoolExecutor,
     ) -> tuple[list[object], int]:
-        calls.append(("worker-warmup", id(executor)))
+        calls.append(("worker-warmup", executor))
         return [object() for _ in range(concurrency)], 0
 
     def fake_baseline(warmup: Callable[[], object], **_kwargs: object) -> int:
@@ -76,7 +76,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         concurrency: int,
         executor: ThreadPoolExecutor,
     ) -> tuple[list[object], int]:
-        calls.append((f"c{concurrency}", id(executor)))
+        calls.append((f"c{concurrency}", executor))
         return [], 0
 
     monkeypatch.setattr(capacity, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
@@ -100,11 +100,11 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         "baseline-end",
         "c64",
     ]
-    executor_by_call = {name: executor_id for name, executor_id in calls if executor_id is not None}
-    assert executor_by_call["prime-16"] == executor_by_call["c16"]
-    assert executor_by_call["c16"] != executor_by_call["c64"]
-    assert calls[0][1] == calls[1][1]
-    assert executor_by_call["prime-64"] == executor_by_call["worker-warmup"] == executor_by_call["c64"]
+    executor_by_call = {name: executor for name, executor in calls if executor is not None}
+    assert executor_by_call["prime-16"] is executor_by_call["c16"]
+    assert executor_by_call["c16"] is not executor_by_call["c64"]
+    assert calls[0][1] is calls[1][1]
+    assert executor_by_call["prime-64"] is executor_by_call["worker-warmup"] is executor_by_call["c64"]
 
 
 @pytest.mark.parametrize("completed,errors", [(1, 0), (2, 1)])
