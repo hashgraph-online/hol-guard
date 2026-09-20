@@ -523,6 +523,61 @@ def test_initialize_recovers_fatal_sqlite_even_when_schema_looks_current(
     assert isinstance(recover_calls[0], sqlite3.DatabaseError)
 
 
+def test_yielded_select_recovery_keeps_triggering_sqlite_error_as_cause(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    original_connect_once = store._connect_once  # pyright: ignore[reportPrivateUsage]
+
+    class _SelectFailureConnection:
+        def __init__(self, connection: sqlite3.Connection) -> None:
+            self._connection = connection
+
+        def execute(self, *args: object, **kwargs: object) -> object:
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._connection, name)
+
+    @contextmanager
+    def fail_select() -> Iterator[object]:
+        with original_connect_once() as connection:
+            yield _SelectFailureConnection(connection)
+
+    def recover_raises(
+        error: BaseException,
+        *,
+        failed_identity: tuple[int, int] | None = None,
+    ) -> bool:
+        del error, failed_identity
+        raise RuntimeError("recovery")
+
+    monkeypatch.setattr(store, "_connect_once", fail_select)
+    monkeypatch.setattr(store, "_recover_fatal_sqlite_store", recover_raises)
+
+    with pytest.raises(RuntimeError, match="recovery") as raised:
+        store.get_runtime_state()
+
+    assert isinstance(raised.value.__cause__, sqlite3.DatabaseError)
+
+
+def test_maybe_queue_first_cloud_sync_returns_none_when_profile_raises_sqlite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image is malformed")),
+    )
+
+    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
+
+
 def test_storage_gate_allows_nested_reads_on_one_thread(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
 

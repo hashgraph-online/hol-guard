@@ -254,6 +254,7 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
+from .aibom_inventory_persist import persist_aibom_inventory_context
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
@@ -8246,28 +8247,14 @@ class GuardDaemonServer:
             storage_complete = self._maintain_storage_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
-        try:
-            workspace_id = self._server.store.get_cloud_workspace_id()
-            if (
-                workspace_id is None
-                or workspace_id != self._aibom_context_workspace_id
-                or self._aibom_workspace_dir is None
-            ):
-                return
-            payload: dict[str, object] = {
-                "workspace_dir": str(self._aibom_workspace_dir),
-                "workspace_id": workspace_id,
-            }
-            if self._aibom_home_dir is not None:
-                payload["home_dir"] = str(self._aibom_home_dir)
-            now = _now()
-            self._server.store.set_sync_payload("aibom_inventory_context", payload, now)
-        except sqlite3.DatabaseError as error:
-            with suppress(Exception):
-                self._diagnostics.record(
-                    "aibom_inventory_context_persist_failed",
-                    detail=type(error).__name__,
-                )
+        persist_aibom_inventory_context(
+            store=self._server.store,
+            cached_workspace_id=self._aibom_context_workspace_id,
+            workspace_dir=self._aibom_workspace_dir,
+            home_dir=self._aibom_home_dir,
+            now=_now(),
+            record_diagnostic=self._diagnostics.record,
+        )
 
     def _serve_forever(self) -> None:
         stop_reason = "serve_loop_returned"

@@ -384,7 +384,10 @@ class StoreConnectionSchemaMixin:
                     error.guard_failed_sqlite_identity = failed_identity
         if fatal_error is None:
             return
-        recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        try:
+            recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        except Exception as recovery_error:
+            raise recovery_error from fatal_error
         if yielded:
             # The caller already ran SQL on the failed connection, so this
             # operation still raises. Recovery makes the next connect usable.

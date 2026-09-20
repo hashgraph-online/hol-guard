@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -794,21 +792,6 @@ def test_maybe_queue_first_cloud_sync_returns_none_when_repair_raises(tmp_path, 
         daemon_server_module,
         "repair_guard_cloud_connect_storage",
         lambda _store: (_ for _ in ()).throw(RuntimeError("repair failed")),
-    )
-
-    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
-
-
-def test_maybe_queue_first_cloud_sync_returns_none_when_profile_raises_sqlite(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-
-    monkeypatch.setattr(
-        store,
-        "get_cloud_sync_profile",
-        lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image is malformed")),
     )
 
     assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
