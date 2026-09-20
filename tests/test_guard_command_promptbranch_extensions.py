@@ -59,6 +59,11 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _PUBLISH_RULE,
     ),
     (
+        "npx @promptbranch/cli@0.2.8 publish security-audit",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
         "bunx @promptbranch/cli publish security-audit --full-history",
         _PUBLISH_ACTION,
         _PUBLISH_RULE,
@@ -119,6 +124,7 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _IMPORT_RULE,
     ),
     ("npx @promptbranch/cli import https://example.test/p/share-id", _IMPORT_ACTION, _IMPORT_RULE),
+    ("bunx @promptbranch/cli@next import https://example.test/p/share-id", _IMPORT_ACTION, _IMPORT_RULE),
     (
         'promptbranch add-note --prompt "security-audit" --body "works well on small diffs"',
         _ADD_NOTE_ACTION,
@@ -131,6 +137,11 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "npx -y @promptbranch/cli add-note --prompt security-audit --body works-well",
+        _ADD_NOTE_ACTION,
+        _ADD_NOTE_RULE,
+    ),
+    (
+        "exec npx @promptbranch/cli@0.2.8 add-note --prompt security-audit --body works-well",
         _ADD_NOTE_ACTION,
         _ADD_NOTE_RULE,
     ),
@@ -151,6 +162,11 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         _REPORT_RUN_RULE,
     ),
     (
+        "xargs -n 1 bunx @promptbranch/cli@0.2.8 report-run --prompt security-audit --tool cli",
+        _REPORT_RUN_ACTION,
+        _REPORT_RUN_RULE,
+    ),
+    (
         "promptbranch report-run --unknown-flag --prompt security-audit",
         _REPORT_RUN_ACTION,
         _REPORT_RUN_RULE,
@@ -162,6 +178,11 @@ PROMPTBRANCH_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "npx -y @promptbranch/cli@latest suggest --content rewritten --prompt security-audit",
+        _SUGGEST_ACTION,
+        _SUGGEST_RULE,
+    ),
+    (
+        "npx @promptbranch/cli@next suggest --content rewritten --prompt security-audit",
         _SUGGEST_ACTION,
         _SUGGEST_RULE,
     ),
@@ -207,6 +228,7 @@ PROMPTBRANCH_SUGGEST_FILE_CASES: tuple[str, ...] = (
     'promptbranch suggest --prompt "security-audit" --file "private rewrite.md"',
     "promptbranch.exe suggest --file rewrite.md --prompt security-audit --json",
     "npx -y @promptbranch/cli suggest --prompt security-audit --file rewrite.md",
+    "exec bunx @promptbranch/cli@0.2.8 suggest --prompt security-audit --file rewrite.md",
     "bunx @promptbranch/cli@latest suggest --file rewrite.md --prompt security-audit",
     "zsh -lc 'promptbranch suggest --prompt security-audit --file rewrite.md'",
     "exec promptbranch suggest --prompt security-audit --file rewrite.md",
@@ -290,6 +312,8 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
     'promptbranch publish "security-audit" --preview',
     'promptbranch publish "security-audit" --full-history --preview --json',
     "npx @promptbranch/cli publish security-audit --preview",
+    "npx @promptbranch/cli@0.2.8 publish security-audit --preview",
+    "exec bunx @promptbranch/cli@next publish security-audit --preview",
     "npx -y @promptbranch/cli get security-audit",
     "echo promptbranch publish security-audit",
     "grep 'promptbranch publish security-audit' docs",
@@ -299,6 +323,10 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
 PROMPTBRANCH_EXTENSION_SAFE_COMMANDS = (
     *PROMPTBRANCH_SAFE_COMMANDS,
     "zsh -lc 'promptbranch suggestions --json'",
+    "npx @promptbranch/cli-helper@0.2.8 publish security-audit",
+    "bunx @promptbranch/client@next import share-id",
+    "exec npx @promptbranch/cli@ publish security-audit",
+    "xargs -n 1 bunx @promptbranch/cli-tools@beta report-run --prompt security-audit --tool cli",
 )
 
 

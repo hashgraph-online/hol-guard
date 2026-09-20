@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant, with_required_flag
+from dataclasses import dataclass, replace
+from typing import final
+
+from .command_extension_matchers import executable_matcher, executable_names, with_required_flag
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule, ExecutableMatcher
+from .command_matcher_contracts import MatcherEvidence
+from .command_model import CanonicalCommand
+from .command_option_parsing import argument_semantics, flags_present_in_all_option_parses
+from .command_rules import (
+    AnyMatcher,
+    CommandSafetyRule,
+    CommandSafeVariant,
+    ExecutableMatcher,
+    _after_leading_options,
+    _without_options,
+)
 
 # CLI surface verified against PromptBranch CLI 0.2.x (apps/cli/src/index.ts):
 # publish, import, add-note, report-run, and suggest mutate local records or
@@ -12,8 +25,8 @@ from .command_rules import AnyMatcher, CommandSafetyRule, ExecutableMatcher
 # reads caller-selected local content. `publish --preview` is the documented
 # side-effect-free counterpart. Read, search, and suggestion-listing commands
 # intentionally have no rules. The public npx/bunx launch forms cover the
-# documented package name and @latest alias; other version pins remain outside
-# this v1 boundary.
+# documented package name and aliases. Version-qualified package launches are
+# matched structurally so a pinned version or dist-tag cannot bypass review.
 
 _COMMON_FLAGS = frozenset({"--json"})
 _NO_FLAGS: frozenset[str] = frozenset()
@@ -29,6 +42,144 @@ _SUGGEST_OPTIONS_WITH_VALUES = frozenset(
 _PUBLISH_FLAGS = frozenset({"--full-history", "--preview", "--yes"})
 _NPX_LEADING_FLAGS = frozenset({"-y", "--yes"})
 _XARGS_LEADING_OPTIONS_WITH_VALUES = frozenset({"-I", "-L", "-n", "-P", "-s"})
+_PROMPTBRANCH_PACKAGE_LAUNCHERS = executable_names("npx") | executable_names("bunx")
+_PROMPTBRANCH_WRAPPER_EXECUTABLES = executable_names("exec") | executable_names("xargs")
+_PROMPTBRANCH_XARGS_EXECUTABLES = executable_names("xargs")
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class PromptBranchVersionedPackageMatcher:
+    """Match a version- or tag-qualified PromptBranch package launch.
+
+    The package token is intentionally checked as a complete structured
+    operand. A prefix such as ``@promptbranch/cli-helper@...`` therefore does
+    not become a PromptBranch match, while arbitrary non-empty npm versions
+    and dist-tags remain covered without enumerating them in the catalog.
+    """
+
+    subcommand: str
+    package_launchers: frozenset[str]
+    wrapper_executables: frozenset[str]
+    wrapper_options_with_values: frozenset[str]
+    package_prefix: str = "@promptbranch/cli@"
+    excluded_qualifiers: frozenset[str] = frozenset({"latest"})
+    required_flags: frozenset[str] = frozenset()
+    options_with_values: frozenset[str] = frozenset()
+    flags: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        package_launchers = frozenset(value.strip().lower() for value in self.package_launchers if value.strip())
+        wrapper_executables = frozenset(value.strip().lower() for value in self.wrapper_executables if value.strip())
+        package_prefix = self.package_prefix.strip().lower()
+        subcommand = self.subcommand.strip().lower()
+        excluded_qualifiers = frozenset(value.strip().lower() for value in self.excluded_qualifiers if value.strip())
+        required_flags = frozenset(value.strip().lower() for value in self.required_flags if value.strip())
+        options_with_values = frozenset(value.strip().lower() for value in self.options_with_values if value.strip())
+        flags = frozenset(value.strip().lower() for value in self.flags if value.strip())
+        wrapper_options_with_values = frozenset(
+            value.strip().lower() for value in self.wrapper_options_with_values if value.strip()
+        )
+        if not package_launchers or not wrapper_executables:
+            raise ValueError("PromptBranchVersionedPackageMatcher requires launchers")
+        if not subcommand or not package_prefix.endswith("@"):
+            raise ValueError("PromptBranchVersionedPackageMatcher requires a subcommand and package prefix")
+        object.__setattr__(self, "package_launchers", package_launchers)
+        object.__setattr__(self, "wrapper_executables", wrapper_executables)
+        object.__setattr__(self, "package_prefix", package_prefix)
+        object.__setattr__(self, "subcommand", subcommand)
+        object.__setattr__(self, "excluded_qualifiers", excluded_qualifiers)
+        object.__setattr__(self, "required_flags", required_flags)
+        object.__setattr__(self, "options_with_values", options_with_values)
+        object.__setattr__(self, "flags", flags)
+        object.__setattr__(self, "wrapper_options_with_values", wrapper_options_with_values)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        all_options_with_values = self.options_with_values | self.wrapper_options_with_values
+        known_flags = self.flags | self.required_flags
+        for index, segment in enumerate(command.segments):
+            if segment.executable is None:
+                continue
+            executable = segment.executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
+            if executable not in self.package_launchers and executable not in self.wrapper_executables:
+                continue
+            lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
+            package_arguments = _without_options(
+                lowered_arguments,
+                self.options_with_values,
+                self.flags | _NPX_LEADING_FLAGS,
+            )
+            if executable in self.wrapper_executables:
+                package_arguments = _after_leading_options(
+                    package_arguments,
+                    self.wrapper_options_with_values if executable in _PROMPTBRANCH_XARGS_EXECUTABLES else frozenset(),
+                    self.flags | _NPX_LEADING_FLAGS,
+                )
+                if not package_arguments or package_arguments[0] not in self.package_launchers:
+                    continue
+                package_arguments = package_arguments[1:]
+            if len(package_arguments) < 2:
+                continue
+            package, subcommand = package_arguments[:2]
+            if not package.startswith(self.package_prefix):
+                continue
+            qualifier = package[len(self.package_prefix) :]
+            if not qualifier or qualifier in self.excluded_qualifiers or subcommand != self.subcommand:
+                continue
+            if self.required_flags:
+                semantics = argument_semantics(lowered_arguments, options_with_values=all_options_with_values)
+                if not self.required_flags <= semantics.present_flags:
+                    continue
+                if not flags_present_in_all_option_parses(
+                    lowered_arguments,
+                    self.required_flags,
+                    options_with_values=all_options_with_values,
+                    known_flags=known_flags,
+                ):
+                    continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched a version-qualified PromptBranch package launcher and structured subcommand.",
+                )
+            )
+        return tuple(evidence)
+
+
+def _promptbranch_versioned_package_matcher(
+    subcommand: str,
+    options_with_values: frozenset[str],
+    flags: frozenset[str],
+) -> PromptBranchVersionedPackageMatcher:
+    return PromptBranchVersionedPackageMatcher(
+        subcommand=subcommand,
+        package_launchers=_PROMPTBRANCH_PACKAGE_LAUNCHERS,
+        wrapper_executables=_PROMPTBRANCH_WRAPPER_EXECUTABLES,
+        wrapper_options_with_values=_XARGS_LEADING_OPTIONS_WITH_VALUES,
+        options_with_values=options_with_values,
+        flags=flags,
+    )
+
+
+def _promptbranch_with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
+    """Clone literal and version-qualified launchers for a safe flag variant."""
+
+    literal_children = tuple(child for child in matcher.matchers if isinstance(child, ExecutableMatcher))
+    versioned_children = tuple(
+        replace(child, required_flags=child.required_flags | {flag})
+        for child in matcher.matchers
+        if isinstance(child, PromptBranchVersionedPackageMatcher)
+    )
+    if len(literal_children) + len(versioned_children) != len(matcher.matchers):
+        raise ValueError("PromptBranch safe variants require supported matcher children")
+    return AnyMatcher(
+        matchers=(
+            *with_required_flag(AnyMatcher(matchers=literal_children), flag).matchers,
+            *versioned_children,
+        )
+    )
 
 
 def _promptbranch_matcher(
@@ -37,6 +188,11 @@ def _promptbranch_matcher(
     flags: frozenset[str] | None = None,
 ) -> AnyMatcher:
     command_flags = _COMMON_FLAGS | (flags if flags is not None else _NO_FLAGS)
+    versioned_package_matcher = _promptbranch_versioned_package_matcher(
+        subcommand,
+        options_with_values,
+        command_flags | _NPX_LEADING_FLAGS,
+    )
     package_arguments = (
         ("@promptbranch/cli", subcommand),
         ("@promptbranch/cli@latest", subcommand),
@@ -91,6 +247,7 @@ def _promptbranch_matcher(
                 for package_argument in package_arguments
             ),
             *(matcher for prefix in launcher_arguments for matcher in _wrapped_matcher(prefix)),
+            versioned_package_matcher,
         )
     )
 
@@ -100,7 +257,7 @@ _PROMPTBRANCH_IMPORT = _promptbranch_matcher("import", _IMPORT_OPTIONS_WITH_VALU
 _PROMPTBRANCH_ADD_NOTE = _promptbranch_matcher("add-note", _ADD_NOTE_OPTIONS_WITH_VALUES)
 _PROMPTBRANCH_REPORT_RUN = _promptbranch_matcher("report-run", _REPORT_RUN_OPTIONS_WITH_VALUES)
 _PROMPTBRANCH_SUGGEST = _promptbranch_matcher("suggest", _SUGGEST_OPTIONS_WITH_VALUES)
-_PROMPTBRANCH_SUGGEST_FILE = with_required_flag(_PROMPTBRANCH_SUGGEST, "--file")
+_PROMPTBRANCH_SUGGEST_FILE = _promptbranch_with_required_flag(_PROMPTBRANCH_SUGGEST, "--file")
 
 PROMPTBRANCH_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "promptbranch prompt publication command": ("network_egress",),
@@ -131,11 +288,10 @@ PROMPTBRANCH_COMMAND_RULES = (
         matcher=_PROMPTBRANCH_PUBLISH,
         default_mode="review",
         safe_variants=(
-            safe_flag_variant(
-                _PROMPTBRANCH_PUBLISH,
+            CommandSafeVariant(
                 variant_id="preview",
                 title="PromptBranch publish preview",
-                flag="--preview",
+                matcher=_promptbranch_with_required_flag(_PROMPTBRANCH_PUBLISH, "--preview"),
             ),
         ),
         example_command="promptbranch publish",
