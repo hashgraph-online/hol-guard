@@ -97,6 +97,9 @@ def test_copilot_isolated_hook_requires_current_guard_paths(
         guard_home=context.guard_home,
     )
     assert any(entry.get("command") == unrelated for entry in preserved if isinstance(entry, dict))
+
+
+def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
     _write_json(context.home_dir / ".copilot" / "config.json", {"trusted_repositories": ["demo"]})
