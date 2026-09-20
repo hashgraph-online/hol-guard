@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
 from .render_uninstall import render_self_uninstall
 
 try:
@@ -231,6 +232,7 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         return
 
     redacted_payload = _coerce_object_dict(_sanitize_payload_for_output(payload, command=command))
+    _restore_ephemeral_signed_approval_output(payload, redacted_payload, command=command)
     if not _RICH_AVAILABLE:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
@@ -2154,6 +2156,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         if isinstance(user_copy, dict):
             harness_message = str(user_copy.get("harness_message") or "").strip()
             if harness_message:
+                harness_message, signed_approval_url = _protect_harness_message_for_render(payload, harness_message)
                 console.print(
                     Panel(
                         Text(harness_message, no_wrap=False, overflow="fold"),
@@ -2161,6 +2164,8 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
                         border_style="magenta",
                     )
                 )
+                if isinstance(signed_approval_url, str) and signed_approval_url:
+                    console.print(Text(signed_approval_url), soft_wrap=True)
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))

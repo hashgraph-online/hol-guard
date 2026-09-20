@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 
 from .adapters.base import HarnessContext
-from .adapters.cursor_hook_config import _hooks_state_path, _is_managed_hook_script
+from .adapters.cursor_hook_config import (
+    _hooks_state_path,
+    _is_managed_hook_script,
+    isolated_cursor_hook_python,
+    live_cursor_hooks_use_frozen_control_plane,
+)
 from .adapters.cursor_hooks import (
     cursor_hook_script_path,
     cursor_hook_script_source,
@@ -114,6 +119,16 @@ def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, 
         needs_rebind = (
             needs_rebind or managed_source != expected_source or cursor_hook_script_bakes_ephemeral_cli(managed_source)
         )
+    if isolated_cursor_hook_python() is not None:
+        try:
+            payload = json.loads(cursor_hooks_path(context).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            nested = payload.get("hooks")
+            hooks_obj = nested if isinstance(nested, dict) else payload
+            if live_cursor_hooks_use_frozen_control_plane(hooks_obj):
+                needs_rebind = True
     if not needs_rebind and _state_matches_attested_cli(context):
         return {"rebound": False, "reason": "cursor_hook_script_current"}
     try:

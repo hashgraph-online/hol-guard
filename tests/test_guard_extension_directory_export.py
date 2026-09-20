@@ -99,3 +99,44 @@ def test_public_directory_matches_cross_repository_contract() -> None:
     entry = dict(catalog["entries"][0])
     entry.pop("operations", None)
     Draft202012Validator(schema).validate({"schemaVersion": catalog["schemaVersion"], "entries": [entry]})
+
+
+def test_claim_readiness_report_matches_claim_policy_invariants() -> None:
+    report = exporter.claim_readiness()
+    assert report["schemaVersion"] == "guard.extension-claim-readiness.v1"
+    rows = report["entries"]
+    assert len(rows) == len(exporter.export_directory()["entries"])
+    provenance = [row for row in rows if row["claimPolicy"] == "provenance"]
+    assert provenance, "expected at least one provenance entry in the canonical directory"
+    for row in provenance:
+        expected_eligible = row["acceptedGithubIdCount"] > 0
+        assert row["invitationEligible"] is expected_eligible
+        assert row["reason"] == ("eligible" if expected_eligible else "empty_accepted_set")
+    for row in rows:
+        if row["claimPolicy"] != "provenance":
+            assert row["invitationEligible"] is False
+            assert row["reason"] == "project_policy"
+
+
+def test_valid_contribution_with_empty_accepted_set_is_not_invitation_eligible(tmp_path: Path) -> None:
+    root = copy_sources(tmp_path)
+    listing_path = root / "contributions/extension-listings/command.blitcp.json"
+    listing_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-listing.v1",
+                "extensionId": "command.blitcp",
+                "tagline": "Reviewed file-transfer operation coverage for blitcp.",
+                "category": "other",
+                "limitations": [
+                    "Coverage is limited to the reviewed operations and the surrounding Guard policy."
+                ],
+            }
+        )
+    )
+    report = exporter.claim_readiness(root)
+    row = next(item for item in report["entries"] if item["id"] == "command.blitcp")
+    assert row["claimPolicy"] == "provenance"
+    assert row["acceptedGithubIdCount"] == 0
+    assert row["invitationEligible"] is False
+    assert row["reason"] == "empty_accepted_set"
