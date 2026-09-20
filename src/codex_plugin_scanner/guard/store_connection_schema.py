@@ -556,11 +556,7 @@ class StoreConnectionSchemaMixin:
             fatal = self._is_fatal_sqlite_error(error) or SQLITE_IO_ERROR_MARKER in str(error).lower()
             # Recovery declining after a transient means the store is healthy.
             # Re-raise only when the schema is not already current.
-            if (
-                (fatal or not schema_current)
-                and not self._recover_fatal_sqlite_store(error)
-                and not schema_current
-            ):
+            if (fatal or not schema_current) and not self._recover_fatal_sqlite_store(error) and not schema_current:
                 raise
             self._initialize_policy_integrity()
 
