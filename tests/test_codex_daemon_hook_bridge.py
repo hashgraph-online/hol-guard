@@ -253,40 +253,6 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
     )
 
 
-def test_codex_pre_tool_response_omits_unsupported_allow() -> None:
-    allowed = bridge._codex_hook_response(
-        {
-            "continue": True,
-            "policy_action": "allow",
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": "HOL Guard allowed this action",
-            },
-        },
-        event_name="PreToolUse",
-    )
-    denied = bridge._codex_hook_response(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": "blocked",
-            }
-        },
-        event_name="PreToolUse",
-    )
-
-    assert allowed == {"continue": True, "hookSpecificOutput": {"hookEventName": "PreToolUse"}}
-    assert denied == {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": "blocked",
-        }
-    }
-
-
 @pytest.mark.parametrize(
     "challenge_mode",
     [

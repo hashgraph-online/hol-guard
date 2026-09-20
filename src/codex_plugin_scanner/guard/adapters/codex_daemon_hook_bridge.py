@@ -174,6 +174,14 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
         }
         decision = cleaned.get("permissionDecision")
         if isinstance(decision, str) and decision.strip().lower() == "allow":
+            reason = cleaned.get("permissionDecisionReason")
+            if (
+                response.get("policy_action") == "warn"
+                and isinstance(reason, str)
+                and reason.strip()
+                and not filtered.get("systemMessage")
+            ):
+                filtered["systemMessage"] = reason
             cleaned.pop("permissionDecision", None)
             cleaned.pop("permissionDecisionReason", None)
         cleaned.setdefault("hookEventName", event_name)
