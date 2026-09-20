@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Final
 
+import yaml
+
 SCHEMA: Final = "hol-guard.hook-data-plane-ownership.v2"
 NODE_CLASSES: Final = frozenset(
     {
@@ -35,6 +37,49 @@ HARNESS_ROUTE_STATUSES: Final = frozenset(
 DECISION_IO_SCHEMA: Final = "hol-guard.decision-critical-io.v1"
 PRIVACY_IO_SCHEMA: Final = "hol-guard.native-hook-io-privacy.v1"
 DECISION_RECEIPT_SCHEMA: Final = "guard-native-hook-decision-receipt.v1"
+NATIVE_PROOF_OVERRIDES: Final = frozenset(
+    [
+        "HOL_GUARD_NATIVE",
+        "HOL_GUARD_NATIVE_BINARY",
+        "HOL_GUARD_HOOK_FAST_PATH",
+        "HOL_GUARD_NATIVE_MODE",
+        "HOL_GUARD_NATIVE_ORACLE",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        "HOL_GUARD_HOOK_FAST_PATH_SHADOW",
+        "HOL_GUARD_HOOK_SOURCE_REF",
+        "HOL_GUARD_HOOK_BINARY",
+        "HOL_GUARD_FAST_PATH",
+        "HOL_GUARD_BINARY",
+        "HOL_GUARD_ORACLE",
+        "HOL_GUARD_DIAGNOSTIC",
+        "HOL_GUARD_TEST_MODE",
+        "HOL_GUARD_PYTHON_ORACLE",
+        "HOL_GUARD_TEST_KEYRING_FILE",
+        "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
+        "HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST",
+        "GUARD_NATIVE",
+        "GUARD_NATIVE_BINARY",
+        "GUARD_NATIVE_MODE",
+        "GUARD_NATIVE_ORACLE",
+        "GUARD_NATIVE_DIAGNOSTIC",
+        "GUARD_HOOK_FAST_PATH",
+        "GUARD_HOOK_FAST_PATH_SHADOW",
+        "GUARD_HOOK_SOURCE_REF",
+        "GUARD_HOOK_BINARY",
+        "GUARD_FAST_PATH",
+        "GUARD_BINARY",
+        "GUARD_ORACLE",
+        "GUARD_DIAGNOSTIC",
+        "GUARD_TEST_MODE",
+        "GUARD_TEST_KEYRING_FILE",
+        "GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
+        "GUARD_PYTEST_DURATION_OUTPUT",
+        "PYTEST_CURRENT_TEST",
+        "PYTEST_ADDOPTS",
+        "PYTEST_PLUGINS",
+        "PYTHONPATH",
+    ]
+)
 
 
 def _read(path: Path) -> str:
@@ -42,6 +87,65 @@ def _read(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise RuntimeError(f"required authority source is missing: {path}") from exc
+
+
+def validate_installed_proof_environment(source: str) -> None:
+    """Require the established exclusions in each installed proof's own shell."""
+    helper = "scripts/ci/native-proof-environment.sh"
+    cleared: set[str] = set()
+    for line in _read(Path(helper)).splitlines():
+        command = line.strip()
+        if not command or command.startswith("#"):
+            continue
+        if re.fullmatch(r"unset(?:[ \t]+[A-Z][A-Z0-9_]*)+", command) is None:
+            raise RuntimeError(f"installed proof environment helper contains an unsupported command: {command}")
+        cleared.update(command.split()[1:])
+    if cleared != NATIVE_PROOF_OVERRIDES:
+        raise RuntimeError("installed proof environment helper must clear exactly the established overrides")
+
+    workflow = yaml.safe_load(source)
+    jobs = workflow.get("jobs", {}) if isinstance(workflow, dict) else {}
+    default_probe = "ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json"
+    proof_command = re.compile(
+        r"^\.venv/bin/python (?:-I )?(?:ci/native_runtime/probe_(?:native_default_auto|installed_pi_output|"
+        r"installed_native_extensions)\.py|scripts/bench_guard_native_installed_slo\.py)(?: |$)"
+    )
+    for job_id in ("linux-x64", "macos", "windows-x64"):
+        job = jobs.get(job_id, {})
+        steps = job.get("steps", []) if isinstance(job, dict) else []
+        runs = [step["run"] for step in steps if isinstance(step, dict) and isinstance(step.get("run"), str)]
+        interpreter = "uv run --no-sync python" if job_id == "windows-x64" else ".venv/bin/python"
+        expected_probe = f"{interpreter} {default_probe}"
+        default_runs = [run for run in runs if expected_probe in [line.strip() for line in run.splitlines()]]
+        if len(default_runs) != 1:
+            raise RuntimeError(f"installed no-env workflow is missing its default proof: {job_id}")
+        if job_id == "windows-x64":
+            lines = [line.strip() for line in default_runs[0].splitlines()]
+            cleared = {
+                match[1]
+                for line in lines[: lines.index(expected_probe)]
+                if (match := re.fullmatch(r"Remove-Item Env:([A-Z][A-Z0-9_]*) -ErrorAction SilentlyContinue", line))
+            }
+            if not cleared >= NATIVE_PROOF_OVERRIDES:
+                raise RuntimeError("installed proof environment cleanup is incomplete: windows")
+            continue
+        for run in runs:
+            lines = [line.strip() for line in run.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+            proof_indices = [index for index, line in enumerate(lines) if proof_command.match(line)]
+            if "--enforce-soak" in run:
+                proof_indices.extend(
+                    index
+                    for index, line in enumerate(lines)
+                    if line.startswith(".venv/bin/python scripts/stress_guard_daemon.py ")
+                )
+            if not proof_indices:
+                continue
+            proof_indices.extend(
+                index for index, line in enumerate(lines) if line.startswith("runtime=$(.venv/bin/python -c ")
+            )
+            first_proof = min(proof_indices)
+            if first_proof == 0 or lines[first_proof - 1] != f"source {helper}":
+                raise RuntimeError(f"installed proof environment helper must be sourced before each proof: {job_id}")
 
 
 def registered_harnesses() -> frozenset[str]:

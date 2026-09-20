@@ -190,7 +190,7 @@ def test_adapter_session_stops_before_broadcasting_worker_client_close(
     monkeypatch.setattr(
         native_slo_session,
         "stop_native_resident",
-        lambda _runtime, _guard_home: events.append("stop") or True,
+        lambda _runtime, _guard_home, *, preserve_clients=False: events.append("stop") or True,
     )
 
     assert session.stop_resident()
@@ -209,7 +209,7 @@ def test_adapter_session_keeps_containment_when_worker_client_cleanup_fails(
     session.guard_home = tmp_path / "home"
     contained = native_slo_session.NativeStopResult(True, {"status": "contained"})
 
-    monkeypatch.setattr(native_slo_session, "stop_native_resident", lambda *_args: contained)
+    monkeypatch.setattr(native_slo_session, "stop_native_resident", lambda *_args, preserve_clients=False: contained)
 
     assert session.stop_resident()
     assert session.last_stop_diagnostic["status"] == "contained_client_cleanup_failed"

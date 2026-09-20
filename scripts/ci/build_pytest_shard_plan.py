@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import sys
+import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
@@ -16,18 +17,36 @@ from typing import Protocol, cast
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.pytest_duration_manifest import load_duration_manifest, node_id_digest
+from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
 from scripts.ci.pytest_shard import discover_test_nodes
 
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
 MAX_NODES_PER_AFFINITY_GROUP = 32
+SCHEDULING_ONLY_NODE_IDS = frozenset(
+    {
+        "tests/test_guard_hook_process_runner.py::"
+        "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial",
+        "tests/test_guard_daemon_storage_liveness.py::"
+        "test_locked_storage_hook_burst_fails_safe_without_stranding_daemon",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_listing_first_queue_page_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_resolving_one_request_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
+        "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
+        "tests/test_guard_cloud_review_runtime_recovery.py::"
+        "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
+    }
+)
 
 
 class _Arguments(Protocol):
     shard_count: int
-    duration_manifest: Path
+    duration_manifest: list[Path]
     max_manifest_age_days: int
     output_directory: Path
 
@@ -51,7 +70,22 @@ def estimate_node_durations(node_ids: Sequence[str], durations: Mapping[str, flo
         UNKNOWN_NODE_DURATION_SECONDS,
         known[(len(known) - 1) // 2] if known else 0.0,
     )
-    return {node_id: float(durations.get(node_id_digest(node_id), fallback)) for node_id in node_ids}
+    parameter_counts: dict[str, int] = defaultdict(int)
+    for node_id in node_ids:
+        if "[" in node_id:
+            parameter_counts[node_id.split("[", maxsplit=1)[0]] += 1
+    estimates: dict[str, float] = {}
+    for node_id in node_ids:
+        duration = durations.get(node_id_digest(node_id))
+        if duration is None and "[" in node_id:
+            # Splitting one long corpus loop must help on the very first run;
+            # its previous unsplit duration is evidence for the new parameters.
+            parent = node_id.split("[", maxsplit=1)[0]
+            parent_duration = durations.get(node_id_digest(parent))
+            if parent_duration is not None:
+                duration = parent_duration / parameter_counts[parent]
+        estimates[node_id] = fallback if duration is None else float(duration)
+    return estimates
 
 
 def _split_file_nodes(
@@ -69,7 +103,21 @@ def _split_file_nodes(
     chunks: list[list[str]] = [[] for _ in range(split_count)]
     loads = [0.0] * split_count
     for node_id in sorted(node_ids, key=lambda node: (-estimates[node], node)):
-        index = min(range(split_count), key=lambda item: (loads[item], item))
+        eligible = [
+            index
+            for index, chunk in enumerate(chunks)
+            if len(chunk) < MAX_NODES_PER_AFFINITY_GROUP
+            and (not chunk or split_count == 1 or loads[index] + estimates[node_id] <= target_seconds)
+        ]
+        if eligible:
+            index = min(eligible, key=lambda item: (loads[item], item))
+        else:
+            # ceil(total / target) is only a lower bound on the bins needed:
+            # e.g. 47, 47, 41 cannot fit in two bins with a 75-second target.
+            # An individually oversized node may occupy one bin by itself.
+            index = len(chunks)
+            chunks.append([])
+            loads.append(0.0)
         chunks[index].append(node_id)
         loads[index] += estimates[node_id]
 
@@ -81,9 +129,11 @@ def build_affinity_node_shards(
     shard_count: int,
     durations: Mapping[str, float],
 ) -> tuple[list[list[str]], list[float]]:
-    """Balance by duration while keeping each test file together when practical."""
+    """Balance traced tests, leaving exact timing contracts to their dedicated job."""
 
-    nodes = list(node_ids)
+    # A timing contract that is deselected during coverage execution must never
+    # own an otherwise empty shard or contribute phantom time to its estimate.
+    nodes = [node_id for node_id in node_ids if node_id not in SCHEDULING_ONLY_NODE_IDS]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
     if shard_count > len(nodes):
@@ -155,16 +205,15 @@ def write_shard_plan(
     )
 
 
-def _load_current_durations(path: Path, max_age_days: int) -> tuple[dict[str, float], bool]:
+def _load_current_durations(paths: Sequence[Path], max_age_days: int) -> tuple[dict[str, float], bool]:
     try:
-        return (
-            load_duration_manifest(
-                path,
-                now=datetime.now(timezone.utc),
-                max_age=timedelta(days=max_age_days),
-            ),
-            True,
+        durations, selected_path = load_latest_duration_manifest(
+            paths,
+            now=datetime.now(timezone.utc),
+            max_age=timedelta(days=max_age_days),
         )
+        print(f"pytest duration evidence: {selected_path}", file=sys.stderr)
+        return durations, True
     except (OSError, ValueError) as exc:
         print(
             f"pytest duration manifest unavailable; using deterministic equal-weight planning: {exc}",
@@ -176,7 +225,7 @@ def _load_current_durations(path: Path, max_age_days: int) -> tuple[dict[str, fl
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument("--shard-count", type=int, required=True)
-    _ = parser.add_argument("--duration-manifest", type=Path, required=True)
+    _ = parser.add_argument("--duration-manifest", type=Path, action="append", required=True)
     _ = parser.add_argument("--max-manifest-age-days", type=int, default=28)
     _ = parser.add_argument("--output-directory", type=Path, required=True)
     args = cast(_Arguments, cast(object, parser.parse_args()))
@@ -186,7 +235,9 @@ def main() -> int:
         args.duration_manifest,
         args.max_manifest_age_days,
     )
+    collection_started = time.monotonic()
     nodes = discover_test_nodes(root)
+    collection_seconds = time.monotonic() - collection_started
     shards, loads = build_affinity_node_shards(nodes, args.shard_count, durations)
     write_shard_plan(
         args.output_directory,
@@ -199,6 +250,7 @@ def main() -> int:
             {
                 "shards": len(shards),
                 "nodes": len(nodes),
+                "collection_seconds": round(collection_seconds, 3),
                 "manifest_used": manifest_used,
                 "estimated_min_seconds": round(min(loads), 3),
                 "estimated_max_seconds": round(max(loads), 3),

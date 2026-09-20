@@ -12,6 +12,7 @@ on:
       - "ci/native_runtime/test_command_model_resident.py"
       - "ci/native_runtime/test_command_shadow_activity.py"
       - ".github/workflows/rust-command-shadow.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
@@ -24,6 +25,7 @@ on:
       - "ci/native_runtime/test_command_model_resident.py"
       - "ci/native_runtime/test_command_shadow_activity.py"
       - ".github/workflows/rust-command-shadow.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -49,10 +51,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Check native command bridge
         run: |
           rustfmt --edition 2021 --check rust/crates/guard-runtime/src/main.rs

@@ -14,12 +14,14 @@ import os
 import secrets
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 import codex_plugin_scanner
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_approval_errors import NATIVE_COMMAND_CONTROL_ERROR_CODES
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -58,6 +60,60 @@ _ACTION_RANK = {
 def require(condition: bool, code: str) -> None:
     if not condition:
         raise RuntimeError(f"installed_native_extensions_failed:{code}")
+
+
+def receipt_binding_diagnostic(
+    response: Mapping[str, object], receipt: Mapping[str, object], expected: Mapping[str, object], seen: list[str]
+) -> dict[str, object]:
+    """Describe a failed comparison without disclosing request or receipt data."""
+    actual = receipt.get("command_extensions")
+    actual = actual if isinstance(actual, dict) else {}
+    fields = [
+        "schema",
+        "program_digest",
+        "catalog_digest",
+        "trust_digest",
+        "control_revision",
+        "managed_control_revision",
+        "control_effective_digest",
+        "observations_digest",
+        "observation_count",
+        "uncertainty_count",
+    ]
+    reasons = {
+        "native_policy_not_ready",
+        "native_hook_worker_unavailable",
+        "native_hook_worker_unsupported",
+        "native_hook_compatibility_disabled",
+        "native_pre_tool_unavailable",
+        "native_pre_tool_review",
+        "native_hook_edge_invalid_response",
+        "native_hook_edge_unavailable",
+        "native_overloaded",
+        "daemon_hook_deadline_exhausted",
+        "daemon_hook_queue_capacity",
+        "daemon_hook_queue_bytes",
+        "daemon_worker_exception",
+        "invalid_hook_payload_reference",
+        "harness_not_managed",
+    } | NATIVE_COMMAND_CONTROL_ERROR_CODES
+    reason = response.get("reason_code")
+    output = response.get("hookSpecificOutput")
+    decision = output.get("permissionDecision") if isinstance(output, dict) else response.get("decision")
+
+    def revision(binding: Mapping[str, object]) -> int | None:
+        value = binding.get("control_revision")
+        return value if type(value) is int and 0 <= value <= 2**64 - 1 else None
+
+    return {
+        "schema": "guard.installed-native-extension-receipt-failure.v1",
+        "http_reason_code": reason if isinstance(reason, str) and reason in reasons else None,
+        "http_decision": decision if isinstance(decision, str) and decision in {"allow", "ask", "deny"} else None,
+        "mismatched_binding_fields": [key for key in fields if actual.get(key) != expected.get(key)],
+        "expected_control_revision": revision(expected),
+        "receipt_control_revision": revision(actual),
+        "receipt_id_repeated": isinstance(receipt.get("decision_id"), str) and receipt["decision_id"] in seen,
+    }
 
 
 def installed_client():
@@ -127,9 +183,15 @@ def control(kind: ControlTargetKind, target: str, state: ControlState) -> Extens
 
 def ready(daemon: GuardDaemonServer, workspace: Path, revision: int) -> dict[str, object]:
     worker = daemon._server.hook_worker
-    binding = worker.prepare_workspace_policy(workspace, deadline=time.monotonic() + 5)
+    deadline = time.monotonic() + 5
+    publisher = worker.policy_snapshot_publisher
+    publisher.register_workspace(workspace)
+    publisher.start()
+    # Await asynchronous control publication before measuring hook admission.
+    require(publisher.wait_until_ready(deadline), "policy_not_ready")
+    binding = worker.prepare_workspace_policy(workspace, deadline=deadline)
     require(binding is not None, "policy_not_ready")
-    snapshot = worker.policy_snapshot_publisher.current_snapshot()
+    snapshot = publisher.current_snapshot()
     require(snapshot is not None, "snapshot_missing")
     require(snapshot["command_extensions"]["revision"] == revision, "wrong_control_generation")
     return binding
@@ -182,8 +244,6 @@ def exercise(root: Path) -> dict[str, object]:
             policy_snapshot=binding,
         )
         if raw is None:
-            # Capture the existing client's fixed diagnostic code immediately.
-            # Do not retry, reset the deadline, or reinterpret a missing result.
             print(
                 json.dumps(
                     {
@@ -231,6 +291,9 @@ def exercise(root: Path) -> dict[str, object]:
         require(isinstance(response, dict), f"{label}:http_missing")
         receipt = daemon._server.hook_worker.last_native_decision_receipt
         require(isinstance(receipt, dict) and receipt.get("authority") == "rust", f"{label}:receipt_missing")
+        if receipt.get("command_extensions") != extensions["binding"]:
+            diagnostic = receipt_binding_diagnostic(response, receipt, extensions["binding"], all_receipts)
+            print(json.dumps({"case": label, "completed_cases": len(rows), **diagnostic}, sort_keys=True), flush=True)
         require(receipt.get("command_extensions") == extensions["binding"], f"{label}:receipt_generation_mismatch")
         require(receipt["decision"] == result["decision"], f"{label}:http_decision_mismatch")
         all_receipts.append(receipt["decision_id"])

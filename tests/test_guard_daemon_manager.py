@@ -2968,6 +2968,88 @@ def test_authenticated_state_with_proven_foreign_recycled_pid_is_tombstoned(tmp_
     assert state_clears == [62_222]
 
 
+@pytest.mark.skipif(os.name == "nt" or not hasattr(os, "waitid"), reason="requires POSIX waitid")
+def test_daemon_death_wait_observes_exact_exited_child_without_poll_delay(monkeypatch) -> None:
+    process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(17)"])
+    try:
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        assert daemon_manager_module._guard_daemon_pid_is_running(process.pid)
+
+        def unexpected_sleep(_seconds: float) -> None:
+            pytest.fail("An exited daemon must not consume a signal grace period")
+
+        monkeypatch.setattr(daemon_manager_module.time, "sleep", unexpected_sleep)
+        assert daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid)
+        assert daemon_manager_module._guard_daemon_pid_is_proven_dead(process.pid)
+        assert process.wait(timeout=5) == 17
+    finally:
+        process.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX child processes")
+def test_daemon_death_wait_preserves_live_child_and_non_child() -> None:
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid, timeout=0)
+        assert process.poll() is None
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(os.getpid(), timeout=0)
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("pid", (0, -1, -42))
+def test_daemon_child_exit_probe_never_waits_for_a_process_group(monkeypatch, pid: int) -> None:
+    def unexpected_wait(*_args: object) -> tuple[int, int]:
+        pytest.fail("Only an exact positive daemon PID can be observed")
+
+    monkeypatch.setattr(daemon_manager_module.os, "waitid", unexpected_wait, raising=False)
+    assert not daemon_manager_module._guard_daemon_child_has_exited(pid)
+
+
+@pytest.mark.parametrize("outcome", (None, "wrong-pid", "stopped", "error"))
+def test_daemon_child_exit_probe_preserves_uncertain_liveness(monkeypatch, outcome: str | None) -> None:
+    proxy = _PosixOSProxy()
+    monkeypatch.setattr(daemon_manager_module, "os", proxy)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    for name, value in (
+        ("P_PID", 1),
+        ("WEXITED", 4),
+        ("WNOHANG", 1),
+        ("WNOWAIT", 8),
+        ("CLD_EXITED", 1),
+        ("CLD_KILLED", 2),
+        ("CLD_DUMPED", 3),
+    ):
+        monkeypatch.setattr(proxy, name, value, raising=False)
+
+    def observe(*_args: object) -> object:
+        if outcome == "error":
+            raise PermissionError("unavailable process status")
+        if outcome is None:
+            return None
+        return SimpleNamespace(
+            si_pid=1235 if outcome == "wrong-pid" else 1234, si_code=4 if outcome == "stopped" else proxy.CLD_EXITED
+        )
+
+    monkeypatch.setattr(proxy, "waitid", observe, raising=False)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
+def test_daemon_child_exit_probe_preserves_platform_without_waitid(monkeypatch) -> None:
+    class WithoutWaitid(_PosixOSProxy):
+        def __getattr__(self, name: str):
+            if name == "waitid":
+                raise AttributeError(name)
+            return super().__getattr__(name)
+
+    monkeypatch.setattr(daemon_manager_module, "os", WithoutWaitid())
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False)
+    assert daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
 def test_posix_daemon_retirement_waits_for_sigkill_to_finish(monkeypatch) -> None:
     pid = 62_223
     signals: list[int] = []
