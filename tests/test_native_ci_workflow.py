@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,6 +54,79 @@ def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
         assert "continue-on-error" not in job
         assert all(not step.get("continue-on-error") for step in job["steps"])
     assert set(proof["strategy"]["matrix"]["proof"]) == {"default", "pi", "extensions", "performance"}
+
+
+def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() -> None:
+    jobs = _workflow("native-wheel-ci.yml")["jobs"]
+    build = jobs["macos-build"]
+    build_targets = {item["target"]: item["runner"] for item in build["strategy"]["matrix"]["include"]}
+    proof_targets = {item["target"]: item["runner"] for item in jobs["macos"]["strategy"]["matrix"]["include"]}
+    assert build_targets == {"x86_64-apple-darwin": "macos-15", "aarch64-apple-darwin": "macos-15"}
+    assert proof_targets == {"x86_64-apple-darwin": "macos-15-intel", "aarch64-apple-darwin": "macos-15"}
+    setup = next(step for step in build["steps"] if step.get("uses") == "./.github/actions/setup-rust")
+    assert setup["with"]["targets"] == "${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}"
+    commands = "\n".join(step.get("run", "") for step in build["steps"])
+    assert '--target "$TARGET"' in commands
+    assert 'target_dir="$target_dir/$TARGET"' in commands
+    assert "--locked --release" in commands
+    assert '--platform-tag "$PLATFORM_TAG"' in commands
+    assert '--source-sha "$HOL_GUARD_BUILD_SHA"' in commands
+
+
+@pytest.mark.skipif(os.name == "nt", reason="macOS wheel builds execute in Bash")
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="Native wheel workflow uses Python 3.12 with tomllib")
+@pytest.mark.parametrize("target", ["x86_64-apple-darwin", "aarch64-apple-darwin"])
+@pytest.mark.parametrize("failed_stage", ["cargo", "self-test", "capabilities"])
+def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str, failed_stage: str) -> None:
+    job = _workflow("native-wheel-ci.yml")["jobs"]["macos-build"]
+    commands = next(step["run"] for step in job["steps"] if step.get("name", "").startswith("Build and assemble"))
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion="1.2.3"\n', encoding="utf-8")
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    (binaries / "python").symlink_to(sys.executable)
+    cargo = binaries / "cargo"
+    cargo.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$@" > cargo-arguments\nif [ "$FAILED_STAGE" = cargo ]; then exit 19; fi\n',
+        encoding="utf-8",
+    )
+    cargo.chmod(0o755)
+    output = tmp_path / "rust/target"
+    if target == "x86_64-apple-darwin":
+        output /= target
+    runtime = output / "release/hol-guard-runtime"
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text(
+        '#!/bin/sh\nif [ "$1" = "$FAILED_STAGE" ]; then exit 23; fi\nprintf \'{"rule_digest":"fixture-digest"}\\n\'\n',
+        encoding="utf-8",
+    )
+    runtime.chmod(0o755)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "build_native_hol_guard_wheel.py").write_text(
+        'from pathlib import Path\nPath("packaged").touch()\n', encoding="utf-8"
+    )
+    completed = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", commands],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{binaries}{os.pathsep}{os.environ['PATH']}",
+            "TARGET": target,
+            "PLATFORM_TAG": "fixture-platform",
+            "HOL_GUARD_BUILD_SHA": "fixture-sha",
+            "FAILED_STAGE": failed_stage,
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert not (tmp_path / "packaged").exists()
+    cargo_arguments = (tmp_path / "cargo-arguments").read_text(encoding="utf-8").splitlines()
+    assert ("--target" in cargo_arguments) == (target == "x86_64-apple-darwin")
+    if "--target" in cargo_arguments:
+        assert cargo_arguments[cargo_arguments.index("--target") + 1] == target
 
 
 def test_bounded_stress_never_claims_full_soak_qualification() -> None:
