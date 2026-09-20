@@ -69,6 +69,11 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    "repopy install command": ("execution",),
+    "repopy link command": (
+        "destructive_shell",
+        "network_egress",
+    ),
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
