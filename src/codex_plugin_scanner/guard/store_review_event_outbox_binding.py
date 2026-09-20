@@ -226,12 +226,48 @@ def refresh_same_subject_binding(connection: sqlite3.Connection, source: str) ->
     return refreshed + max(0, int(quarantined.rowcount or 0))
 
 
+def _reassignment_filter(binding: dict[str, str], *, only_unbound: bool) -> tuple[str, list[object]]:
+    query = """
+        binding_status = 'quarantined'
+        and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
+        and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
+    """
+    parameters: list[object] = [binding["oauth_source"], binding["workspace_id"]]
+    if only_unbound:
+        query += " and quarantine_reason = 'identity_incomplete'"
+        for column in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id"):
+            query += f" and ({column} is null or {column} = ?)"
+            parameters.append(binding[column])
+        for table in ("guard_review_outbox_request_sequences", "guard_review_outbox_events"):
+            conflicts = []
+            for column in binding:
+                conflicts.append(f"(prior.{column} is not null and prior.{column} != ?)")
+                parameters.append(binding[column])
+            query += (
+                f" and not exists (select 1 from {table} prior"
+                " where prior.local_request_id = guard_review_outbox_events.local_request_id"
+                " and (" + " or ".join(conflicts) + "))"
+            )
+    return query, parameters
+
+
+def count_recoverable_unbound_events(connection: sqlite3.Connection, *, source: str) -> int:
+    binding = load_review_oauth_binding(connection, source)
+    if binding is None:
+        return 0
+    query, parameters = _reassignment_filter(binding, only_unbound=True)
+    return int(
+        connection.execute("select count(*) from guard_review_outbox_events where " + query, parameters).fetchone()[0]
+    )
+
+
 def explicitly_reassign_quarantined_events(
     connection: sqlite3.Connection,
     *,
     source: str,
     approved_source: str,
     approved_workspace_id: str,
+    only_unbound: bool = False,
 ) -> int:
     """Adopt quarantined events only after a caller confirms the target binding."""
 
@@ -242,23 +278,10 @@ def explicitly_reassign_quarantined_events(
         raise ValueError("active OAuth source does not have a complete Review event binding")
     if approved_workspace_id.strip() != binding["workspace_id"]:
         raise ValueError("approved workspace does not match the active OAuth workspace")
+    query, parameters = _reassignment_filter(binding, only_unbound=only_unbound)
     candidates = connection.execute(
-        """
-        select stream_sequence, payload_json from guard_review_outbox_events
-        where binding_status = 'quarantined'
-          and quarantine_reason in (
-            'identity_incomplete',
-            'identity_changed_requires_confirmation'
-          )
-          and (
-            oauth_source = ?
-            or (oauth_source is null and (workspace_id is null or workspace_id = ?))
-          )
-        """,
-        (
-            source,
-            approved_workspace_id.strip(),
-        ),
+        "select stream_sequence, local_request_id, payload_json from guard_review_outbox_events where " + query,
+        parameters,
     ).fetchall()
     for candidate in candidates:
         payload_hash = review_event_payload_digest(
@@ -287,36 +310,33 @@ def explicitly_reassign_quarantined_events(
                 candidate["stream_sequence"],
             ),
         )
-    connection.execute(
+    request_ids = {str(candidate["local_request_id"]) for candidate in candidates}
+    connection.executemany(
         """
         update guard_review_outbox_request_sequences
         set oauth_source = ?, oauth_subject_hash = ?, workspace_id = ?, machine_id = ?,
             machine_installation_id = ?
-        where local_request_id in (
-          select local_request_id from guard_review_outbox_events
-          where oauth_source = ? and workspace_id = ?
-        )
+        where local_request_id = ?
         """,
-        (
-            source,
-            binding["oauth_subject_hash"],
-            binding["workspace_id"],
-            binding["machine_id"],
-            binding["machine_installation_id"],
-            source,
-            binding["workspace_id"],
-        ),
+        [
+            (
+                source,
+                binding["oauth_subject_hash"],
+                binding["workspace_id"],
+                binding["machine_id"],
+                binding["machine_installation_id"],
+                request_id,
+            )
+            for request_id in request_ids
+        ],
     )
-    connection.execute(
+    connection.executemany(
         """
         update approval_requests
         set oauth_source = ?
         where oauth_source is null
-          and request_id in (
-            select local_request_id from guard_review_outbox_events
-            where oauth_source = ? and workspace_id = ?
-          )
+          and request_id = ?
         """,
-        (source, source, binding["workspace_id"]),
+        [(source, request_id) for request_id in request_ids],
     )
     return len(candidates)

@@ -68,20 +68,20 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
             "assert models is sys.modules['codex_plugin_scanner.guard.models']"
         ),
         (
-                "import sys; "
-                "import codex_plugin_scanner.guard as guard; "
-                "import codex_plugin_scanner.guard.runtime as runtime; "
-                "guard_modules = {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "import tests.guard_command_decision_diff; "
-                "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "from codex_plugin_scanner.guard.runtime import effect_decision; "
-                "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
+            "import sys; "
+            "import codex_plugin_scanner.guard as guard; "
+            "import codex_plugin_scanner.guard.runtime as runtime; "
+            "guard_modules = {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "import tests.guard_command_decision_diff; "
+            "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "from codex_plugin_scanner.guard.runtime import effect_decision; "
+            "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
         ),
     )
     for script in scripts:
@@ -168,10 +168,11 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
     }
     assert groups == {
         "allow|block": 9373,
-        "allow|require-reapproval": 16691,
+        "allow|require-reapproval": 4191,
         "allow|review": 250,
         "block|block": 4167,
         "review|block": 19794,
+        "review|require-reapproval": 12500,
         "review|review": 725,
     }
 
@@ -226,3 +227,56 @@ def test_fresh_process_report_is_environment_independent_and_bounded() -> None:
     assert all(float(str(item["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])) for item in metrics), (
         metrics
     )
+
+
+def test_decision_diff_scheduler_keeps_four_processes_for_all_partitions(monkeypatch) -> None:
+    from tests import guard_command_decision_diff_runner as runner
+
+    captured: dict[str, object] = {}
+    expected = tuple(object() for _ in range(runner.EVALUATION_SHARD_COUNT))
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers, mp_context):
+            captured["workers"] = max_workers
+            captured["start_method"] = mp_context.get_start_method()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            captured["closed"] = True
+
+        def map(self, function, indices):
+            captured["function"] = function
+            captured["indices"] = tuple(indices)
+            return iter(expected)
+
+    monkeypatch.setattr(runner, "ProcessPoolExecutor", RecordingExecutor)
+    assert runner.evaluate_decision_diff_shards() == expected
+    assert captured == {
+        "workers": 4,
+        "start_method": "spawn",
+        "function": runner._evaluate_shard,
+        "indices": tuple(range(16)),
+        "closed": True,
+    }
+
+
+def test_decision_diff_partitions_keep_every_case_and_its_oracle() -> None:
+    from itertools import chain
+
+    from tests import guard_command_decision_diff_runner as runner
+    from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
+
+    expected_ids = {case.case_id for case in chain(iter_benign_corpus(), iter_adversarial_corpus())}
+    seen: set[str] = set()
+    for partition in range(runner.EVALUATION_SHARD_COUNT):
+        partition_count = 0
+        for case, oracle in runner._case_oracle_pairs(partition):
+            assert case.case_id == oracle.case_id
+            assert case.case_id not in seen
+            seen.add(case.case_id)
+            partition_count += 1
+        assert partition_count > 0
+    assert len(seen) == 51000
+    assert seen == expected_ids

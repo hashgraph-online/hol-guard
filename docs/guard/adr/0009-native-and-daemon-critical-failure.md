@@ -1,5 +1,7 @@
 # ADR 0009: Native child and Python daemon critical-failure behavior
 
+> Historical availability scope: the blanket PreToolUse pause and resident/one-shot/fail-safe sequence below do not specify all current delivery routes. [The RSP-024 technical review](../native-runtime-technical-contract-review.md) records the actual event-specific continuation, integrity-denial and permission behavior, and preserves the phase-aware nonreplay rules. The original ADR is retained for context, not as current installed qualification.
+
 Baseline reviewed: `release/3.0` at `0432719ee0d638443b7ef5208b4e16fc4ab70d80`.
 
 Status: accepted for implementation on the 3.0 prerelease train. This ADR does not change the native source default.
@@ -21,9 +23,9 @@ A native failure follows a capability-specific bounded sequence while the Python
 
 A Python daemon failure is a critical protection state:
 
-- PostToolUse output remains withheld or blocked.
 - Mutating, network-capable, secret-capable, destructive, package-executing, process-control, policy-tampering, and uncertain PreToolUse actions pause.
-- Only the ratified exact emergency-safe profile may continue, and only when its package, rule, and policy identities are authenticated and current.
+- PostToolUse continues when native review cannot complete. The tool already ran; withholding the turn freezes the session without preventing the action. Native PostToolUse decisions still apply when review succeeds.
+- The ratified emergency-safe inspection profile may continue: workspace source reads, grep/glob, and bounded local git/status inspection. Continuations emit `native_degraded_emergency_safe` and never restore a Python semantic evaluator.
 - Empty or malformed hook responses must never be interpreted as successful tool execution.
 
 ## Recovery ownership

@@ -6,7 +6,7 @@ Guard evaluates object-storage operations from the canonical parsed command mode
 
 | Extension | Reviewed operations | Safe counterparts |
 | --- | --- | --- |
-| `command.storage.aws-s3` | S3 object and bucket removal, delete-enabled sync, S3 API object and bucket deletion | Help; documented high-level S3 dry run |
+| `command.storage.aws-s3` | High-level S3 copy, list, sync, website, and deletion plus S3 API object writes, access-control changes, bucket configuration, tagging, reads, and deletion | Help; documented high-level S3 dry run; AWS request skeleton generation |
 | `command.storage.google-cloud` | Google Cloud object and bucket removal, delete-enabled `gcloud` and `gsutil` sync | Help; `gcloud --dry-run`; `gsutil -n` |
 | `command.storage.azure-blob` | Blob, batch, and container deletion | Help; blob batch `--dryrun` |
 | `command.storage.minio` | Object and bucket removal, remove-enabled mirror | Help and listing operations |

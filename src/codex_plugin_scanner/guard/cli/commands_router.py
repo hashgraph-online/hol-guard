@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .commands_support_workspace import _resolve_guard_workspace
 
 
+from ..native_runtime import native_mode
 from ._commands_shared import *
 from .commands_lifecycle_gate import enforce_lifecycle_gate
 from .commands_parser_helpers import *
@@ -55,6 +56,7 @@ _COMMON_HANDLERS = {
     "package-shims": "_run_guard_package_shims_command",
     "contained-write": "_run_guard_contained_write_command",
     "run": "_run_guard_run_command",
+    "run-shim": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
     "test-eval": "_run_guard_test_eval_command",
     "receipts": "_run_guard_receipts_command",
@@ -116,9 +118,14 @@ def _invoke_guard_handler(handler: object, args: argparse.Namespace, **kwargs: o
 
 
 def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
-    """Prime local integrity state in the long-lived daemon process."""
+    """Do not prime integrity while constructing the daemon process.
 
-    return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+    Desktop waits for the approval-center URL. Secret-store priming on a large
+    Guard home can exceed that timeout before HTTP accepts.
+    """
+
+    del args
+    return False
 
 
 def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
@@ -134,6 +141,10 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     "Execute a Guard subcommand."
+    if args.guard_command == "extensions":
+        from .extension_builder_commands import run_extension_builder_command
+
+        return run_extension_builder_command(args, output_stream=output_stream)
     handler = _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(
@@ -191,8 +202,14 @@ def run_guard_command(
     except (TimeoutError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
-    config = load_guard_config(guard_home, workspace=workspace)
-    config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
+    if args.guard_command == "hook" and native_mode() in {"auto", "force"}:
+        # Native hooks receive the raw envelope before any request-time
+        # configuration or policy-file read.  HookWorker's startup publisher
+        # owns the cached ACKed snapshot; a barrier miss returns fail-safe.
+        config = None
+    else:
+        config = load_guard_config(guard_home, workspace=workspace)
+        config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     handler = _resolve_guard_handler(_COMMON_HANDLERS, args.guard_command)
     if callable(handler):

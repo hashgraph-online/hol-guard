@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import socket
+import stat
 import struct
 import tempfile
 import threading
@@ -64,7 +65,7 @@ def default_codex_app_server_socket_available(*, environ: Mapping[str, str] | No
     """Return whether the current Codex app-server control socket is reachable."""
 
     socket_path = default_codex_app_server_socket_path(environ=environ)
-    if not socket_path.exists():
+    if not _is_trusted_local_socket(socket_path):
         return False
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -92,13 +93,10 @@ def codex_resume_metadata_from_hook_payload(
     turn_id = _first_string(payload, _TURN_ID_KEYS)
     if turn_id is not None:
         metadata["codex_turn_id"] = turn_id
-    socket_path = _first_string(payload, _SOCKET_KEYS) or _first_string_from_env(
-        env,
-        ("CODEX_APP_SERVER_SOCKET", "CODEX_APP_SERVER_CONTROL_SOCKET"),
-    )
+    socket_path = _first_string_from_env(env, ("CODEX_APP_SERVER_SOCKET", "CODEX_APP_SERVER_CONTROL_SOCKET"))
     if socket_path is not None:
         metadata["codex_app_server_socket"] = socket_path
-    codex_home = _first_string(payload, _CODEX_HOME_KEYS) or _first_string_from_env(env, ("CODEX_HOME",))
+    codex_home = _first_string_from_env(env, ("CODEX_HOME",))
     if codex_home is not None:
         metadata["codex_home"] = codex_home
     model = _first_string(payload, _MODEL_KEYS)
@@ -376,9 +374,12 @@ def _send_app_server_websocket_messages(
     ready: threading.Event | None = None,
     result: dict[str, object] | None = None,
 ) -> tuple[dict[str, object] | None, str]:
+    resolved_socket_path = Path(socket_path).expanduser()
+    if not _is_trusted_local_socket(resolved_socket_path):
+        raise ValueError("unsafe_socket_path")
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(timeout_seconds)
-        client.connect(str(Path(socket_path).expanduser()))
+        client.connect(str(resolved_socket_path))
         pending = bytearray(_send_websocket_handshake(client))
         for payload in payloads:
             _send_websocket_text(client, json.dumps(payload, separators=(",", ":")))
@@ -587,6 +588,24 @@ def _is_safe_local_socket_path(socket_path: str) -> bool:
         or resolved.is_relative_to(tmp)
         or resolved.is_relative_to(var_tmp)
         or resolved.is_relative_to(system_tmp)
+    )
+
+
+def _is_trusted_local_socket(path: Path) -> bool:
+    if os.name == "nt" or not _is_safe_local_socket_path(str(path)):
+        return False
+    try:
+        metadata = path.lstat()
+        parent_metadata = path.parent.lstat()
+    except OSError:
+        return False
+    return (
+        stat.S_ISSOCK(metadata.st_mode)
+        and metadata.st_uid == os.geteuid()
+        and not metadata.st_mode & 0o022
+        and stat.S_ISDIR(parent_metadata.st_mode)
+        and parent_metadata.st_uid == os.geteuid()
+        and not parent_metadata.st_mode & 0o022
     )
 
 

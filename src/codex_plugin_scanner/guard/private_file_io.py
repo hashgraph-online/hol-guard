@@ -50,7 +50,12 @@ def read_private_regular_bytes(
 
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
+        if os.name == "nt":
+            from .windows_replaceable_file import open_replaceable_read_descriptor
+
+            descriptor = open_replaceable_read_descriptor(path, flags)
+        else:
+            descriptor = os.open(path, flags)
     except OSError:
         return None
     try:

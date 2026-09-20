@@ -12,31 +12,78 @@ import pytest
 
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 
-SRC_PATH = Path(__file__).resolve().parents[1] / "src"
+pytest_plugins = ["tests.bundle_first_cloud"]
+
+ROOT_PATH = Path(__file__).resolve().parents[1]
+SRC_PATH = ROOT_PATH / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
-if str(SUPPORT_PATH) not in sys.path:
-    sys.path.insert(0, str(SUPPORT_PATH))
+for path in (ROOT_PATH, SRC_PATH, SUPPORT_PATH):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
-pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
+pythonpath_prefix = [str(path) for path in (ROOT_PATH, SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep Python-engine unit tests on explicit ``off`` unless they set a mode.
+    """Keep legacy unit fixtures on explicit, test-only oracle mode.
 
     Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves.
+    ``native_mode`` or delete this variable themselves. The oracle is injected
+    below; no production module imports the semantic evaluator.
     """
 
     if "HOL_GUARD_NATIVE" not in os.environ:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+
+
+@pytest.fixture(autouse=True)
+def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install the Python reviewer only for explicit differential-test paths."""
+
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+
+    from codex_plugin_scanner.guard.cli import commands_hook_source_ref
+    from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
+    from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
+    from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
+    from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    def worker_oracle(worker: HookWorker) -> object:
+        return HookReviewEngine(
+            store=worker.store,
+            scanner=ContentScanner(),
+            cache=HookDecisionCache(worker.store),
+            config_loader=worker._load_config,
+            metrics=worker.metrics,
+        )
+
+    def source_ref_oracle(
+        request: HookReviewRequest,
+        store: GuardStore,
+        config: GuardConfig | None,
+    ) -> HookReviewResponse:
+        return HookReviewEngine(
+            store=store,
+            scanner=ContentScanner(),
+            cache=HookDecisionCache(store),
+            config_loader=lambda guard_home, workspace: (
+                config if config is not None else load_guard_config(guard_home, workspace=workspace)
+            ),
+        ).review(request)
+
+    monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
+    monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -166,7 +213,9 @@ def _isolate_daemon_background_refresh_workers(
             },
         )
     if request.node.get_closest_marker("daemon_service_workers") is None:
-        monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(
+            daemon_server, "start_command_queue_worker", lambda _store, existing, *, config_reader=None: existing
+        )
         monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 
 from ..adapters import get_adapter
@@ -36,6 +37,7 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from .audit_workspace import audit_workspace_is_bound_to_context, bind_relative_audit_workspace
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text
 from .command_payload import result as _command_result
@@ -80,6 +82,7 @@ def execute_guard_command_job(
     context: HarnessContext,
     store: GuardStore,
     now: Callable[[], str] | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     operation = command_job_operation(job)
     generated_at = now() if now is not None else _now()
@@ -92,6 +95,7 @@ def execute_guard_command_job(
                 context=context,
                 store=store,
                 generated_at=generated_at,
+                config_reader=config_reader,
             )
         if operation in APP_OPERATIONS:
             return _execute_app_operation(
@@ -106,7 +110,11 @@ def execute_guard_command_job(
                 payload=payload,
                 store=store,
                 generated_at=generated_at,
-                resume_after_approval=_resume_after_remote_approval,
+                resume_after_approval=(
+                    _resume_after_remote_approval
+                    if config_reader is None
+                    else partial(_resume_after_remote_approval, config_reader=config_reader)
+                ),
             )
         if operation in POLICY_MEMORY_OPERATIONS:
             return _result(
@@ -132,7 +140,15 @@ def _execute_package_shim_operation(
     context: HarnessContext,
     store: GuardStore,
     generated_at: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
+    if operation == "guard.packageShims.audit" and not audit_workspace_is_bound_to_context(payload, context):
+        return {
+            "failureCode": "workspace_scope_mismatch",
+            "failureMessage": "Cloud audit requests must target the active local workspace.",
+        }
+    if operation == "guard.packageShims.audit":
+        payload = bind_relative_audit_workspace(payload, context)
     command_context = _package_shim_context(payload, base_context=context, store=store)
     if operation == "guard.packageShims.status":
         return _result(package_shim_status(command_context), generated_at=generated_at)
@@ -177,7 +193,7 @@ def _execute_package_shim_operation(
             }
         audit_payload, exit_code = build_workspace_audit_payload(
             command_name="audit",
-            config=load_guard_config(store.guard_home),
+            config=load_guard_config(store.guard_home, config_reader=config_reader),
             now=generated_at,
             sbom_paths=(),
             store=store,
@@ -285,14 +301,19 @@ def _resume_after_remote_approval(
     request_id: str,
     action: str,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
     if harness == "codex" and action in {"allow", "block"}:
-        continuation = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
+        continuation = _resume_codex_request(
+            store=store, request_id=request_id, action=action, now=now, config_reader=config_reader
+        )
         if continuation is None:
             return {}
         return _continuation_resume_metadata(continuation, detail_key="codexResume")
-    harness_resume = resume_harness_operation(store, request_id=request_id, action=action, now=now)
+    harness_resume = resume_harness_operation(
+        store, request_id=request_id, action=action, now=now, config_reader=config_reader
+    )
     if harness_resume is None:
         return {}
     return _continuation_resume_metadata(harness_resume, detail_key="harnessResume")
@@ -304,6 +325,7 @@ def _resume_codex_request(
     request_id: str,
     action: str,
     now: str,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
     request = store.get_approval_request(request_id)
     if not isinstance(request, dict):
@@ -314,6 +336,7 @@ def _resume_codex_request(
             request_row=request,
             action=action,
             now=now,
+            config_reader=config_reader,
         )
         return continuation
     except ValueError as error:

@@ -1,0 +1,1028 @@
+{
+  "schema": "hol-guard.auxiliary-response-captures.v1",
+  "source_commit": "e44008445630aad28ccc291ec234f55a14892e6d",
+  "native_policy_boundary": "modeled_results_not_native_execution",
+  "input_bytes_limit": 1000000,
+  "cases": [
+    {
+      "id": "copilot.userPromptSubmitted.protected_default.timeout",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.protected_default.malformed_child",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.protected_default.input_limit",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.protected_default.output_limit",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.watch.timeout",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.watch.malformed_child",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.watch.input_limit",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.userPromptSubmitted.watch.output_limit",
+      "harness": "copilot",
+      "event": "userPromptSubmitted",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.protected_default.timeout",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.protected_default.malformed_child",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.protected_default.input_limit",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.protected_default.output_limit",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.watch.timeout",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.watch.malformed_child",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.watch.input_limit",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequest.watch.output_limit",
+      "harness": "copilot",
+      "event": "permissionRequest",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.protected_default.timeout",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.protected_default.malformed_child",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.protected_default.input_limit",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.protected_default.output_limit",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "behavior": "deny",
+        "message": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "interrupt": false
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.watch.timeout",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.watch.malformed_child",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.watch.input_limit",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "copilot.permissionRequestV2.watch.output_limit",
+      "harness": "copilot",
+      "event": "permissionRequestV2",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "permissionDecision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.protected_default.timeout",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.protected_default.malformed_child",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.protected_default.input_limit",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.protected_default.output_limit",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.watch.timeout",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.watch.malformed_child",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.watch.input_limit",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.UserPromptSubmit.watch.output_limit",
+      "harness": "kimi",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.protected_default.timeout",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.protected_default.malformed_child",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.protected_default.input_limit",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.protected_default.output_limit",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.watch.timeout",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.watch.malformed_child",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.watch.input_limit",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.SessionStart.watch.output_limit",
+      "harness": "kimi",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "SessionStart",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.protected_default.timeout",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "Stop"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.protected_default.malformed_child",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "Stop"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.protected_default.input_limit",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "Stop"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.protected_default.output_limit",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "Stop"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.watch.timeout",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "Stop",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.watch.malformed_child",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "Stop",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.watch.input_limit",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "Stop",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "kimi.Stop.watch.output_limit",
+      "harness": "kimi",
+      "event": "Stop",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "Stop",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.protected_default.timeout",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.protected_default.malformed_child",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.protected_default.input_limit",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook input exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.protected_default.output_limit",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook output exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.watch.timeout",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.watch.malformed_child",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.watch.input_limit",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.UserPromptSubmit.watch.output_limit",
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.protected_default.timeout",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.protected_default.malformed_child",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.protected_default.input_limit",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook input exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.protected_default.output_limit",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook output exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.watch.timeout",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.watch.malformed_child",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.watch.input_limit",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SubagentStart.watch.output_limit",
+      "harness": "grok",
+      "event": "SubagentStart",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.protected_default.timeout",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.protected_default.malformed_child",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard could not complete this review before the hook deadline. Retry the action."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.protected_default.input_limit",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook input exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.protected_default.output_limit",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow",
+        "reason": "HOL Guard blocked this action because hook output exceeded the safe size limit."
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.watch.timeout",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.watch.malformed_child",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.watch.input_limit",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "grok.SessionStart.watch.output_limit",
+      "harness": "grok",
+      "event": "SessionStart",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "decision": "allow"
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.protected_default.timeout",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "timeout",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.protected_default.malformed_child",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "malformed_child",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard could not complete this review before the hook deadline. Retry the action.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.protected_default.input_limit",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "input_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook input exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.protected_default.output_limit",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "protected_default",
+      "condition": "output_limit",
+      "response": {
+        "continue": true,
+        "systemMessage": "HOL Guard blocked this action because hook output exceeded the safe size limit.",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.watch.timeout",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "timeout",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.watch.malformed_child",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "malformed_child",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.watch.input_limit",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "input_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "id": "zcode.UserPromptSubmit.watch.output_limit",
+      "harness": "zcode",
+      "event": "UserPromptSubmit",
+      "posture": "watch",
+      "condition": "output_limit",
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit",
+          "permissionDecision": "allow"
+        }
+      },
+      "exit_code": 0
+    }
+  ]
+}

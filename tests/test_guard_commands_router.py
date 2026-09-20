@@ -16,8 +16,8 @@ def test_normalize_guard_handler_result_treats_none_as_success() -> None:
     assert commands_router._normalize_guard_handler_result({"status": "unexpected"}) == 1
 
 
-def test_only_daemon_server_eagerly_primes_policy_integrity() -> None:
-    assert commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=True))
+def test_daemon_store_construction_does_not_prime_policy_integrity() -> None:
+    assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=True))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=False))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="trust"))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="codex-mcp-proxy"))
@@ -29,6 +29,45 @@ def test_only_explicit_account_actions_allow_system_keyring() -> None:
         assert commands_router._should_allow_system_keyring(Namespace(guard_command=command))
     for command in ("daemon", "hook", "status", "sync", "codex-mcp-proxy"):
         assert not commands_router._should_allow_system_keyring(Namespace(guard_command=command))
+
+
+def test_auto_hook_router_dispatches_before_request_config_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(commands_router, "native_mode", lambda: "auto")
+    monkeypatch.setattr(commands_router, "resolve_guard_home", lambda _override: guard_home)
+    monkeypatch.setattr(commands_router, "_resolve_guard_workspace", lambda _args, **_kwargs: None)
+    monkeypatch.setattr(commands_router, "enforce_lifecycle_gate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(commands_router, "GuardStore", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        commands_router,
+        "load_guard_config",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("hook loaded config")),
+    )
+
+    def hook_handler(args: Namespace, **kwargs: object) -> int:
+        captured.update(kwargs)
+        assert args.guard_command == "hook"
+        return 0
+
+    monkeypatch.setattr(commands_router, "_run_guard_hook_command", hook_handler, raising=False)
+    args = Namespace(
+        guard_command="hook",
+        guard_home=None,
+        home=None,
+        workspace=None,
+        grok_executable=None,
+        source="default",
+        serve=False,
+        json=True,
+    )
+
+    assert commands_router.run_guard_command(args) == 0
+    assert captured["config"] is None
 
 
 @pytest.mark.parametrize("authority_outcome", ["success", "false", "exception"])

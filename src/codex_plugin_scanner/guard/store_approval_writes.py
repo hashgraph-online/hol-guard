@@ -6,7 +6,11 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 
-from .continuation_snapshot import non_resumable_continuation_snapshot, validated_continuation_snapshot
+from .continuation_snapshot import (
+    canonical_continuation_correlation_id,
+    non_resumable_continuation_snapshot,
+    validated_continuation_snapshot,
+)
 from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .store_approvals import (
@@ -115,6 +119,19 @@ def _update_request(
     queue_group_id: str,
     now: str,
 ) -> None:
+    existing = connection.execute(
+        "select continuation_snapshot_json from approval_requests where request_id = ? and oauth_source = ?",
+        (request_id, oauth_source),
+    ).fetchone()
+    try:
+        frozen = validated_continuation_snapshot(json.loads(existing[0])) if existing and existing[0] else None
+    except (TypeError, ValueError):
+        frozen = None
+    correlation_id = canonical_continuation_correlation_id(
+        request_id=request_id,
+        request_row={"continuation_snapshot": frozen},
+        operation_metadata={},
+    )
     connection.execute(
         """update approval_requests
            set harness = ?, artifact_name = ?, artifact_type = ?, artifact_hash = ?, publisher = ?, policy_action = ?,
@@ -138,6 +155,7 @@ def _update_request(
             action_identity=action_identity,
             queue_group_id=queue_group_id,
             now=now,
+            continuation_snapshot=_continuation_snapshot_json(request, correlation_id=correlation_id),
         ),
     )
 
@@ -152,6 +170,7 @@ def _update_values(
     action_identity: str,
     queue_group_id: str,
     now: str,
+    continuation_snapshot: str,
 ) -> tuple[object, ...]:
     return (
         request.harness,
@@ -189,7 +208,7 @@ def _update_values(
         _rewrite_approval_url(request.approval_url, request_id),
         request.raw_command_text,
         request.guard_version,
-        _continuation_snapshot_json(request),
+        continuation_snapshot,
         request.first_seen_guard_version or request.guard_version,
         request.last_seen_guard_version or request.guard_version,
         request_id,
@@ -294,10 +313,12 @@ def _insert_values(
     )
 
 
-def _continuation_snapshot_json(request: GuardApprovalRequest) -> str:
+def _continuation_snapshot_json(request: GuardApprovalRequest, *, correlation_id: str | None = None) -> str:
     snapshot = validated_continuation_snapshot(request.continuation_snapshot)
     if snapshot is None:
         snapshot = non_resumable_continuation_snapshot(request.to_dict())
+    if correlation_id is not None:
+        snapshot["correlationId"] = correlation_id
     return json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
 
 

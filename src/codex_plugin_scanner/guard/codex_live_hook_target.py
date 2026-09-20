@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +24,7 @@ def codex_live_hook_wait_deadline(
     *,
     operation: Mapping[str, object],
     metadata: Mapping[str, object],
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> datetime | None:
     """Return a proven live-hook deadline, including the legacy PreToolUse bridge."""
 
@@ -45,7 +46,9 @@ def codex_live_hook_wait_deadline(
         return None
     workspace = _workspace_path(metadata)
     try:
-        configured = int(load_guard_config(store.guard_home, workspace).approval_wait_timeout_seconds)
+        configured = int(
+            load_guard_config(store.guard_home, workspace, config_reader=config_reader).approval_wait_timeout_seconds
+        )
         configured = max(0, min(configured, MAX_APPROVAL_WAIT_TIMEOUT_SECONDS))
     except (OSError, TypeError, ValueError):
         configured = 120

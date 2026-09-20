@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, release/3.2]
   push:
-    branches: [main]
+    branches: [main, release/3.2]
   workflow_dispatch:
 
 permissions:
@@ -17,11 +17,16 @@ concurrency:
 jobs:
   linux-x64:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
+    outputs:
+      rule_digest: ${{ steps.native-wheel.outputs.rule_digest }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -31,7 +36,7 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Run wheel-builder contracts
-        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
+        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_policy_snapshot_inactive_namespace.py --tb=short
       - name: Install pinned Rust toolchain and musl target
         run: |
           rustup toolchain install 1.88.0 --profile minimal
@@ -59,12 +64,14 @@ jobs:
           fi
           "$runtime" self-test --json
       - name: Assemble and install native wheel
+        id: native-wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
           RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          printf 'rule_digest=%s\n' "$RULE_DIGEST" >> "$GITHUB_OUTPUT"
           uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
             --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$runtime" \
@@ -74,16 +81,94 @@ jobs:
             --target x86_64-unknown-linux-musl \
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST"
+          uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          unset HOL_GUARD_NATIVE_MODE HOL_GUARD_NATIVE_ORACLE HOL_GUARD_NATIVE_DIAGNOSTIC
+          unset HOL_GUARD_HOOK_FAST_PATH_SHADOW HOL_GUARD_HOOK_SOURCE_REF HOL_GUARD_HOOK_BINARY
+          unset HOL_GUARD_FAST_PATH HOL_GUARD_BINARY HOL_GUARD_ORACLE HOL_GUARD_DIAGNOSTIC HOL_GUARD_TEST_MODE
+          unset HOL_GUARD_PYTHON_ORACLE
+          unset HOL_GUARD_TEST_KEYRING_FILE HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON
+          unset HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST
+          unset GUARD_NATIVE GUARD_NATIVE_BINARY GUARD_NATIVE_MODE GUARD_NATIVE_ORACLE GUARD_NATIVE_DIAGNOSTIC
+          unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUARD_HOOK_BINARY
+          unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
+          unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
+          unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+          .venv/bin/python -I ci/native_runtime/probe_installed_runtime_identity.py --json native-installed-identity.json
+          .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
+      - name: Measure installed adapter-to-decision SLOs
+        env:
+          NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
+        run: |
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
+          unset HOL_GUARD_NATIVE_MODE HOL_GUARD_NATIVE_ORACLE HOL_GUARD_NATIVE_DIAGNOSTIC
+          unset HOL_GUARD_HOOK_FAST_PATH_SHADOW HOL_GUARD_HOOK_SOURCE_REF HOL_GUARD_HOOK_BINARY
+          unset HOL_GUARD_FAST_PATH HOL_GUARD_BINARY HOL_GUARD_ORACLE HOL_GUARD_DIAGNOSTIC HOL_GUARD_TEST_MODE
+          unset HOL_GUARD_TEST_KEYRING_FILE HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON
+          unset HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST
+          unset GUARD_NATIVE GUARD_NATIVE_BINARY GUARD_NATIVE_MODE GUARD_NATIVE_ORACLE GUARD_NATIVE_DIAGNOSTIC
+          unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUARD_HOOK_BINARY
+          unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
+          unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
+          unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
+          .venv/bin/python scripts/bench_guard_native_installed_slo.py \
+            --runtime "$runtime" \
+            --warm-iterations 2 \
+            --cold-iterations 2 \
+            --recovery-iterations 2 \
+            --readiness-samples 2 \
+            --json native-installed-slo.json \
+            --enforce
+      - name: Enforce installed native soak
+        run: |
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
+          unset HOL_GUARD_NATIVE_MODE HOL_GUARD_NATIVE_ORACLE HOL_GUARD_NATIVE_DIAGNOSTIC
+          unset HOL_GUARD_HOOK_FAST_PATH_SHADOW HOL_GUARD_HOOK_SOURCE_REF HOL_GUARD_HOOK_BINARY
+          unset HOL_GUARD_FAST_PATH HOL_GUARD_BINARY HOL_GUARD_ORACLE HOL_GUARD_DIAGNOSTIC HOL_GUARD_TEST_MODE
+          unset HOL_GUARD_TEST_KEYRING_FILE HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON
+          unset HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST
+          unset GUARD_NATIVE GUARD_NATIVE_BINARY GUARD_NATIVE_MODE GUARD_NATIVE_ORACLE GUARD_NATIVE_DIAGNOSTIC
+          unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUARD_HOOK_BINARY
+          unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
+          unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
+          unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+          .venv/bin/python scripts/stress_guard_daemon.py \
+            --requests 100000 \
+            --receipts 250000 \
+            --settle-seconds 0 \
+            --enforce-soak \
+            --json native-soak.json
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          cp "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" native-dist/
+          SOURCE_SHA="${GITHUB_SHA:?missing GitHub source SHA}"
+          runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/ci/validate_release_artifacts.py \
+            --dist-dir native-dist \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --platform manylinux_2_17_x86_64 \
+            --windows-waiver "validated by the platform matrix" \
+            --output native-artifact-evidence.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: hol-guard-native-wheel-linux-x64
           path: |
             native-dist/*.whl
             native-default-auto.json
-          if-no-files-found: error
+            native-default-auto-failure.json
+            native-installed-identity.json
+            installed-pi-output.json
+            native-installed-slo.json
+            native-soak.json
+            native-artifact-evidence.json
+            native-stop-diagnostic.json
+          if-no-files-found: warn
 
   macos:
     strategy:
@@ -99,11 +184,14 @@ jobs:
             target: aarch64-apple-darwin
             deployment_target: "11.0"
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -112,10 +200,20 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Verify macOS qualification process observation
+        run: uv run --no-sync python -m pytest -q tests/test_native_qualification_process.py tests/test_native_policy_snapshot_inactive_namespace.py
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install 1.88.0 --profile minimal
           rustup default 1.88.0
+      - name: Cache native Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          shared-key: native-wheel
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Verify macOS resident deadlines and buffered peer-close responses
+        run: cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime resident_client -- --nocapture --test-threads=1
       - name: Build pure Python wheel
         run: uv run --no-sync python -m build --wheel --outdir pure-dist
       - name: Build native runtime
@@ -145,16 +243,76 @@ jobs:
             --target "$TARGET" \
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST"
+          uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          unset HOL_GUARD_NATIVE_MODE HOL_GUARD_NATIVE_ORACLE HOL_GUARD_NATIVE_DIAGNOSTIC
+          unset HOL_GUARD_HOOK_FAST_PATH_SHADOW HOL_GUARD_HOOK_SOURCE_REF HOL_GUARD_HOOK_BINARY
+          unset HOL_GUARD_FAST_PATH HOL_GUARD_BINARY HOL_GUARD_ORACLE HOL_GUARD_DIAGNOSTIC HOL_GUARD_TEST_MODE
+          unset HOL_GUARD_PYTHON_ORACLE
+          unset HOL_GUARD_TEST_KEYRING_FILE HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON
+          unset HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST
+          unset GUARD_NATIVE GUARD_NATIVE_BINARY GUARD_NATIVE_MODE GUARD_NATIVE_ORACLE GUARD_NATIVE_DIAGNOSTIC
+          unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUARD_HOOK_BINARY
+          unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
+          unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
+          unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+          .venv/bin/python -I ci/native_runtime/probe_installed_runtime_identity.py --json native-installed-identity.json
+          .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
+      - name: Measure installed adapter-to-decision SLOs
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
+        run: |
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
+          unset HOL_GUARD_NATIVE_MODE HOL_GUARD_NATIVE_ORACLE HOL_GUARD_NATIVE_DIAGNOSTIC
+          unset HOL_GUARD_HOOK_FAST_PATH_SHADOW HOL_GUARD_HOOK_SOURCE_REF HOL_GUARD_HOOK_BINARY
+          unset HOL_GUARD_FAST_PATH HOL_GUARD_BINARY HOL_GUARD_ORACLE HOL_GUARD_DIAGNOSTIC HOL_GUARD_TEST_MODE
+          unset HOL_GUARD_TEST_KEYRING_FILE HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON
+          unset HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST
+          unset GUARD_NATIVE GUARD_NATIVE_BINARY GUARD_NATIVE_MODE GUARD_NATIVE_ORACLE GUARD_NATIVE_DIAGNOSTIC
+          unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUARD_HOOK_BINARY
+          unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
+          unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
+          unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
+          .venv/bin/python scripts/bench_guard_native_installed_slo.py \
+            --runtime "$runtime" \
+            --warm-iterations 2 \
+            --cold-iterations 2 \
+            --recovery-iterations 2 \
+            --readiness-samples 2 \
+            --json native-installed-slo.json \
+            --enforce
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          cp "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" native-dist/
+          SOURCE_SHA="${GITHUB_SHA:?missing GitHub source SHA}"
+          runtime="rust/target/release/hol-guard-runtime"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/ci/validate_release_artifacts.py \
+            --dist-dir native-dist \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --platform "$PLATFORM_TAG" \
+            --windows-waiver "validated by the platform matrix" \
+            --output native-artifact-evidence.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
           path: |
             native-dist/*.whl
             native-default-auto.json
-          if-no-files-found: error
+            native-default-auto-failure.json
+            native-installed-identity.json
+            installed-pi-output.json
+            native-installed-slo.json
+            native-artifact-evidence.json
+            native-stop-diagnostic.json
+          if-no-files-found: warn
 
   windows-x64:
     runs-on: windows-latest
@@ -171,6 +329,21 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Verify Windows storage sharing and exclusive recovery
+        run: uv run --no-sync python -m pytest tests/test_guard_storage_gate_concurrency.py tests/test_native_policy_snapshot_inactive_namespace.py --tb=short
+      - name: Verify actual Windows private readers and atomic writer
+        run: >-
+          uv run --no-sync python -m pytest
+          tests/test_guard_private_file_io.py
+          tests/test_private_reader_descriptor_guards.py
+          tests/test_windows_replaceable_file.py
+          tests/test_windows_replaceable_reader_process.py
+          tests/test_windows_replaceable_unicode_crt.py
+          tests/test_windows_wtext_acceptance_probe.py
+          tests/test_windows_atomic_replace.py
+          tests/test_windows_atomic_replace_process.py
+          tests/test_guard_daemon_manager.py::test_daemon_token_and_state_use_atomic_replacement
+          --junitxml=windows-private-authority-controls.xml --tb=short
       - name: Install pinned Rust toolchain
         shell: pwsh
         run: |
@@ -205,15 +378,119 @@ jobs:
             --source-sha $env:SOURCE_SHA `
             --rule-digest $caps.rule_digest
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
+          uv pip uninstall --python .venv\Scripts\python.exe hol-guard
           uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
           Remove-Item Env:HOL_GUARD_NATIVE -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_NATIVE_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_NATIVE_MODE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_NATIVE_ORACLE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_NATIVE_DIAGNOSTIC -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH -ErrorAction SilentlyContinue
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH_SHADOW -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_HOOK_SOURCE_REF -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_HOOK_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_FAST_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_ORACLE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_DIAGNOSTIC -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_TEST_MODE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_TEST_KEYRING_FILE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_RUN_SYSTEM_KEYCHAIN_TEST -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_NATIVE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_NATIVE_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_NATIVE_MODE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_NATIVE_ORACLE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_NATIVE_DIAGNOSTIC -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_HOOK_FAST_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_HOOK_FAST_PATH_SHADOW -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_HOOK_SOURCE_REF -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_HOOK_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_FAST_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_BINARY -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_ORACLE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_DIAGNOSTIC -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_TEST_MODE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_TEST_KEYRING_FILE -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_TEST_SYNC_AUTH_CONTEXT_JSON -ErrorAction SilentlyContinue
+          Remove-Item Env:GUARD_PYTEST_DURATION_OUTPUT -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTEST_CURRENT_TEST -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTEST_ADDOPTS -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTEST_PLUGINS -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_PYTHON_ORACLE -ErrorAction SilentlyContinue
+          .venv\Scripts\python.exe -I ci/native_runtime/probe_installed_runtime_identity.py --json native-installed-identity.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv\Scripts\python.exe -I ci/native_runtime/probe_installed_command_control_lock.py --json native-installed-control-lock.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv\Scripts\python.exe ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-native-wheel-windows-x64
           path: |
             native-dist/*.whl
             native-default-auto.json
+            native-installed-identity.json
+            native-installed-control-lock.json
+          if-no-files-found: error
+
+      - name: Retain Windows private authority control results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-private-authority-controls
+          path: windows-private-authority-controls.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Retain bounded default-auto failure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-default-auto-failure-windows-x64
+          path: native-default-auto-failure.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  native-artifact-matrix:
+    needs: [linux-x64, macos, windows-x64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Verify native artifact collection contracts
+        run: uv run --no-sync python -m pytest tests/test_aggregate_native_wheel_artifacts.py tests/test_validate_release_artifacts.py --tb=short
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: hol-guard-native-wheel-*
+          path: native-matrix-input
+          merge-multiple: false
+      - name: Admit all four native targets without a Windows waiver
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          RULE_DIGEST: ${{ needs.linux-x64.outputs.rule_digest }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          uv run --no-sync python -m scripts.ci.aggregate_native_wheel_artifacts \
+            --artifacts-dir native-matrix-input \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --output native-matrix-evidence.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-wheel-matrix-admission
+          path: native-matrix-evidence.json
           if-no-files-found: error

@@ -18,7 +18,6 @@ from .extension_control_contract import (
     ControlSurface,
     ControlTarget,
     ControlTargetKind,
-    ExtensionControl,
     ExtensionControlLayer,
     ResolverFailureCode,
 )
@@ -29,6 +28,12 @@ from .extension_control_limits import (
     MAX_OBSERVATIONS,
     MAX_RESOLUTION_IDS,
 )
+from .extension_control_projection import (
+    compile_control_projection,
+)
+from .extension_control_projection import (
+    compose_control_layers as compose_control_layers,
+)
 
 _FAILURE_REASON = "control.resolver-failure"
 _TRUSTED_LOCKDOWN_SURFACES = frozenset({ControlSurface.TRUSTED_LOCAL_RECOVERY, ControlSurface.TRUSTED_LOCAL_PROOF})
@@ -37,32 +42,6 @@ _MAX_CONTROLS_PER_LAYER = 512
 _MAX_RESOLUTION_IDS = 1024
 _MAX_OBSERVATIONS = 2048
 _MAX_INPUT_TEXT_LENGTH = 256
-
-
-def compose_control_layers(layers: Iterable[ExtensionControlLayer]) -> ComposedExtensionControls:
-    """Compose local and cloud layers with disable dominance and deterministic output."""
-    states: dict[ControlTarget, ControlState] = {}
-    seen_layer_kinds: set[ControlLayerKind] = set()
-    failures: set[ControlResolverFailure] = set()
-    lockdown = False
-    for layer in layers:
-        if layer.kind in seen_layer_kinds:
-            failures.add(ControlResolverFailure(ResolverFailureCode.DUPLICATE_LAYER_KIND, layer.kind))
-        seen_layer_kinds.add(layer.kind)
-        lockdown = lockdown or layer.global_lockdown
-        seen_targets: set[ControlTarget] = set()
-        for control in layer.controls:
-            if control.target in seen_targets:
-                failures.add(ControlResolverFailure(ResolverFailureCode.DUPLICATE_TARGET_IN_LAYER, layer.kind))
-                continue
-            seen_targets.add(control.target)
-            previous = states.get(control.target)
-            if previous is ControlState.DISABLED or control.state is ControlState.DISABLED:
-                states[control.target] = ControlState.DISABLED
-            else:
-                states[control.target] = ControlState.ENABLED
-    controls = tuple(ExtensionControl(target, states[target]) for target in sorted(states))
-    return ComposedExtensionControls(lockdown, controls, tuple(sorted(failures)))
 
 
 def resolve_extension_controls(
@@ -77,8 +56,9 @@ def resolve_extension_controls(
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
 
-    layer_values = tuple(islice(layers, MAX_CONTROL_LAYERS + 1))
-    composed = compose_control_layers(layer_values)
+    projection = compile_control_projection(tuple(islice(layers, MAX_CONTROL_LAYERS + 1)))
+    layer_values = projection.layers
+    composed = projection.composed
     failures = set(composed.failures)
     if authority_failure is not None and surface is not ControlSurface.TRUSTED_LOCAL_PROOF:
         failures.add(ControlResolverFailure(authority_failure))

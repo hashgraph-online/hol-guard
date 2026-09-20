@@ -1,5 +1,7 @@
 # ADR 0007: Native runtime packaging
 
+> Current-scope correction: the universal wheel is a packaging compatibility artifact, not authorization for a production Python hook semantic backend on unsupported native platforms. The Python-backend/fallback statements below are retained as the historical packaging direction and are superseded for current hook delivery and rollback by [the RSP-024 technical review](../native-runtime-technical-contract-review.md). Current installed upgrade/rollback proof remains pending.
+
 Status: selected direction, release proof pending.
 
 ## Decision

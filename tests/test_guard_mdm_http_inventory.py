@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import ast
 from pathlib import Path
+
+from tests.http_client_inventory_support import HttpClientInventory
 
 ROOT = Path(__file__).parents[1]
 GUARD_SOURCE = ROOT / "src" / "codex_plugin_scanner" / "guard"
@@ -26,59 +27,41 @@ _RAW_HTTP_BOUNDARIES = frozenset(
     {
         "mdm/network_transport.py",
         "daemon/client.py",
-        "daemon/manager.py",
+        "daemon/live_identity.py",
+        "daemon/manager_live.py",
+        "daemon/manager_locator.py",
         "bridge/__init__.py",
-        "adapters/bounded_cli_hook_bridge.py",
+        "adapters/bounded_cli_hook_daemon.py",
         "adapters/claude_daemon_hook_bridge.py",
+        "adapters/claude_daemon_hook_transport.py",
         "adapters/cursor_hook_script_template_head.py",
         "adapters/codex_daemon_hook_transport.py",
     }
 )
 
 
-def _aliases(tree: ast.AST) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                binding = alias.asname or alias.name.split(".", 1)[0]
-                aliases[binding] = alias.name if alias.asname else binding
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
-                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
-    return aliases
-
-
-def _qualified_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
-    if isinstance(node, ast.Name):
-        return aliases.get(node.id, node.id)
-    if isinstance(node, ast.Attribute):
-        parent = _qualified_name(node.value, aliases)
-        return f"{parent}.{node.attr}" if parent is not None else None
-    return None
-
-
 def test_raw_http_clients_are_confined_to_enterprise_transport_or_loopback_ipc() -> None:
     violations: list[str] = []
     observed_boundaries: set[str] = set()
+    manager_calls: dict[str, list[str]] = {}
+    inventory = HttpClientInventory(GUARD_SOURCE)
 
     for path in sorted(GUARD_SOURCE.rglob("*.py")):
         relative = path.relative_to(GUARD_SOURCE).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        aliases = _aliases(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            call_name = _qualified_name(node.func, aliases)
+        for line, call_name in inventory.calls(path):
             if call_name not in _RAW_HTTP_CALLS:
                 continue
             observed_boundaries.add(relative)
+            if relative.startswith("daemon/manager_"):
+                manager_calls.setdefault(relative, []).append(call_name)
             if relative not in _RAW_HTTP_BOUNDARIES:
-                violations.append(f"{relative}:{node.lineno}:{call_name}")
+                violations.append(f"{relative}:{line}:{call_name}")
 
     assert violations == []
+    assert manager_calls == {
+        "daemon/manager_live.py": ["urllib.request.urlopen"] * 3,
+        "daemon/manager_locator.py": ["urllib.request.urlopen"],
+    }
     assert "mdm/network_transport.py" in observed_boundaries
     assert "runtime/verified_github_reads.py" not in observed_boundaries
 

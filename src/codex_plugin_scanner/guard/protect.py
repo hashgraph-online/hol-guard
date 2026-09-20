@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import shlex
-import subprocess
-from collections.abc import Callable
-from dataclasses import dataclass, replace
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Literal
-from urllib.parse import urlparse
-from uuid import uuid4
+# Retain facade dependencies for live lookups from the helper modules.
+import hashlib  # noqa: F401
+import json  # noqa: F401
+import os  # noqa: F401
+import shlex  # noqa: F401
+import subprocess  # noqa: F401
+from collections.abc import Callable  # noqa: F401
+from dataclasses import dataclass, replace  # noqa: F401
+from datetime import datetime, timezone  # noqa: F401
+from pathlib import Path  # noqa: F401
+from typing import Any, Literal  # noqa: F401
+from urllib.parse import urlparse  # noqa: F401
+from uuid import uuid4  # noqa: F401
 
-from .action_lattice import normalize_guard_action
-from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
+from .action_lattice import normalize_guard_action  # noqa: F401
+from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url  # noqa: F401
 from .collections_support import dedupe_preserving_order
-from .config import GuardConfig
-from .models import GuardReceipt
-from .redaction import redact_text
-from .runtime.decisions import decision_from_legacy_policy_action
-from .runtime.package_manager_command import strip_package_manager_global_options
+from .config import GuardConfig  # noqa: F401
+from .models import GuardReceipt  # noqa: F401
+from .redaction import redact_text  # noqa: F401
+from .runtime.decisions import decision_from_legacy_policy_action  # noqa: F401
+from .runtime.package_manager_command import strip_package_manager_global_options  # noqa: F401
 
 ProtectAction = Literal["allow", "review", "block"]
 SeverityLabel = Literal["low", "medium", "high", "critical"]
@@ -112,409 +113,29 @@ class ProtectVerdict:
         }
 
 
-def build_protect_payload(
-    *,
-    command: list[str],
-    store: Any,
-    workspace_dir: Path,
-    dry_run: bool,
-    now: str,
-    config: GuardConfig | None = None,
-    current_config_provider: Callable[[], GuardConfig] | None = None,
-    unsafe_raw_output: bool = False,
-) -> tuple[dict[str, object], int]:
-    """Evaluate and optionally execute an install command."""
+from . import protect_execution as _protect_execution  # noqa: E402
 
-    if len(command) == 0:
-        raise ValueError("Guard protect requires a command to wrap.")
-    request = parse_protect_command(command)
-    advisories = store.list_cached_advisories(limit=None)
-    cached_verdict = evaluate_protect_request(request, advisories)
-    observe_mode = config is not None and config.mode == "observe"
-    cached_gate = cached_verdict.blocking and not observe_mode
-    cached_policy_context = _cached_advisory_policy_context(cached_verdict)
-    from .local_supply_chain import build_package_protect_payload
-
-    def current_cached_advisory_authority() -> tuple[object | None, dict[str, object] | None]:
-        current_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
-        return current_verdict.action, _cached_advisory_policy_context(current_verdict)
-
-    final_config_provider = current_config_provider
-    final_advisory_provider: Callable[[], tuple[object | None, dict[str, object] | None]] = (
-        current_cached_advisory_authority
-    )
-    if observe_mode:
-        refresh_state: dict[str, object] = {"additional_ready": False, "force_block": False}
-
-        def refresh_additional_authority() -> tuple[object | None, dict[str, object] | None]:
-            if not bool(refresh_state.get("additional_ready")):
-                try:
-                    action, context = current_cached_advisory_authority()
-                except Exception as error:
-                    refresh_state["force_block"] = True
-                    action = "block"
-                    context = {
-                        "available": False,
-                        "error": type(error).__name__,
-                        "status": "authority_refresh_failed",
-                        "version": 1,
-                    }
-                refresh_state["additional_action"] = action
-                refresh_state["additional_context"] = context
-                refresh_state["additional_ready"] = True
-            if bool(refresh_state.get("force_block")):
-                context = refresh_state.get("additional_context")
-                return (
-                    "block",
-                    context
-                    if isinstance(context, dict)
-                    else {
-                        "available": False,
-                        "status": "authority_refresh_failed",
-                        "version": 1,
-                    },
-                )
-            context = refresh_state.get("additional_context")
-            return refresh_state.get("additional_action"), context if isinstance(context, dict) else None
-
-        def refresh_current_config() -> GuardConfig:
-            current_config = config
-            if current_config_provider is not None:
-                try:
-                    candidate = current_config_provider()
-                    if not isinstance(candidate, GuardConfig):
-                        raise TypeError("current config provider returned an invalid value")
-                    current_config = candidate
-                except Exception as error:
-                    refresh_state["force_block"] = True
-                    refresh_state["additional_context"] = {
-                        "available": False,
-                        "error": type(error).__name__,
-                        "reason_code": "package_config_refresh_failed",
-                        "status": "authority_refresh_failed",
-                        "version": 1,
-                    }
-                    refresh_state["additional_ready"] = True
-            _ = refresh_additional_authority()
-            if bool(refresh_state.get("force_block")):
-                assert current_config is not None
-                return replace(current_config, mode="enforce")
-            assert current_config is not None
-            return current_config
-
-        final_config_provider = refresh_current_config
-        final_advisory_provider = refresh_additional_authority
-
-    package_payload = build_package_protect_payload(
-        command=command,
-        store=store,
-        workspace_dir=workspace_dir,
-        dry_run=dry_run or cached_gate,
-        allow_saved_approval_execution=cached_gate and not dry_run,
-        now=now,
-        config=config,
-        unsafe_raw_output=unsafe_raw_output,
-        timeout_seconds=_protect_command_timeout_seconds(),
-        additional_current_action=cached_verdict.action,
-        additional_policy_context=cached_policy_context,
-        current_config_provider=final_config_provider,
-        additional_authority_provider=final_advisory_provider,
-    )
-    if package_payload is not None:
-        current_cached_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
-        if (
-            not observe_mode
-            and current_cached_verdict.blocking
-            and package_payload[0].get("executed") is False
-            and not _package_payload_uses_saved_approval(package_payload[0])
-        ):
-            return _merge_cached_advisory_into_package_payload(
-                package_payload,
-                cached_verdict=current_cached_verdict,
-                requested_dry_run=dry_run,
-                store=store,
-                now=now,
-            )
-        return package_payload
-    verdict = _observe_only_verdict(cached_verdict) if observe_mode else cached_verdict
-    receipt = _build_install_receipt(request, verdict)
-    verdict_payload = verdict.to_dict()
-    if observe_mode and cached_verdict.blocking:
-        verdict_payload["observed_action"] = cached_verdict.action
-        verdict_payload["observe_mode"] = True
-    payload: dict[str, object] = {
-        "generated_at": now,
-        "request": request.to_dict(),
-        "targets": [target.to_dict() for target in request.targets],
-        "verdict": verdict_payload,
-        "executed": False,
-        "dry_run": dry_run,
-        "receipt": receipt.to_dict(),
-        "matched_advisories": list(verdict.matched_advisories),
-    }
-    if observe_mode and cached_verdict.blocking:
-        payload["observed_verdict"] = cached_verdict.to_dict()
-    if verdict.blocking or dry_run:
-        store.add_receipt(receipt)
-        store.add_event(
-            f"install_time_{verdict.action}",
-            {
-                "artifact_id": request.targets[0].artifact_id,
-                "artifact_name": request.targets[0].artifact_name,
-                "executor": request.executor,
-                "install_kind": request.install_kind,
-                "action": verdict.action,
-                "risk_signals": list(verdict.risk_signals),
-            },
-            now,
-        )
-        return (payload, 2 if verdict.blocking else 0)
-    execution = subprocess.run(
-        list(request.command),
-        cwd=workspace_dir,
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=_protect_command_timeout_seconds(),
-    )
-    redacted_stdout = redact_text(execution.stdout)
-    redacted_stderr = redact_text(execution.stderr)
-    payload["executed"] = True
-    payload["execution"] = {
-        "returncode": execution.returncode,
-        "stdout": execution.stdout if unsafe_raw_output else redacted_stdout.text,
-        "stderr": execution.stderr if unsafe_raw_output else redacted_stderr.text,
-        "stdout_redactions": redacted_stdout.to_dict(),
-        "stderr_redactions": redacted_stderr.to_dict(),
-        "raw_output_enabled": unsafe_raw_output,
-    }
-    if execution.returncode == 0:
-        store.add_receipt(receipt)
-        store.add_event(
-            "install_time_allow",
-            {
-                "artifact_id": request.targets[0].artifact_id,
-                "artifact_name": request.targets[0].artifact_name,
-                "executor": request.executor,
-                "install_kind": request.install_kind,
-                "action": verdict.action,
-                "risk_signals": list(verdict.risk_signals),
-            },
-            now,
-        )
-    else:
-        store.add_event(
-            "install_time_execution_failed",
-            {
-                "artifact_id": request.targets[0].artifact_id,
-                "artifact_name": request.targets[0].artifact_name,
-                "executor": request.executor,
-                "install_kind": request.install_kind,
-                "action": verdict.action,
-                "returncode": execution.returncode,
-                "risk_signals": list(verdict.risk_signals),
-            },
-            now,
-        )
-    return (payload, int(execution.returncode))
+build_protect_payload = _protect_execution.build_protect_payload
 
 
-def _observe_only_verdict(verdict: ProtectVerdict) -> ProtectVerdict:
-    """Project a watch-only verdict to execution while retaining observed evidence separately."""
-
-    if not verdict.blocking:
-        return verdict
-    return ProtectVerdict(
-        "allow",
-        f"Watch only observed a `{verdict.action}` install decision. HOL Guard allowed the command to continue.",
-        verdict.risk_signals,
-        verdict.matched_advisories,
-    )
+_observe_only_verdict = _protect_execution._observe_only_verdict
 
 
-def _cached_advisory_policy_context(verdict: ProtectVerdict) -> dict[str, object]:
-    """Return the complete cached-advisory authority bound to package approval reuse."""
-
-    return {
-        "action": verdict.action,
-        "matched_advisories": [dict(advisory) for advisory in verdict.matched_advisories],
-        "reason": verdict.reason,
-        "risk_signals": list(verdict.risk_signals),
-        "version": 1,
-    }
+_cached_advisory_policy_context = _protect_execution._cached_advisory_policy_context
 
 
-def _package_payload_uses_saved_approval(payload: dict[str, object]) -> bool:
-    evaluation = payload.get("supply_chain_evaluation")
-    verdict = payload.get("verdict")
-    if not isinstance(evaluation, dict) or not isinstance(verdict, dict):
-        return False
-    if verdict.get("action") != "allow":
-        return False
-    reasons = evaluation.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(isinstance(reason, dict) and reason.get("code") == "saved_package_approval" for reason in reasons)
+_package_payload_uses_saved_approval = _protect_execution._package_payload_uses_saved_approval
 
 
-def _merge_cached_advisory_into_package_payload(
-    result: tuple[dict[str, object], int],
-    *,
-    cached_verdict: ProtectVerdict,
-    requested_dry_run: bool,
-    store: Any,
-    now: str,
-) -> tuple[dict[str, object], int]:
-    """Apply locally cached advisory blocks/reviews to package protect results."""
-
-    payload, exit_code = result
-    verdict = payload.get("verdict")
-    if not isinstance(verdict, dict):
-        return result
-    package_action = verdict.get("action")
-    if not isinstance(package_action, str):
-        package_action = "allow"
-
-    merged_action = package_action
-    merged_reason = verdict.get("reason")
-    if not isinstance(merged_reason, str):
-        merged_reason = cached_verdict.reason
-    merged_advisories = list(verdict.get("matched_advisories") or [])
-    risk_signals = list(verdict.get("risk_signals") or [])
-
-    if cached_verdict.action == "block":
-        merged_action = "block"
-        merged_reason = cached_verdict.reason
-    elif cached_verdict.action == "review" and package_action in {"allow", "warn"}:
-        merged_action = "review"
-        merged_reason = cached_verdict.reason
-
-    for item in cached_verdict.matched_advisories:
-        if item not in merged_advisories:
-            merged_advisories.append(item)
-    for signal in cached_verdict.risk_signals:
-        if signal not in risk_signals:
-            risk_signals.append(signal)
-
-    action_changed = merged_action != package_action
-    advisories_changed = merged_advisories != list(verdict.get("matched_advisories") or [])
-    if not action_changed and not advisories_changed:
-        return result
-
-    blocking = merged_action in {"block", "review"}
-    updated_verdict = {
-        **verdict,
-        "action": merged_action,
-        "reason": merged_reason,
-        "risk_signals": risk_signals,
-        "matched_advisories": merged_advisories,
-        "blocking": blocking,
-    }
-    updated_payload: dict[str, object] = {
-        **payload,
-        "verdict": updated_verdict,
-        "matched_advisories": merged_advisories,
-        "executed": False,
-        "dry_run": requested_dry_run or blocking,
-    }
-    exact_action = normalize_guard_action(merged_action, unknown_action="block")
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        canonical_copy = decision_from_legacy_policy_action(
-            exact_action,
-            reason=merged_reason,
-        )
-        existing_user_copy = supply_chain_evaluation.get("user_copy")
-        user_copy = dict(existing_user_copy) if isinstance(existing_user_copy, dict) else {}
-        user_copy.update(
-            {
-                "title": canonical_copy.user_title,
-                "summary": canonical_copy.user_body,
-                "next_step": canonical_copy.retry_instruction or canonical_copy.user_body,
-                "harness_message": canonical_copy.harness_message,
-            }
-        )
-        updated_payload["supply_chain_evaluation"] = {
-            **supply_chain_evaluation,
-            "decision": canonical_copy.action,
-            "policy_action": exact_action,
-            "risk_summary": merged_reason,
-            "user_copy": user_copy,
-        }
-    receipt = payload.get("receipt")
-    if isinstance(receipt, dict):
-        action_envelope = receipt.get("action_envelope_json")
-        updated_action_envelope = dict(action_envelope) if isinstance(action_envelope, dict) else None
-        if updated_action_envelope is not None:
-            for key in ("policy_action", "pre_execution_result"):
-                if key in updated_action_envelope:
-                    updated_action_envelope[key] = exact_action
-        updated_receipt = {
-            **receipt,
-            "policy_decision": exact_action,
-            **({"action_envelope_json": updated_action_envelope} if updated_action_envelope is not None else {}),
-        }
-        updated_payload["receipt"] = updated_receipt
-        if action_changed:
-            receipt_id = updated_receipt.get("receipt_id")
-            if isinstance(receipt_id, str) and receipt_id:
-                store.update_receipt_policy_decision(receipt_id, exact_action)
-        if action_changed:
-            request = payload.get("request")
-            executor = request.get("executor") if isinstance(request, dict) else None
-            install_kind = request.get("install_kind") if isinstance(request, dict) else None
-            store.add_event(
-                f"install_time_{merged_action}",
-                {
-                    "artifact_id": updated_receipt.get("artifact_id"),
-                    "artifact_name": updated_receipt.get("artifact_name"),
-                    "executor": executor,
-                    "install_kind": install_kind,
-                    "action": merged_action,
-                    "risk_signals": risk_signals,
-                    "cached_advisory_override": True,
-                },
-                now,
-            )
-    if blocking:
-        return (updated_payload, 2)
-    return (updated_payload, exit_code)
+_merge_cached_advisory_into_package_payload = _protect_execution._merge_cached_advisory_into_package_payload
 
 
-def _protect_command_timeout_seconds() -> int:
-    raw_timeout = os.getenv("GUARD_PROTECT_TIMEOUT_SECONDS")
-    if raw_timeout is None:
-        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
-    try:
-        parsed_timeout = int(raw_timeout)
-    except ValueError:
-        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
-    if parsed_timeout < 1:
-        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
-    return min(parsed_timeout, _MAX_PROTECT_TIMEOUT_SECONDS)
+_protect_command_timeout_seconds = _protect_execution._protect_command_timeout_seconds
 
 
-def parse_protect_command(command: list[str]) -> ProtectRequest:
-    """Parse a package install or harness registration command."""
+from . import protect_command_parsing as _protect_command_parsing  # noqa: E402
 
-    executable = Path(command[0]).name.lower()
-    handlers = {
-        "npm": _parse_npm_request,
-        "pnpm": _parse_pnpm_request,
-        "yarn": _parse_yarn_request,
-        "pip": _parse_pip_request,
-        "pip3": _parse_pip_request,
-        "uv": _parse_uv_request,
-        "go": _parse_go_request,
-        "claude": _parse_claude_request,
-        "codex": _parse_codex_request,
-        "cursor": _parse_cursor_request,
-        "antigravity": _parse_antigravity_request,
-        "gemini": _parse_gemini_request,
-        "opencode": _parse_opencode_request,
-    }
-    handler = handlers.get(executable, _parse_custom_request)
-    return handler(command)
+parse_protect_command = _protect_command_parsing.parse_protect_command
 
 
 def evaluate_protect_request(
@@ -542,465 +163,87 @@ def evaluate_protect_request(
     )
 
 
-def _parse_npm_request(command: list[str]) -> ProtectRequest:
-    normalized_command = list(strip_package_manager_global_options(command))
-    specs = (
-        _collect_package_specs(normalized_command[2:])
-        if len(normalized_command) > 1 and normalized_command[1] in {"install", "add", "i"}
-        else ()
-    )
-    return _package_manager_request(command, "npm", specs)
+_parse_npm_request = _protect_command_parsing._parse_npm_request
 
 
-def _parse_pnpm_request(command: list[str]) -> ProtectRequest:
-    normalized_command = list(strip_package_manager_global_options(command))
-    specs = (
-        _collect_package_specs(normalized_command[2:])
-        if len(normalized_command) > 1 and normalized_command[1] in {"add", "install"}
-        else ()
-    )
-    return _package_manager_request(command, "pnpm", specs)
+_parse_pnpm_request = _protect_command_parsing._parse_pnpm_request
 
 
-def _parse_yarn_request(command: list[str]) -> ProtectRequest:
-    normalized_command = tuple(strip_package_manager_global_options(command))
-    working_command = normalized_command
-    if len(normalized_command) >= 4 and normalized_command[1] == "workspace":
-        working_command = (normalized_command[0], *normalized_command[3:])
-    specs = (
-        _collect_package_specs(list(working_command[2:]))
-        if len(working_command) > 1 and working_command[1] == "add"
-        else ()
-    )
-    return _package_manager_request(command, "yarn", specs)
+_parse_yarn_request = _protect_command_parsing._parse_yarn_request
 
 
-def _parse_pip_request(command: list[str]) -> ProtectRequest:
-    normalized_command = list(strip_package_manager_global_options(command))
-    specs = (
-        _collect_package_specs(normalized_command[2:])
-        if len(normalized_command) > 1 and normalized_command[1] == "install"
-        else ()
-    )
-    return _package_manager_request(command, "pip", specs)
+_parse_pip_request = _protect_command_parsing._parse_pip_request
 
 
-def _parse_uv_request(command: list[str]) -> ProtectRequest:
-    normalized_command = list(strip_package_manager_global_options(command))
-    specs = _collect_uv_specs(normalized_command)
-    return _package_manager_request(command, "uv", specs)
+_parse_uv_request = _protect_command_parsing._parse_uv_request
 
 
-def _parse_go_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_package_specs(command[2:]) if len(command) > 1 and command[1] in {"get", "install"} else ()
-    return _package_manager_request(command, "go", specs)
+_parse_go_request = _protect_command_parsing._parse_go_request
 
 
-def _parse_codex_request(command: list[str]) -> ProtectRequest:
-    if len(command) >= 4 and command[1:3] == ["mcp", "add"]:
-        name = command[3]
-        target = ProtectTarget(
-            artifact_id=f"install:codex:{name}",
-            artifact_name=name,
-            artifact_type="mcp_server",
-            ecosystem="codex",
-            package_name=name,
-            package_url=None,
-            raw_spec=name,
-            version=None,
-            source_url=_option_value(command, "--url"),
-            harness="codex",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "codex", None, "codex", (target,))
-    return _parse_custom_request(command)
+_parse_codex_request = _protect_command_parsing._parse_codex_request
 
 
-def _parse_claude_request(command: list[str]) -> ProtectRequest:
-    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
-        positional = _remaining_positionals(command[3:])
-        if len(positional) < 2:
-            return _parse_custom_request(command)
-        name = positional[0]
-        command_or_url = positional[1]
-        target = ProtectTarget(
-            artifact_id=f"install:claude-code:mcp:{name}",
-            artifact_name=name,
-            artifact_type="mcp_server",
-            ecosystem="claude-code",
-            package_name=name,
-            package_url=None,
-            raw_spec=command_or_url,
-            version=None,
-            source_url=command_or_url if command_or_url.startswith(("http://", "https://")) else None,
-            harness="claude-code",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
-    if len(command) >= 5 and command[1:3] == ["mcp", "add-json"]:
-        positional = _remaining_positionals(command[3:])
-        if len(positional) < 2:
-            return _parse_custom_request(command)
-        name = positional[0]
-        target = _parse_claude_mcp_target(name, positional[1])
-        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
-    return _parse_custom_request(command)
+_parse_claude_request = _protect_command_parsing._parse_claude_request
 
 
-def _parse_cursor_request(command: list[str]) -> ProtectRequest:
-    if len(command) >= 4 and command[1:3] == ["mcp", "add"]:
-        name = command[3]
-        target = ProtectTarget(
-            artifact_id=f"install:cursor:{name}",
-            artifact_name=name,
-            artifact_type="mcp_server",
-            ecosystem="cursor",
-            package_name=name,
-            package_url=None,
-            raw_spec=name,
-            version=None,
-            source_url=_option_value(command, "--url"),
-            harness="cursor",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "cursor", None, "cursor", (target,))
-    return _parse_custom_request(command)
+_parse_cursor_request = _protect_command_parsing._parse_cursor_request
 
 
-def _parse_gemini_request(command: list[str]) -> ProtectRequest:
-    if len(command) >= 4 and command[1:3] == ["extensions", "install"]:
-        name = command[3]
-        target = ProtectTarget(
-            artifact_id=f"install:gemini:{name}",
-            artifact_name=name,
-            artifact_type="extension",
-            ecosystem="gemini",
-            package_name=name,
-            package_url=None,
-            raw_spec=name,
-            version=None,
-            source_url=_option_value(command, "--url"),
-            harness="gemini",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
-    if len(command) >= 4 and tuple(command[1:3]) in {
-        ("extensions", "link"),
-        ("skills", "install"),
-        ("skills", "link"),
-    }:
-        spec = command[3]
-        name = _target_name_from_spec(spec)
-        artifact_type = "extension" if command[1] == "extensions" else "skill"
-        target = ProtectTarget(
-            artifact_id=f"install:gemini:{artifact_type}:{name}",
-            artifact_name=name,
-            artifact_type=artifact_type,
-            ecosystem="gemini",
-            package_name=name if artifact_type == "extension" else None,
-            package_url=build_package_url("gemini", name if artifact_type == "extension" else None, None),
-            raw_spec=spec,
-            version=None,
-            source_url=_spec_url(spec),
-            harness="gemini",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
-    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
-        name = command[3]
-        command_or_url = command[4]
-        transport = _option_value(command, "--transport") or _option_value(command, "--type")
-        source_url = command_or_url if _is_remote_transport(command_or_url, transport) else None
-        target = ProtectTarget(
-            artifact_id=f"install:gemini:mcp:{name}",
-            artifact_name=name,
-            artifact_type="mcp_server",
-            ecosystem="gemini",
-            package_name=name,
-            package_url=None,
-            raw_spec=command_or_url,
-            version=None,
-            source_url=source_url,
-            harness="gemini",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
-    return _parse_custom_request(command)
+_parse_gemini_request = _protect_command_parsing._parse_gemini_request
 
 
-def _parse_antigravity_request(command: list[str]) -> ProtectRequest:
-    extension_name = _option_value(command, "--install-extension")
-    if extension_name is not None:
-        target = ProtectTarget(
-            artifact_id=f"install:antigravity:extension:{extension_name}",
-            artifact_name=extension_name,
-            artifact_type="extension",
-            ecosystem="antigravity",
-            package_name=extension_name,
-            package_url=build_package_url("antigravity", extension_name, None),
-            raw_spec=extension_name,
-            version=None,
-            source_url=_spec_url(extension_name),
-            harness="antigravity",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "antigravity", None, "antigravity", (target,))
-    raw_mcp_payload = _option_value(command, "--add-mcp")
-    if raw_mcp_payload is not None:
-        target = _parse_antigravity_mcp_target(raw_mcp_payload)
-        return ProtectRequest(tuple(command), "harness_registration", "antigravity", None, "antigravity", (target,))
-    return _parse_custom_request(command)
+_parse_antigravity_request = _protect_command_parsing._parse_antigravity_request
 
 
-def _parse_opencode_request(command: list[str]) -> ProtectRequest:
-    if len(command) >= 4 and command[1] in {"plugin", "skill"} and command[2] in {"add", "install"}:
-        name = command[3]
-        target = ProtectTarget(
-            artifact_id=f"install:opencode:{name}",
-            artifact_name=name,
-            artifact_type="plugin" if command[1] == "plugin" else "skill",
-            ecosystem="opencode",
-            package_name=name,
-            package_url=None,
-            raw_spec=name,
-            version=None,
-            source_url=_option_value(command, "--url"),
-            harness="opencode",
-        )
-        return ProtectRequest(tuple(command), "harness_registration", "opencode", None, "opencode", (target,))
-    return _parse_custom_request(command)
+_parse_opencode_request = _protect_command_parsing._parse_opencode_request
 
 
-def _parse_custom_request(command: list[str]) -> ProtectRequest:
-    executable = Path(command[0]).name
-    target = ProtectTarget(
-        artifact_id=f"install:custom:{_command_fingerprint(command)[:16]}",
-        artifact_name=executable,
-        artifact_type="custom_command",
-        ecosystem="custom",
-        package_name=None,
-        package_url=None,
-        raw_spec=shlex.join(command),
-        version=None,
-        source_url=_first_url(command),
-        harness=None,
-    )
-    return ProtectRequest(tuple(command), "custom", executable, None, None, (target,))
+_parse_custom_request = _protect_command_parsing._parse_custom_request
 
 
-def _package_manager_request(command: list[str], ecosystem: str, specs: tuple[str, ...]) -> ProtectRequest:
-    targets = tuple(_package_target(ecosystem, spec) for spec in specs)
-    if len(targets) == 0:
-        targets = (
-            ProtectTarget(
-                artifact_id=f"install:{ecosystem}:{_command_fingerprint(command)[:16]}",
-                artifact_name=ecosystem,
-                artifact_type="package_request",
-                ecosystem=ecosystem,
-                package_name=None,
-                package_url=None,
-                raw_spec=shlex.join(command),
-                version=None,
-                source_url=_first_url(command),
-                harness=None,
-            ),
-        )
-    return ProtectRequest(tuple(command), "package_install", ecosystem, ecosystem, None, targets)
+from . import protect_target_parsing as _protect_target_parsing  # noqa: E402
+
+_package_manager_request = _protect_target_parsing._package_manager_request
 
 
-def _package_target(ecosystem: str, spec: str) -> ProtectTarget:
-    package_name, version = _parse_package_identity(ecosystem, spec)
-    if package_name is not None:
-        package_name = package_name.strip()
-    if version is not None:
-        version = version.strip()
-    source_url = _spec_url(spec)
-    if source_url is None and version is not None:
-        source_url = _spec_url(version)
-    identity = package_name or spec
-    return ProtectTarget(
-        artifact_id=f"install:{ecosystem}:{identity}",
-        artifact_name=identity,
-        artifact_type=f"{ecosystem}_package",
-        ecosystem=ecosystem,
-        package_name=package_name,
-        package_url=build_package_url(ecosystem, package_name, version),
-        raw_spec=spec,
-        version=version,
-        source_url=source_url,
-        harness=None,
-    )
+_package_target = _protect_target_parsing._package_target
 
 
-def _collect_package_specs(values: list[str]) -> tuple[str, ...]:
-    specs: list[str] = []
-    skip_next = False
-    value_options = {
-        "-r",
-        "--extra-index-url",
-        "--index-url",
-        "--prefix",
-        "--registry",
-        "--requirement",
-    }
-    for index, value in enumerate(values):
-        if skip_next:
-            skip_next = False
-            continue
-        if value.startswith("-"):
-            if value in value_options:
-                skip_next = True
-            continue
-        if index > 0 and values[index - 1] in {"-r", "--requirement"}:
-            continue
-        specs.append(value)
-    return tuple(specs)
+_collect_package_specs = _protect_target_parsing._collect_package_specs
 
 
-def _collect_uv_specs(command: list[str]) -> tuple[str, ...]:
-    if len(command) >= 3 and command[1:3] == ["pip", "install"]:
-        return _collect_package_specs(command[3:])
-    if len(command) >= 2 and command[1] == "add":
-        return _collect_package_specs(command[2:])
-    return ()
+_collect_uv_specs = _protect_target_parsing._collect_uv_specs
 
 
-def _parse_package_identity(ecosystem: str, spec: str) -> tuple[str | None, str | None]:
-    if ecosystem in {"pip", "uv"} and "==" in spec:
-        name, version = spec.split("==", 1)
-        return (name, version)
-    if ecosystem == "go" and "@" in spec:
-        name, version = spec.rsplit("@", 1)
-        return (name, version)
-    if spec.startswith("@"):
-        if spec.count("@") >= 2:
-            name, version = spec.rsplit("@", 1)
-            return (name, version)
-        return (spec, None)
-    if "@" in spec and not spec.startswith(("http://", "https://", "git+", "file:")):
-        name, version = spec.rsplit("@", 1)
-        return (name, version)
-    return (_spec_name(spec), None)
+_parse_package_identity = _protect_target_parsing._parse_package_identity
 
 
-def _spec_name(spec: str) -> str | None:
-    if spec.startswith(("http://", "https://", "git+", "file:")):
-        parsed = urlparse(spec)
-        candidate = Path(parsed.path or spec).name
-        return candidate or spec
-    if spec.startswith(("./", "../", "/")):
-        return Path(spec).name or spec
-    return spec or None
+_spec_name = _protect_target_parsing._spec_name
 
 
-def _spec_url(spec: str) -> str | None:
-    if spec.startswith(("http://", "https://", "git+", "file:")):
-        return spec
-    return None
+_spec_url = _protect_target_parsing._spec_url
 
 
-def _target_name_from_spec(spec: str) -> str:
-    parsed_name = _spec_name(spec)
-    if parsed_name is None:
-        return spec
-    return parsed_name.removesuffix(".git")
+_target_name_from_spec = _protect_target_parsing._target_name_from_spec
 
 
-def _option_value(command: list[str], option: str) -> str | None:
-    for index, value in enumerate(command):
-        if value == option and index + 1 < len(command):
-            return command[index + 1]
-    return None
+_option_value = _protect_target_parsing._option_value
 
 
-def _remaining_positionals(args: list[str]) -> list[str]:
-    positionals: list[str] = []
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "--":
-            positionals.extend(args[index + 1 :])
-            break
-        if token.startswith("--"):
-            if "=" not in token and index + 1 < len(args) and not args[index + 1].startswith("-"):
-                index += 2
-                continue
-            index += 1
-            continue
-        if token.startswith("-") and token != "-":
-            if len(token) == 2 and index + 1 < len(args) and not args[index + 1].startswith("-"):
-                index += 2
-                continue
-            index += 1
-            continue
-        positionals.append(token)
-        index += 1
-    return positionals
+_remaining_positionals = _protect_target_parsing._remaining_positionals
 
 
-def _first_url(command: list[str]) -> str | None:
-    for value in command:
-        if value.startswith(("http://", "https://", "git+", "file:")):
-            return value
-    return None
+_first_url = _protect_target_parsing._first_url
 
 
-def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-    target_name = payload.get("name")
-    name = target_name if isinstance(target_name, str) else "antigravity-mcp"
-    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
-    if command_or_url is None and isinstance(payload.get("command"), str):
-        command_or_url = payload["command"]
-    source_url = (
-        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, None) else None
-    )
-    return ProtectTarget(
-        artifact_id=f"install:antigravity:mcp:{name}",
-        artifact_name=name,
-        artifact_type="mcp_server",
-        ecosystem="antigravity",
-        package_name=name,
-        package_url=None,
-        raw_spec=raw_payload,
-        version=None,
-        source_url=source_url,
-        harness="antigravity",
-    )
+_parse_antigravity_mcp_target = _protect_target_parsing._parse_antigravity_mcp_target
 
 
-def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-    transport = payload.get("transport") if isinstance(payload.get("transport"), str) else None
-    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
-    if command_or_url is None and isinstance(payload.get("command"), str):
-        command_or_url = payload["command"]
-    source_url = (
-        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport) else None
-    )
-    return ProtectTarget(
-        artifact_id=f"install:claude-code:mcp:{name}",
-        artifact_name=name,
-        artifact_type="mcp_server",
-        ecosystem="claude-code",
-        package_name=name,
-        package_url=None,
-        raw_spec=raw_payload,
-        version=None,
-        source_url=source_url,
-        harness="claude-code",
-    )
+_parse_claude_mcp_target = _protect_target_parsing._parse_claude_mcp_target
 
 
-def _is_remote_transport(command_or_url: str, transport: str | None) -> bool:
-    if transport == "stdio":
-        return False
-    if transport in {"http", "sse"}:
-        return command_or_url.startswith(("http://", "https://"))
-    return command_or_url.startswith(("http://", "https://"))
+_is_remote_transport = _protect_target_parsing._is_remote_transport
 
 
 def _matching_advisories(
@@ -1096,34 +339,15 @@ def _review_reason(
     return "Guard found install-time risk signals that should be reviewed before this command runs."
 
 
-def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> GuardReceipt:
-    primary_target = request.targets[0]
-    artifact_hash = _command_fingerprint(list(request.command))
-    capabilities_summary = f"{request.executor} {request.install_kind.replace('_', ' ')}"
-    provenance_summary = shlex.join(request.command)
-    changed_capabilities = list(verdict.risk_signals)
-    sample = ", ".join(changed_capabilities[:3])
-    suffix = " ..." if len(changed_capabilities) > 3 else ""
-    diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
-    return GuardReceipt(
-        receipt_id=f"guard-receipt-{uuid4()}",
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        harness=request.harness or request.package_manager or request.executor,
-        artifact_id=primary_target.artifact_id,
-        artifact_hash=artifact_hash,
-        policy_decision=verdict.action,
-        capabilities_summary=capabilities_summary,
-        changed_capabilities=tuple(changed_capabilities),
-        provenance_summary=provenance_summary,
-        artifact_name=primary_target.artifact_name,
-        source_scope="install",
-        diff_summary=diff_summary,
-    )
+from . import protect_receipts as _protect_receipts  # noqa: E402
+
+_build_install_receipt = _protect_receipts._build_install_receipt
 
 
-def _command_fingerprint(command: list[str]) -> str:
-    payload = "\u0000".join(command).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+_is_package_tool_request = _protect_receipts._is_package_tool_request
+
+
+_command_fingerprint = _protect_receipts._command_fingerprint
 
 
 _dedupe = dedupe_preserving_order

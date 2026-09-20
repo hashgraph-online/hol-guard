@@ -16,6 +16,8 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon.discovery import load_daemon_discovery_key
+
 
 def _run(args: list[str], guard_home: Path) -> tuple[int, dict[str, object]]:
     result = subprocess.run(
@@ -144,7 +146,7 @@ class TestDaemonRepairCommand:
         cleared = payload.get("cleared", [])
         assert isinstance(cleared, list)
         assert "daemon_discovery_key" in cleared
-        assert key_path.exists() is False
+        assert load_daemon_discovery_key(tmp_path) is not None
 
 
 def test_daemon_recover_dispatches_failure_aware_recovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

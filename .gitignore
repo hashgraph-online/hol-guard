@@ -21,6 +21,7 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 coverage/
 mutants/
@@ -57,3 +58,20 @@ Thumbs.db
 !.env.example
 .worktrees/
 .venv
+
+# Publish only the maintained extension-builder reference documents.
+/docs/guard/extension-builder/*.[mM][dD]
+!/docs/guard/extension-builder/README.md
+!/docs/guard/extension-builder/VALIDATION.md
+
+# Generated qualification dumps, scan logs, and compressed artifacts.
+/docs/guard/evidence/
+/docs/guard/performance/
+/docs/guard/rust-performance/evidence/
+/docs/guard/rust-performance/reproducibility*/
+/docs/guard/security/evidence/
+/docs/guard/security/gitleaks-*/
+/docs/guard/**/*.gz
+/docs/guard/**/*.zip
+/docs/guard/**/*.log
+/release-metadata/mcp-*

@@ -223,6 +223,49 @@ class TestSensitivePath:
         assert response.reason_code == "sensitive_path"
 
 
+class TestInlineOutputProof:
+    def test_clean_inline_output_returns_content_digest(
+        self, engine: HookReviewEngine, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        content = "safe inline output\n"
+        response = engine.review(
+            _request(
+                payload={
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Bash",
+                    "tool_response": [{"type": "text", "text": content}],
+                },
+                cwd=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+            )
+        )
+
+        assert response.decision == "allow"
+        assert response.model_output_action == "allow_original"
+        assert response.reviewed_output_sha256 == sha256_text(content)
+
+    def test_empty_inline_output_returns_empty_content_digest(
+        self, engine: HookReviewEngine, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        response = engine.review(
+            _request(
+                payload={
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Bash",
+                    "tool_response": [],
+                },
+                cwd=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+            )
+        )
+
+        assert response.decision == "allow"
+        assert response.model_output_action == "allow_original"
+        assert response.reviewed_output_sha256 == sha256_text("")
+
+
 class TestNonPostToolEvents:
     def test_pre_tool_use_returns_not_applicable(
         self, engine: HookReviewEngine, workspace: Path, home_dir: Path, guard_home: Path

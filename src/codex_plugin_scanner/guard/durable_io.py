@@ -9,6 +9,17 @@ from pathlib import Path
 _UNSUPPORTED_DIRECTORY_SYNC_ERRORS = frozenset({errno.EINVAL, errno.ENOTSUP})
 
 
+def write_all(descriptor: int, payload: bytes) -> None:
+    """Finish every byte on an owned descriptor, rejecting stalled writes."""
+
+    offset = 0
+    while offset < len(payload):
+        written = os.write(descriptor, payload[offset:])
+        if written <= 0:
+            raise OSError(errno.EIO, "write did not make progress")
+        offset += written
+
+
 def fsync_directory(path: Path) -> None:
     """Flush a directory entry after an atomic rename when the platform supports it.
 
@@ -36,4 +47,4 @@ def fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-__all__ = ["fsync_directory"]
+__all__ = ["fsync_directory", "write_all"]

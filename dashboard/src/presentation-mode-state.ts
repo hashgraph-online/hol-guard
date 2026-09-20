@@ -1,10 +1,9 @@
 import type { GuardPresentationMode, GuardResolvedPresentation, GuardSettings } from "./guard-types";
 
-const SOURCES = new Set(["default", "local-explicit", "migrated", "session-preview", "cloud-profile", "read-error"]);
+const SOURCES = new Set(["default", "local-explicit", "session-preview", "cloud-profile", "read-error"]);
 const DIAGNOSTICS = new Set([
   "presentation_not_supported_by_core", "presentation_settings_unavailable",
   "unsupported_presentation_schema_fell_back_to_everyday", "unknown_presentation_mode_fell_back_to_everyday",
-  "legacy_presentation_mode_migrated",
 ]);
 const READ_ONLY_DIAGNOSTICS = new Set([
   "presentation_not_supported_by_core", "presentation_settings_unavailable",

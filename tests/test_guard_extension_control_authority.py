@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
+from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
@@ -315,6 +316,42 @@ def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     ].permission_id
 
 
+def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index
+        for index, rule in enumerate(extension.rules)
+        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
+    )
+    rule = extension.rules[rule_index]
+    assert isinstance(rule.matcher, AnyMatcher)
+    leaf_index = next(
+        index
+        for index, matcher in enumerate(rule.matcher.matchers)
+        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
+    )
+    leaf = rule.matcher.matchers[leaf_index]
+    assert isinstance(leaf, ExecutableMatcher)
+    changed_leaf = replace(leaf, required_flags=leaf.required_flags | {"--catalog-migration-identity"})
+    changed_matcher = replace(
+        rule.matcher,
+        matchers=(*rule.matcher.matchers[:leaf_index], changed_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
+    )
+    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),
+    )
+    permission_id = next(
+        permission.permission_id for permission in extension.permissions if permission.rule_ids == (rule.rule_id,)
+    )
+    return (
+        CommandSafetyExtensionRegistry((changed_extension, *(item for item in extensions if item is not extension))),
+        permission_id,
+    )
+
+
 def _proof(
     store: GuardStore,
     layers: tuple[ExtensionControlLayer, ...],
@@ -454,8 +491,14 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    store.read_extension_control_authority(catalog_digest=original_digest)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     _commit(store)
+    with store._connect() as connection:
+        legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+    assert legacy_manifest is not None
     upgraded_registry = _upgraded_registry()
     upgraded_digest = upgraded_registry.catalog_digest
 
@@ -475,6 +518,16 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
             "select previous_revision, catalog_digest, phase from extension_control_authority_transition "
             "where revision = 2"
         ).fetchone()
+        persisted_legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+        persisted_upgraded_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (upgraded_digest,),
+        ).fetchone()
+    assert dict(persisted_legacy_manifest) == dict(legacy_manifest)
+    assert persisted_upgraded_manifest is not None
     assert event is not None
     assert json.loads(event["payload_json"]) == {
         "previous_revision": 1,
@@ -581,6 +634,19 @@ def test_catalog_upgrade_retires_enabled_target_when_rule_version_changes(tmp_pa
     store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     upgraded_registry, permission_id = _rule_version_registry()
     _commit_enabled_permission(store, permission_id, key="enable-before-rule-version-change")
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls == ()
+
+
+def test_catalog_upgrade_retires_enabled_target_when_matcher_contract_changes(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded_registry, permission_id = _matcher_contract_registry()
+    _commit_enabled_permission(store, permission_id, key="enable-before-matcher-contract-change")
 
     upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
 
@@ -763,9 +829,7 @@ def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkey
     assert _enroll(store).health is AuthorityHealth.PROTECTED
 
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    view = restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    view = restarted.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert view.health is AuthorityHealth.PROTECTED
     secrets_dir = tmp_path / "secrets"
     if os.name != "nt":
@@ -780,9 +844,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(sys, "platform", "linux")
     legacy_secrets = MemorySecretStore()
     legacy_store = _store(tmp_path, legacy_secrets)
-    assert legacy_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        legacy_store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "get_secret",
@@ -791,9 +858,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", lambda _self, _secret_id, _value: None)
 
     migrated = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert migrated.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        migrated.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
     monkeypatch.setattr(
         SystemKeyringSecretStore,
@@ -801,9 +871,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
         lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("session keyring disappeared")),
     )
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        restarted.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
 
 def test_macos_extension_authority_default_never_probes_keychain(

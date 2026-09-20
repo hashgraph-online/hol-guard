@@ -90,6 +90,7 @@ import {
   getDemoReceipts,
   getDemoRequest,
   getDemoRequests,
+  demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
 
@@ -786,6 +787,25 @@ async function initializeGuardDashboardSessionAtOrigin(
   }
 }
 
+export async function ensureGuardDashboardSession(): Promise<boolean> {
+  const origin =
+    establishedGuardDaemonOriginForReconnect() ?? (await discoverGuardDaemonOrigin());
+  if (!origin) {
+    return false;
+  }
+  const existing = readGuardToken();
+  let token = await initializeGuardDashboardSessionAtOrigin(origin, existing);
+  if (!token && existing) {
+    token = await initializeGuardDashboardSessionAtOrigin(origin, null);
+  }
+  if (!token) {
+    return false;
+  }
+  saveGuardToken(token);
+  saveGuardDaemonOrigin(origin);
+  return true;
+}
+
 export async function fetchGuardUpdateStatusAtOrigin(
   origin: string,
   guardToken: string | null,
@@ -822,7 +842,7 @@ export function redirectToGuardDaemonOrigin(
   }
   fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(candidateOrigin)}`);
   url.hash = fragmentPairs.join("&");
-  window.location.replace(url.toString());
+  window.location.replace(url.toString()); // NOSONAR - re-canonicalized to exact loopback; caller authenticates it
 }
 
 export async function reconnectGuardDaemonAfterUpdate(
@@ -987,7 +1007,7 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -2136,7 +2156,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
     return {
       guard_home: "~/.hol-guard",
       config_path: "~/.hol-guard/config.toml",
-      settings: {
+      settings: { ...demoPresentationSettings,
         mode: "prompt",
         security_level: "balanced",
         default_action: "warn",
@@ -2167,6 +2187,39 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
     };
   }
   return readJson<GuardSettingsPayload>("/v1/settings");
+}
+
+export type CloudReviewSettingsStatus = {
+  enabled: boolean;
+  connected: boolean;
+  reason: string | null;
+  expires_at: string | null;
+  workspace_id: string | null;
+  source: string | null;
+  pending_uploads: number;
+  held_events: number;
+  isolated_events: number;
+  last_synced_at: string | null;
+  delivery_state: string;
+  approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;
+  activation_error?: string | null;
+};
+
+export async function fetchCloudReviewSettings(): Promise<CloudReviewSettingsStatus> {
+  return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", { cache: "no-store" });
+}
+
+export async function changeCloudReviewSettings(input: {
+  action: "enable" | "disable";
+  workspace_id: string | null;
+  source: string | null;
+  include_held_requests: boolean;
+} & ApprovalGateWriteProof): Promise<CloudReviewSettingsStatus> {
+  return readJson<CloudReviewSettingsStatus>("/v1/cloud-review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, confirm: `cloud-review.${input.action}` }),
+  });
 }
 
 export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {

@@ -8,6 +8,8 @@ from typing import Literal
 
 from codex_plugin_scanner.guard.types import GuardSignal
 
+from .payload_coercion import optional_string, required_string
+
 RiskSignalCategory = Literal[
     "secret",
     "network",
@@ -79,18 +81,18 @@ class RiskSignalV2:
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> RiskSignalV2:
         return cls(
-            signal_id=_required_string(payload, "signal_id"),
+            signal_id=required_string(payload, "signal_id"),
             category=_parse_category(payload.get("category")),
             severity=_parse_severity(payload.get("severity")),
             confidence=_parse_confidence(payload.get("confidence")),
-            detector=_required_string(payload, "detector"),
-            title=_required_string(payload, "title"),
-            plain_reason=_required_string(payload, "plain_reason"),
-            technical_detail=_optional_string(payload, "technical_detail"),
-            evidence_ref=_optional_string(payload, "evidence_ref"),
+            detector=required_string(payload, "detector"),
+            title=required_string(payload, "title"),
+            plain_reason=required_string(payload, "plain_reason"),
+            technical_detail=optional_string(payload, "technical_detail"),
+            evidence_ref=optional_string(payload, "evidence_ref"),
             redaction_level=_parse_redaction_level(payload.get("redaction_level")),
-            false_positive_hint=_optional_string(payload, "false_positive_hint"),
-            advisory_id=_optional_string(payload, "advisory_id"),
+            false_positive_hint=optional_string(payload, "false_positive_hint"),
+            advisory_id=optional_string(payload, "advisory_id"),
         )
 
     @classmethod
@@ -161,25 +163,25 @@ class GuardRiskSignalV3:
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> GuardRiskSignalV3:
         return cls(
-            signal_id=_required_string(payload, "signal_id"),
+            signal_id=required_string(payload, "signal_id"),
             source=_parse_source(payload.get("source")),
-            source_version=_required_string(payload, "source_version"),
+            source_version=required_string(payload, "source_version"),
             category=_parse_category(payload.get("category")),
             severity=_parse_severity(payload.get("severity")),
             confidence=_parse_confidence(payload.get("confidence")),
-            title=_required_string(payload, "title"),
-            plain_language_summary=_required_string(payload, "plain_language_summary"),
-            technical_detail=_optional_string(payload, "technical_detail"),
-            evidence_ref=_optional_string(payload, "evidence_ref"),
-            scanner_name=_optional_string(payload, "scanner_name"),
+            title=required_string(payload, "title"),
+            plain_language_summary=required_string(payload, "plain_language_summary"),
+            technical_detail=optional_string(payload, "technical_detail"),
+            evidence_ref=optional_string(payload, "evidence_ref"),
+            scanner_name=optional_string(payload, "scanner_name"),
             scanner_status=_parse_scanner_status(payload.get("scanner_status")),
-            scanner_rule_id=_optional_string(payload, "scanner_rule_id"),
+            scanner_rule_id=optional_string(payload, "scanner_rule_id"),
             redaction_level=_parse_redaction_level(payload.get("redaction_level")),
-            source_path=_optional_string(payload, "source_path"),
+            source_path=optional_string(payload, "source_path"),
             source_line=_optional_int(payload, "source_line"),
-            data_source=_optional_string(payload, "data_source"),
-            data_sink=_optional_string(payload, "data_sink"),
-            recommended_action=_optional_string(payload, "recommended_action"),
+            data_source=optional_string(payload, "data_source"),
+            data_sink=optional_string(payload, "data_sink"),
+            recommended_action=optional_string(payload, "recommended_action"),
         )
 
 
@@ -223,22 +225,6 @@ def _title_from_reason(reason: str) -> str:
     if not stripped:
         return "Guard risk signal"
     return f"{stripped[0].upper()}{stripped[1:]}"
-
-
-def _required_string(payload: Mapping[str, object], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-empty string")
-    return value
-
-
-def _optional_string(payload: Mapping[str, object], key: str) -> str | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{key} must be a string or null")
-    return value
 
 
 def _optional_int(payload: Mapping[str, object], key: str) -> int | None:

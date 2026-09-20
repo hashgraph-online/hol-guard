@@ -8,6 +8,8 @@ from ..action_lattice import guard_action_severity
 from .command_decision_adapter import evaluate_extension_interaction, legacy_rule_floor
 from .command_extensions import CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand
+from .extension_control_runtime import current_extension_control_snapshot
+from .extension_trust import filter_inert_external_observations
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +30,11 @@ def classify_command_extension_interaction(
 ) -> CommandExtensionInteraction:
     """Return sanitized legacy interaction projections from the central plane."""
 
-    observations = registry.observations(command)
+    snapshot = current_extension_control_snapshot()
+    observations = filter_inert_external_observations(
+        registry.observations(command),
+        snapshot.layers if snapshot is not None else (),
+    )
     reviewable_signal = any(
         bool(item.uncertainty_reasons)
         or (bool(item.effective_evidence) and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"})

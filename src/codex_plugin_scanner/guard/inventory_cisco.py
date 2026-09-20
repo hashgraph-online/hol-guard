@@ -337,6 +337,9 @@ def _safe_mcp_target_label(*, root: Path, config_path: Path, workspace_dir: Path
 def _skill_scan_roots(*, harness: str, context: HarnessContext, detection: object) -> tuple[Path, ...]:
     roots: list[Path] = []
     seen: set[str] = set()
+    # Share positive target-discovery proof only in this call, never scanner
+    # results or negative discoveries. A later refresh reexamines the tree.
+    verified_collections: set[Path] = set()
 
     if harness == "hermes":
         hermes_skills = context.home_dir / ".hermes" / "skills"
@@ -349,7 +352,7 @@ def _skill_scan_roots(*, harness: str, context: HarnessContext, detection: objec
         artifact_type = str(getattr(artifact, "artifact_type", ""))
         if artifact_type not in {"skill", "skill_file"}:
             continue
-        root = _artifact_skill_root(artifact, context=context)
+        root = _artifact_skill_root(artifact, context=context, verified_collections=verified_collections)
         if root is not None:
             resolved = str(root.resolve())
             if resolved not in seen:
@@ -358,7 +361,9 @@ def _skill_scan_roots(*, harness: str, context: HarnessContext, detection: objec
     return tuple(roots)
 
 
-def _artifact_skill_root(artifact: object, *, context: HarnessContext) -> Path | None:
+def _artifact_skill_root(
+    artifact: object, *, context: HarnessContext, verified_collections: set[Path] | None = None
+) -> Path | None:
     metadata = getattr(artifact, "metadata", {})
     if isinstance(metadata, dict):
         skill_root = metadata.get("skill_root")
@@ -370,13 +375,13 @@ def _artifact_skill_root(artifact: object, *, context: HarnessContext) -> Path |
                 if candidate.is_dir():
                     if (candidate / "SKILL.md").is_file():
                         return candidate
-                    if _skill_dirs_under(candidate):
+                    if _skill_collection_has_documents(candidate, verified_collections):
                         return candidate
     config_path = getattr(artifact, "config_path", None)
     if not isinstance(config_path, str):
         return None
     skill_path = Path(config_path)
-    collection_root = _nearest_skill_collection_dir(skill_path)
+    collection_root = _nearest_skill_collection_dir(skill_path, verified_collections=verified_collections)
     if collection_root is not None and collection_root.is_dir():
         return collection_root
     root = _nearest_skill_dir(skill_path)
@@ -412,11 +417,21 @@ def _nearest_skill_dir(path: Path) -> Path | None:
     return None
 
 
-def _nearest_skill_collection_dir(path: Path) -> Path | None:
+def _skill_collection_has_documents(root: Path, verified_collections: set[Path] | None) -> bool:
+    if verified_collections is not None and root in verified_collections:
+        return True
+    if not _skill_dirs_under(root):
+        return False
+    if verified_collections is not None:
+        verified_collections.add(root)
+    return True
+
+
+def _nearest_skill_collection_dir(path: Path, *, verified_collections: set[Path] | None = None) -> Path | None:
     for parent in path.parents:
         if parent.name != "skills":
             continue
-        if _skill_dirs_under(parent):
+        if _skill_collection_has_documents(parent, verified_collections):
             return parent
     return None
 

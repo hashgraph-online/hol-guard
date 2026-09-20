@@ -284,6 +284,32 @@ class StoreEventReceiptsMixin:
                 integrity_key_id=integrity_key_id,
             )
 
+    def peek_consumed_local_once_approval(
+        self,
+        *,
+        request_id: str,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str,
+    ) -> dict[str, object] | None:
+        """Read exact signed consumption evidence; never grant or consume again."""
+        from .store_consumed_once_authority import read_consumed_once_authority
+
+        return read_consumed_once_authority(
+            self._connect,
+            self._policy_integrity_secret_material,
+            request_id=request_id,
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
+        )
+
     def claim_local_once_approval(
         self,
         approval_id: str,

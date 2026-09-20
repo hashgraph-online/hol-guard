@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.ci.python_static_bindings import Reference, StaticBindings
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -12,19 +14,20 @@ def test_native_resident_client_has_bounded_admission() -> None:
 
 
 def test_daemon_http_server_is_bounded() -> None:
-    source = (ROOT / "src/codex_plugin_scanner/guard/daemon/server.py").read_text(encoding="utf-8")
-    assert "BoundedThreadingHTTPServer" in source
-    assert "class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer)" in source or (
-        "BoundedThreadingHTTPServer(" in source and "ThreadingHTTPServer(" not in source
-    )
+    resolver = StaticBindings(ROOT / "src/codex_plugin_scanner/guard/daemon/server.py")
+    path, owner = resolver.resolved_class("_GuardDaemonHTTPServer")
+    assert len(owner.bases) == 1
+    reference, _ = resolver.expression(path, owner.bases[0])
+    assert reference == Reference("codex_plugin_scanner.guard.daemon.bounded_http", "BoundedThreadingHTTPServer")
 
 
 def test_native_runtime_tracks_total_request_age() -> None:
-    source = (ROOT / "rust/crates/guard-runtime/src/main.rs").read_text(encoding="utf-8")
-    assert "mod hardening;" in source
-    assert "accepted_at: Instant" in source
-    assert "hardening::request_expired" in source
-    assert "native_request_deadline_exceeded" in source
+    runtime_source = (ROOT / "rust/crates/guard-runtime/src/main.rs").read_text(encoding="utf-8")
+    transport_source = (ROOT / "rust/crates/guard-runtime/src/resident_transport.rs").read_text(encoding="utf-8")
+    assert "mod hardening;" in runtime_source
+    assert "accepted_at: Instant" in transport_source
+    assert "hardening::request_expired" in transport_source
+    assert "native_request_deadline_exceeded" in transport_source
 
 
 def test_native_io_failures_have_stable_non_integrity_classes() -> None:

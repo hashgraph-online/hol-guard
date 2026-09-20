@@ -9,7 +9,6 @@ import json
 import os
 import platform
 import plistlib
-import stat
 import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
@@ -28,6 +27,7 @@ from .contracts import (
     canonical_payload_hash,
     default_machine_paths,
 )
+from .managed_file_trust import posix_path_is_root_owned_and_restricted
 
 _MAX_POLICY_BYTES = 1024 * 1024
 _MODE_STRENGTH = {"observe": 0, "prompt": 1, "enforce": 2}
@@ -129,6 +129,8 @@ def _parse_integrity_trust(value: object) -> ManagedIntegrityTrust:
     thumbprints = tuple(sorted({item.replace(" ", "").upper() for item in thumbprints_raw}))
     if any(len(item) != 40 or any(character not in "0123456789ABCDEF" for character in item) for item in thumbprints):
         raise ManagedPolicyError("Windows signer thumbprints must be SHA-1 certificate thumbprints")
+    # MDM machine-install pins only. Do not store Azure Artifact Signing leaves;
+    # those certificates rotate and are used by HOL Guard Desktop, not HOLGuardMachine.
     return ManagedIntegrityTrust(
         release_public_keys=release_keys,
         macos_team_id=_optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId"),
@@ -265,24 +267,7 @@ def _machine_policy_source_is_trusted(path: Path, system_name: str) -> bool:
         return False
     if not path.is_absolute():
         return False
-    current = path
-    while True:
-        try:
-            metadata = current.lstat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(metadata.st_mode):
-            return False
-        if current == path:
-            if not stat.S_ISREG(metadata.st_mode):
-                return False
-        elif not stat.S_ISDIR(metadata.st_mode):
-            return False
-        if metadata.st_uid != 0 or metadata.st_mode & 0o022:
-            return False
-        if current.parent == current:
-            return True
-        current = current.parent
+    return posix_path_is_root_owned_and_restricted(path)
 
 
 def _read_windows_policy() -> tuple[object | None, str]:

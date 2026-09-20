@@ -1,0 +1,407 @@
+{
+  "schema": "hol-guard.current-hook-response-roster.v1",
+  "source_commit": "e44008445630aad28ccc291ec234f55a14892e6d",
+  "source_tree": "addf0c1daf8ceb6313d6805ee4d05e216d6fdac8",
+  "execution_performed": false,
+  "surfaces": [
+    {
+      "harness": "claude-code",
+      "aliases": [
+        "claude-code",
+        "claude"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/claude_code.py",
+        "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py",
+        "src/codex_plugin_scanner/guard/adapters/claude_hook_argv.py"
+      ],
+      "generated_launcher": "~/.claude/settings.json; shell-free command/args; daemon bridge, separate SessionStart argv",
+      "managed_events": [
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "Notification",
+        "Stop",
+        "SessionStart"
+      ],
+      "registration_detail": "PreToolUse matched Bash/Read/Write/Edit/MultiEdit/WebFetch/WebSearch/mcp__.*; PostToolUse also AskUserQuestion; Notification permission_prompt; SessionStart startup/resume/clear/compact",
+      "claim_limits": "Native pre/post registration; SessionStart is a separate generated session handler. Current installer removes managed UserPromptSubmit and PermissionDenied; normalizer support is not installation.",
+      "response_fixture_paths": [
+        "tests/test_guard_claude_hook_argv.py",
+        "tests/test_claude_hook_exit_paths.py",
+        "tests/test_claude_daemon_hook_bridge.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "codex",
+      "aliases": [
+        "codex"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/codex.py",
+        "src/codex_plugin_scanner/guard/adapters/codex_adapter_commands.py",
+        "src/codex_plugin_scanner/guard/adapters/codex_adapter_installation.py",
+        "src/codex_plugin_scanner/guard/adapters/codex_adapter_hook_writes.py"
+      ],
+      "generated_launcher": "Canonical global Codex TOML plus authenticated managed-hook manifest; daemon bridge argv; old hooks.json migrated/removed",
+      "managed_events": [
+        "PreToolUse",
+        "PermissionRequest",
+        "UserPromptSubmit",
+        "PostToolUse"
+      ],
+      "registration_detail": "_managed_hook_groups emits exactly four events; original foreign hooks inventoried and preserved",
+      "claim_limits": "Pre/post and prompt/permission are separate interfaces; registration does not prove approval continuation.",
+      "response_fixture_paths": [
+        "tests/test_codex_hook_inventory.py",
+        "tests/test_codex_daemon_hook_bridge.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "cursor",
+      "aliases": [
+        "cursor"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/cursor.py",
+        "src/codex_plugin_scanner/guard/adapters/cursor_hooks.py",
+        "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py",
+        "src/codex_plugin_scanner/guard/adapters/cursor_cli.py"
+      ],
+      "generated_launcher": "~/.cursor/hooks.json and .cursor/hooks/hol-guard-cursor-hook.py; event baked into command; editor/CLI/all surfaces",
+      "managed_events": [
+        "beforeShellExecution",
+        "beforeMCPExecution",
+        "beforeReadFile",
+        "beforeWriteFile",
+        "afterShellExecution",
+        "afterMCPExecution"
+      ],
+      "registration_detail": "Four before events failClosed=true; two after events failClosed=false",
+      "claim_limits": "After hooks are observation-only, never proof of output withholding. CLI shim is a distinct launch surface; do not infer editor registration from CLI detection.",
+      "response_fixture_paths": [
+        "tests/test_cursor_watch_hook_script.py",
+        "tests/test_native_slo_registered_surfaces.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "copilot",
+      "aliases": [
+        "copilot"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/copilot.py",
+        "src/codex_plugin_scanner/guard/adapters/copilot_state_paths.py"
+      ],
+      "generated_launcher": "Global and project .github/hooks/hol-guard-copilot.json; bounded Python bridge; bash/powershell commands",
+      "managed_events": [
+        "userPromptSubmitted",
+        "preToolUse",
+        "postToolUse",
+        "permissionRequest",
+        "permissionRequestV2"
+      ],
+      "registration_detail": "sessionStart/sessionEnd/errorOccurred are detectable external events, not in the five managed events",
+      "claim_limits": "Actual native stdout uses Copilot's top-level binary permissionDecision for pre/post; permission-request behavior shape is separate. Host post-result enforcement must not be inferred solely from a deny JSON.",
+      "response_fixture_paths": [
+        "tests/test_bounded_cli_hook_copilot_delivery.py",
+        "tests/test_daemon_session_continuity_edges.py",
+        "tests/test_registered_auxiliary_response_fixtures.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "cline",
+      "aliases": [
+        "cline",
+        "cline-cli",
+        "cline-vscode"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/cline.py",
+        "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
+        "src/codex_plugin_scanner/guard/adapters/cline_state_paths.py",
+        "src/codex_plugin_scanner/guard/adapters/cline_plugin.py",
+        "src/codex_plugin_scanner/guard/adapters/cline_bridge.py"
+      ],
+      "generated_launcher": "Canonical native hook root (Documents/Cline/Hooks, legacy .cline/hooks, or saved supported custom root); private state pins worker+wrapper hashes; alternate plugin selected explicitly",
+      "managed_events": [
+        "PreToolUse",
+        "PostToolUse",
+        "UserPromptSubmit",
+        "TaskStart",
+        "TaskError",
+        "SessionShutdown"
+      ],
+      "registration_detail": "POSIX isolated Python wrapper or Windows PowerShell wrapper; hooks/plugin transports mutually selected in adapter-state",
+      "claim_limits": "Native PreToolUse can cancel; native PostToolUse and lifecycle are nonblocking. Alternate plugin can replace model-visible post-tool output; native hook evidence must not claim plugin mediation.",
+      "response_fixture_paths": [
+        "tests/test_cline_nonblocking_response_fixtures.py",
+        "tests/test_cline_hook_transports.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "kimi",
+      "aliases": [
+        "kimi",
+        "kimi-code",
+        "kimi-cli"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/kimi.py",
+        "src/codex_plugin_scanner/guard/adapters/kimi_hooks.py"
+      ],
+      "generated_launcher": "Kimi TOML managed block with bounded CLI bridge",
+      "managed_events": [
+        "PreToolUse",
+        "UserPromptSubmit",
+        "PostToolUse",
+        "SessionStart",
+        "Stop"
+      ],
+      "registration_detail": "All five literal event registrations in _build_managed_block",
+      "claim_limits": "Restrictive pre/prompt outcomes use exit 2; lifecycle does not. Post-result JSON and actual host withholding are distinct claims.",
+      "response_fixture_paths": [
+        "tests/test_kimi_adapter.py",
+        "tests/test_bounded_cli_hook_native_consistency.py",
+        "tests/test_registered_auxiliary_response_fixtures.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "grok",
+      "aliases": [
+        "grok",
+        "grok-build",
+        "grok-build-cli",
+        "xai-grok"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/grok.py",
+        "src/codex_plugin_scanner/guard/adapters/grok_config.py",
+        "src/codex_plugin_scanner/guard/adapters/grok_hooks.py"
+      ],
+      "generated_launcher": "~/.grok/hooks/hol-guard-pretooluse.json plus observe-hook JSON and managed_config.toml compatibility hooks; bounded CLI bridge",
+      "managed_events": [
+        "PreToolUse",
+        "UserPromptSubmit",
+        "SubagentStart",
+        "SessionStart"
+      ],
+      "registration_detail": "PreToolUse catch-all deliberately omits matcher; OBSERVE_HOOK_EVENTS contains the other three",
+      "claim_limits": "Observe events are not enforcement. Additional normalized PostToolUse/SessionEnd/SubagentStop/PermissionDenied support is not an installed managed post hook.",
+      "response_fixture_paths": [
+        "tests/test_grok_adapter.py",
+        "tests/test_bounded_cli_hook_daemon.py",
+        "tests/test_registered_auxiliary_response_fixtures.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "hermes",
+      "aliases": [
+        "hermes"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/hermes.py",
+        "src/codex_plugin_scanner/guard/adapters/hermes_runtime_hooks.py"
+      ],
+      "generated_launcher": "Managed pretool-hook.json and MCP overlay plus Hermes config.yaml hooks.pre_tool_call; bounded CLI bridge and launch shim",
+      "managed_events": [
+        "pre_tool_call"
+      ],
+      "registration_detail": "Runtime YAML hook registration and approval command checked separately from generated managed descriptor",
+      "claim_limits": "Pre-tool only in this native inventory; absent runtime hook is explicitly launch-review-only. No managed post-hook claim.",
+      "response_fixture_paths": [
+        "tests/test_native_runtime_delivery_contract.py",
+        "tests/test_bounded_cli_hook_native_consistency.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "openclaw",
+      "aliases": [
+        "openclaw"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/openclaw.py",
+        "src/codex_plugin_scanner/guard/adapters/openclaw_config.py",
+        "src/codex_plugin_scanner/guard/adapters/openclaw_support.py"
+      ],
+      "generated_launcher": "Managed OpenClaw overlay.json, pretool-hook.json, manifest and Guard launch shim",
+      "managed_events": [
+        "pre-tool descriptor"
+      ],
+      "registration_detail": "Descriptor + launch overlay are generated; actual gateway activation is a separate witness",
+      "claim_limits": "Do not equate generated manifest or detection with a successfully activated host callback; no managed post hook.",
+      "response_fixture_paths": [
+        "tests/test_bounded_cli_hook_native_consistency.py",
+        "tests/test_guard_native_qualification_corpus.py"
+      ],
+      "event_class": "generated_pretool_descriptor"
+    },
+    {
+      "harness": "opencode",
+      "aliases": [
+        "opencode"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/opencode.py",
+        "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py"
+      ],
+      "generated_launcher": "Managed and global ~/.config/opencode/plugins TypeScript pretool plugin; managed config/MCP proxy and shim",
+      "managed_events": [
+        "tool.execute.before"
+      ],
+      "registration_detail": "Plugin executes exact generated Guard argv through bounded CLI; runtime may be Bun or Node",
+      "claim_limits": "Native pre-tool plugin path; no managed PostToolUse output-mediation registration in this source.",
+      "response_fixture_paths": [
+        "tests/test_guard_phase04_harness_contracts.py",
+        "tests/test_guard_native_qualification_corpus.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "pi",
+      "aliases": [
+        "pi",
+        "pi-agent",
+        "pi-coding-agent"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/pi.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_cli_runtime_source.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_content_source.py"
+      ],
+      "generated_launcher": "Managed extension TypeScript enabled in Pi settings plus launch shim",
+      "managed_events": [
+        "input",
+        "tool_call",
+        "tool_result",
+        "message_end"
+      ],
+      "registration_detail": "input->UserPromptSubmit; tool_call->PreToolUse; tool_result->PostToolUse; message_end applies retained blocked-tool-result replacement",
+      "claim_limits": "Extension callbacks are not standalone native hook stdout/exit. Post-result replacement requires exact tool identity/source reference and actual extension witness.",
+      "response_fixture_paths": [
+        "tests/test_pi_extension_response_contract.py"
+      ],
+      "event_class": "extension_callback"
+    },
+    {
+      "harness": "omp",
+      "aliases": [
+        "omp",
+        "oh-my-pi"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/pi.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_cli_runtime_source.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_content_source.py"
+      ],
+      "generated_launcher": "OMP settings and managed extension generated by shared Pi-family adapter",
+      "managed_events": [
+        "input",
+        "tool_call",
+        "tool_result",
+        "message_end"
+      ],
+      "registration_detail": "Same callback family as Pi with distinct harness/settings ownership",
+      "claim_limits": "Shared generator does not make a Pi execution an OMP installed execution; carry separate harness identity.",
+      "response_fixture_paths": [
+        "tests/test_pi_extension_response_contract.py"
+      ],
+      "event_class": "extension_callback"
+    },
+    {
+      "harness": "zcode",
+      "aliases": [
+        "zcode",
+        "zai",
+        "z-code",
+        "zai-zcode"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/zcode.py",
+        "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
+        "src/codex_plugin_scanner/guard/adapters/zcode_hooks.py"
+      ],
+      "generated_launcher": "ZCode config hooks.events; bounded CLI command with managed shell marker; launch shim",
+      "managed_events": [
+        "PreToolUse",
+        "UserPromptSubmit"
+      ],
+      "registration_detail": "18 PreToolUse matchers plus catch-all UserPromptSubmit; normalizer has extra events not installed",
+      "claim_limits": "No managed PostToolUse. Existing registered runner explicitly refuses Windows shell-comment command semantics; that limitation is not silently waived.",
+      "response_fixture_paths": [
+        "tests/test_native_slo_registered_surfaces.py",
+        "tests/test_bounded_cli_hook_native_consistency.py",
+        "tests/test_registered_auxiliary_response_fixtures.py"
+      ],
+      "event_class": "generated_hook"
+    },
+    {
+      "harness": "paseo",
+      "aliases": [
+        "paseo"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/paseo.py",
+        "src/codex_plugin_scanner/guard/adapters/paseo_install.py",
+        "src/codex_plugin_scanner/guard/adapters/paseo_config.py"
+      ],
+      "generated_launcher": "Delegated supported native-provider installation and proof receipt plus launch shim",
+      "managed_events": [
+        "provider-owned events"
+      ],
+      "registration_detail": "preflight_native then install_native for detected supported providers",
+      "claim_limits": "No direct Paseo hook identity in frozen native corpus. Current provider installation is real source behavior, but receipt labels runtime verification not performed; inherited provider events must retain provider identity.",
+      "response_fixture_paths": [
+        "tests/test_guard_harness_contracts.py"
+      ],
+      "event_class": "delegated_provider_not_direct_native_hook"
+    },
+    {
+      "harness": "gemini",
+      "aliases": [
+        "gemini"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/gemini.py",
+        "src/codex_plugin_scanner/guard/adapters/base.py"
+      ],
+      "generated_launcher": "Detect Gemini settings/extensions/hooks/skills/MCP; base launch/preflight behavior",
+      "managed_events": [],
+      "registration_detail": "External hooks may be discovered but adapter does not install a native Guard hook",
+      "claim_limits": "Discovery/preflight only for this native-hook inventory; no managed enforcement claim.",
+      "response_fixture_paths": [
+        "tests/test_guard_phase04_harness_contracts.py"
+      ],
+      "event_class": "discovery_preflight_only"
+    },
+    {
+      "harness": "antigravity",
+      "aliases": [
+        "antigravity"
+      ],
+      "source_paths": [
+        "src/codex_plugin_scanner/guard/adapters/antigravity.py",
+        "src/codex_plugin_scanner/guard/adapters/base.py"
+      ],
+      "generated_launcher": "Discovery/preflight and base adapter launch behavior",
+      "managed_events": [],
+      "registration_detail": "No Guard native hook installer in this adapter",
+      "claim_limits": "Preflight only; do not infer installed native enforcement.",
+      "response_fixture_paths": [
+        "tests/test_guard_harness_contracts.py"
+      ],
+      "event_class": "discovery_preflight_only"
+    }
+  ],
+  "scope": "Registration/event and existing response-fixture map; source controls do not establish actual host activation or installed native evaluation."
+}

@@ -8,6 +8,7 @@ import {
 import { ActionButton } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
 import {
+  safeCloudConnectUrl,
   startOrRecoverCloudConnect,
   waitForAuthorizeUrl,
   waitForCloudConnection,
@@ -18,9 +19,15 @@ import type {
   GuardProtectionHealth,
 } from "./guard-types";
 import { defaultConnectHarness } from "./apps/app-catalog";
-import { remainingProtectionRepairParts } from "./protection-health";
+import {
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
+  remainingProtectionRepairParts,
+} from "./protection-health";
 import { recoverySummary, repairButtonLabel } from "./fleet-protection-recovery-copy";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
+
+export { hasRepairableProtectionGap, isUnsupportedPlatformCheck } from "./protection-health";
 
 type GapAction = {
   label: string;
@@ -38,6 +45,7 @@ export type CloudPolicyRecoveryInput = {
   cloudSyncState: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale";
   cloudPolicySyncError?: string | null;
   connectUrl: string;
+  dashboardUrl?: string;
 };
 
 type CloudPolicyRecoveryHint = {
@@ -99,16 +107,13 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
 };
 
 export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
-  const cloudProofUnavailable =
-    input.cloudState !== "paired_active"
-    || input.cloudSyncState !== "healthy"
-    || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
+  const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
+  if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail:
       "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.connectUrl,
+    href: input.cloudState === "local_only" ? input.connectUrl : input.dashboardUrl!,
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof",
   };
@@ -118,6 +123,13 @@ function actionForCheck(
   check: GuardProtectionCheck,
   repairHarness?: string,
 ): GapAction {
+  if (isUnsupportedPlatformCheck(check)) {
+    return {
+      label: "Unsupported on this platform",
+      detail:
+        "Containment controls are unavailable on this platform. Guard remains fail-closed; no repair is available.",
+    };
+  }
   if (check.check_id === "harness_hooks" && repairHarness) {
     return {
       label: "App hooks",
@@ -140,6 +152,13 @@ function ProtectionGapItem({
   action: GapAction;
   check: GuardProtectionCheck;
 }) {
+  const unsupported = isUnsupportedPlatformCheck(check);
+  let statusLabel = "Unproven";
+  if (unsupported) {
+    statusLabel = "Unsupported";
+  } else if (check.status === "fail") {
+    statusLabel = "Failed";
+  }
   return (
     <li className="flex items-start gap-2 border-t border-brand-attention/10 py-3 first:border-t-0">
       <div className="flex items-start gap-2 text-xs text-slate-600">
@@ -152,7 +171,7 @@ function ProtectionGapItem({
             {action.label}
           </strong>
           <span className="ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            {check.status === "fail" ? "Failed" : "Unproven"}
+            {statusLabel}
           </span>
           <span className="mt-0.5 block">{action.detail}</span>
         </span>
@@ -205,29 +224,19 @@ function cloudConnectButtonLabel(
   return defaultLabel;
 }
 
-function safeCloudConnectUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const [repairState, setRepairState] = useState<RepairState | null>(null);
   const [cloudConnectState, setCloudConnectState] = useState<CloudConnectState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const cloudConnectControllerRef = useRef<AbortController | null>(null);
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
-  const failCount = gaps.filter((check) => check.status === "fail").length;
-  const unknownCount = gaps.length - failCount;
+  const hasRepairableGaps = hasRepairableProtectionGap(gaps);
+  const unsupportedGaps = gaps.filter(isUnsupportedPlatformCheck);
+  const hasUnsupportedGaps = unsupportedGaps.length > 0;
+  const unsupportedOnly = gaps.length > 0 && !hasRepairableGaps;
+  const repairableGaps = gaps.filter((check) => !isUnsupportedPlatformCheck(check));
+  const failCount = repairableGaps.filter((check) => check.status === "fail").length;
+  const unknownCount = repairableGaps.length - failCount;
   const needsConnectedApp = remainingProtectionRepairParts(props.health).needsConnectedApp;
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
   const repairHarnessKey = props.repairHarnesses.join("\u0000");
@@ -242,9 +251,12 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   );
 
   const handleRepair = useCallback(async () => {
+    if (!hasRepairableGaps) return;
     setRepairState({
       status: "working",
-      message: "Repairing app hooks, local runtime, local rule packs, and local integrity…",
+      message: hasUnsupportedGaps
+        ? "Repairing supported local protection. Containment remains unavailable on this platform…"
+        : "Repairing app hooks, local runtime, local rule packs, and local integrity…",
     });
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
@@ -263,7 +275,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
       });
       setDetailsOpen(true);
     }
-  }, [props.onRepairProtection, props.repairHarnesses]);
+  }, [hasRepairableGaps, hasUnsupportedGaps, props.onRepairProtection, props.repairHarnesses]);
   const connectHarness = props.connectHarness ?? defaultConnectHarness(props.repairHarness, props.repairHarnesses);
   const handleRepairClick = useCallback(() => {
     if (needsConnectedApp && props.onRepairHarness) {
@@ -300,19 +312,16 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
       }
       const flow = status.connect_flow;
       const authorizeUrl = safeCloudConnectUrl(flow?.authorize_url);
-      const signInUrl = authorizeUrl ?? safeCloudConnectUrl(flow?.connect_url);
-      if (!flow || !signInUrl) {
+      if (!flow || !authorizeUrl) {
         throw new Error(
           flow?.detail || "Guard could not generate a secure sign-in link. Try again.",
         );
       }
-      const opened = authorizeUrl
-        ? openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened)
-        : false;
+      const opened = openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened);
       if (!isActiveCloudConnect(controller)) return;
       setCloudConnectState({
-        authorizeUrl: signInUrl,
-        message: cloudConnectPendingMessage(Boolean(authorizeUrl), opened),
+        authorizeUrl,
+        message: cloudConnectPendingMessage(true, opened),
         status: "pending",
       });
       const connectedStatus = await waitForCloudConnection(status, {
@@ -328,11 +337,9 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         return;
       }
       const detail = connectedStatus.connect_flow?.detail;
+      const nextAuthorizeUrl = safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url);
       setCloudConnectState({
-        authorizeUrl:
-          safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url)
-          ?? safeCloudConnectUrl(connectedStatus.connect_flow?.connect_url)
-          ?? signInUrl,
+        authorizeUrl: nextAuthorizeUrl ?? authorizeUrl,
         message:
           connectedStatus.connect_flow?.state === "failed"
             ? detail || "Guard Cloud sign-in could not finish. Try again."
@@ -376,6 +383,21 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   );
   const cloudConnectMessageClassName =
     cloudConnectState?.status === "error" ? "text-sm text-red-600" : "text-sm text-slate-600";
+  let targetedRepairHarnesses: string[] = [];
+  if (repairState?.status === "error") {
+    targetedRepairHarnesses = repairState.failedHarnesses ?? [];
+  } else if (hasRepairableGaps) {
+    targetedRepairHarnesses = repairHarnessList;
+  }
+  const showTargetedRepairActions =
+    hasRepairableGaps && targetedRepairHarnesses.length > 0 && Boolean(props.onRepairHarness);
+  const onRepairHarness = props.onRepairHarness;
+  let recoveryHeading = "Restore local protection";
+  if (unsupportedOnly) {
+    recoveryHeading = "Containment unavailable on this platform";
+  } else if (hasUnsupportedGaps) {
+    recoveryHeading = "Repair supported protection";
+  }
 
   return (
     <section
@@ -390,19 +412,31 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
               aria-hidden="true"
             />
             <h2 className="text-sm font-semibold text-brand-dark">
-              Restore local protection
+              {recoveryHeading}
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {recoverySummary(failCount, unknownCount, needsConnectedApp)}
+            {unsupportedOnly
+              ? "Containment controls are unavailable on this platform. Guard remains fail-closed; no repair is available."
+              : recoverySummary(
+                  failCount,
+                  unknownCount,
+                  needsConnectedApp,
+                  repairableGaps
+                    .filter((check) => check.status === "fail")
+                    .map((check) => actionForCheck(check, props.repairHarness).label),
+                  unsupportedGaps.length,
+                )}
           </p>
         </div>
-        <ActionButton onClick={handleRepairClick} disabled={working}>
-          {repairButtonLabel(repairState, needsConnectedApp)}
-        </ActionButton>
+        {hasRepairableGaps ? (
+          <ActionButton onClick={handleRepairClick} disabled={working}>
+            {repairButtonLabel(repairState, needsConnectedApp, hasUnsupportedGaps)}
+          </ActionButton>
+        ) : null}
       </div>
       {cloudPolicyHint ? (
-        <div className="mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600">
+        <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
           <p className="font-medium text-brand-dark">{cloudPolicyHint.title}</p>
           <p className="mt-1">{cloudPolicyHint.detail}</p>
           {cloudPolicyHint.startsOAuth ? (
@@ -432,7 +466,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           )}
         </div>
       ) : null}
-      {repairState ? (
+      {repairState && hasRepairableGaps ? (
         <p
           className={`mt-3 flex items-start gap-2 text-sm ${repairState.status === "error" ? "text-red-600" : "text-slate-600"}`}
           aria-live="polite"
@@ -446,13 +480,13 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           {repairState.message}
         </p>
       ) : null}
-      {repairState?.status === "error" && repairState.failedHarnesses?.length && props.onRepairHarness ? (
+      {showTargetedRepairActions && onRepairHarness ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {Array.from(new Set(repairState.failedHarnesses)).map((harness) => (
+          {Array.from(new Set(targetedRepairHarnesses)).map((harness) => (
             <TargetedRepairButton
               key={harness}
               harness={harness}
-              onRepair={props.onRepairHarness}
+              onRepair={onRepairHarness}
             />
           ))}
         </div>
@@ -463,7 +497,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         aria-expanded={detailsOpen}
         className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        View repair details
+        {hasRepairableGaps ? "View repair details" : "View protection details"}
         <HiMiniChevronDown
           className={`h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`}
           aria-hidden="true"

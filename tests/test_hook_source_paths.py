@@ -276,7 +276,7 @@ class TestSourcePathIsAllowed:
         )
 
         assert not decision.allowed
-        assert decision.reason_code == "absolute_path_outside_workspace"
+        assert decision.reason_code == "path_traversal"
 
     def test_external_sensitive_path_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
         secret_file = (home_dir / "sibling-source" / "credentials" / "config.ts").resolve()

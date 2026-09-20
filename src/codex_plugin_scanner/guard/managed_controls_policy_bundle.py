@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from typing import cast
 
@@ -235,6 +236,7 @@ def build_managed_controls_activation_state(
     negotiated_capabilities: frozenset[str],
     authority_key: bytes,
     base_snapshot_digest: str,
+    source_target_manifest: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Build the complete, atomically persisted managed-control projection."""
 
@@ -293,6 +295,15 @@ def build_managed_controls_activation_state(
         },
         "negotiatedCapabilities": sorted(negotiated_capabilities),
     }
+    if source_target_manifest is not None:
+        from .store_managed_control_manifest_context import (
+            MANAGED_CONTROLS_SOURCE_MANIFEST_FIELD,
+            bounded_source_manifest,
+        )
+
+        activation[MANAGED_CONTROLS_SOURCE_MANIFEST_FIELD] = bounded_source_manifest(
+            signed_layers, source_target_manifest
+        )
     if parsed.authority_mode is not None:
         activation["authorityMode"] = parsed.authority_mode
     if control_set_id is not None:
@@ -375,4 +386,7 @@ def managed_controls_layers_from_activation_state(
     layers = layers_from_json(encoded_layers)
     if len(layers) > 1 or any(layer.kind is not ControlLayerKind.SIGNED_CLOUD for layer in layers):
         raise ExtensionControlAuthorityError("invalid managed signed Cloud layer")
+    from .store_managed_control_manifest_context import activation_source_manifest
+
+    activation_source_manifest(value, layers)
     return cast(tuple[ExtensionControlLayer, ...], layers), revision

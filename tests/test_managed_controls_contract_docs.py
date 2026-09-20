@@ -12,16 +12,10 @@ GLOSSARY_PATH = ROOT / "docs" / "guard" / "managed-controls-glossary.md"
 NAVIGATION_PATH = ROOT / "dashboard" / "src" / "shell-navigation-model.ts"
 RULES_PAGE_PATH = ROOT / "dashboard" / "src" / "policy-workspace-page.tsx"
 APP_PATH = ROOT / "dashboard" / "src" / "app.tsx"
+APP_ROUTING_PATH = ROOT / "dashboard" / "src" / "app-routing.ts"
 APP_TITLE_TEST_PATH = ROOT / "dashboard" / "src" / "scrg171-172.test.ts"
 DASHBOARD_BUNDLE_PATH = (
-    ROOT
-    / "src"
-    / "codex_plugin_scanner"
-    / "guard"
-    / "daemon"
-    / "static"
-    / "assets"
-    / "guard-dashboard.js"
+    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static" / "assets" / "guard-dashboard.js"
 )
 POLICY_BUNDLE_PATH = (
     ROOT
@@ -44,19 +38,11 @@ MANAGED_CONTROLS_DOCS = (
     ROOT / "docs" / "guard" / "managed-controls-rollback-runbook.md",
     ROOT / "docs" / "guard" / "managed-controls-release-notes.md",
 )
-MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(
-    sorted((ROOT / "docs" / "guard").glob("managed-controls*.md"))
-)
+MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(sorted((ROOT / "docs" / "guard").glob("managed-controls*.md")))
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-EXTENSION_CONTROL_API_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
-)
-MANAGED_CONTROLS_API_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
-)
-POLICY_COMMAND_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
-)
+EXTENSION_CONTROL_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+MANAGED_CONTROLS_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
+POLICY_COMMAND_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
 
 EXPECTED_PRODUCT_DECISION: dict[str, object] = {
     "authority_modes": [
@@ -183,6 +169,7 @@ def test_local_navigation_uses_product_language_without_breaking_routes() -> Non
     navigation = NAVIGATION_PATH.read_text(encoding="utf-8")
     rules_page = RULES_PAGE_PATH.read_text(encoding="utf-8")
     app = APP_PATH.read_text(encoding="utf-8")
+    app_routing = APP_ROUTING_PATH.read_text(encoding="utf-8")
     app_title_test = APP_TITLE_TEST_PATH.read_text(encoding="utf-8")
     assert 'href: "/policy"' in navigation
     assert 'label: "Rules & exceptions"' in navigation
@@ -192,7 +179,13 @@ def test_local_navigation_uses_product_language_without_breaking_routes() -> Non
     assert 'eyebrow="Rules & exceptions"' in rules_page
     assert 'title="Remembered decisions and exceptions"' in rules_page
     assert "Configure tools and capability posture in Extensions." in rules_page
-    assert 'if (view === "policy") return "Rules & exceptions";' in app
+    assert 'if (view === "policy") return "Rules & exceptions";' in app_routing
+    assert 'import { navigate, viewTitle } from "./app-routing";' in app
+    assert (
+        'export { PROTECT_ROUTE, TODAY_EVIDENCE_ROUTE, viewTitle, parseAppDetail, resolveView } from "./app-routing";'
+        in app
+    )
+    assert "{viewTitle(view)}" in app
     assert 'viewTitle("policy") === "Rules & exceptions"' in app_title_test
     assert "Managed extensions and integrations" not in navigation
 
@@ -321,9 +314,7 @@ def test_support_projection_fields_exist_in_current_local_apis() -> None:
 
 
 def test_managed_controls_release_runbook_uses_repository_tooling() -> None:
-    release_runbook = (ROOT / "docs" / "guard" / "managed-controls-release-runbook.md").read_text(
-        encoding="utf-8"
-    )
+    release_runbook = (ROOT / "docs" / "guard" / "managed-controls-release-runbook.md").read_text(encoding="utf-8")
     assert "uv run python scripts/ci/managed_controls_release_gate.py" in release_runbook
     assert "uv run pytest tests/managed_controls" in release_runbook
     assert "uv run pytest tests/test_managed_controls_contract_docs.py" in release_runbook

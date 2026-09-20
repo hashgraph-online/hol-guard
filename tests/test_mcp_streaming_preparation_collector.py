@@ -1,0 +1,337 @@
+"""Source and accounting gates for F's fixed plan; no benchmark execution."""
+
+from __future__ import annotations
+
+import importlib
+import inspect
+import json
+import sys
+from argparse import Namespace
+from contextlib import nullcontext
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def collector(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    return importlib.import_module("compare_guard_mcp_streaming_preparation")
+
+
+def test_plan_is_the_entire_prior_e_schedule_with_only_the_arm_replaced(collector):
+    previous = importlib.import_module("compare_guard_mcp_owned_preparation")
+    expected = [{**cell, "arm": "F" if cell["arm"] == "E" else cell["arm"]} for cell in previous.schedule(30)]
+    fixed = collector.plan_identity()
+    assert collector.schedule(30) == fixed["plan"]["cells"] == expected
+    assert len(expected) == 64
+    assert sum(bool(cell.get("profile")) for cell in expected) == 14
+    assert all(sum(cell["samples"] + 1 for cell in expected if cell["arm"] == arm) == 554 for arm in ("B", "F"))
+    # The stopped attempt retains its original plan. Later helper repairs
+    # require a separately reviewed experiment before any fresh measurement.
+    assert fixed["sha256"] == "c3ac8620ffd90b8cf9e4365fa0eed3f8291426e90c50788e24f478e8910b6d4c"
+    frozen = fixed["plan"]["harness_sources_sha256"]
+    current = collector.harness_identity()
+    assert frozen.keys() == current.keys()
+    assert frozen != current
+    assert fixed["plan"]["prior_e_comparison_sha256"]
+    assert fixed["plan"]["public_oracle_reference_sources_sha256"]
+
+
+def test_worker_uses_shared_orchestration_and_preserves_public_defaults(collector):
+    root = Path(collector.__file__).parent
+    worker = importlib.import_module("profile_guard_mcp_streaming_session")
+    prior_worker = importlib.import_module("profile_guard_mcp_session")
+    prior_collector = importlib.import_module("compare_guard_mcp_owned_preparation")
+    shared_modules = (
+        "profile_guard_mcp_fixture.py",
+        "profile_guard_mcp_worker.py",
+        "profile_guard_mcp_case.py",
+        "profile_guard_mcp_matrix.py",
+    )
+
+    streaming_identity = collector.harness_identity()
+    owned_identity = prior_collector.harness_identity()
+    for name in shared_modules:
+        assert streaming_identity[name] == owned_identity[name]
+        assert (root / name).is_file()
+        assert len((root / name).read_text().splitlines()) <= 500
+
+    shared_case = importlib.import_module("profile_guard_mcp_case")
+    shared_matrix = importlib.import_module("profile_guard_mcp_matrix")
+    shared_worker = importlib.import_module("profile_guard_mcp_worker")
+    assert worker.run_case_common is prior_worker.run_case_common is shared_case.run_case_common
+    assert worker.run_remote_case is prior_worker.run_remote_case is shared_matrix.run_remote_case
+    assert worker.performance_lock is prior_worker.performance_lock is shared_matrix.performance_lock
+    assert worker.run_worker is prior_worker.run_worker is shared_worker.run_worker
+
+    old_defaults = {
+        name: parameter.default for name, parameter in inspect.signature(prior_worker.run_case).parameters.items()
+    }
+    new_defaults = {
+        name: parameter.default for name, parameter in inspect.signature(worker.run_case).parameters.items()
+    }
+    new_defaults["owned_preparation_pilot"] = new_defaults.pop("streaming_preparation_pilot")
+    assert new_defaults == old_defaults
+    assert collector.run_case is worker.run_case
+    assert collector.plan_identity()["plan"]["prior_e_worker_sha256"] == (
+        "6223e0c599e91ef0ac76d2dc510010dab7bf7c22a868e7034055233518808932"
+    )
+
+
+def test_worker_rejects_matrix_flag_that_cannot_select_f(collector, monkeypatch, tmp_path, capsys):
+    worker = importlib.import_module("profile_guard_mcp_streaming_session")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(worker.__file__), "--matrix", "--streaming-preparation-pilot", "--json", str(tmp_path / "unused.json")],
+    )
+    monkeypatch.setattr(worker, "run_matrix", lambda **_kwargs: pytest.fail("unsupported F flag must not run B matrix"))
+    with pytest.raises(SystemExit) as error:
+        worker.main()
+    assert error.value.code == 2
+    assert "explicit F matrix requires" in capsys.readouterr().err
+
+
+@pytest.fixture
+def accounting(tmp_path, monkeypatch, collector):
+    runtime = {"runtime": "same-runtime"}
+    reference = {"runtime": "frozen-old-public-oracle"}
+    harness = {"guard_mcp_streaming_preparation_pilot.py": "exact-f-adapter"}
+    args = Namespace(
+        json=tmp_path / "attempt.json",
+        runtime_src=tmp_path / "runtime",
+        oracle_src=tmp_path / "oracle",
+        lock_file=tmp_path / "lock",
+        samples=30,
+    )
+    monkeypatch.setattr(collector, "source_identity", lambda path: reference if path.name == "oracle" else runtime)
+    monkeypatch.setattr(collector, "harness_identity", lambda: harness)
+    monkeypatch.setattr(
+        collector,
+        "plan_identity",
+        lambda: {
+            "sha256": "fixed-plan",
+            "plan": {"harness_sources_sha256": harness, "public_oracle_reference_sources_sha256": reference},
+        },
+    )
+    monkeypatch.setattr(collector, "oracle_identity", lambda: runtime)
+    monkeypatch.setattr(collector, "performance_lock", lambda _path: nullcontext())
+    monkeypatch.setattr(collector.time, "sleep", lambda _seconds: None)
+    oracle_roots = []
+
+    def oracle(path):
+        oracle_roots.append(path)
+        return {"cases": 3008}
+
+    monkeypatch.setattr(collector, "verify_facts", oracle)
+    calls = []
+
+    def fake_case(**options):
+        calls.append(options)
+        selected = options["streaming_preparation_pilot"]
+        return {
+            "fixture": {"profile": False, **options},
+            "loaded_runtime_sha256": runtime,
+            "loaded_adapter_sha256": "exact-f-adapter" if selected else None,
+            "streaming_preparation_pilot": {
+                "candidate": "F",
+                "comparison": "sequential_exact_bytes_without_accumulation",
+                "counters": {
+                    name: options["samples"] + 1
+                    for name in (
+                        "requests_admitted",
+                        "category_derivations",
+                        "preparations_completed",
+                        "bound_forwards",
+                    )
+                },
+            }
+            if selected
+            else None,
+            "correctness": {"complete_synthetic_accounting_trace": True},
+            "client_roundtrip_ms": {"p95": 1},
+            "tree_cpu_ms_per_call": 1,
+        }
+
+    monkeypatch.setattr(collector, "run_case", fake_case)
+    return args, calls, oracle_roots, fake_case
+
+
+def test_stubbed_collector_accounts_for_all_cells_and_uses_separate_public_oracle(collector, accounting):
+    args, calls, oracle_roots, _case = accounting
+    result = collector.run_comparison(args)
+    assert len(calls) == result["completed_cases"] == 64
+    assert len(result["comparisons"]) == 32
+    assert all(row["exact_correctness_parity"] for row in result["comparisons"])
+    assert result["runtime_sources_sha256"]["B"] == result["runtime_sources_sha256"]["F"]
+    assert oracle_roots == [args.oracle_src.resolve()]
+    assert result["production_activation"] is False
+    with pytest.raises(ValueError, match="refuses_to_overwrite"):
+        collector.run_comparison(args)
+
+
+@pytest.mark.parametrize(
+    "failure", ["wrong_adapter", "baseline_adapter", "missing_counter", "fallback", "wrong_runtime"]
+)
+def test_wrong_or_incomplete_completed_cells_are_retained_without_credit(collector, accounting, monkeypatch, failure):
+    args, calls, _oracle_roots, original = accounting
+
+    def case(**options):
+        result = original(**options)
+        selected = options["streaming_preparation_pilot"]
+        if failure == "baseline_adapter" and not selected:
+            result["loaded_adapter_sha256"] = "unexpected"
+        elif selected:
+            if failure == "wrong_adapter":
+                result["streaming_preparation_pilot"]["candidate"] = "E"
+            elif failure == "missing_counter":
+                result["streaming_preparation_pilot"]["counters"]["bound_forwards"] -= 1
+            elif failure == "fallback":
+                result["streaming_preparation_pilot"]["counters"]["busy_fallback"] = 1
+            elif failure == "wrong_runtime":
+                result["loaded_runtime_sha256"] = {"runtime": "wrong"}
+        return result
+
+    monkeypatch.setattr(collector, "run_case", case)
+    with pytest.raises(RuntimeError):
+        collector.run_comparison(args)
+    report = json.loads(args.json.read_text())
+    assert len(calls) == (1 if failure == "baseline_adapter" else 2)
+    assert len(report["cases"]) == len(calls) - 1
+    assert report["failed_case"]["measurement_valid"] is False
+    assert "completed_case_result" in report["failed_case"]
+
+
+def test_partial_worker_failure_retains_real_counters_without_synthesizing_success(collector, accounting, monkeypatch):
+    args, _calls, _oracle_roots, _original = accounting
+
+    def case(**_options):
+        raise collector.BenchmarkCaseError(
+            {
+                "attempted_tool_requests": 4,
+                "observed_tool_responses": 2,
+                "observed_child_forwarded_count": 3,
+                "streaming_preparation_pilot": {"candidate": "F", "counters": {"bound_forwards": 3}},
+            }
+        )
+
+    monkeypatch.setattr(collector, "run_case", case)
+    with pytest.raises(collector.BenchmarkCaseError):
+        collector.run_comparison(args)
+    report = json.loads(args.json.read_text())
+    assert report["cases"] == []
+    assert report["failed_case"]["attempted_tool_requests"] == 4
+    assert report["failed_case"]["observed_tool_responses"] == 2
+    assert report["failed_case"]["observed_child_forwarded_count"] == 3
+    assert report["failed_case"]["streaming_preparation_pilot"]["counters"]["bound_forwards"] == 3
+
+
+@pytest.mark.parametrize(
+    "failure", ["wrong_oracle", "wrong_harness", "missing_source", "same_reference", "wrong_reference"]
+)
+def test_preflight_failure_is_retained_before_any_oracle_credit_or_cell(collector, accounting, monkeypatch, failure):
+    args, calls, oracle_roots, _case = accounting
+    if failure == "wrong_oracle":
+        monkeypatch.setattr(collector, "oracle_identity", lambda: {"runtime": "wrong"})
+    elif failure == "wrong_harness":
+        monkeypatch.setattr(
+            collector, "plan_identity", lambda: {"sha256": "plan", "plan": {"harness_sources_sha256": {}}}
+        )
+    elif failure == "missing_source":
+        monkeypatch.setattr(collector, "source_identity", lambda _path: (_ for _ in ()).throw(FileNotFoundError()))
+    elif failure == "same_reference":
+        monkeypatch.setattr(collector, "source_identity", lambda _path: {"runtime": "same-runtime"})
+    else:
+        monkeypatch.setattr(
+            collector,
+            "source_identity",
+            lambda path: {"runtime": "unrelated-reference" if path.name == "oracle" else "same-runtime"},
+        )
+    with pytest.raises((RuntimeError, ValueError, FileNotFoundError)):
+        collector.run_comparison(args)
+    report = json.loads(args.json.read_text())
+    assert report["cases"] == []
+    assert calls == oracle_roots == []
+    assert "public_api_facts_parity" not in report
+    assert "failed_parity_gate" in report
+
+
+def test_sample_count_cannot_silently_change_the_fixed_plan(collector, accounting):
+    args, calls, _oracle_roots, _case = accounting
+    args.samples = 3
+    with pytest.raises(ValueError, match="requires_30_samples"):
+        collector.run_comparison(args)
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("module_name", "pilot_flag", "variant"),
+    [
+        ("profile_guard_mcp_session", "owned_preparation_pilot", "owned"),
+        ("profile_guard_mcp_streaming_session", "streaming_preparation_pilot", "streaming"),
+    ],
+)
+@pytest.mark.parametrize("enabled", [False, True])
+def test_wrapper_selects_its_own_variant_without_running_a_worker(
+    monkeypatch, module_name, pilot_flag, variant, enabled
+):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    worker = importlib.import_module(module_name)
+    observed = []
+    marker = object()
+
+    def capture(**kwargs):
+        observed.append(kwargs)
+        return marker
+
+    monkeypatch.setattr(worker, "run_case_common", capture)
+    options = {
+        "catalog_size": 7,
+        "payload_bytes": 997,
+        "samples": 3,
+        "profile": True,
+        "uncached": True,
+        "child_delay_ms": 5,
+        "approval": "accept",
+        "approval_delay_ms": 9,
+        "refresh_every": 2,
+        "compact_result": True,
+        "payload_kind": "unicode",
+        "native_text_helper": Path("/inert-fixture/native-helper"),
+        "native_minimum_characters": 4096,
+    }
+
+    result = worker.run_case(**options, **{pilot_flag: enabled})
+
+    assert result is marker
+    assert len(observed) == 1
+    provider = observed[0].pop("fixture_arguments_provider")
+    assert provider() is worker.fixture_arguments
+    assert observed == [{**options, "preparation_variant": variant, "preparation_pilot": enabled}]
+
+
+def test_frozen_plan_rejects_repaired_helpers_before_oracle_or_measurement(collector, monkeypatch, tmp_path):
+    fixed = collector.plan_identity()
+    assert fixed["plan"]["harness_sources_sha256"] != collector.harness_identity()
+    reference = fixed["plan"]["public_oracle_reference_sources_sha256"]
+    args = Namespace(
+        json=tmp_path / "attempt.json",
+        runtime_src=tmp_path / "runtime",
+        oracle_src=tmp_path / "oracle",
+        lock_file=tmp_path / "lock",
+        samples=30,
+    )
+    monkeypatch.setattr(
+        collector, "source_identity", lambda path: reference if path == args.oracle_src else {"runtime": "candidate"}
+    )
+    monkeypatch.setattr(collector, "performance_lock", lambda _path: nullcontext())
+    monkeypatch.setattr(collector, "verify_facts", lambda _path: pytest.fail("unreviewed harness must not run oracle"))
+    monkeypatch.setattr(collector, "run_case", lambda **_kwargs: pytest.fail("unreviewed harness must not run cells"))
+    with pytest.raises(ValueError, match="streaming_mcp_unreviewed_harness_identity"):
+        collector.run_comparison(args)
+    report = json.loads(args.json.read_text())
+    assert report["fixed_plan_sha256"] == fixed["sha256"]
+    assert report["cases"] == []
+    assert "public_api_facts_parity" not in report
+    assert report["failed_parity_gate"]["failure_code"] == "streaming_mcp_unreviewed_harness_identity"

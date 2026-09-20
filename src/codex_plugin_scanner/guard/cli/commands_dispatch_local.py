@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import importlib
+import os
+import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,9 +19,30 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .network_status_command import load_network_status_payload
+
+_PACKAGE_SHIM_PENDING_APPROVAL_STATUS = "HOL Guard: package approval pending; review it in Guard Inbox."
+
+
+def _emit_package_shim_pending_approval_status() -> None:
+    """Tell an interactive package shim why its manager is waiting."""
+
+    message = f"{_PACKAGE_SHIM_PENDING_APPROVAL_STATUS}\n"
+    status_fd_value = os.environ.get(PACKAGE_SHIM_STATUS_FD_ENV_VAR)
+    if status_fd_value:
+        try:
+            os.write(int(status_fd_value), message.encode("utf-8"))
+            return
+        except (OSError, OverflowError, ValueError):
+            pass
+    try:
+        sys.stderr.write(message)
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        pass
 
 
 def _migrate_legacy_macos_secrets(store: GuardStore) -> None:
@@ -97,7 +120,8 @@ def _run_guard_command_inspection_command(
         if command_command == "setup":
             from ..runtime.command_ecosystem_detection import command_setup_detection_payload
 
-            workspace = Path(str(getattr(args, "workspace", "."))).resolve()
+            workspace_value = getattr(args, "workspace", None)
+            workspace = Path(str(workspace_value or ".")).resolve()
             if not workspace.is_dir():
                 raise ValueError("Command setup workspace must be an existing directory")
             payload = command_setup_detection_payload(workspace)
@@ -305,6 +329,7 @@ def _run_guard_protect_command(
             if isinstance(item, str) and item
         ]
         if request_ids:
+            _emit_package_shim_pending_approval_status()
             wait_result = wait_for_approval_requests(
                 store=store,
                 request_ids=request_ids,

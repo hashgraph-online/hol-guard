@@ -189,12 +189,13 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
 
 ## Rust Authority Boundary
 
 Every supported harness routes security semantics through the bundled,
-version-matched Rust runtime. `PreToolUse` command decisions and supported
-`PostToolUse` output review do not use a Python semantic fallback. Native
+version-matched Rust runtime. Generic `PreToolUse` action decisions and
+supported `PostToolUse` output review do not use a Python semantic fallback. Native
 identity, protocol, rule-digest, policy-snapshot, overload, timeout, transport,
 and response failures fail closed.
 
@@ -203,3 +204,7 @@ approval coordination, dashboard control-plane work, and bounded
 non-authoritative evidence persistence. The repository-wide ownership gate
 prevents Python command evaluation or output-scanning fallback from being
 reintroduced as PreToolUse or PostToolUse authority.
+
+## Paseo
+
+Run `hol-guard install paseo` on the Paseo daemon host to install Guard for enabled, available native providers. This is not a universal Paseo permission hook. See [Paseo setup and coverage](paseo.md) for provider support, exclusions, diagnostics, and shared-hook ownership.

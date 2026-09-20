@@ -1,5 +1,7 @@
 # ADR 0006: Python control plane with Rust runtime data plane
 
+> Historical scope: the original PostToolUse-only migration and blanket failure wording below are not the current complete hook contract. Supported PreToolUse and PostToolUse authority, current availability delivery, and the separate approval continuation routes are reconciled in [the RSP-024 technical review](../native-runtime-technical-contract-review.md). This notice does not expand any route.
+
 Status: accepted for the 3.0 prerelease train. Eligible PostToolUse default-`auto` is authorized by ADR 0010; broader native authority remains out of scope.
 
 ## Decision
@@ -21,4 +23,10 @@ The first authoritative migration surface is PostToolUse. PreToolUse, approvals,
 
 ## Rollout
 
-`HOL_GUARD_NATIVE=off|shadow|auto|force` controls the backend. Eligible PostToolUse defaults to `auto`, which accepts only the verified bundled runtime with protocol and exact package-version compatibility and otherwise falls back to Python. Explicit `off` remains the immediate rollback, `shadow` keeps Python authoritative, and `force` remains a developer/test mode. See ADR 0010 for the release-gate decision.
+`HOL_GUARD_NATIVE=off|shadow|auto|force` controls the backend. Eligible hooks
+default to `auto`, which accepts only the verified bundled runtime with
+protocol and exact package-version compatibility. Native unavailability and
+explicit `off` fail closed; `off` is not a Python rollback. `shadow` may
+compare against the Python reference only on an explicitly marked
+non-production diagnostic surface, and `force` remains a developer/test mode.
+See ADR 0010 for the release-gate decision.

@@ -2,127 +2,77 @@
 
 from __future__ import annotations
 
-import json
-import os
-import stat
+import hashlib as hashlib
+import json as json
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Mapping
-from copy import deepcopy
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import replace as replace
+from datetime import datetime as datetime
+from datetime import timezone as timezone
 from pathlib import Path
-from typing import TypedDict, cast, final
-from uuid import uuid4
+from typing import cast as cast
+from typing import final
+from uuid import uuid4 as uuid4
 
-from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
-from ..runtime.command_activity_contract import CorrelationHandle, CorrelationKind
+from ..action_lattice import is_guard_action as is_guard_action
+from ..cli.commands_support_command_activity import (
+    persist_deferred_post_hook_command_activity as persist_deferred_post_hook_command_activity,
+)
+from ..models import GuardAction as GuardAction
+from ..native_decision_receipt import validate_native_decision_receipt as validate_native_decision_receipt
+from ..runtime.command_activity_contract import (
+    ActivityApprovalReuseStatus as ActivityApprovalReuseStatus,
+)
+from ..runtime.command_activity_contract import (
+    CorrelationHandle,
+)
 from ..runtime.command_activity_correlation import (
-    derive_proven_request_correlation,
+    derive_proven_request_correlation as derive_proven_request_correlation,
+)
+from ..runtime.command_activity_correlation import (
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_display import (
+    build_invocation_preview_from_payload as build_invocation_preview_from_payload,
+)
+from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence as build_native_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
-
-
-class RuntimeHookEvidenceWriterStats(TypedDict):
-    queued: int
-    queued_bytes: int
-    accepted: int
-    processed: int
-    dropped: int
-    failures: int
-    recovered: int
-    durable_pending: int
-    degraded: bool
-    running: bool
-
-
-@dataclass(frozen=True, slots=True)
-class _CommandActivityRecord:
-    record_id: str
-    harness: str
-    event: str
-    correlation: CorrelationHandle | None
-    has_command: bool
-    succeeded: bool
-    payload_bytes: int
-    attempts: int = 0
-
-    def serialized(self) -> bytes:
-        return (
-            json.dumps(
-                {
-                    "record_id": self.record_id,
-                    "harness": self.harness,
-                    "event": self.event,
-                    "correlation": (
-                        {
-                            "kind": self.correlation.kind.value,
-                            "harness": self.correlation.harness,
-                            "key_id": self.correlation.key_id,
-                            "digest": self.correlation.digest,
-                        }
-                        if self.correlation is not None
-                        else None
-                    ),
-                    "has_command": self.has_command,
-                    "succeeded": self.succeeded,
-                },
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-            + b"\n"
-        )
-
-    @classmethod
-    def from_json(cls, value: object) -> _CommandActivityRecord | None:
-        if not isinstance(value, dict):
-            return None
-        fields = cast(dict[str, object], value)
-        record_id = fields.get("record_id")
-        harness = fields.get("harness")
-        event = fields.get("event")
-        correlation_value = fields.get("correlation")
-        has_command = fields.get("has_command")
-        succeeded = fields.get("succeeded")
-        if (
-            not isinstance(record_id, str)
-            or not isinstance(harness, str)
-            or not isinstance(event, str)
-            or not isinstance(has_command, bool)
-            or not isinstance(succeeded, bool)
-        ):
-            return None
-        correlation: CorrelationHandle | None = None
-        if correlation_value is not None:
-            if not isinstance(correlation_value, dict):
-                return None
-            correlation_fields = cast(dict[str, object], correlation_value)
-            try:
-                correlation = CorrelationHandle(
-                    kind=CorrelationKind(str(correlation_fields.get("kind"))),
-                    harness=str(correlation_fields.get("harness")),
-                    key_id=str(correlation_fields.get("key_id")),
-                    digest=str(correlation_fields.get("digest")),
-                )
-            except (TypeError, ValueError):
-                return None
-        record = cls(record_id, harness, event, correlation, has_command, succeeded, 0)
-        return cls(
-            record.record_id,
-            record.harness,
-            record.event,
-            record.correlation,
-            record.has_command,
-            record.succeeded,
-            len(record.serialized()),
-        )
+from .runtime_hook_evidence_diagnostics import (
+    EvidenceFailurePhase,
+    evidence_failure_code,
+)
+from .runtime_hook_evidence_journal import (
+    _CommandActivityRecord,
+    _EvidenceRecord,
+    _NativeDecisionReceiptRecord,
+    append_journal_batch,
+    checkpoint_journal,
+)
+from .runtime_hook_evidence_journal import (
+    _payload_has_command as _payload_has_command,
+)
+from .runtime_hook_evidence_journal import (
+    append_journal as append_journal,
+)
+from .runtime_hook_evidence_journal import (
+    recover_journal_records as recover_journal_records,
+)
+from .runtime_hook_evidence_journal import (
+    rewrite_journal as rewrite_journal,
+)
+from .runtime_hook_evidence_writer_journal import (
+    RuntimeHookEvidenceWriterJournalMixin,
+    RuntimeHookEvidenceWriterStats,
+    persist_native_decision_receipt,
+)
 
 
 @final
-class RuntimeHookEvidenceWriter:
+class RuntimeHookEvidenceWriter(RuntimeHookEvidenceWriterJournalMixin):
     """Keeps best-effort activity writes outside security-decision workers."""
 
     def __init__(
@@ -134,6 +84,7 @@ class RuntimeHookEvidenceWriter:
         max_batch: int = 50,
         batch_wait_seconds: float = 0.025,
         journal_path: Path | None = None,
+        queue_observation: EvidenceQueueObservation | None = None,
     ) -> None:
         if min(max_records, max_bytes, max_batch) < 1 or batch_wait_seconds < 0:
             raise ValueError("runtime hook evidence writer limits are invalid")
@@ -141,12 +92,18 @@ class RuntimeHookEvidenceWriter:
         self._guard_home = store.guard_home
         self._max_records = max_records
         self._max_bytes = max_bytes
-        self._max_batch = max_batch
+        self._max_batch = min(max_batch, 50)
         self._batch_wait_seconds = batch_wait_seconds
         self._condition = threading.Condition()
-        self._records: deque[_CommandActivityRecord] = deque()
-        self._durable: OrderedDict[str, _CommandActivityRecord] = OrderedDict()
+        self._records: deque[_EvidenceRecord] = deque()
+        self._queue_observation: EvidenceQueueObservation | None = None
+        self._durable: OrderedDict[str, _EvidenceRecord] = OrderedDict()
+        self._receipt_seen: OrderedDict[str, None] = OrderedDict()
         self._retry_attempts: dict[str, int] = {}
+        self._checkpoint_pending: set[str] = set()
+        self._journal_durable = 0
+        self._journal_checkpoints = 0
+        self._receipt_transactions = 0
         self._in_flight = False
         self._queued_bytes = 0
         self._accepted = 0
@@ -155,6 +112,13 @@ class RuntimeHookEvidenceWriter:
         self._failures = 0
         self._recovered = 0
         self._degraded = False
+        self._receipt_accepted = 0
+        self._receipt_processed = 0
+        self._receipt_deduped = 0
+        self._receipt_dropped = 0
+        self._receipt_failures = 0
+        self._failure_diagnostics: dict[str, int] = {}
+        self._receipt_failure_diagnostics: dict[str, int] = {}
         self._stopping = False
         self._drain_deadline: float | None = None
         self._sqlite_timeout_seconds = 0.05
@@ -165,13 +129,30 @@ class RuntimeHookEvidenceWriter:
             )
         except (OSError, ValueError):
             self._correlation_key = None
-        self._recover_journal()
-        self._thread = threading.Thread(
-            target=self._run,
-            name="hol-guard-hook-evidence",
-            daemon=True,
-        )
-        self._thread.start()
+        if queue_observation is not None:
+            try:
+                queue_observation.attach(self)
+            except BaseException:
+                try:  # noqa: SIM105 - Diagnostic fallback must not invoke a new context manager.
+                    queue_observation._hook_failed(self)
+                except BaseException:
+                    pass
+        try:
+            self._recover_journal()
+            self._thread = threading.Thread(
+                target=self._run,
+                name="hol-guard-hook-evidence",
+                daemon=True,
+            )
+            self._thread.start()
+        except BaseException:
+            observation = self._queue_observation
+            if observation is not None:
+                try:  # noqa: SIM105 - Startup cleanup must preserve the original failure.
+                    observation.detach(self)
+                except BaseException:
+                    pass
+            raise
 
     def submit_command_activity(
         self,
@@ -180,38 +161,43 @@ class RuntimeHookEvidenceWriter:
         event: str,
         payload: Mapping[str, object],
         succeeded: bool,
+        policy_action: str | None = None,
+        receipt_id: str | None = None,
+        prompted: bool = False,
+        approval_reuse_status: str = "not-applicable",
     ) -> bool:
-        try:
-            snapshot = deepcopy(dict(payload))
-            encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
-            correlation = self._derive_correlation(harness=harness, event=event, payload=snapshot)
-        except Exception:
-            with self._condition:
-                self._dropped += 1
-            return False
-        record = _CommandActivityRecord(
-            record_id=uuid4().hex,
+        return _evidence_operations.submit_command_activity(
+            self,
             harness=harness,
             event=event,
-            correlation=correlation,
-            has_command=_payload_has_command(snapshot),
+            payload=payload,
             succeeded=succeeded,
-            payload_bytes=len(encoded),
+            policy_action=policy_action,
+            receipt_id=receipt_id,
+            prompted=prompted,
+            approval_reuse_status=approval_reuse_status,
         )
-        with self._condition:
-            if (
-                self._stopping
-                or len(self._records) >= self._max_records
-                or self._queued_bytes + record.payload_bytes > self._max_bytes
-            ):
-                self._dropped += 1
-                self._degraded = True
-                return False
-            self._records.append(record)
-            self._queued_bytes += record.payload_bytes
-            self._accepted += 1
-            self._condition.notify()
-        return True
+
+    def submit_native_decision_receipt(self, receipt: Mapping[str, object]) -> bool:
+        """Queue one Rust receipt without touching SQLite or waiting on I/O."""
+
+        return _evidence_operations.submit_native_decision_receipt(self, receipt)
+
+    def _observe_queue(self, record: _EvidenceRecord, origin: str | None = None) -> None:
+        observation = self._queue_observation
+        if observation is None:
+            return
+        try:
+            if origin is None:
+                observation._dequeued(self, record)
+            else:
+                observation._enqueued(self, record, origin)
+        except BaseException:
+            # Diagnostic faults never change queue admission or persistence.
+            try:  # noqa: SIM105 - Diagnostic fallback must not invoke a new context manager.
+                observation._hook_failed(self)
+            except BaseException:
+                pass
 
     def _derive_correlation(
         self,
@@ -220,20 +206,15 @@ class RuntimeHookEvidenceWriter:
         event: str,
         payload: Mapping[str, object],
     ) -> CorrelationHandle | None:
-        key = self._correlation_key
-        if key is None:
-            key = load_or_create_installation_correlation_key(self._guard_home)
-            self._correlation_key = key
-        try:
-            return derive_proven_request_correlation(harness=harness, event=event, payload=payload, key=key)
-        except (OSError, ValueError):
-            key = load_or_create_installation_correlation_key(self._guard_home)
-            self._correlation_key = key
-            return derive_proven_request_correlation(harness=harness, event=event, payload=payload, key=key)
+        return _evidence_operations._derive_correlation(self, harness=harness, event=event, payload=payload)
 
     def stats(self) -> RuntimeHookEvidenceWriterStats:
         with self._condition:
             return {
+                "journal_durable": self._journal_durable,
+                "journal_checkpoints": self._journal_checkpoints,
+                "receipt_transactions": self._receipt_transactions,
+                "checkpoint_pending": len(self._checkpoint_pending),
                 "queued": len(self._records),
                 "queued_bytes": self._queued_bytes,
                 "accepted": self._accepted,
@@ -244,6 +225,16 @@ class RuntimeHookEvidenceWriter:
                 "durable_pending": len(self._durable),
                 "degraded": self._degraded or bool(self._durable and not self._records and not self._in_flight),
                 "running": self._thread.is_alive() and not self._stopping,
+                "receipt_accepted": self._receipt_accepted,
+                "receipt_processed": self._receipt_processed,
+                "receipt_deduped": self._receipt_deduped,
+                "receipt_dropped": self._receipt_dropped,
+                "receipt_failures": self._receipt_failures,
+                "failure_diagnostics": dict(self._failure_diagnostics),
+                "receipt_failure_diagnostics": dict(self._receipt_failure_diagnostics),
+                "receipt_durable_pending": sum(
+                    isinstance(record, _NativeDecisionReceiptRecord) for record in self._durable.values()
+                ),
             }
 
     def stop(self, *, timeout_seconds: float = 1.0) -> bool:
@@ -261,180 +252,184 @@ class RuntimeHookEvidenceWriter:
         while True:
             batch = self._next_batch()
             if not batch:
-                return
-            for record in batch:
+                self._checkpoint_completed_records()
                 with self._condition:
-                    if self._drain_expired():
-                        self._degraded = True
+                    if self._stopping:
                         return
-                    self._in_flight = True
-                with self._condition:
-                    already_durable = record.record_id in self._durable
-                if not already_durable:
-                    try:
-                        self._append_journal(record)
-                    except OSError:
-                        with self._condition:
-                            self._dropped += 1
-                            self._failures += 1
-                            self._degraded = True
-                            self._in_flight = False
-                        continue
-                    with self._condition:
-                        self._durable[record.record_id] = record
+                continue
+            with self._condition:
+                self._in_flight = True
+                fresh = [record for record in batch if record.record_id not in self._durable]
+            if fresh:
                 try:
-                    with sqlite_connect_timeout_override(self._sqlite_timeout_seconds):
-                        _ = persist_deferred_post_hook_command_activity(
-                            store=self._store,
-                            harness=record.harness,
-                            correlation=record.correlation,
-                            has_command=record.has_command,
-                            succeeded=record.succeeded,
-                        )
-                except Exception:
+                    append_journal_batch(self._journal_path, fresh, max_bytes=self._max_bytes)
+                except OSError as error:
                     with self._condition:
-                        self._failures += 1
+                        self._dropped += len(fresh)
+                        self._failures += len(fresh)
+                        receipts_dropped = sum(isinstance(record, _NativeDecisionReceiptRecord) for record in fresh)
+                        self._receipt_dropped += receipts_dropped
+                        self._receipt_failures += receipts_dropped
+                        self._record_failure_diagnostics(
+                            "journal_append",
+                            evidence_failure_code(error),
+                            len(fresh),
+                            receipts_dropped,
+                        )
+                        for record in fresh:
+                            if isinstance(record, _NativeDecisionReceiptRecord):
+                                self._receipt_seen.pop(record.record_id, None)
                         self._degraded = True
-                        if not self._stopping:
-                            attempt = self._retry_attempts.get(record.record_id, 0) + 1
-                            self._retry_attempts[record.record_id] = attempt
-                            self._records.append(record)
-                            self._queued_bytes += record.payload_bytes
-                            _ = self._condition.wait(timeout=min(1.0, 0.05 * (2 ** min(attempt - 1, 5))))
-                        self._in_flight = False
+                    fresh_ids = {record.record_id for record in fresh}
+                    batch = [record for record in batch if record.record_id not in fresh_ids]
                 else:
                     with self._condition:
-                        self._processed += 1
-                        self._retry_attempts.pop(record.record_id, None)
-                        _ = self._durable.pop(record.record_id, None)
-                        durable_records = tuple(self._durable.values())
-                    try:
-                        self._rewrite_journal(durable_records)
-                    except OSError:
-                        with self._condition:
-                            self._failures += 1
-                            self._degraded = True
-                    finally:
-                        with self._condition:
-                            self._in_flight = False
+                        self._durable.update((record.record_id, record) for record in fresh)
+                        self._journal_durable += len(fresh)
+            # Submission only accepts memory. Even when shutdown expires during
+            # append, finish the durability boundary before abandoning DB work.
+            with self._condition:
+                if self._drain_expired():
+                    self._degraded = bool(self._durable) or self._degraded
+                    self._in_flight = False
+                    return
+            receipts = [record for record in batch if isinstance(record, _NativeDecisionReceiptRecord)]
+            retry_delay = 0.0
+            if receipts:
+                failure_code: str | None = None
+                try:
+                    with sqlite_connect_timeout_override(self._sqlite_timeout_seconds):
+                        if len(receipts) == 1:
+                            if not persist_native_decision_receipt(store=self._store, receipt=receipts[0].receipt):
+                                failure_code = "unacknowledged"
+                                raise RuntimeError("native receipt persistence was not acknowledged")
+                        else:
+                            acknowledged = self._store.record_native_decision_receipts(
+                                tuple(record.receipt for record in receipts)
+                            )
+                            if acknowledged != tuple(record.record_id for record in receipts):
+                                failure_code = "unacknowledged"
+                                raise RuntimeError("native receipt batch persistence was not acknowledged")
+                    with self._condition:
+                        self._receipt_transactions += 1
+                except Exception as error:
+                    retry_delay = self._record_persistence_failure(
+                        receipts,
+                        phase="receipt_persistence",
+                        code=failure_code or evidence_failure_code(error),
+                    )
+                else:
+                    self._record_committed(receipts)
+            for record in batch:
+                if isinstance(record, _NativeDecisionReceiptRecord):
+                    continue
+                try:
+                    with sqlite_connect_timeout_override(self._sqlite_timeout_seconds):
+                        self._persist_command_activity(record)
+                except Exception as error:
+                    retry_delay = max(
+                        retry_delay,
+                        self._record_persistence_failure(
+                            [record],
+                            phase="command_activity_persistence",
+                            code=evidence_failure_code(error),
+                        ),
+                    )
+                else:
+                    self._record_committed([record])
+            self._checkpoint_completed_records()
+            with self._condition:
+                self._in_flight = False
+                if retry_delay and not self._stopping:
+                    self._condition.wait(timeout=retry_delay)
 
-    def _next_batch(self) -> list[_CommandActivityRecord]:
+    def _record_failure_diagnostics(
+        self, phase: EvidenceFailurePhase, code: str, records: int, receipts: int = 0
+    ) -> None:
+        # Keep the synchronization and failed-attempt units of the existing
+        # failure counters. Successful retry never clears diagnostics.
+        key = f"{phase}/{code}"
+        self._failure_diagnostics[key] = self._failure_diagnostics.get(key, 0) + records
+        if receipts:
+            self._receipt_failure_diagnostics[key] = self._receipt_failure_diagnostics.get(key, 0) + receipts
+
+    def _record_persistence_failure(
+        self,
+        records: Sequence[_EvidenceRecord],
+        *,
+        phase: EvidenceFailurePhase,
+        code: str,
+    ) -> float:
+        retry_delay = 0.0
         with self._condition:
-            while not self._records and not self._stopping:
-                _ = self._condition.wait()
-            if not self._records:
-                return []
-            if not self._stopping and self._batch_wait_seconds:
-                _ = self._condition.wait(timeout=self._batch_wait_seconds)
-            batch: list[_CommandActivityRecord] = []
-            while self._records and len(batch) < self._max_batch:
-                record = self._records.popleft()
-                self._queued_bytes -= record.payload_bytes
-                batch.append(record)
-            return batch
-
-    def _drain_expired(self) -> bool:
-        return self._stopping and self._drain_deadline is not None and time.monotonic() >= self._drain_deadline
-
-    def _recover_journal(self) -> None:
-        try:
-            descriptor = self._open_journal(os.O_RDONLY)
-        except FileNotFoundError:
-            return
-        except OSError:
+            self._failures += len(records)
+            self._receipt_failures += sum(isinstance(record, _NativeDecisionReceiptRecord) for record in records)
+            self._record_failure_diagnostics(
+                phase,
+                code,
+                len(records),
+                sum(isinstance(record, _NativeDecisionReceiptRecord) for record in records),
+            )
             self._degraded = True
-            self._failures += 1
+            for record in records:
+                if not self._stopping:
+                    attempt = self._retry_attempts.get(record.record_id, 0) + 1
+                    self._retry_attempts[record.record_id] = attempt
+                    # Retries have already passed admission and remain durable.
+                    # Do not convert a SQLite outage into silent evidence loss.
+                    self._records.append(record)
+                    if self._queue_observation is not None:
+                        self._observe_queue(record, "retry")
+                    self._queued_bytes += record.payload_bytes
+                    retry_delay = max(retry_delay, min(1.0, 0.05 * (2 ** min(attempt - 1, 5))))
+        return retry_delay
+
+    def _record_committed(self, records: Sequence[_EvidenceRecord]) -> None:
+        with self._condition:
+            self._processed += len(records)
+            self._receipt_processed += sum(isinstance(record, _NativeDecisionReceiptRecord) for record in records)
+            for record in records:
+                self._retry_attempts.pop(record.record_id, None)
+                self._checkpoint_pending.add(record.record_id)
+
+    def _checkpoint_completed_records(self) -> None:
+        with self._condition:
+            completed = frozenset(self._checkpoint_pending)
+        if not completed:
             return
         try:
-            metadata = os.fstat(descriptor)
-            if metadata.st_size > self._max_bytes:
-                self._degraded = True
+            invalid_records = checkpoint_journal(
+                self._journal_path,
+                remove_record_ids=completed,
+                max_bytes=self._max_bytes,
+            )
+        except OSError as error:
+            with self._condition:
                 self._failures += 1
-                return
-            raw_lines = os.read(descriptor, self._max_bytes + 1).splitlines()
-        finally:
-            os.close(descriptor)
-        for raw_line in raw_lines:
-            try:
-                decoded = cast(object, json.loads(raw_line))
-                record = _CommandActivityRecord.from_json(decoded)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                record = None
-            if record is None:
+                self._record_failure_diagnostics("journal_checkpoint", evidence_failure_code(error), 1)
                 self._degraded = True
-                self._failures += 1
-                continue
-            if len(self._records) >= self._max_records or self._queued_bytes + record.payload_bytes > self._max_bytes:
-                self._degraded = True
-                self._failures += 1
-                continue
-            self._durable[record.record_id] = record
-            self._records.append(record)
-            self._queued_bytes += record.payload_bytes
-            self._recovered += 1
+        else:
+            with self._condition:
+                self._journal_checkpoints += 1
+                if invalid_records:
+                    self._failures += invalid_records
+                    self._record_failure_diagnostics("journal_checkpoint", "invalid_record", invalid_records)
+                    self._degraded = True
+                self._checkpoint_pending.difference_update(completed)
+                for record_id in completed:
+                    self._durable.pop(record_id, None)
 
-    def _append_journal(self, record: _CommandActivityRecord) -> None:
-        self._journal_path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = self._open_journal(os.O_APPEND | os.O_CREAT | os.O_WRONLY)
-        original_size = os.fstat(descriptor).st_size
-        try:
-            os.fchmod(descriptor, 0o600)
-            self._write_all(descriptor, record.serialized())
-            os.fsync(descriptor)
-        except OSError:
-            os.ftruncate(descriptor, original_size)
-            raise
-        finally:
-            os.close(descriptor)
-
-    def _rewrite_journal(self, records: tuple[_CommandActivityRecord, ...]) -> None:
-        temporary = self._journal_path.with_name(f".{self._journal_path.name}.{uuid4().hex}.tmp")
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
-        flags |= getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(temporary, flags, 0o600)
-        try:
-            try:
-                for record in records:
-                    self._write_all(descriptor, record.serialized())
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-            os.replace(temporary, self._journal_path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    def _open_journal(self, flags: int) -> int:
-        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self._journal_path, flags, 0o600)
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-            os.close(descriptor)
-            raise OSError("evidence journal is not a private regular file")
-        return descriptor
-
-    @staticmethod
-    def _write_all(descriptor: int, payload: bytes) -> None:
-        view = memoryview(payload)
-        while view:
-            written = os.write(descriptor, view)
-            if written < 1:
-                raise OSError("evidence journal write made no progress")
-            view = view[written:]
+    def _persist_command_activity(self, record: _CommandActivityRecord) -> None:
+        _evidence_operations._persist_command_activity(self, record)
 
 
-def _payload_has_command(payload: Mapping[str, object]) -> bool:
-    arguments = payload.get("tool_input", payload.get("arguments"))
-    if isinstance(arguments, Mapping):
-        command_arguments = cast(Mapping[object, object], arguments)
-        for key in ("command", "cmd", "shell_command", "shellCommand"):
-            value = command_arguments.get(key)
-            if isinstance(value, str) and value.strip():
-                return True
-    for key in ("command", "cmd"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return True
-    return False
+__all__ = [
+    "RuntimeHookEvidenceWriter",
+    "RuntimeHookEvidenceWriterStats",
+    "persist_native_decision_receipt",
+]
 
 
-__all__ = ["RuntimeHookEvidenceWriter", "RuntimeHookEvidenceWriterStats"]
+# Operations bind this facade only after declaring their deferred functions.
+from . import runtime_hook_evidence_operations as _evidence_operations  # noqa: E402
+from .runtime_hook_evidence_queue_observation import EvidenceQueueObservation  # noqa: E402

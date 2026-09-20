@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.hook_review_types import (
 )
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_hook_test_client import open_authenticated_claude_request
 
 
 class _Metrics:
@@ -272,7 +273,12 @@ def test_watch_only_daemon_worker_exception_does_not_block_harnesses(
                 },
                 method="POST",
             )
-            response = cast(HTTPResponse, urllib.request.urlopen(request, timeout=5))
+            response = cast(
+                HTTPResponse,
+                open_authenticated_claude_request(daemon, request, timeout=5)
+                if harness == "claude-code"
+                else urllib.request.urlopen(request, timeout=5),
+            )
             with response:
                 results[harness] = json.loads(response.read().decode("utf-8"))
     finally:

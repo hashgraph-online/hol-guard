@@ -224,7 +224,7 @@ def test_derive_and_dual_write_tables() -> None:
     assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
 
 
-def test_confidence_stop_only_when_explicit_and_strong() -> None:
+def test_confidence_stop_blocks_strong_exfiltration_even_when_implicit() -> None:
     asked = apply_posture_confidence(
         posture="protected",
         explicit=True,
@@ -255,7 +255,7 @@ def test_confidence_stop_only_when_explicit_and_strong() -> None:
     )
     assert asked == "require-reapproval"
     assert stopped == "block"
-    assert implicit == "require-reapproval"
+    assert implicit == "block"
     assert always == "block"
 
 

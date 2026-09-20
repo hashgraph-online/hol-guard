@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_evidence import store_evidence_batch
 
 
 class StoreEvidenceMixin:
@@ -53,6 +56,12 @@ class StoreEvidenceMixin:
     def add_evidence(self, record: EvidenceRecord) -> None:
         with self._connect() as connection:
             _store_evidence_impl(connection, record)
+
+    def add_evidence_batch(self, records: Iterable[EvidenceRecord]) -> None:
+        """Commit package evidence using one connection and one transaction."""
+
+        with self._connect() as connection:
+            store_evidence_batch(connection, records)
 
     @staticmethod
     def _advisory_cache_key(advisory: dict[str, object]) -> str:

@@ -7,6 +7,7 @@ from pathlib import Path
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
+from . import pi_settings_discovery as _settings_discovery
 from .base import HarnessAdapter, HarnessContext, _resolve_command
 from .pi_support import (
     EXTENSION_SUFFIXES,
@@ -22,11 +23,11 @@ from .pi_support import (
     artifact,
     disable_managed_extension,
     enable_managed_extension,
-    json_payload,
     managed_extension_source,
-    resolve_configured_paths,
-    stable_suffix,
 )
+from .pi_support import json_payload as json_payload
+from .pi_support import resolve_configured_paths as resolve_configured_paths
+from .pi_support import stable_suffix as stable_suffix
 
 
 class _PiFamilyHarnessAdapter(HarnessAdapter):
@@ -67,6 +68,13 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
         return _resolve_command(self.executable, self.executable_candidates(context))
+
+    def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
+        # Linux package installers commonly place user-owned CLIs in a
+        # user-local bin directory without exporting it to GUI-launched apps.
+        # Resolve that durable install directly so diagnostics and Guard's
+        # launcher agree with the command the user can run from a terminal.
+        return (context.home_dir / ".local" / "bin" / self.executable,)
 
     def policy_path(self, context: HarnessContext) -> Path:
         project_root = self._project_root(context)
@@ -152,200 +160,9 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
             workspace_dir=context.workspace_dir,
         )
 
-    def _append_settings_artifacts(
-        self,
-        artifacts: list[GuardArtifact],
-        found_paths: list[str],
-        seen_keys: set[str],
-        *,
-        settings_path: Path,
-        scope: str,
-        id_scope: str,
-        extension_root: Path,
-        skill_root: Path,
-        prompt_root: Path,
-        theme_root: Path,
-    ) -> None:
-        if not settings_path.is_file():
-            return
-        append_found_path(found_paths, settings_path)
-        payload = json_payload(settings_path)
-        self._append_package_setting_artifacts(artifacts, seen_keys, settings_path, payload, scope, id_scope)
-        self._append_configured_resource_setting_artifacts(
-            artifacts,
-            found_paths,
-            seen_keys,
-            settings_path=settings_path,
-            payload=payload,
-            scope=scope,
-            id_scope=id_scope,
-            key="extensions",
-            artifact_type="extension",
-            default_root=extension_root,
-        )
-        self._append_configured_resource_setting_artifacts(
-            artifacts,
-            found_paths,
-            seen_keys,
-            settings_path=settings_path,
-            payload=payload,
-            scope=scope,
-            id_scope=id_scope,
-            key="skills",
-            artifact_type="skill",
-            default_root=skill_root,
-        )
-        self._append_configured_resource_setting_artifacts(
-            artifacts,
-            found_paths,
-            seen_keys,
-            settings_path=settings_path,
-            payload=payload,
-            scope=scope,
-            id_scope=id_scope,
-            key="prompts",
-            artifact_type="prompt",
-            default_root=prompt_root,
-        )
-        self._append_configured_resource_setting_artifacts(
-            artifacts,
-            found_paths,
-            seen_keys,
-            settings_path=settings_path,
-            payload=payload,
-            scope=scope,
-            id_scope=id_scope,
-            key="themes",
-            artifact_type="theme",
-            default_root=theme_root,
-        )
-
-    def _append_package_setting_artifacts(
-        self,
-        artifacts: list[GuardArtifact],
-        seen_keys: set[str],
-        settings_path: Path,
-        payload: dict[str, object],
-        scope: str,
-        id_scope: str,
-    ) -> None:
-        values = payload.get("packages")
-        if not isinstance(values, list):
-            return
-        for value in values:
-            if not isinstance(value, str) or not value.strip():
-                continue
-            artifact_id = f"{self.harness}:{id_scope}:package:{stable_suffix(value)}"
-            append_artifact(
-                artifacts,
-                seen_keys,
-                artifact(
-                    harness=self.harness,
-                    artifact_id=artifact_id,
-                    name=value,
-                    artifact_type="package",
-                    scope=scope,
-                    path=settings_path,
-                    metadata={"source": "settings.json", "key": "packages", "value": value},
-                ),
-                dedupe_key=artifact_id,
-            )
-
-    def _append_configured_resource_setting_artifacts(
-        self,
-        artifacts: list[GuardArtifact],
-        found_paths: list[str],
-        seen_keys: set[str],
-        *,
-        settings_path: Path,
-        payload: dict[str, object],
-        scope: str,
-        id_scope: str,
-        key: str,
-        artifact_type: str,
-        default_root: Path,
-    ) -> None:
-        values = payload.get(key)
-        if not isinstance(values, list):
-            return
-        for value in values:
-            if not isinstance(value, str) or not value.strip():
-                continue
-            matches = resolve_configured_paths(settings_path, value)
-            if not matches:
-                artifact_id = f"{self.harness}:{id_scope}:{artifact_type}:configured:{stable_suffix(value)}"
-                append_artifact(
-                    artifacts,
-                    seen_keys,
-                    artifact(
-                        harness=self.harness,
-                        artifact_id=artifact_id,
-                        name=value,
-                        artifact_type=artifact_type,
-                        scope=scope,
-                        path=settings_path,
-                        metadata={"source": "settings.json", "key": key, "value": value},
-                    ),
-                    dedupe_key=artifact_id,
-                )
-                continue
-            for match in matches:
-                if match.is_relative_to(default_root):
-                    id_root = default_root
-                else:
-                    id_root = match if match.is_dir() else match.parent
-                if artifact_type == "extension":
-                    if match.is_dir():
-                        self._append_extension_artifacts(
-                            artifacts,
-                            found_paths,
-                            seen_keys,
-                            extension_root=match,
-                            scope=scope,
-                            id_scope=id_scope,
-                            id_root=id_root,
-                        )
-                    elif match.suffix in EXTENSION_SUFFIXES:
-                        self._append_extension_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
-                elif artifact_type == "skill":
-                    if match.is_dir():
-                        self._append_skill_artifacts(
-                            artifacts,
-                            found_paths,
-                            seen_keys,
-                            skill_root=match,
-                            scope=scope,
-                            id_scope=id_scope,
-                            id_root=id_root,
-                        )
-                    elif match.name == "SKILL.md":
-                        self._append_skill_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
-                elif artifact_type == "prompt":
-                    if match.is_dir():
-                        self._append_prompt_artifacts(
-                            artifacts,
-                            found_paths,
-                            seen_keys,
-                            prompt_root=match,
-                            scope=scope,
-                            id_scope=id_scope,
-                            id_root=id_root,
-                        )
-                    elif match.suffix == ".md":
-                        self._append_prompt_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
-                elif artifact_type == "theme":
-                    if match.is_dir():
-                        self._append_theme_artifacts(
-                            artifacts,
-                            found_paths,
-                            seen_keys,
-                            theme_root=match,
-                            scope=scope,
-                            id_scope=id_scope,
-                            id_root=id_root,
-                        )
-                    elif match.suffix in THEME_SUFFIXES:
-                        self._append_theme_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
+    _append_settings_artifacts = _settings_discovery._append_settings_artifacts
+    _append_package_setting_artifacts = _settings_discovery._append_package_setting_artifacts
+    _append_configured_resource_setting_artifacts = _settings_discovery._append_configured_resource_setting_artifacts
 
     def _append_extension_artifacts(
         self,
@@ -490,7 +307,15 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
             return
         for theme_path in sorted(theme_root.rglob("*")):
             if theme_path.is_file() and theme_path.suffix in THEME_SUFFIXES:
-                self._append_theme_file(artifacts, found_paths, seen_keys, theme_path, scope, id_scope, id_root)
+                self._append_theme_file(
+                    artifacts,
+                    found_paths,
+                    seen_keys,
+                    theme_path,
+                    scope,
+                    id_scope,
+                    id_root,
+                )
 
     def _append_theme_file(
         self,
@@ -537,7 +362,10 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
             ),
             encoding="utf-8",
         )
-        enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
+        enable_managed_extension(
+            settings_path=self._managed_settings_path(context),
+            extension_path=extension_path,
+        )
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -562,7 +390,10 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
             display_name=self.display_name,
         )
         extension_path = self._managed_extension_path(context)
-        disable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
+        disable_managed_extension(
+            settings_path=self._managed_settings_path(context),
+            extension_path=extension_path,
+        )
         if extension_path.exists():
             extension_path.unlink()
         raw_notes = shim_manifest.get("notes")
@@ -595,16 +426,6 @@ class PiHarnessAdapter(_PiFamilyHarnessAdapter):
     )
     fallback_hint = "Pi keeps the blocked request in Guard and shows the reason inline before you retry."
 
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        """Remove the verified combined-install OMP extension during legacy cleanup."""
-
-        manifest = super().uninstall(context)
-        if remove_legacy_omp_managed_extension(context):
-            notes = manifest.get("notes")
-            if isinstance(notes, list):
-                notes.append("Guard also removed the verified legacy Oh My Pi extension from the combined Pi install.")
-        return manifest
-
 
 class OmpHarnessAdapter(_PiFamilyHarnessAdapter):
     """Protect Oh My Pi independently from Pi."""
@@ -623,65 +444,7 @@ class OmpHarnessAdapter(_PiFamilyHarnessAdapter):
     fallback_hint = "Oh My Pi keeps the blocked request in Guard and shows the reason inline before you retry."
 
 
-def legacy_omp_managed_extension_is_verified(
-    context: HarnessContext,
-    pi_managed_install: dict[str, object],
-) -> bool:
-    """Identify only the exact OMP extension written by the former combined Pi install."""
-
-    if not bool(pi_managed_install.get("active")):
-        return False
-    manifest = pi_managed_install.get("manifest")
-    if not isinstance(manifest, dict):
-        return False
-    pi_path = context.home_dir / PI_AGENT_DIR / "extensions" / PI_MANAGED_EXTENSION_NAME
-    if manifest.get("config_path") != str(pi_path):
-        return False
-    omp_settings_path = context.home_dir / OMP_AGENT_DIR / PI_SETTINGS_FILE
-    omp_extension_path = omp_settings_path.parent / "extensions" / PI_MANAGED_EXTENSION_NAME
-    settings = json_payload(omp_settings_path)
-    extensions = settings.get("extensions")
-    if not isinstance(extensions, list) or str(omp_extension_path) not in extensions:
-        return False
-    try:
-        source = omp_extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    return source == managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=omp_settings_path,
-        harness="pi",
-        display_name="Pi",
-    )
-
-
-def remove_legacy_omp_managed_extension(context: HarnessContext) -> bool:
-    """Remove only a byte-for-byte legacy OMP extension after Pi disconnects."""
-
-    omp_settings_path = context.home_dir / OMP_AGENT_DIR / PI_SETTINGS_FILE
-    omp_extension_path = omp_settings_path.parent / "extensions" / PI_MANAGED_EXTENSION_NAME
-    try:
-        source = omp_extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=omp_settings_path,
-        harness="pi",
-        display_name="Pi",
-    )
-    if source != expected_source:
-        return False
-    disable_managed_extension(settings_path=omp_settings_path, extension_path=omp_extension_path)
-    omp_extension_path.unlink()
-    return True
-
-
 __all__ = [
     "OmpHarnessAdapter",
     "PiHarnessAdapter",
-    "legacy_omp_managed_extension_is_verified",
-    "remove_legacy_omp_managed_extension",
 ]

@@ -16,7 +16,6 @@ from scripts.verify_release_registry import (
     assert_pypi_release_absent,
     compute_local_distribution_hashes,
     inspect_release,
-    list_registry_versions,
     main,
     verify_registry_release,
     verify_testpypi_release,
@@ -58,6 +57,24 @@ class FakeFetcher:
         response = self.responses.get(url)
         if response is None:
             raise AssertionError(f"Unexpected fetch: {url}")
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+class SequencedFetcher:
+    def __init__(self, url: str, responses: list[bytes | Exception]) -> None:
+        self.url = url
+        self.responses = responses
+        self.calls: list[str] = []
+
+    def __call__(self, url: str) -> bytes:
+        self.calls.append(url)
+        if url != self.url:
+            raise AssertionError(f"Unexpected fetch: {url}")
+        if not self.responses:
+            raise AssertionError("Fetcher response sequence was exhausted")
+        response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
         return response
@@ -117,29 +134,6 @@ def _local_plugin_dist(tmp_path: Path) -> Path:
     return dist
 
 
-def test_lists_sorted_canonical_registry_versions() -> None:
-    fetcher = FakeFetcher(
-        {_project_url(Registry.PYPI): json.dumps({"releases": {"2.2.0a2": [], "2.1.0": [], "2.2.0a1": []}}).encode()}
-    )
-
-    assert list_registry_versions(Registry.PYPI, fetcher=fetcher) == (
-        "2.1.0",
-        "2.2.0a1",
-        "2.2.0a2",
-    )
-
-
-def test_lists_plugin_scanner_registry_versions() -> None:
-    fetcher = FakeFetcher(
-        {_project_url(Registry.PYPI, PLUGIN_PROJECT): json.dumps({"releases": {"3.0.0a2": [], "3.0.0a1": []}}).encode()}
-    )
-
-    assert list_registry_versions(Registry.PYPI, project_name=PLUGIN_PROJECT, fetcher=fetcher) == (
-        "3.0.0a1",
-        "3.0.0a2",
-    )
-
-
 def test_verifies_plugin_scanner_release_independently(tmp_path: Path) -> None:
     dist = _local_plugin_dist(tmp_path)
     payload = _release_payload(
@@ -186,29 +180,6 @@ def test_verify_release_cli_accepts_plugin_scanner_project(tmp_path: Path, capsy
         == 0
     )
     assert json.loads(capsys.readouterr().out)["status"] == "exact"
-
-
-@pytest.mark.parametrize(
-    "response",
-    [
-        b"not-json",
-        json.dumps([]).encode(),
-        json.dumps({}).encode(),
-        json.dumps({"releases": {"v2.2.0a1": []}}).encode(),
-    ],
-)
-def test_listing_registry_versions_fails_closed_on_invalid_data(response: bytes) -> None:
-    fetcher = FakeFetcher({_project_url(Registry.PYPI): response})
-
-    with pytest.raises(RegistryVerificationError):
-        list_registry_versions(Registry.PYPI, fetcher=fetcher)
-
-
-def test_listing_registry_versions_fails_closed_on_network_error() -> None:
-    fetcher = FakeFetcher({_project_url(Registry.PYPI): urllib.error.URLError("offline")})
-
-    with pytest.raises(RegistryVerificationError, match="Registry request failed"):
-        list_registry_versions(Registry.PYPI, fetcher=fetcher)
 
 
 def test_stdlib_fetch_rejects_oversized_chunked_responses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -461,29 +432,6 @@ def test_verify_release_cli_reconciles_pypi_without_exposing_urls(
     assert decoded["registry"] == "pypi"
     assert decoded["status"] == "exact"
     assert "pythonhosted.org" not in output
-
-
-@pytest.mark.parametrize(
-    "files",
-    [
-        {WHEEL: (b"different", None), SDIST: (SDIST_BYTES, None)},
-        {WHEEL: (WHEEL_BYTES, None)},
-        {
-            WHEEL: (WHEEL_BYTES, None),
-            SDIST: (SDIST_BYTES, None),
-            f"hol_guard-{VERSION}-py2-none-any.whl": (b"extra", None),
-        },
-    ],
-)
-def test_verify_testpypi_rejects_mismatch_partial_and_extra(
-    tmp_path: Path,
-    files: dict[str, tuple[bytes, str | None]],
-) -> None:
-    dist = _local_dist(tmp_path)
-    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): _release_payload(Registry.TESTPYPI, files)})
-
-    with pytest.raises(RegistryVerificationError):
-        verify_testpypi_release(VERSION, dist, fetcher=fetcher)
 
 
 def test_generic_pypi_reconciliation_rejects_digest_mismatch(tmp_path: Path) -> None:

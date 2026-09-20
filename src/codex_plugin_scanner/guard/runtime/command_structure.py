@@ -11,7 +11,8 @@ from typing import Literal, Protocol
 from .shell_structure import ShellHeredoc, ShellScanState
 
 _REDIRECT_PATTERN = re.compile(
-    r"(?<![<>])(?P<operator>(?:\d*)>>?|(?:\d*)<)(?![<>&])\s*(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
+    r"(?<![<>])(?P<operator>(?:\d*)(?:<>|>\||>>?|<))(?![<>&])\s*"
+    r"(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
 )
 
 

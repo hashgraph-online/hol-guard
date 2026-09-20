@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.noodle",
+  "version": "1.0.0",
+  "name": "Noodle",
+  "description": "Reviews Noodle terminal REST client request and collection runs.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.wilfredinni",
+    "displayName": "Community",
+    "url": "https://github.com/wilfredinni/noodle"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#1F3A8A" },
+  "homepage": "https://github.com/wilfredinni/noodle",
+  "license": "MIT",
+  "executables": ["noodle"],
+  "ecosystemIds": ["noodle"],
+  "riskClasses": ["execution", "network_egress"],
+  "actionClasses": ["Noodle request execution command"],
+  "referenceUrls": ["https://github.com/wilfredinni/noodle"],
+  "saferAlternatives": ["Inspect the resolved method, URL, and environment before running."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_noodle_extensions"
+  }
+}

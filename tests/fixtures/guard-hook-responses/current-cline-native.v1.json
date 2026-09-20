@@ -1,0 +1,164 @@
+{
+  "schema": "hol-guard.current-cline-native-responses.v1",
+  "captured_source": "e44008445630aad28ccc291ec234f55a14892e6d",
+  "source_role": "Current supplemental response/exit fixture; original2e corpus unchanged",
+  "native_policy_boundary": "modeled_child_not_native_execution",
+  "events": [
+    "PreToolUse",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "TaskStart",
+    "TaskError",
+    "SessionShutdown"
+  ],
+  "nonblocking_events": [
+    "PostToolUse",
+    "UserPromptSubmit",
+    "TaskStart",
+    "TaskError",
+    "SessionShutdown"
+  ],
+  "input_bytes_limit": 262144,
+  "input_depth_limit": 48,
+  "exit_code": 0,
+  "conditions": {
+    "completed_allow": {
+      "blocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": ""
+      },
+      "nonblocking": {
+        "cancel": false,
+        "contextModification": ""
+      },
+      "child_invoked": true,
+      "completion_proof": true
+    },
+    "completed_deny": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "Synthetic completed refusal.",
+        "contextModification": "Synthetic completed refusal."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "contextModification": "Synthetic completed refusal."
+      },
+      "child_invoked": true,
+      "completion_proof": true
+    },
+    "child_unavailable": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.",
+        "contextModification": "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "child_invalid_json": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.",
+        "contextModification": "HOL Guard returned an invalid decision; this Cline action was not allowed to proceed."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard returned an invalid decision; this Cline action was not allowed to proceed."
+      },
+      "child_invoked": true,
+      "completion_proof": false
+    },
+    "malformed_input": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard could not parse the Cline hook request safely.",
+        "contextModification": "HOL Guard could not parse the Cline hook request safely."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard could not parse the Cline hook request safely."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "nonobject_input": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard rejected an invalid Cline hook request.",
+        "contextModification": "HOL Guard rejected an invalid Cline hook request."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard rejected an invalid Cline hook request."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "overdepth_input": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard rejected an invalid Cline hook request.",
+        "contextModification": "HOL Guard rejected an invalid Cline hook request."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard rejected an invalid Cline hook request."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "oversize_input": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard rejected an oversized Cline hook request.",
+        "contextModification": "HOL Guard rejected an oversized Cline hook request."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard rejected an oversized Cline hook request."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "missing_transport": {
+      "blocking": {
+        "cancel": true,
+        "errorMessage": "HOL Guard Cline transport state is unavailable; this action was not allowed to proceed safely.",
+        "contextModification": "HOL Guard Cline transport state is unavailable; this action was not allowed to proceed safely."
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": "HOL Guard Cline transport state is unavailable; this action was not allowed to proceed safely."
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    },
+    "inactive_transport": {
+      "blocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": ""
+      },
+      "nonblocking": {
+        "cancel": false,
+        "errorMessage": "",
+        "contextModification": ""
+      },
+      "child_invoked": false,
+      "completion_proof": false
+    }
+  }
+}

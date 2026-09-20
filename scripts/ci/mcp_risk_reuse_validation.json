@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "classification": "mcp_risk_reuse_functional_regression",
+  "source_files": [
+    "src/codex_plugin_scanner/guard/mcp_approval_risk.py",
+    "src/codex_plugin_scanner/guard/mcp_request_risk.py",
+    "src/codex_plugin_scanner/guard/mcp_risk_dependencies.py",
+    "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
+    "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+    "tests/test_mcp_approval_risk_projection.py",
+    "tests/test_mcp_approval_risk_projection_guards.py",
+    "tests/test_mcp_invocation_risk_pair.py",
+    "tests/test_mcp_risk_dependencies.py",
+    "tests/test_mcp_request_risk_facts.py",
+    "tests/test_mcp_risk_prefilter.py",
+    "tests/test_mcp_invocation_risk_identity.py",
+    "src/codex_plugin_scanner/guard/mcp_risk_stdlib.py",
+    "tests/test_mcp_risk_stdlib.py"
+  ],
+  "tests": [
+    "tests/test_mcp_risk_dependencies.py",
+    "tests/test_mcp_invocation_risk_pair.py",
+    "tests/test_mcp_request_risk_facts.py",
+    "tests/test_runtime_mcp_authority_callbacks.py",
+    "tests/test_runtime_mcp_tool_call_binding.py",
+    "tests/test_guard_browser_mcp_intent.py",
+    "tests/test_mcp_risk_prefilter.py",
+    "tests/test_mcp_package_drain_authority_review.py",
+    "tests/test_mcp_approval_risk_projection.py",
+    "tests/test_mcp_approval_risk_projection_guards.py",
+    "tests/test_mcp_invocation_risk_identity.py",
+    "tests/test_mcp_risk_stdlib.py"
+  ],
+  "approval_positive_nodes": [
+    "test_one_pure_analysis_supplies_decision_pending_summary_and_receipt[zero]",
+    "test_one_pure_analysis_supplies_decision_pending_summary_and_receipt[single]",
+    "test_one_pure_analysis_supplies_decision_pending_summary_and_receipt[multiple]",
+    "test_one_pure_analysis_supplies_decision_pending_summary_and_receipt[browser]",
+    "test_real_stdio_review_queues_and_records_without_forwarding_or_rederiving",
+    "test_path_constructor_namespace_is_available_from_exact_class_dictionary"
+  ],
+  "additional_required_nodes": [
+    "test_real_unreadable_launch_identities_are_not_reused_or_masked",
+    "test_live_stdlib_producers_have_bound_state"
+  ],
+  "platforms": {
+    "linux-x64": [
+      [
+        "Linux",
+        "x86_64"
+      ]
+    ],
+    "mac-arm64": [
+      [
+        "Darwin",
+        "arm64"
+      ]
+    ],
+    "mac-intel": [
+      [
+        "Darwin",
+        "x86_64"
+      ]
+    ],
+    "windows-x64": [
+      [
+        "Windows",
+        "AMD64"
+      ],
+      [
+        "Windows",
+        "x86_64"
+      ]
+    ]
+  },
+  "platform_python_versions": {
+    "linux-x64": [
+      "3.10",
+      "3.11",
+      "3.12",
+      "3.13",
+      "3.14"
+    ],
+    "mac-arm64": [
+      "3.12"
+    ],
+    "mac-intel": [
+      "3.12"
+    ],
+    "windows-x64": [
+      "3.12"
+    ]
+  },
+  "scope": {
+    "performance_qualification": false,
+    "windows_descendant_retirement_proven": false,
+    "linux_declared_interpreters": "3.10–3.14",
+    "other_platforms": "Python 3.12",
+    "timeout_policy": "Stop after a timed-out stage; preserve original output and direct-process cleanup status."
+  }
+}

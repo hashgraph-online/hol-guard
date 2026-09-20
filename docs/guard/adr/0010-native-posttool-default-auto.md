@@ -1,12 +1,14 @@
 # ADR 0010: Default eligible PostToolUse review to bundled Rust
 
+> Current-scope correction: default auto and exclusive supported native evaluation remain in force. The blanket statement below that every unavailable/malformed native result is delivered as a denial is superseded by [the RSP-024 technical review](../native-runtime-technical-contract-review.md). Native evaluation failure, Watch presentation, event-specific availability and delivered harness output are distinct. The historical Evidence paragraph is not proof of current-source installed qualification.
+
 Status: accepted for `main`.
 
 ## Decision
 
 HOL Guard 3.x selects `HOL_GUARD_NATIVE=auto` when the variable is not set. The verified, version-matched Rust runtime is the exclusive semantic authority for supported command `PreToolUse` and `PostToolUse` review on published native wheels.
 
-Python remains the control plane: authentication, transport, harness rendering, approval continuation, and bounded evidence. It is not a semantic fallback for those supported events. Unsupported `PreToolUse` tools still raise `HookWorkerUnsupported` so the existing CLI path can coordinate policy and approval UX.
+Python remains the control plane: authentication, transport, harness rendering, approval continuation, and bounded evidence. It is not a semantic fallback for those supported events. Unsupported inputs use the native conservative floor or fail closed; no automatic Python evaluator fallback is permitted.
 
 ## Security boundary
 
@@ -16,7 +18,11 @@ Secret-bearing output remains blocked by the Rust path. Native unavailability, i
 
 ## Rollback
 
-`HOL_GUARD_NATIVE=off` is the immediate local and managed rollback. `shadow` keeps Python authoritative while collecting native evidence. `force` requires native even for developer overrides. Invalid or empty values resolve to the product default instead of silently disabling Rust.
+`HOL_GUARD_NATIVE=off` is an explicit fail-safe disablement, not a semantic
+rollback. `shadow` is diagnostic-only and may compare against the Python
+reference only on an explicitly marked non-production surface. `force` requires
+native even for developer overrides. Invalid or empty values resolve to the
+product default instead of silently disabling Rust.
 
 ## Evidence
 

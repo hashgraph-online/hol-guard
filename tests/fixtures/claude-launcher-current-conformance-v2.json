@@ -1,0 +1,47 @@
+{
+  "schema": "guard-claude-current-source-conformance.v2",
+  "source_revision": "ad9d9238e5f6cb01d392d0ed6c01389bbb41ec7d",
+  "source_tree": "19977465d6e419f1276d75fb6bd1b3477f5c9720",
+  "python_execution": "current_adapter_registered_python_argv",
+  "installed_artifact": false,
+  "qualification_complete": false,
+  "historical_auth_provenance": {
+    "fixture": "tests/fixtures/claude-launcher-pilot-auth.json",
+    "fixture_sha256": "ebf41a37cfe9e6e05bcd9f5161874a3e1329015bb990f779e238d3c8f4b3571a",
+    "revision": "ae33987d0c8675c36a77375e03419aee920825f6",
+    "generator": "scripts/generate_claude_launcher_auth_vectors.py",
+    "generator_sha256": "03fa95cd2b9366c8913ac5b703f153c64f2b917e1d1ba953825486ca0debeeb5",
+    "module": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_auth.py",
+    "module_sha256": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+    "historical_bridge_executed": false
+  },
+  "bridge_modules": {
+    "adapters/claude_daemon_hook_bridge.py": "596e5b982813fb5400c8dc900259b5dd302641b84251bb44df32cf1cad665b0b",
+    "adapters/claude_daemon_hook_transport.py": "9a01c09bd0f1ce2f8b0352154a3253fbc070395be18d4f0365406aca4c12253e",
+    "adapters/codex_daemon_hook_auth.py": "f989759d4c231a8a4800e4505dce48e7eea4bdefab821817cd7260516da21876",
+    "adapters/claude_daemon_state.py": "14859cac506d29ced21ea2b6a1609d10279e0d988ef88a54592203cfd719cc7e"
+  },
+  "marker_source": {
+    "module": "adapters/claude_hook_config.py",
+    "sha256": "a452508d7650662709fba99632befdea0a019b66957dc1ffdf67e24c6d4c2f61"
+  },
+  "reviewed_import_delta": {
+    "module": "adapters/claude_daemon_hook_bridge.py",
+    "historical_sha256": "4a57d7ac27bbd57695e5696b61fcabe5ec07f61af4a148e61aa3483cc70397f5",
+    "current_sha256": "596e5b982813fb5400c8dc900259b5dd302641b84251bb44df32cf1cad665b0b",
+    "removed": "from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER",
+    "added": "from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER",
+    "scope": "Only the marker import changes; inverse edit must reproduce the exact historical bridge bytes."
+  },
+  "reviewed_windows_reader_delta": {
+    "module": "adapters/codex_daemon_hook_auth.py",
+    "historical_sha256": "97efff612c70b1e02f3bd1bf21b600c1095daee5a35cf57114802b693f50ed6b",
+    "current_sha256": "f989759d4c231a8a4800e4505dce48e7eea4bdefab821817cd7260516da21876",
+    "added": "        if os.name == \"nt\":\n            from ..windows_replaceable_file import read_replaceable_text\n\n            return read_replaceable_text(path).strip()\n",
+    "providers": {
+      "windows_replaceable_file.py": "ccc6b88c70dac5bc80c340b0bc4712e0ae588a123623b4bc3e34616d9b684fb9",
+      "windows_paths.py": "b93ca4e5361c9dbda0ea273be903b4ed7225dc21ec5bfaf3a7da5ddb892cf79d"
+    },
+    "scope": "Exact Windows-only private-file read branch; inverse deletion reproduces historical auth bytes. Current reader providers are separately pinned; historical vectors do not certify Windows replacement behavior."
+  }
+}

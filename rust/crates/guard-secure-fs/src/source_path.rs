@@ -187,6 +187,10 @@ fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
         for root in KNOWN_SKILL_DOC_ROOTS {
             let skill_dir = home.join(root).join(candidate);
             let skill_file = skill_dir.join("SKILL.md");
+            #[cfg(windows)]
+            if contains_symlink_component(&skill_file) {
+                continue;
+            }
             let Ok(real_dir) = fs::canonicalize(&skill_dir) else {
                 continue;
             };
@@ -223,6 +227,27 @@ pub fn classify_source_path(
     if stripped.is_empty() {
         return SourcePathDecision::deny("empty_path");
     }
+    let lexical_path = Path::new(stripped);
+    if lexical_path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return SourcePathDecision::deny("path_traversal");
+    }
+    if stripped
+        .chars()
+        .any(|character| matches!(character, '*' | '?' | '{' | '}'))
+    {
+        return SourcePathDecision::deny("glob_pattern");
+    }
+    let lexical_parts = lowered_parts(lexical_path);
+    if sensitive_path_family(lexical_path).is_some()
+        || lexical_parts
+            .iter()
+            .any(|part| SENSITIVE_SEARCH_BASENAMES.contains(&part.as_str()))
+    {
+        return SourcePathDecision::deny("sensitive_basename");
+    }
     if let Some(home) = home {
         if let Some(skill_path) = known_skill_doc_path(stripped, home) {
             return SourcePathDecision::allow("known_skill_doc_path", skill_path);
@@ -232,18 +257,15 @@ pub fn classify_source_path(
             && fs::symlink_metadata(&safety)
                 .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
         {
+            #[cfg(windows)]
+            if contains_symlink_component(&safety) {
+                return SourcePathDecision::deny("symlink_in_path");
+            }
             if let Ok(real) = fs::canonicalize(safety) {
                 return SourcePathDecision::allow("guard_safety_doc_path", real);
             }
         }
     }
-    if stripped
-        .chars()
-        .any(|character| matches!(character, '*' | '?' | '{' | '}'))
-    {
-        return SourcePathDecision::deny("glob_pattern");
-    }
-
     let Ok(workspace) = fs::canonicalize(cwd) else {
         return SourcePathDecision::deny("unresolved_path");
     };

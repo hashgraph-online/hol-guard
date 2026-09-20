@@ -53,8 +53,11 @@ from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_beni
 from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
 
-EVALUATION_SHARD_COUNT: Final = 4
-MAX_CONCURRENT_WORKERS: Final = EVALUATION_SHARD_COUNT
+# Keep process concurrency bounded while scheduling smaller deterministic
+# partitions. Equal case counts do not imply equal evaluator costs; one
+# coarse partition must not leave the other workers idle at the tail.
+MAX_CONCURRENT_WORKERS: Final = 4
+EVALUATION_SHARD_COUNT: Final = MAX_CONCURRENT_WORKERS * 4
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 
@@ -80,7 +83,23 @@ def evaluate_decision_diff_shards() -> tuple[DecisionDiffShard, ...]:
         return tuple(executor.map(_evaluate_shard, range(EVALUATION_SHARD_COUNT)))
 
 
+def _pin_neutral_attribution() -> None:
+    """Keep corpus evaluation independent of the developer or CI harness."""
+
+    import os
+
+    from tests.harness_attribution_env import HARNESS_ENV_MARKERS
+
+    for marker in HARNESS_ENV_MARKERS:
+        os.environ.pop(marker, None)
+    os.environ["__CFBundleIdentifier"] = "com.apple.Terminal"  # noqa: SIM112
+    from codex_plugin_scanner.guard.runtime import package_protect_projection
+
+    package_protect_projection.resolve_parent_process_harness = lambda: None
+
+
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
+    _pin_neutral_attribution()
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     legacy_ids: defaultdict[str, list[str]] = defaultdict(list)
     reconciliation_ids: defaultdict[str, list[str]] = defaultdict(list)
@@ -100,20 +119,20 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
             "|".join((current.action, current.disposition.value, proposed.action, proposed.disposition.value))
         ].append(case.case_id)
         legacy_ids[f"{legacy_action}|{current.action}"].append(case.case_id)
-        lowered_count += guard_action_severity(proposed.action) < guard_action_severity(current.action)
-        legacy_lowered_count += guard_action_severity(current.action) < guard_action_severity(legacy_action)
+        proposed_rank = guard_action_severity(proposed.action)
+        current_rank = guard_action_severity(current.action)
+        legacy_rank = guard_action_severity(legacy_action)
+        lowered_count += proposed_rank < current_rank
+        legacy_lowered_count += current_rank < legacy_rank
         disposition_changed_count += current.disposition is not proposed.disposition
 
         reconciliation = _reconciliation_category(legacy_action, current.action, oracle.minimum_floor)
         reconciliation_ids[
             "|".join((reconciliation, legacy_action, current.action, oracle.minimum_floor, oracle.owner))
         ].append(case.case_id)
-        if guard_action_severity(current.action) != guard_action_severity(oracle.minimum_floor):
-            kind = (
-                "underclassified"
-                if guard_action_severity(current.action) < guard_action_severity(oracle.minimum_floor)
-                else "overclassified"
-            )
+        oracle_rank = guard_action_severity(oracle.minimum_floor)
+        if current_rank != oracle_rank:
+            kind = "underclassified" if current_rank < oracle_rank else "overclassified"
             actual_gap_ids["|".join((oracle.owner, kind, oracle.minimum_floor, current.action))].append(case.case_id)
 
     return DecisionDiffShard(

@@ -1960,6 +1960,7 @@ def test_guard_install_codex_workspace_refuses_to_rebind_global_managed_hook(tmp
     assert len(home_config["hooks"]["PermissionRequest"]) == 1
     assert len(home_config["hooks"]["UserPromptSubmit"]) == 1
     assert len(home_config["hooks"]["PostToolUse"]) == 1
+    assert home_config["hooks"]["PostToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_POST_TOOL_MATCHER
     managed_group = home_config["hooks"]["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]

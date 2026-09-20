@@ -1,0 +1,112 @@
+name: MCP risk reuse regression
+
+on:
+  pull_request:
+    paths:
+      - "src/codex_plugin_scanner/**"
+      - "tests/test_mcp*.py"
+      - "tests/test_runtime_mcp*.py"
+      - "tests/test_guard_browser_mcp_intent.py"
+      - "tests/test_guard*mcp*.py"
+      - "tests/conftest.py"
+      - "tests/guard_test_invariants.py"
+      - "tests/bundle_first_cloud.py"
+      - "tests/test_guard_supply_chain_evaluator.py"
+      - "conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/ci/*mcp*risk*"
+      - "scripts/ci/validate_mcp_risk_reuse.py"
+      - ".github/workflows/mcp-risk-reuse.yml"
+  push:
+    branches: [release/3.2]
+    paths:
+      - "src/codex_plugin_scanner/**"
+      - "tests/test_mcp*.py"
+      - "tests/test_runtime_mcp*.py"
+      - "tests/test_guard_browser_mcp_intent.py"
+      - "tests/test_guard*mcp*.py"
+      - "tests/conftest.py"
+      - "tests/guard_test_invariants.py"
+      - "tests/bundle_first_cloud.py"
+      - "tests/test_guard_supply_chain_evaluator.py"
+      - "conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/ci/*mcp*risk*"
+      - "scripts/ci/validate_mcp_risk_reuse.py"
+      - ".github/workflows/mcp-risk-reuse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cell: linux-x64
+            runner: ubuntu-latest
+            python: "3.10"
+          - cell: linux-x64
+            runner: ubuntu-latest
+            python: "3.11"
+          - cell: linux-x64
+            runner: ubuntu-latest
+            python: "3.12"
+          - cell: linux-x64
+            runner: ubuntu-latest
+            python: "3.13"
+          - cell: linux-x64
+            runner: ubuntu-latest
+            python: "3.14"
+          - cell: mac-arm64
+            runner: macos-15
+            python: "3.12"
+          - cell: mac-intel
+            runner: macos-15-intel
+            python: "3.12"
+          - cell: windows-x64
+            runner: windows-latest
+            python: "3.12"
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 45
+    env:
+      RSP100_EVIDENCE_DIR: mcp-risk-reuse-evidence
+      UV_NO_PROGRESS: "1"
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: "false"
+      RSP100_PLATFORM_CELL: ${{ matrix.cell }}
+      RSP100_PYTHON_VERSION: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify bound source before dependency installation
+        run: python scripts/ci/validate_mcp_risk_reuse.py --bind-only
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: false
+      - name: Install frozen development dependencies
+        timeout-minutes: 10
+        run: uv sync --frozen --extra dev --python '${{ matrix.python }}'
+      - name: Import, prove positive admission, and run bounded controls
+        if: always()
+        run: python scripts/ci/validate_mcp_risk_reuse.py
+      - name: Preserve all source, result and failure records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mcp-risk-reuse-${{ matrix.cell }}-python${{ matrix.python }}
+          path: mcp-risk-reuse-evidence/
+          if-no-files-found: error

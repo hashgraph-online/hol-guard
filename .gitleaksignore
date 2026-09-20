@@ -1,1 +1,173 @@
 47e80fd309a92b2a495aaeac60cb4cebbf952f6a:tests/guard_review_signing_helpers.py:private-key:16
+# Synthetic deterministic Ed25519 test key; no literal private key is stored.
+1e4e87e64c3ccfb870fb45de285d88b59e38a755:tests/test_final_release_evidence.py:generic-api-key:77
+c8b599fa1a262de4751062063677b74e915344c8:tests/test_final_release_evidence.py:generic-api-key:77
+# The test helper was renamed after this commit changed the flagged signature.
+41109cbe4130f4f2c1f8da28e1a3b6e0128f64f7:tests/test_final_release_evidence.py:generic-api-key:77
+ecab2b4949aa53c67014ad06b5162dde273266d6:tests/test_final_release_evidence.py:generic-api-key:77
+# Historical Sonar review: source_sha256 records a code digest under an oauth_client.py path, not an API credential.
+b81cb35213f4a0cf8d5fb0e87ef8cda60ba0ddc0:docs/guard/security/sonar-audit-origin-review.json:generic-api-key:11
+# Historical synthetic AWS key used only for scanner cache parity; current fixture constructs it explicitly.
+b9dd466a20b123d0fe777b85a979db519b51f5bc:tests/test_guard_secret_git_batch.py:aws-access-token:196
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:tests/fixtures/claude-launcher-pilot-auth.json:generic-api-key:9
+
+# Exact historical evidence false positives independently reviewed at D104.
+# 184 matches / 143 fingerprints: source and artifact digests, plus Sonar issue identifiers.
+# All affected evidence files remain deleted. No path, rule, or value allowlist.
+# Per-fingerprint provenance and exact-range replay are retained on the separate review evidence branch.
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:433
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:437
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:439
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:440
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:441
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/linux-receipt.json:generic-api-key:442
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:433
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:437
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:439
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:440
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:441
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macarm-receipt.json:generic-api-key:442
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:433
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:437
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:439
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:440
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:441
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/macintel-receipt.json:generic-api-key:442
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:373
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:377
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:379
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:380
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:381
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/evidence/scanner-installed-9db/windows-receipt.json:generic-api-key:382
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/codeql-356-source-review.json:generic-api-key:21
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-issues.json:generic-api-key:1
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:113
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:132
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:151
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:170
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:189
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:208
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:227
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:246
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:265
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:284
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:303
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:322
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:341
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:360
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:379
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:398
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:417
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:436
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:455
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:474
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:493
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:512
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:531
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:550
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:569
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:588
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:607
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:626
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:645
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:664
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:683
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:702
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:721
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:740
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:759
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:780
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:805
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:830
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:857
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:884
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:911
+647ff7dccbc287401933ff807d11937227ac3348:docs/guard/security/sonar-rsp-9db-review.json:generic-api-key:94
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:433
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:437
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:439
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:440
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:441
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-linux.json:generic-api-key:442
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:433
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:437
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:439
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:440
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:441
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macarm.json:generic-api-key:442
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:433
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:437
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:439
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:440
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:441
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/evidence/rsp-scanner-installed-abf-macintel.json:generic-api-key:442
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/rust-performance/claude-component-evidence.json:generic-api-key:62
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/rust-performance/claude-component-evidence.json:generic-api-key:73
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/rust-performance/claude-component-evidence.json:generic-api-key:79
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/rust-performance/reproducibility/manifest.json:generic-api-key:321
+a4a2bd0437f3229d669f210cda224a3ed5cb44e3:docs/guard/rust-performance/reproducibility/manifest.json:generic-api-key:322
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:433
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:437
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:439
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:440
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:441
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-bound-linux.json:generic-api-key:442
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:21
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:26
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:28
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:29
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:30
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-encoding-validation-linux.json:generic-api-key:31
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:433
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:437
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:439
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:440
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:441
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-bound-linux.json:generic-api-key:442
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:21
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:26
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:28
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:29
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:30
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-launcher-validation-linux.json:generic-api-key:31
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:349
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:353
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:355
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:356
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:357
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-attempt-linux.json:generic-api-key:358
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:377
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:381
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:383
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:384
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:385
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-final-linux.json:generic-api-key:386
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:417
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:421
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:423
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:424
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:425
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-pure-wheel-semantic-status-linux.json:generic-api-key:426
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-semantic-validation-linux.json:generic-api-key:10
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-semantic-validation-linux.json:generic-api-key:11
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-semantic-validation-linux.json:generic-api-key:6
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-semantic-validation-linux.json:generic-api-key:8
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-installed-semantic-validation-linux.json:generic-api-key:9
+abf319d5a345d761d88e26ba787026e98370c26f:docs/guard/evidence/rsp-scanner-working-reader-tests-linux.json:generic-api-key:45
+ae33987d0c8675c36a77375e03419aee920825f6:docs/guard/evidence/rsp-scanner-native-regex-tests-linux.json:generic-api-key:28
+ae33987d0c8675c36a77375e03419aee920825f6:docs/guard/evidence/rsp-scanner-native-regex-tests-linux.json:generic-api-key:29
+ae33987d0c8675c36a77375e03419aee920825f6:docs/guard/evidence/rsp-scanner-native-regex-tests-linux.json:generic-api-key:30
+ae33987d0c8675c36a77375e03419aee920825f6:docs/guard/evidence/rsp-scanner-native-regex-tests-linux.json:generic-api-key:31
+08621ad4a84bfa21c9c1602640886d37fb1e6bc4:tests/fixtures/claude-launcher-current-conformance.json:generic-api-key:21
+
+# Public source SHA-256 only: the 9,539-byte auth module in f8f190a2.
+# Exact source: src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_auth.py
+# SHA-256: f989759d4c231a8a4800e4505dce48e7eea4bdefab821817cd7260516da21876
+# Retain detection for every other commit, path, rule and line.
+f8f190a286159b46bf14a624a62ba52b5d2371a3:tests/fixtures/claude-launcher-current-conformance-v2.json:generic-api-key:21
+
+# Immutable AES-GCM known-answer fixture, not a credential.
+# Original encoded key decodes to sequential test bytes 0..31; Node vector and
+# unchanged ciphertext bind this public synthetic input. Current source constructs
+# the same bytes and checks the base64url roundtrip; retain this historical-only finding.
+4001185e4f39cad51fd5eab314bf02b86b8a1674:rust/crates/guard-runtime/src/edge_encrypted_tests.rs:generic-api-key:95

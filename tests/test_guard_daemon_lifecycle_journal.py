@@ -111,3 +111,15 @@ def test_daemon_records_ready_and_clean_stop_without_sqlite_dependency(tmp_path:
     session_ids = {event.get("session_id") for event in events}
     assert len(session_ids) == 1
     assert None not in session_ids
+
+
+def test_daemon_classifies_requested_sigint_as_clean_shutdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    monkeypatch.setattr(daemon._server, "serve_forever", lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+
+    daemon._serve_forever()
+
+    lifecycle = [(event["event"], event.get("reason")) for event in load_daemon_lifecycle_events(store.guard_home)]
+    assert ("serve_failed", "unexpected_exception") not in lifecycle
+    assert lifecycle[-1] == ("stopped", "requested_shutdown")

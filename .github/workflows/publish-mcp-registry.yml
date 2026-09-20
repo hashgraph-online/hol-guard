@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: hol-guard-mcp-registry-${{ github.ref }}
@@ -15,6 +14,9 @@ concurrency:
 jobs:
   publish:
     name: Publish verified MCP metadata
+    permissions:
+      contents: read
+      id-token: write
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       !contains(github.event.head_commit.message || '', '[skip release publish]')

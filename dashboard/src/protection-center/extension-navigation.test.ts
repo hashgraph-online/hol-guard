@@ -6,6 +6,8 @@ const searchConsoleSource = readFileSync(new URL("./components/pattern-search-co
 const modalLayerSource = readFileSync(new URL("../guard-modal-layer.tsx", import.meta.url), "utf8");
 const overlayRootSource = readFileSync(new URL("../guard-overlay-root.ts", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+const appDataSource = readFileSync(new URL("../use-app-data.ts", import.meta.url), "utf8");
+const appRoutingSource = readFileSync(new URL("../app-routing.ts", import.meta.url), "utf8");
 
 assert.match(workspaceSource, /data-testid="extensions-workspace"/);
 assert.match(workspaceSource, /pushExtensionHistory/);
@@ -19,9 +21,12 @@ assert.doesNotMatch(searchConsoleSource, /type="search"/);
 
 assert.match(modalLayerSource, /ensureGuardOverlayRoot/);
 assert.match(modalLayerSource, /setOverlayRoot\(ensureGuardOverlayRoot\(\)\)/);
-assert.match(appSource, /input\[role="searchbox"\]/);
-assert.match(appSource, /closest\("\[hidden\], \[inert\]"\)/);
-assert.match(appSource, /function focusVisibleDashboardSearch/);
+assert.match(appRoutingSource, /input\[role="searchbox"\]/);
+assert.match(appRoutingSource, /closest\("\[hidden\], \[inert\]"\)/);
+assert.match(appRoutingSource, /function focusVisibleDashboardSearch/);
+assert.match(appSource, /const data = useAppData\(\)/);
+assert.match(appDataSource, /focusVisibleDashboardSearch,?\s*\} from "\.\/app-routing"/);
+assert.match(appDataSource, /if \(focusVisibleDashboardSearch\(\)\)/);
 
 assert.match(overlayRootSource, /guard-dashboard-root/);
 assert.match(overlayRootSource, /insertBefore/);

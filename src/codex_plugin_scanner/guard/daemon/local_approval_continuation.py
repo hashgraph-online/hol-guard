@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
 
 from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
 from ..codex_resume import defer_request_resume_to_live_hook, retry_request_resume
@@ -20,6 +21,7 @@ def apply_local_approval_continuation(
     harness: str,
     copy: dict[str, str],
     now: Callable[[], str],
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> tuple[dict[str, object], dict[str, str]]:
     resolved_request = store.get_approval_request(request_id)
     if not isinstance(resolved_request, dict) or action not in {"allow", "block"}:
@@ -31,6 +33,7 @@ def apply_local_approval_continuation(
             action=action,
             now=now(),
             headless=False,
+            config_reader=config_reader,
         )
         harness_resume = continuation.get("harnessResume")
         if isinstance(harness_resume, dict):
@@ -43,6 +46,7 @@ def apply_local_approval_continuation(
         action=action,
         request=resolved_request,
         now=now,
+        config_reader=config_reader,
     )
     if codex_resume is None:
         return updated, copy
@@ -68,6 +72,7 @@ def _codex_continuation(
     action: str,
     request: dict[str, object],
     now: Callable[[], str],
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
     timestamp = now()
     codex_resume = defer_request_resume_to_live_hook(
@@ -75,6 +80,7 @@ def _codex_continuation(
         request_id=request_id,
         action=action,
         now=timestamp,
+        config_reader=config_reader,
     )
     if codex_resume is not None:
         return codex_resume
@@ -87,6 +93,7 @@ def _codex_continuation(
             action=action,
             now=timestamp,
             headless=False,
+            config_reader=config_reader,
         )
         retry_payload = continuation.get("codexResume")
         if isinstance(retry_payload, dict):

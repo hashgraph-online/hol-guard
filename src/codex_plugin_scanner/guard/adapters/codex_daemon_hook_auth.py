@@ -66,6 +66,10 @@ def _private_file_text(path: Path, *, label: str) -> str:
         if stat.S_IMODE(parent_metadata.st_mode) & 0o077 or stat.S_IMODE(metadata.st_mode) & 0o077:
             raise ValueError(f"{label} permissions are not owner-only")
     try:
+        if os.name == "nt":
+            from ..windows_replaceable_file import read_replaceable_text
+
+            return read_replaceable_text(path).strip()
         return path.read_text(encoding="utf-8").strip()
     except OSError as error:
         raise ValueError(f"{label} is unreadable") from error

@@ -1,37 +1,13 @@
-import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
-
-import {
-  clearPolicy,
-  fetchDiff,
-  fetchInventory,
-  fetchLatestReceipt,
-  fetchPolicies,
-  fetchPolicy,
-  fetchReceipts,
-  fetchRequest,
-  fetchMcpPolicyRequest,
-  fetchApprovalPage,
-  fetchAllPendingRequests,
-  fetchInboxState,
-  fetchRuntimeSnapshot,
-  fetchSettings,
-  fetchGuardUpdateStatus,
-  guardAwareHref,
-  bulkAllowReadOnce,
-  repairApprovalCenter,
-  resolveRequestWithQueueResult,
-  GuardRequestResolutionError,
-  retryResume,
-} from "./guard-api";
-import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
-import type { AppView } from "./approval-center-primitives";
-import { buildClearPayload } from "./clear-policy-payload";
-import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
+import { useMemo, Suspense } from "react";
+import { ApprovalCenterLayout } from "./approval-center-layout";
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
-import { runAutomaticProtectionRepair } from "./protection-repair-flow";
-import { selectNextAfterResolution } from "./queue-state";
-import { useRouteFocus } from "./use-route-focus";
+import { navigate, viewTitle } from "./app-routing";
+import { useAppData } from "./use-app-data";
+import { useAppActions } from "./use-app-actions";
+
+export { PROTECT_ROUTE, TODAY_EVIDENCE_ROUTE, viewTitle, parseAppDetail, resolveView } from "./app-routing";
+export { refreshStaleScopeContractSelection, shouldFetchArtifactDiff } from "./app-detail-state";
 
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
@@ -58,797 +34,61 @@ function LazyFallback() {
     </div>
   );
 }
-import type {
-  GuardApprovalGatePublicConfig,
-  GuardApprovalRequest,
-  GuardArtifactDiff,
-  GuardCodexResumeResult,
-  GuardPolicyDecision,
-  GuardReceipt,
-  GuardRuntimeSnapshot,
-  GuardInventoryItem,
-  DecisionScope,
-} from "./guard-types";
-
-type RequestState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardApprovalRequest[] };
-
-type DetailState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "stale" }
-  | {
-      kind: "ready";
-      item: GuardApprovalRequest;
-      diff: GuardArtifactDiff | null;
-      receipt: GuardReceipt | null;
-      policy: GuardPolicyDecision[];
-    }
-  | { kind: "mcp-policy"; requestId: string };
-
-type ReceiptsState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardReceipt[] };
-
-type RuntimeState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
-
-type PolicyState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardPolicyDecision[] };
-type InventoryState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardInventoryItem[] };
-
-function usePathname(): string {
-  const [pathname, setPathname] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  return pathname;
-}
-
-function navigate(pathname: string): void {
-  window.history.pushState({}, "", guardAwareHref(pathname));
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-function focusVisibleDashboardSearch(): boolean {
-  const candidates = document.querySelectorAll<HTMLInputElement>(
-    'input[type="search"], input[role="searchbox"]',
-  );
-  for (const input of candidates) {
-    if (input.closest("[hidden], [inert]")) continue;
-    input.focus();
-    return true;
-  }
-  return false;
-}
-
-function parseRequestId(pathname: string): string | null {
-  if (pathname.startsWith("/requests/")) {
-    return pathname.slice("/requests/".length);
-  }
-  if (pathname.startsWith("/approvals/")) {
-    return pathname.slice("/approvals/".length);
-  }
-  return null;
-}
-
-export const PROTECT_ROUTE = "/protect";
-export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
-
-export function viewTitle(view: AppView): string {
-  if (view === "home") return "Home";
-  if (view === "inbox") return "Inbox";
-  if (view === "fleet") return "Protect";
-  if (view === "evidence") return "Evidence";
-  if (view === "settings") return "Settings";
-  if (view === "supply-chain") return "Supply Chain";
-  if (view === "audit") return "Audit";
-  if (view === "policy") return "Rules & exceptions";
-  if (view === "feed-health") return "Feed Health";
-  if (view === "about") return "About";
-  if (view === "extensions") return "Extensions";
-  return "App detail";
-}
-
-export function parseAppDetail(pathname: string): string | null {
-  if (!pathname.startsWith("/apps/")) {
-    return null;
-  }
-  const rawSlug = pathname.slice("/apps/".length);
-  try {
-    return normalizeHarnessSlug(decodeURIComponent(rawSlug));
-  } catch {
-    return null;
-  }
-}
-
-export function resolveView(pathname: string): AppView {
-  if (parseAppDetail(pathname) !== null) {
-    return "app-detail";
-  }
-  if (pathname.startsWith("/apps/")) {
-    return "fleet";
-  }
-  if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
-    return "extensions";
-  }
-  if (pathname === "/settings") {
-    return "settings";
-  }
-  if (pathname === PROTECT_ROUTE) {
-    return "fleet";
-  }
-  if (pathname === "/evidence") {
-    return "evidence";
-  }
-  if (pathname === "/supply-chain") {
-    return "supply-chain";
-  }
-  if (pathname === "/audit") {
-    return "audit";
-  }
-  if (pathname === "/policy") {
-    return "policy";
-  }
-  if (pathname === "/feed-health") {
-    return "feed-health";
-  }
-  if (pathname === "/about") {
-    return "about";
-  }
-  if (
-    pathname === "/inbox" ||
-    pathname === "/requests" ||
-    pathname === "/approvals" ||
-    pathname.startsWith("/requests/") ||
-    pathname.startsWith("/approvals/")
-  ) {
-    return "inbox";
-  }
-  return "home";
-}
-
-async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kind: "idle" | "loading" }>> {
-  try {
-    const item = await fetchRequest(requestId);
-    const [diff, receipt, policy] = await Promise.all([
-      shouldFetchArtifactDiff(item.artifact_type)
-        ? fetchDiff(item.artifact_id, item.harness)
-        : Promise.resolve(null),
-      fetchLatestReceipt(item.artifact_id, item.harness),
-      fetchPolicy(item.harness)
-    ]);
-    return { kind: "ready", item, diff, receipt, policy };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("404")) {
-      // VPC045-047/056: a 404 on /v1/requests/<id> may mean this is a staged
-      // MCP policy creation request rather than a regular approval. Probe the
-      // MCP endpoint; if it exists, render the MCP panel. Otherwise fall back
-      // to the stale state so the inbox shows an honest "gone" message.
-      try {
-        const mcpRequest = await fetchMcpPolicyRequest(requestId);
-        if (mcpRequest !== null) {
-          return { kind: "mcp-policy", requestId };
-        }
-      } catch {
-        // Swallow — the original 404 is the source of truth here.
-      }
-      return { kind: "stale" };
-    }
-    return {
-      kind: "error",
-      message: message.length > 0 ? message : "Unable to load the approval request."
-    };
-  }
-}
-
-export async function refreshStaleScopeContractSelection<T>({
-  requestId,
-  refreshQueue,
-  loadSelectedDetail,
-  applySelectedDetail,
-}: {
-  requestId: string | null;
-  refreshQueue: () => Promise<void>;
-  loadSelectedDetail: (requestId: string) => Promise<T>;
-  applySelectedDetail: (detail: T) => void;
-}): Promise<void> {
-  await refreshQueue();
-  if (requestId === null) return;
-  applySelectedDetail(await loadSelectedDetail(requestId));
-}
-
-export function shouldFetchArtifactDiff(artifactType: string): boolean {
-  return new Set(["mcp_server", "skill", "skill_file"]).has(artifactType);
-}
 
 export function App() {
-  const pathname = usePathname();
-  const view = resolveView(pathname);
-  useRouteFocus(view);
-  const requestId = parseRequestId(pathname);
-  const appDetailHarness = parseAppDetail(pathname);
-  const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
-  const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
-  const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
-  const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
-  const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
-  const [inventory, setInventory] = useState<InventoryState>({ kind: "idle" });
-  const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
-  const [codexResume, setCodexResume] = useState<GuardCodexResumeResult | null>(null);
-  const [resolvedRequestId, setResolvedRequestId] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
-  const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
-  const [guardVersion, setGuardVersion] = useState<string | null>(null);
-  const resolutionInFlight = useRef(false);
-  const bulkApproveInFlight = useRef(false);
-  const queuedItems = requests.kind === "ready" ? requests.items : [];
-  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
-
-  useEffect(() => {
-    if (activeRequestId === null) {
-      setDetail({ kind: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setDetail({ kind: "loading" });
-    loadDetail(activeRequestId).then((nextState) => {
-      if (!cancelled) {
-        setDetail(nextState);
-        if (nextState.kind === "ready") {
-          setRequests((current) => {
-            if (current.kind !== "ready" || current.items.some((item) => item.request_id === nextState.item.request_id)) {
-              return current;
-            }
-            return { kind: "ready", items: [nextState.item, ...current.items] };
-          });
-        }
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRequestId]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-      if (event.key === "?") {
-        event.preventDefault();
-        setHelpOpen((open) => !open);
-      }
-      if (event.key === "/") {
-        if (focusVisibleDashboardSearch()) {
-          event.preventDefault();
-        }
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let pollId: number | undefined;
-    let refreshInFlight = false;
-    let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
-    const needsRuntimeReceipts =
-      view === "home" ||
-      view === "fleet" ||
-      view === "app-detail" ||
-      view === "supply-chain" ||
-      view === "audit" ||
-      view === "feed-health";
-    const loadApprovalQueue = () => {
-      if (refreshInFlight || cancelled || resolutionInFlight.current) {
-        return;
-      }
-      refreshInFlight = true;
-      const queueErrorMessage = "Unable to load the local approval queue.";
-      const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
-      let pendingRequests: Promise<void>;
-      if (needsFullQueue) {
-        pendingRequests = fetchAllPendingRequests()
-          .then((items) => {
-            if (!cancelled && !resolutionInFlight.current) {
-              setRequests({ kind: "ready", items });
-            }
-          })
-          .catch((error: unknown) => {
-            if (!cancelled && !resolutionInFlight.current) {
-              const message = error instanceof Error ? error.message : queueErrorMessage;
-              setRequests({ kind: "error", message });
-            }
-          });
-      } else if (needsQueuePage) {
-        pendingRequests = fetchApprovalPage({ status: "pending", limit: 200 })
-          .then((page) => {
-            if (!cancelled && !resolutionInFlight.current) {
-              setRequests({ kind: "ready", items: page.items });
-            }
-          })
-          .catch((error: unknown) => {
-            if (!cancelled && !resolutionInFlight.current) {
-              const message = error instanceof Error ? error.message : queueErrorMessage;
-              setRequests({ kind: "error", message });
-            }
-          });
-      } else {
-        pendingRequests = Promise.resolve().then(() => {
-          if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
-            setRequests({ kind: "ready", items: [] });
-            clearedQueue = true;
-          }
-        });
-      }
-      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false, includeReceipts: needsRuntimeReceipts })
-        .then((snapshot) => {
-          if (!cancelled && !resolutionInFlight.current) {
-            setRuntime({ kind: "ready", snapshot });
-          }
-        })
-        .catch((error: unknown) => {
-          if (!cancelled && !resolutionInFlight.current) {
-            const message = error instanceof Error ? error.message : runtimeErrorMessage;
-            setRuntime({ kind: "error", message });
-          }
-        });
-      void Promise.allSettled([pendingRequests, runtimeSnapshot]).finally(() => {
-        refreshInFlight = false;
-      });
-    };
-    loadApprovalQueue();
-    pollId = window.setInterval(loadApprovalQueue, needsFullQueue ? 4000 : 12000);
-    return () => {
-      cancelled = true;
-      if (pollId !== undefined) {
-        window.clearInterval(pollId);
-      }
-    };
-  }, [view, requestId]);
-
-  useEffect(() => {
-    const needsInventory = view === "app-detail";
-    if (!needsInventory) {
-      return;
-    }
-    let cancelled = false;
-    fetchInventory()
-      .then((items) => {
-        if (!cancelled) {
-          setInventory({ kind: "ready", items });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setInventory({ kind: "ready", items: [] });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchSettings()
-      .then((payload) => {
-        if (!cancelled && payload.settings.approval_gate !== undefined) {
-          setApprovalGate(payload.settings.approval_gate);
-        }
-      })
-      .catch(() => {});
-    if (view === "about") {
-      fetchGuardUpdateStatus()
-        .then((status) => {
-          if (!cancelled && status.current_version) {
-            setGuardVersion(status.current_version);
-          }
-        })
-        .catch(() => {});
-    }
-    return () => { cancelled = true; };
-  }, [view]);
-
-  useEffect(() => {
-    const needsReceipts =
-      view === "evidence" ||
-      view === "app-detail" ||
-      view === "supply-chain" ||
-      view === "audit" ||
-      view === "feed-health";
-    const needsPolicies =
-      view === "home" ||
-      view === "fleet" ||
-      view === "app-detail" ||
-      view === "supply-chain" ||
-      view === "audit" ||
-      view === "feed-health" ||
-      view === "policy";
-    if (!needsReceipts && !needsPolicies) {
-      return;
-    }
-    let cancelled = false;
-    Promise.allSettled([
-      needsReceipts ? fetchReceipts() : Promise.resolve<GuardReceipt[] | null>(null),
-      needsPolicies ? fetchPolicies() : Promise.resolve<GuardPolicyDecision[] | null>(null),
-    ])
-      .then(([receiptsResult, policiesResult]) => {
-        if (cancelled) {
-          return;
-        }
-        if (needsReceipts) {
-          if (receiptsResult.status === "fulfilled" && receiptsResult.value !== null) {
-            setReceipts({ kind: "ready", items: receiptsResult.value });
-          } else {
-            const reason = receiptsResult.status === "rejected" ? receiptsResult.reason : null;
-            setReceipts({
-              kind: "error",
-              message: reason instanceof Error ? reason.message : "Unable to load local approval history."
-            });
-          }
-        }
-        if (needsPolicies) {
-          if (policiesResult.status === "fulfilled" && policiesResult.value !== null) {
-            setPolicies({ kind: "ready", items: policiesResult.value });
-          } else {
-            const reason = policiesResult.status === "rejected" ? policiesResult.reason : null;
-            setPolicies({
-              kind: "error",
-              message: reason instanceof Error ? reason.message : "Unable to load saved approvals."
-            });
-          }
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view]);
-
-  useEffect(() => {
-    if (view !== "fleet") {
-      return;
-    }
-    let cancelled = false;
-    setInventory({ kind: "loading" });
-    fetchInventory()
-      .then((items) => {
-        if (!cancelled) {
-          setInventory({ kind: "ready", items });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setInventory({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load watched app inventory."
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view]);
-
-  const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
-  const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
-  const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
-  const handleOpenTodayEvidence = useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
-  const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
-  const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
-  const handleOpenSettings = useCallback(() => navigate("/settings"), []);
-  const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
-  const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
-  const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
-  const handleCloseHelp = useCallback(() => setHelpOpen(false), []);
-  const handleGoHome = useCallback(() => navigate("/"), []);
-  const handleOpenRequest = useCallback((nextRequestId: string) => {
-    navigate(`/requests/${nextRequestId}`);
-  }, []);
-  const handleOpenAppDetail = useCallback((harness: string) => {
-    const slug = normalizeHarnessSlug(harness);
-    if (slug !== null) {
-      navigate(`/apps/${encodeURIComponent(slug)}`);
-    }
-  }, []);
-
-  const refreshStateAfterAction = useCallback(async () => {
-    const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
-      fetchInboxState(),
-      fetchReceipts(),
-      fetchPolicies(),
-      fetchInventory(),
-    ]);
-    if (inboxResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
-      setRequests({ kind: "ready", items: inboxResult.value.items });
-    } else {
-      const message =
-        inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
-      setRuntime({ kind: "error", message });
-      setRequests({ kind: "error", message });
-    }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
-      });
-    }
-    if (inventoryResult.status === "fulfilled") {
-      setInventory({ kind: "ready", items: inventoryResult.value });
-    } else {
-      setInventory({
-        kind: "error",
-        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory.",
-      });
-    }
-    return inboxResult.status === "fulfilled" ? inboxResult.value.snapshot : null;
-  }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
-
-  const refreshStateWithoutResult = useCallback(async () => {
-    await refreshStateAfterAction();
-  }, [refreshStateAfterAction]);
-
-  const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
-    setClearConfirm(scope);
-  }, []);
-
-  const handleConfirmClear = useCallback(async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
-    if (clearConfirm === null) return;
-    await clearPolicy({ ...clearConfirm, ...credentials });
-    setClearConfirm(null);
-    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
-    if (inboxResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
-      setRequests({ kind: "ready", items: inboxResult.value.items });
-    } else {
-      const message =
-        inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
-      setRuntime({ kind: "error", message });
-      setRequests({ kind: "error", message });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals.",
-      });
-    }
-  }, [clearConfirm, setRuntime, setRequests, setPolicies]);
-
-  const handleCancelClear = useCallback(() => {
-    setClearConfirm(null);
-  }, []);
-
-  const handleClearAppPolicies = useCallback(async (harness: string) => {
-    await clearPolicy({ harness });
-    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
-    if (inboxResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
-      setRequests({ kind: "ready", items: inboxResult.value.items });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals.",
-      });
-    }
-  }, [setRuntime, setRequests, setPolicies]);
-
-  const handleRefreshPolicies = useCallback(async () => {
-    try {
-      const items = await fetchPolicies();
-      setPolicies({ kind: "ready", items });
-    } catch {
-      // Keep the current policy list when refresh fails.
-    }
-  }, []);
-
-  const handleClearPolicy = useCallback(async (policy: GuardPolicyDecision) => {
-    await clearPolicy(buildClearPayload(policy));
-    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
-    if (inboxResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
-      setRequests({ kind: "ready", items: inboxResult.value.items });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals.",
-      });
-    }
-  }, [setRuntime, setRequests, setPolicies]);
-
-  const handleClearEvidence = useCallback(() => {
-    setReceipts({ kind: "ready", items: [] });
-  }, [setReceipts]);
-
-  const handleResolve = useCallback(async (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-    scope_contract_version?: string;
-    scope_contract_digest?: string;
-  }) => {
-    resolutionInFlight.current = true;
-    const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
-    try {
-      const result = await resolveRequestWithQueueResult(payload).catch(async (error: unknown) => {
-        if (
-          error instanceof GuardRequestResolutionError &&
-          error.status === 409 &&
-          error.payload?.["error"] === "stale_scope_contract"
-        ) {
-          await refreshStaleScopeContractSelection({
-            requestId: activeRequestId,
-            refreshQueue: async () => {
-              await refreshStateAfterAction();
-            },
-            loadSelectedDetail: loadDetail,
-            applySelectedDetail: setDetail,
-          });
-          throw new Error(
-            "This request changed while you were reviewing it. Guard refreshed the current action and scopes; review them, then retry.",
-          );
-        }
-        throw error;
-      });
-      const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codexResume ?? null;
-      setCodexResume(resume);
-      setResolvedRequestId(resume !== null ? payload.requestId : null);
-      if (nextId !== null) {
-        setResolutionMessage(null);
-        navigate(`/requests/${nextId}`);
-      } else {
-        setResolutionMessage(resume !== null ? null : (result.resolution_summary || "Decision saved. Return to your chat and retry the command."));
-        navigate("/inbox");
-      }
-      await refreshStateAfterAction();
-    } finally {
-      resolutionInFlight.current = false;
-    }
-  }, [activeRequestId, requests, refreshStateAfterAction, setResolutionMessage]);
-
-  const handleRetryResume = useCallback(async () => {
-    if (resolvedRequestId === null) return;
-    const updated = await retryResume(resolvedRequestId);
-    setCodexResume(updated);
-  }, [resolvedRequestId]);
-
-  const handleBulkApprove = useCallback(async (ids: string[], gateCredentials?: BulkGateCredentials) => {
-    if (bulkApproveInFlight.current) {
-      return;
-    }
-    if (!gateCredentials?.approval_password?.trim() && !gateCredentials?.approval_totp_code?.trim()) {
-      throw new Error("Bulk approval requires approval proof.");
-    }
-    bulkApproveInFlight.current = true;
-    try {
-      const result = await bulkAllowReadOnce({
-        requestIds: ids,
-        approval_password: gateCredentials.approval_password,
-        approval_totp_code: gateCredentials.approval_totp_code,
-        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
-      });
-      await refreshStateAfterAction();
-      if (result.failed.length > 0) {
-        const succeeded = result.resolved_count;
-        const failed = result.failed.length;
-        throw new Error(
-          failed === ids.length
-            ? "Bulk approval failed. Retry the selected items manually."
-            : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`
-        );
-      }
-      const label = `${result.resolved_count} item${result.resolved_count !== 1 ? "s" : ""} approved.`;
-      setResolutionMessage(label);
-    } finally {
-      bulkApproveInFlight.current = false;
-    }
-  }, [refreshStateAfterAction, setResolutionMessage]);
-
-  const handleRetry = useCallback(() => {
-    setRuntime({ kind: "loading" });
-    setRequests({ kind: "loading" });
-    fetchInboxState()
-      .then(({ snapshot, items }) => {
-        setRuntime({ kind: "ready", snapshot });
-        setRequests({ kind: "ready", items });
-      })
-      .catch((error: unknown) => {
-        const message =
-          error instanceof Error ? error.message : "Unable to load the local approval queue.";
-        setRuntime({ kind: "error", message });
-        setRequests({ kind: "error", message });
-      });
-  }, []);
-
-  const handleRepair = useCallback(async () => {
-    await repairApprovalCenter();
-    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-    fetchInboxState()
-      .then(({ snapshot, items }) => {
-        setRuntime({ kind: "ready", snapshot });
-        setRequests({ kind: "ready", items });
-      })
-      .catch((error: unknown) => {
-        const message =
-          error instanceof Error ? error.message : "Unable to reconnect to Guard daemon.";
-        setRuntime({ kind: "error", message });
-        setRequests({ kind: "error", message });
-      });
-  }, []);
-
-  const handleConnectHarness = useCallback((harness: string) => {
-    const slug = normalizeHarnessSlug(harness);
-    if (slug !== null) {
-      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
-    }
-  }, []);
-
-  const handleTestHarness = useCallback((harness: string) => {
-    const slug = normalizeHarnessSlug(harness);
-    if (slug !== null) {
-      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
-    }
-  }, []);
-
-  const handleRepairHarness = useCallback((harness: string) => {
-    const slug = normalizeHarnessSlug(harness);
-    if (slug !== null) {
-      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
-    }
-  }, []);
-
-  const handleRepairProtection = useCallback(async (harnesses: string[]) => {
-    return runAutomaticProtectionRepair({
-      harnesses,
-      displayName: harnessDisplayName,
-      refreshStateAfterAction,
-    });
-  }, [refreshStateAfterAction]);
+  const data = useAppData();
+  const {
+    view,
+    appDetailHarness,
+    requests,
+    detail,
+    receipts,
+    runtime,
+    policies,
+    inventory,
+    resolutionMessage,
+    codexResume,
+    helpOpen,
+    clearConfirm,
+    approvalGate,
+    setApprovalGate,
+    guardVersion,
+    activeRequestId,
+  } = data;
+  const {
+    handleOpenInbox,
+    handleOpenFleet,
+    handleOpenEvidence,
+    handleOpenTodayEvidence,
+    handleOpenInsights,
+    handleOpenCommands,
+    handleOpenSettings,
+    handleOpenSupplyChain,
+    handleOpenHelp,
+    handleCloseHelp,
+    handleGoHome,
+    handleOpenRequest,
+    handleOpenAppDetail,
+    refreshStateAfterAction,
+    refreshStateWithoutResult,
+    handleReconnectSession,
+    handleClearPolicies,
+    handleConfirmClear,
+    handleCancelClear,
+    handleClearAppPolicies,
+    handleRefreshPolicies,
+    handleClearPolicy,
+    handleClearEvidence,
+    handleResolve,
+    handleRetryResume,
+    handleBulkApprove,
+    handleRetry,
+    handleRepair,
+    handleConnectHarness,
+    handleTestHarness,
+    handleRepairHarness,
+    handleRepairProtection,
+  } = useAppActions(data);
 
   const appDetailContent = useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
@@ -863,13 +103,14 @@ export function App() {
         inventory={inventory.kind === "ready" ? inventory.items : []}
         requests={requests.kind === "ready" ? requests.items : []}
         onGoHome={handleGoHome}
+        onOpenApps={handleOpenFleet}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
         onClearPolicy={handleClearPolicy}
         onManagedInstallChanged={refreshStateWithoutResult}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
 
   const policyContent = useMemo(() => {
     if (runtime.kind !== "ready") {
@@ -945,6 +186,7 @@ export function App() {
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
+            onReconnectSession={handleReconnectSession}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
@@ -992,7 +234,7 @@ export function App() {
       extensionsContent={
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
-            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} />
+            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onRefreshRuntime={refreshStateAfterAction} onNavigate={navigate} />
           </Suspense>
         </ErrorBoundary>
       }

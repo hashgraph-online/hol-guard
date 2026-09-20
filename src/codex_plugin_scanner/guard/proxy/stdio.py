@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import io
 import json
-import queue
-import select
+import select  # noqa: F401 - compatibility seam for existing selector-failure tests
 import subprocess
-import threading
+import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -51,6 +49,18 @@ from ..runtime.secret_file_requests import build_file_read_request_artifact, ext
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ._env import _build_scrubbed_env
+from .framing import (
+    IO_FAILURES,
+    ProxyIoLimitError,
+    ProxyIoTimeoutError,
+    bounded_operation,
+    count_frame,
+    read_line,
+    remaining_timeout,
+    retire_reader,
+    stream_fileno,
+    write_message,
+)
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
@@ -164,13 +174,6 @@ def _approval_surface_policy_for_browser(configured_policy: object, approval_flo
     if policy == "native-only":
         return "never-auto-open"
     return policy
-
-
-class ProxyIoTimeoutError(TimeoutError):
-    def __init__(self, *, source: str, timeout_seconds: float) -> None:
-        super().__init__(f"timeout waiting for {source}")
-        self.source = source
-        self.timeout_seconds = timeout_seconds
 
 
 class ProxyLaunchIdentityChangedError(RuntimeError):
@@ -301,51 +304,46 @@ def _is_timeout_response(payload: object) -> bool:
 
 
 def _stream_fileno(stream: Any) -> int | None:
-    try:
-        fileno = stream.fileno()
-    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
-        return None
-    return fileno if isinstance(fileno, int) and fileno >= 0 else None
+    return stream_fileno(stream)
 
 
 def _readline_with_timeout(
     stream: Any,
-    timeout_seconds: float,
+    timeout_seconds: float | None,
     *,
     source: str,
     allow_background_wait: bool = True,
 ) -> str:
-    fileno = None if allow_background_wait else _stream_fileno(stream)
-    if fileno is not None:
-        try:
-            ready, _, _ = select.select([fileno], [], [], timeout_seconds)
-        except (OSError, ValueError) as exc:
-            raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds) from exc
-        if not ready:
-            raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
-        return stream.readline()
-    if not allow_background_wait:
-        if isinstance(stream, io.StringIO):
-            return stream.readline()
-        raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
-    result_queue: queue.Queue[tuple[bool, str | BaseException]] = queue.Queue(maxsize=1)
+    return read_line(stream, timeout_seconds, source=source, allow_background_wait=allow_background_wait)
 
-    def _reader() -> None:
-        try:
-            result_queue.put((True, stream.readline()))
-        except BaseException as exc:  # pragma: no cover - surfaced through queue
-            result_queue.put((False, exc))
 
-    threading.Thread(target=_reader, daemon=True).start()
-    try:
-        ok, result = result_queue.get(timeout=timeout_seconds)
-    except queue.Empty as exc:
-        raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds) from exc
-    if ok:
-        return result if isinstance(result, str) else ""
-    if isinstance(result, BaseException):
-        raise result
-    raise RuntimeError("guard_proxy_io_failed")
+def _io_failure_response(message_id: Any, error: ProxyIoTimeoutError | ProxyIoLimitError) -> dict[str, Any]:
+    response: dict[str, Any]
+    if isinstance(error, ProxyIoTimeoutError):
+        response = _timeout_response(
+            message_id,
+            source=error.source,
+            timeout_seconds=error.timeout_seconds,
+            message="Guard MCP proxy stopped after a transport deadline.",
+        )
+    else:
+        response = {
+            "jsonrpc": "2.0",
+            "id": message_id,
+            "error": {"code": -32098, "message": "Guard MCP proxy stopped after a transport limit.", "data": {}},
+        }
+    response["error"]["data"].update(
+        {"guard_io_failure": True, "reason_code": error.reason, "source": error.source, "session_terminal": True}
+    )
+    return response
+
+
+def _is_terminal_response(payload: object) -> bool:
+    if _is_timeout_response(payload):
+        return True
+    if not isinstance(payload, dict) or not isinstance(error := payload.get("error"), dict):
+        return False
+    return isinstance(data := error.get("data"), dict) and data.get("session_terminal") is True
 
 
 def _quarantine_process(process: subprocess.Popen[str]) -> None:
@@ -390,6 +388,7 @@ class StdioGuardProxy:
         self._current_config_provider = current_config_provider
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
+        self._io_failure: ProxyIoTimeoutError | ProxyIoLimitError | None = None
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
@@ -437,7 +436,12 @@ class StdioGuardProxy:
         process = self._start_process()
 
         try:
-            for raw_line in input_stream:
+            while True:
+                if self._io_failure is not None:
+                    break
+                raw_line = _readline_with_timeout(input_stream, None, source="client_input")
+                if not raw_line:
+                    break
                 line = raw_line.strip()
                 if not line:
                     continue
@@ -454,19 +458,30 @@ class StdioGuardProxy:
                     output_stream=output_stream,
                 )
                 if response is not None:
-                    output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
-                    output_stream.flush()
-                    if _is_timeout_response(response):
+                    write_message(
+                        output_stream,
+                        response,
+                        timeout_seconds=self._response_timeout_seconds(),
+                        source="client_output",
+                    )
+                    if _is_terminal_response(response):
                         break
+                if self._io_failure is not None:
+                    break
             assert process.stdin is not None
-            process.stdin.close()
+            if self._io_failure is None:
+                process.stdin.close()
             process.wait(timeout=5)
         finally:
             if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+                _quarantine_process(process)
             self._active_launch_identity = None
             self._active_env_values_hash = None
+            retire_reader(input_stream)
+            if process.stdout is not None:
+                retire_reader(process.stdout)
+        if self._io_failure is not None:
+            return 2
         return process.returncode if isinstance(process.returncode, int) else 0
 
     def _run_messages(
@@ -485,20 +500,25 @@ class StdioGuardProxy:
                     events=events,
                     output_stream=None,
                 )
-                if responses and _is_timeout_response(responses[-1]):
+                if responses and _is_terminal_response(responses[-1]):
+                    break
+                if self._io_failure is not None:
                     break
             assert process.stdin is not None
-            process.stdin.close()
+            if self._io_failure is None:
+                process.stdin.close()
             process.wait(timeout=5)
         finally:
             if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+                _quarantine_process(process)
             self._active_launch_identity = None
             self._active_env_values_hash = None
+            if process.stdout is not None:
+                retire_reader(process.stdout)
         return responses, events, process.returncode
 
     def _start_process(self) -> subprocess.Popen[str]:
+        self._io_failure = None
         launch_env = _build_scrubbed_env(self.env)
         self._active_launch_identity = self._build_launch_identity(launch_env)
         self._active_env_values_hash = build_configured_environment_hash(
@@ -566,6 +586,7 @@ class StdioGuardProxy:
             configured_keys=tuple(self.env),
         )
 
+    @bounded_operation(lambda self: self._response_timeout_seconds(), source="child_response")
     def _forward_message(
         self,
         *,
@@ -915,14 +936,29 @@ class StdioGuardProxy:
                     responses.append(response)
                     return response
 
-        process.stdin.write(json.dumps(message) + "\n")
-        process.stdin.flush()
-        response = self._read_response(
-            process=process,
-            message_id=message.get("id"),
-            output_stream=output_stream,
-        )
+        try:
+            if self._io_failure is not None:
+                raise self._io_failure
+            write_message(
+                process.stdin, message, timeout_seconds=self._response_timeout_seconds(), source="child_write"
+            )
+            response = self._read_response(
+                process=process,
+                message_id=message.get("id"),
+                output_stream=output_stream,
+            )
+        except IO_FAILURES as error:
+            self._io_failure = error
+            _quarantine_process(process)
+            response = _io_failure_response(message.get("id"), error) if "id" in message else None
+            event["transport_outcome"] = "delivery-unknown"
+            event["transport_reason_code"] = error.reason
+            event["session_terminal"] = True
+            if "policy_action" not in event:
+                event["decision"] = "transport-failed"
         if response is None:
+            if self._io_failure is not None:
+                events.append(event)
             return None
         if _is_timeout_response(response):
             event["transport_outcome"] = "timeout"
@@ -942,11 +978,18 @@ class StdioGuardProxy:
         if message_id is None:
             return None
         assert process.stdout is not None
+        timeout_seconds = self._response_timeout_seconds()
+        deadline = time.monotonic() + timeout_seconds
         while True:
-            timeout_seconds = self._response_timeout_seconds()
+            count_frame(source="child_response")
             try:
-                line = _readline_with_timeout(process.stdout, timeout_seconds, source="child_response")
-            except ProxyIoTimeoutError:
+                line = _readline_with_timeout(
+                    process.stdout,
+                    remaining_timeout(deadline - time.monotonic(), source="child_response"),
+                    source="child_response",
+                )
+            except ProxyIoTimeoutError as error:
+                self._io_failure = error
                 _quarantine_process(process)
                 return _timeout_response(
                     message_id,
@@ -960,8 +1003,12 @@ class StdioGuardProxy:
             if response.get("id") == message_id:
                 return response
             if output_stream is not None:
-                output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
-                output_stream.flush()
+                write_message(
+                    output_stream,
+                    response,
+                    timeout_seconds=max(0.0, deadline - time.monotonic()),
+                    source="client_output",
+                )
 
     def _policy_path(self) -> Path:
         if self.cwd is not None:

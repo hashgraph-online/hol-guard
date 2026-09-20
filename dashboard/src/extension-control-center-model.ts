@@ -66,6 +66,7 @@ export function parseExtensionRoute(pathname: string): ExtensionRoute {
   if (!encoded || encoded.includes("/")) return { kind: "invalid" };
   try {
     const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
     if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
     return { kind: "detail", extensionId: decoded };
   } catch {
@@ -163,7 +164,11 @@ export function extensionEffectiveState(
   if (effective.health !== "protected") return "disabled";
   if (effective.global_lockdown) return "disabled";
   if (extension.required) return "enabled";
-  return explicitControlState(effective, "extension", extension.extension_id) ?? "enabled";
+  const explicit = explicitControlState(effective, "extension", extension.extension_id);
+  if (extension.trust_class === "external" || extension.activation === "opt-in") {
+    return explicit === "enabled" ? "enabled" : "disabled";
+  }
+  return explicit ?? "enabled";
 }
 
 export function permissionEffectiveState(
@@ -205,6 +210,16 @@ export function extensionStateLabel(
   if (managedExplicitControlState(effective, "extension", extension.extension_id) !== null) return "Managed";
   if (extension.required) return "Required";
   return extensionEffectiveState(effective, extension) === "enabled" ? "Allowed" : "Blocked";
+}
+
+export function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
+  if (state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
+  if (extension.trust_class === "external" && state !== "Allowed" && state !== "Required") {
+    return "Off until you turn it on";
+  }
+  if (state === "Blocked") return state;
+  const executables = extension.executables.join(" · ").trim();
+  return executables || extension.description;
 }
 
 export function permissionStateLabel(

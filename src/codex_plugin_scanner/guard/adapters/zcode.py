@@ -242,16 +242,14 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             return "project"
         return "global"
 
-    # ---- install / uninstall -------------------------------------------------
-
-    def _managed_state_dir(self, context: HarnessContext) -> Path:
-        return context.guard_home / "managed" / "zcode"
-
-    def _state_path(self, context: HarnessContext) -> Path:
-        return self._managed_state_dir(context) / "install.state.json"
-
-    def _backup_path(self, context: HarnessContext) -> Path:
-        return self._managed_state_dir(context) / "config.json.backup"
+    def _managed_state_paths(self, context: HarnessContext) -> tuple[Path, Path, Path]:
+        state_dir = context.guard_home / "managed" / "zcode"
+        backup_path = state_dir / "config.json.backup"
+        state_path = state_dir / "install.state.json"
+        _ensure_path_within_root(context.guard_home, state_dir, label="ZCode state")
+        _ensure_path_within_root(state_dir, backup_path, label="ZCode backup")
+        _ensure_path_within_root(state_dir, state_path, label="ZCode state")
+        return state_dir, backup_path, state_path
 
     @staticmethod
     def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -295,7 +293,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             display_name="zcode",
         )
         config_path = self._config_path(context)
-        _ensure_path_within_root(context.home_dir, config_path, label="ZCode")
+        _ensure_path_within_root(self._zcode_home_dir(context), config_path, label="ZCode")
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
         payload = _json_payload(config_path)
@@ -304,12 +302,12 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         if not isinstance(payload.get("plugins"), dict):
             payload["plugins"] = {}
 
-        state_dir = self._managed_state_dir(context)
+        state_dir, backup_path, state_path = self._managed_state_paths(context)
         state_dir.mkdir(parents=True, exist_ok=True)
-        if config_path.is_file() and not self._backup_path(context).exists():
+        if config_path.is_file() and not backup_path.exists():
             import shutil
 
-            shutil.copy2(config_path, self._backup_path(context))
+            shutil.copy2(config_path, backup_path)
 
         hook_command = _shell_command(self._hook_command_parts(context))
         managed_hook_command = self._managed_command_wrapper(hook_command)
@@ -321,7 +319,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         self._sync_managed_hook_groups(hooks, managed_hook_command)
         config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-        self._state_path(context).write_text(
+        state_path.write_text(
             json.dumps({"managed_config_path": str(config_path)}, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -352,7 +350,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         )
         config_path = self._config_path(context)
         if config_path.is_file():
-            _ensure_path_within_root(context.home_dir, config_path, label="ZCode")
+            _ensure_path_within_root(self._zcode_home_dir(context), config_path, label="ZCode")
             payload = _json_payload(config_path)
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
@@ -363,7 +361,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                     payload["hooks"] = hooks
                 config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-        state_path = self._state_path(context)
+        _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():
             state_path.unlink()
 

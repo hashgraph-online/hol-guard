@@ -127,7 +127,7 @@ export type GuardDecisionV2 = {
 };
 
 export type GuardPresentationMode = "everyday" | "technical";
-export type GuardPresentationSource = "default" | "local-explicit" | "migrated" | "session-preview" | "cloud-profile" | "read-error";
+export type GuardPresentationSource = "default" | "local-explicit" | "session-preview" | "cloud-profile" | "read-error";
 export type GuardResolvedPresentation = {
   value: GuardPresentationMode;
   source: GuardPresentationSource;

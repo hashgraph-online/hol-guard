@@ -183,7 +183,34 @@ class TestKimiInstallUninstall:
         assert "# END HOL GUARD MANAGED HOOKS" in text
         assert 'event = "PreToolUse"' in text
         assert 'event = "UserPromptSubmit"' in text
-        assert "hol-guard" in text or "codex_plugin_scanner.cli" in text
+        # The checkout/interpreter path need not contain the project name.
+        # Check the current bounded launcher and its actual installed arguments.
+        parts = KimiHarnessAdapter._hook_command_parts(ctx)
+        assert parts[1:3] == ("-I", "-c")
+        assert "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv" in parts[3]
+        command_config = json.loads(parts[4])
+        assert command_config["harness"] == "kimi"
+        assert command_config["guard_home"] == str(ctx.guard_home.resolve())
+        assert command_config["cli_args"] == [
+            "guard",
+            "hook",
+            "--guard-home",
+            str(ctx.guard_home),
+            "--harness",
+            "kimi",
+            "--home",
+            str(ctx.home_dir),
+        ]
+        hooks = tomllib.loads(text)["hooks"]
+        assert [hook["event"] for hook in hooks] == [
+            "PreToolUse",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "SessionStart",
+            "Stop",
+        ]
+        assert {hook["command"] for hook in hooks} == {_shell_command(parts)}
+        assert {hook["timeout"] for hook in hooks} == {30}
 
     def test_uninstall_removes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)

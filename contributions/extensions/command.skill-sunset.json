@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.skill-sunset",
+  "version": "1.0.0",
+  "name": "Skill Sunset",
+  "description": "Reviews the Skill Sunset audit surface and its local report and viewer side effects.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.ooocooc",
+    "displayName": "Community",
+    "url": "https://github.com/ooocooc/open-skill-sunset"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#6B21A8" },
+  "homepage": "https://github.com/ooocooc/open-skill-sunset",
+  "license": "MIT",
+  "executables": ["skill-sunset"],
+  "ecosystemIds": ["skill-sunset"],
+  "riskClasses": ["local_secret_read"],
+  "actionClasses": ["Skill Sunset configuration audit command"],
+  "referenceUrls": ["https://github.com/ooocooc/open-skill-sunset/blob/main/src/cli.js"],
+  "saferAlternatives": [
+    "Confirm the audit target and output directory before running Skill Sunset."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_skill_sunset_extensions"
+  }
+}

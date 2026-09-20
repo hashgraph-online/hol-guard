@@ -1,6 +1,5 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, k as useProtectionPresentationState, p as protectionHealthFor, l as unavailableProtectionHealth, m as EmptyState, A as ActionButton, W as WatchProtectionBanner, n as EvidenceInsightsShareModal, o as HiMiniCheckCircle, q as GuardHero, O as OperatorHealthCard, s as formatNumber, t as HiMiniShieldCheck, D as DeviceProofCard, v as guardActionDisposition, w as formatRelativeTime, x as guardActionActivityCopy, y as HiMiniSparkles, z as HiMiniXMark, B as HiMiniChevronUp, C as HiMiniChevronDown, F as resolveCloudIntelCopy, I as HiMiniCloud, J as HiMiniQuestionMarkCircle, K as useFocusTrap, L as approvalProofRequiresPassword, M as HiMiniExclamationTriangle, N as HiMiniBolt, P as Badge, Q as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, e as guardActionDisposition, i as formatRelativeTime, k as guardActionActivityCopy, l as harnessDisplayName, m as isConnectableAppHarness, u as useFocusTrap, n as approvalProofRequiresPassword, o as HiMiniExclamationTriangle, p as EmptyState, B as Badge, s as HiMiniCheckCircle, t as HiMiniMinusCircle, v as HiMiniChevronUp, w as HiMiniChevronDown, A as ActionButton, x as resolveCloudIntelCopy, y as HiMiniCloud, z as HiMiniQuestionMarkCircle, C as HiMiniSparkles, D as HiMiniXMark, F as HiMiniBolt, I as useReceiptAnalytics, J as updateSettings, K as useProtectionPresentationState, L as protectionHealthFor, M as unavailableProtectionHealth, W as WatchProtectionBanner, N as EvidenceInsightsShareModal, O as GuardHero, P as OperatorHealthCard, Q as formatNumber, R as HiMiniShieldCheck, T as DeviceProofCard } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
-import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: Array.from({ length: 4 }, (_, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 bg-white px-4 py-3.5 sm:py-4", children: [
@@ -109,6 +108,26 @@ function HomeCommandActivityCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-3 text-xs ${model.health ? "text-amber-700" : "text-slate-500"}`, children: model.health ?? "Evidence store reporting normally." })
   ] });
 }
+function buildDaemonErrorCopy() {
+  return {
+    title: "Guard is not responding",
+    body: "The local Guard service is not reachable. Retry the connection, or open Settings if you need to repair protection.",
+    primaryCta: "Retry",
+    secondaryCta: "Go to Settings"
+  };
+}
+function buildHomeRuntimeErrorCopy(message) {
+  if (queueErrorIsUnauthorizedSession(message)) {
+    return {
+      kind: "session",
+      title: "This window needs a signed session",
+      body: "Guard is still running on this device. Reconnect this window so the dashboard and local protection stay in sync.",
+      primaryCta: "Reconnect",
+      secondaryCta: "Open review queue"
+    };
+  }
+  return { kind: "daemon", ...buildDaemonErrorCopy() };
+}
 const safeLocalStorage = {
   getItem(key) {
     try {
@@ -143,14 +162,6 @@ function buildEmptyStateCopy() {
     installHint: "hol-guard apps connect <app>"
   };
 }
-function buildDaemonErrorCopy() {
-  return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Go to Settings to repair the connection and restore protection.",
-    primaryCta: "Go to Settings",
-    secondaryCta: "Open review queue"
-  };
-}
 function redactHomeArtifactLabel(value) {
   if (typeof value !== "string" || value.trim().length === 0) {
     return "a local action";
@@ -167,355 +178,6 @@ function buildRecentProtectionCopy(receipt) {
     harnessDisplayName(receipt.harness),
     redactHomeArtifactLabel(receipt.artifact_name)
   );
-}
-function HomeWorkspace(props) {
-  const [toastMessage, setToastMessage] = reactExports.useState(null);
-  const [clearPassword, setClearPassword] = reactExports.useState("");
-  const [clearTotpCode, setClearTotpCode] = reactExports.useState("");
-  const [clearError, setClearError] = reactExports.useState(null);
-  const [clearSubmitting, setClearSubmitting] = reactExports.useState(false);
-  const [shareOpen, setShareOpen] = reactExports.useState(false);
-  const handleShareOpen = reactExports.useCallback(() => {
-    setShareOpen(true);
-  }, []);
-  const handleShareClose = reactExports.useCallback(() => {
-    setShareOpen(false);
-  }, []);
-  const toastTimerRef = reactExports.useRef(null);
-  const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
-  const analyticsState = useReceiptAnalytics(analyticsEnabled);
-  reactExports.useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
-  }, []);
-  const showToast = reactExports.useCallback((message) => {
-    setToastMessage(message);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3e3);
-  }, []);
-  const handleClearPolicies = reactExports.useCallback((scope) => {
-    props.onClearPolicies(scope);
-  }, [props.onClearPolicies]);
-  const handleTurnProtectionOn = reactExports.useCallback(() => {
-    void updateSettings({ protection_posture: "protected" }).then(async () => {
-      await props.onRefreshRuntime?.();
-      props.onOpenSettings();
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : "Unable to turn protection on.";
-      showToast(message);
-      props.onOpenSettings();
-    });
-  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
-  const handleClearPasswordChange = reactExports.useCallback((event) => {
-    setClearPassword(event.target.value);
-    setClearError(null);
-  }, []);
-  const handleClearTotpCodeChange = reactExports.useCallback((event) => {
-    setClearTotpCode(event.target.value);
-    setClearError(null);
-  }, []);
-  const handleConfirmClearWithToast = reactExports.useCallback(async () => {
-    const confirm = props.clearConfirm;
-    setClearSubmitting(true);
-    setClearError(null);
-    try {
-      await props.onConfirmClear({
-        ...clearPassword ? { approval_password: clearPassword } : {},
-        ...clearTotpCode ? { approval_totp_code: clearTotpCode } : {}
-      });
-      setClearPassword("");
-      setClearTotpCode("");
-      if (confirm?.harness) {
-        showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
-      } else if (confirm?.all) {
-        showToast("Cleared all decisions");
-      }
-    } catch (error) {
-      setClearError(error instanceof Error ? error.message : "Unable to clear remembered decisions.");
-    } finally {
-      setClearSubmitting(false);
-    }
-  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
-  const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
-  const queuedCount = resolveHomeQueuedCount({
-    pendingCount: snapshot?.pending_count ?? null,
-    requestCount: props.requests.kind === "ready" ? props.requests.items.length : null
-  });
-  const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item) => isConnectableAppHarness(item.harness));
-  const activeInstalls = managedInstalls.filter((item) => item.active);
-  const observedHarnesses = snapshot ? Array.from(
-    new Set([
-      ...snapshot.items.map((item) => item.harness),
-      ...snapshot.latest_receipts.map((receipt) => receipt.harness),
-      ...policyItems.map((policy) => policy.harness)
-    ].filter(isConnectableAppHarness))
-  ).sort() : [];
-  const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i) => i.harness) : observedHarnesses;
-  const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
-  const protectionState = useProtectionPresentationState(
-    snapshot ? protectionHealthFor(snapshot) : unavailableProtectionHealth()
-  );
-  const state = reactExports.useMemo(
-    () => deriveHomeState({
-      hasActiveInstalls: activeInstalls.length > 0,
-      hasObservedHarnesses: observedHarnesses.length > 0,
-      queuedCount,
-      watchedAppsCount,
-      protectionState
-    }),
-    [activeInstalls.length, observedHarnesses.length, protectionState, queuedCount, watchedAppsCount]
-  );
-  const dailyStory = reactExports.useMemo(
-    () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
-    [snapshot, queuedCount]
-  );
-  const streak = reactExports.useMemo(() => {
-    if (analyticsState.kind === "ready") {
-      return analyticsState.data.active_day_streak;
-    }
-    return snapshot ? computeStreak(snapshot.latest_receipts) : 0;
-  }, [analyticsState, snapshot]);
-  const cloudUpsellVisible = reactExports.useMemo(
-    () => snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false,
-    [snapshot, queuedCount]
-  );
-  const ctaAction = state.ctaTarget === "inbox" ? props.onOpenInbox : state.ctaTarget === "protect" ? props.onOpenFleet : props.onOpenEvidence;
-  if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-36 w-full" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full" })
-    ] });
-  }
-  if (props.runtime.kind === "error") {
-    const errorCopy = buildDaemonErrorCopy();
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: errorCopy.title,
-        body: errorCopy.body,
-        action: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenSettings, children: errorCopy.primaryCta }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenInbox, children: errorCopy.secondaryCta })
-        ] }),
-        tone: "teach"
-      }
-    );
-  }
-  if (!snapshot) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    snapshot.protection_posture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
-    shareOpen && analyticsState.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EvidenceInsightsShareModal,
-      {
-        analytics: analyticsState.data,
-        runtime: snapshot,
-        onClose: handleShareClose
-      }
-    ) : null,
-    toastMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: toastMessage })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardHero,
-      {
-        status: state.heroStatus,
-        headline: state.headline,
-        subheadline: state.subheadline,
-        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: ctaAction, "data-primary": "true", children: state.ctaLabel })
-      }
-    ),
-    snapshot.operator_health ? /* @__PURE__ */ jsxRuntimeExports.jsx(OperatorHealthCard, { health: snapshot.operator_health }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EvidenceInsightsHomePreview,
-      {
-        overviewStats: [
-          { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
-          { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "Recorded", value: formatNumber(snapshot.receipt_count ?? 0), tone: "slate" }
-        ],
-        analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
-        analyticsLoading: analyticsState.kind === "loading" && analyticsEnabled,
-        runtime: snapshot,
-        onOpenInsights: props.onOpenInsights,
-        onShare: handleShareOpen
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HomeCommandActivityCard, { onOpen: props.onOpenCommands }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      NewAppDiscoveryBanner,
-      {
-        managedInstalls,
-        observedHarnesses,
-        receipts: snapshot.latest_receipts,
-        policies: policyItems,
-        onOpenAppDetail: props.onOpenAppDetail
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AppsAtAGlance,
-          {
-            managedInstalls,
-            observedHarnesses,
-            queuedItems: props.requests.kind === "ready" ? props.requests.items : [],
-            onOpenAppDetail: props.onOpenAppDetail
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          HomeProtectionModule,
-          {
-            snapshot,
-            managedInstalls,
-            onOpenFleet: props.onOpenFleet,
-            onOpenSupplyChain: props.onOpenSupplyChain
-          }
-        ),
-        dailyStory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          CollapsibleCard,
-          {
-            id: "daily-brief",
-            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-            label: dailyStory.title,
-            defaultOpen: true,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: dailyStory.body }),
-              dailyStory.stats && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: dailyStory.stats.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "span",
-                {
-                  className: "rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-dark",
-                  children: [
-                    s.value,
-                    " ",
-                    s.label
-                  ]
-                },
-                s.label
-              )) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { className: "mt-4", variant: "secondary", onClick: props.onOpenTodayEvidence, children: "Review today's activity" })
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-        snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
-        policyItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Reset remembered decisions" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Clear remembered decisions when you want Guard to ask again next time. This does not remove your history." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: clearHarnesses.slice(0, 4).map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ClearHarnessButton,
-            {
-              harness,
-              onClearPolicies: handleClearPolicies
-            },
-            harness
-          )) })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CloudStatusCard,
-        {
-          snapshot,
-          showUpsell: cloudUpsellVisible,
-          onOpenSettings: props.onOpenSettings
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(KeyboardHelpCard, { onOpenHelp: props.onOpenHelp })
-    ] }),
-    props.clearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ClearConfirmDialog,
-      {
-        clearConfirm: props.clearConfirm,
-        approvalGate: props.approvalGate,
-        clearPassword,
-        clearTotpCode,
-        clearError,
-        clearSubmitting,
-        onClearPasswordChange: handleClearPasswordChange,
-        onClearTotpCodeChange: handleClearTotpCodeChange,
-        onCancelClear: props.onCancelClear,
-        onConfirmClear: handleConfirmClearWithToast
-      }
-    )
-  ] });
-}
-function ClearConfirmDialog(props) {
-  const dialogRef = reactExports.useRef(null);
-  useFocusTrap(true, dialogRef);
-  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  const proofIncomplete = needsProof && (needsPassword ? props.clearPassword.trim() === "" : props.clearTotpCode.trim() === "");
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", role: "dialog", "aria-modal": "true", "aria-label": "Confirm clear decisions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: dialogRef, className: "guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: "Clear remembered decisions?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
-          "This will remove ",
-          props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`,
-          ". Guard will ask again next time matching actions run."
-        ] }),
-        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "password",
-              autoComplete: "current-password",
-              value: props.clearPassword,
-              onChange: props.onClearPasswordChange,
-              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              maxLength: 6,
-              value: props.clearTotpCode,
-              onChange: props.onClearTotpCodeChange,
-              placeholder: "123456",
-              autoComplete: "one-time-code",
-              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }) }),
-        props.clearError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark", children: props.clearError })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onCancelClear,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-          children: "Keep decisions"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onConfirmClear,
-          disabled: props.clearSubmitting || proofIncomplete,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60",
-          children: props.clearSubmitting ? "Clearing..." : "Clear decisions"
-        }
-      )
-    ] })
-  ] }) });
 }
 function resolveHomeQueuedCount(input) {
   return Math.max(input.pendingCount ?? 0, input.requestCount ?? 0);
@@ -625,18 +287,6 @@ function buildDailyStory(receipts, queuedCount) {
   }
   return null;
 }
-function harnessPriorityScore(install, observed, pendingCount) {
-  let score = 0;
-  if (install?.active) {
-    score = 3;
-  } else if (install !== void 0) {
-    score = 2;
-  } else if (observed) {
-    score = 1;
-  }
-  if (pendingCount > 0) score += 4;
-  return score;
-}
 function computeStreak(receipts) {
   if (receipts.length === 0) return 0;
   const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -661,6 +311,93 @@ function computeStreak(receipts) {
     }
   }
   return streak;
+}
+function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
+  const activeHarnesses = new Set(managedInstalls.filter((i) => isConnectableAppHarness(i.harness)).map((i) => i.harness));
+  return observedHarnesses.filter((h) => isConnectableAppHarness(h) && !activeHarnesses.has(h));
+}
+function ClearConfirmDialog(props) {
+  const dialogRef = reactExports.useRef(null);
+  useFocusTrap(true, dialogRef);
+  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  const proofIncomplete = needsProof && (needsPassword ? props.clearPassword.trim() === "" : props.clearTotpCode.trim() === "");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", role: "dialog", "aria-modal": "true", "aria-label": "Confirm clear decisions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: dialogRef, className: "guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: "Clear remembered decisions?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
+          "This will remove ",
+          props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`,
+          ". Guard will ask again next time matching actions run."
+        ] }),
+        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              autoComplete: "current-password",
+              value: props.clearPassword,
+              onChange: props.onClearPasswordChange,
+              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              maxLength: 6,
+              value: props.clearTotpCode,
+              onChange: props.onClearTotpCodeChange,
+              placeholder: "123456",
+              autoComplete: "one-time-code",
+              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }) }),
+        props.clearError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark", children: props.clearError })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onCancelClear,
+          className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+          children: "Keep decisions"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onConfirmClear,
+          disabled: props.clearSubmitting || proofIncomplete,
+          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60",
+          children: props.clearSubmitting ? "Clearing..." : "Clear decisions"
+        }
+      )
+    ] })
+  ] }) });
+}
+function harnessPriorityScore(install, observed, pendingCount) {
+  let score = 0;
+  if (install?.active) {
+    score = 3;
+  } else if (install !== void 0) {
+    score = 2;
+  } else if (observed) {
+    score = 1;
+  }
+  if (pendingCount > 0) score += 4;
+  return score;
 }
 function AppsAtAGlance(props) {
   const pendingByHarness = reactExports.useMemo(() => {
@@ -823,6 +560,38 @@ function RecentProtectionSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-hidden rounded-xl border border-slate-200/70", children: recent.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(RecentReceiptRow, { receipt }, receipt.receipt_id)) })
   ] });
 }
+function CollapsibleCard(props) {
+  const storageKey = `guard-collapsed-${props.id}`;
+  const [isOpen, setIsOpen] = reactExports.useState(() => {
+    const saved = safeLocalStorage.getItem(storageKey);
+    return saved === null ? props.defaultOpen ?? true : saved === "1";
+  });
+  const toggle = reactExports.useCallback(() => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      safeLocalStorage.setItem(storageKey, next ? "1" : "0");
+      return next;
+    });
+  }, [storageKey]);
+  const borderClass = props.id === "daily-brief" ? "border-brand-green/15 bg-brand-green/[0.04]" : "border-brand-purple/15 bg-brand-purple/[0.04]";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl border ${borderClass} p-5 shadow-sm sm:p-6`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: toggle,
+        className: "flex w-full items-center gap-3 text-left",
+        "aria-expanded": isOpen,
+        "aria-controls": `collapsible-content-${props.id}`,
+        children: [
+          props.icon,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: props.label }) }),
+          isOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 shrink-0 text-muted-foreground", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 shrink-0 text-muted-foreground", "aria-hidden": "true" })
+        ]
+      }
+    ),
+    isOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: `collapsible-content-${props.id}`, className: "mt-3 guard-fade-in", children: props.children })
+  ] });
+}
 const MILESTONE_STREAKS = [7, 14, 30];
 function StreakMilestoneBanner({ streak }) {
   const milestone = MILESTONE_STREAKS.includes(streak) ? streak : null;
@@ -871,10 +640,6 @@ function NewAppDiscoveryBanner(props) {
     harness
   )) });
 }
-function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
-  const activeHarnesses = new Set(managedInstalls.filter((i) => isConnectableAppHarness(i.harness)).map((i) => i.harness));
-  return observedHarnesses.filter((h) => isConnectableAppHarness(h) && !activeHarnesses.has(h));
-}
 function NewAppBanner(props) {
   const storageKey = `guard-new-app-dismissed-${props.harness}`;
   const [dismissed, setDismissed] = reactExports.useState(() => {
@@ -919,36 +684,290 @@ function NewAppBanner(props) {
     )
   ] });
 }
-function CollapsibleCard(props) {
-  const storageKey = `guard-collapsed-${props.id}`;
-  const [isOpen, setIsOpen] = reactExports.useState(() => {
-    const saved = safeLocalStorage.getItem(storageKey);
-    return saved === null ? props.defaultOpen ?? true : saved === "1";
-  });
-  const toggle = reactExports.useCallback(() => {
-    setIsOpen((prev) => {
-      const next = !prev;
-      safeLocalStorage.setItem(storageKey, next ? "1" : "0");
-      return next;
+function HomeWorkspace(props) {
+  const [toastMessage, setToastMessage] = reactExports.useState(null);
+  const [clearPassword, setClearPassword] = reactExports.useState("");
+  const [clearTotpCode, setClearTotpCode] = reactExports.useState("");
+  const [clearError, setClearError] = reactExports.useState(null);
+  const [clearSubmitting, setClearSubmitting] = reactExports.useState(false);
+  const [shareOpen, setShareOpen] = reactExports.useState(false);
+  const handleShareOpen = reactExports.useCallback(() => {
+    setShareOpen(true);
+  }, []);
+  const handleShareClose = reactExports.useCallback(() => {
+    setShareOpen(false);
+  }, []);
+  const toastTimerRef = reactExports.useRef(null);
+  const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
+  const analyticsState = useReceiptAnalytics(analyticsEnabled);
+  reactExports.useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+  const showToast = reactExports.useCallback((message) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3e3);
+  }, []);
+  const handleClearPolicies = reactExports.useCallback((scope) => {
+    props.onClearPolicies(scope);
+  }, [props.onClearPolicies]);
+  const handleTurnProtectionOn = reactExports.useCallback(() => {
+    void updateSettings({ protection_posture: "protected" }).then(async () => {
+      await props.onRefreshRuntime?.();
+      props.onOpenSettings();
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unable to turn protection on.";
+      showToast(message);
+      props.onOpenSettings();
     });
-  }, [storageKey]);
-  const borderClass = props.id === "daily-brief" ? "border-brand-green/15 bg-brand-green/[0.04]" : "border-brand-purple/15 bg-brand-purple/[0.04]";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl border ${borderClass} p-5 shadow-sm sm:p-6`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
+  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
+  const handleClearPasswordChange = reactExports.useCallback((event) => {
+    setClearPassword(event.target.value);
+    setClearError(null);
+  }, []);
+  const handleClearTotpCodeChange = reactExports.useCallback((event) => {
+    setClearTotpCode(event.target.value);
+    setClearError(null);
+  }, []);
+  const handleConfirmClearWithToast = reactExports.useCallback(async () => {
+    const confirm = props.clearConfirm;
+    setClearSubmitting(true);
+    setClearError(null);
+    try {
+      await props.onConfirmClear({
+        ...clearPassword ? { approval_password: clearPassword } : {},
+        ...clearTotpCode ? { approval_totp_code: clearTotpCode } : {}
+      });
+      setClearPassword("");
+      setClearTotpCode("");
+      if (confirm?.harness) {
+        showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
+      } else if (confirm?.all) {
+        showToast("Cleared all decisions");
+      }
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : "Unable to clear remembered decisions.");
+    } finally {
+      setClearSubmitting(false);
+    }
+  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
+  const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
+  const queuedCount = resolveHomeQueuedCount({
+    pendingCount: snapshot?.pending_count ?? null,
+    requestCount: props.requests.kind === "ready" ? props.requests.items.length : null
+  });
+  const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
+  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item) => isConnectableAppHarness(item.harness));
+  const activeInstalls = managedInstalls.filter((item) => item.active);
+  const observedHarnesses = snapshot ? Array.from(
+    new Set([
+      ...snapshot.items.map((item) => item.harness),
+      ...snapshot.latest_receipts.map((receipt) => receipt.harness),
+      ...policyItems.map((policy) => policy.harness)
+    ].filter(isConnectableAppHarness))
+  ).sort() : [];
+  const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i) => i.harness) : observedHarnesses;
+  const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+  const protectionState = useProtectionPresentationState(
+    snapshot ? protectionHealthFor(snapshot) : unavailableProtectionHealth()
+  );
+  const state = reactExports.useMemo(
+    () => deriveHomeState({
+      hasActiveInstalls: activeInstalls.length > 0,
+      hasObservedHarnesses: observedHarnesses.length > 0,
+      queuedCount,
+      watchedAppsCount,
+      protectionState
+    }),
+    [activeInstalls.length, observedHarnesses.length, protectionState, queuedCount, watchedAppsCount]
+  );
+  const dailyStory = reactExports.useMemo(
+    () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
+    [snapshot, queuedCount]
+  );
+  const streak = reactExports.useMemo(() => {
+    if (analyticsState.kind === "ready") {
+      return analyticsState.data.active_day_streak;
+    }
+    return snapshot ? computeStreak(snapshot.latest_receipts) : 0;
+  }, [analyticsState, snapshot]);
+  const cloudUpsellVisible = reactExports.useMemo(
+    () => snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false,
+    [snapshot, queuedCount]
+  );
+  const ctaAction = state.ctaTarget === "inbox" ? props.onOpenInbox : state.ctaTarget === "protect" ? props.onOpenFleet : props.onOpenEvidence;
+  if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-36 w-full" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full" })
+    ] });
+  }
+  if (props.runtime.kind === "error") {
+    const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    const handlePrimary = () => {
+      if (errorCopy.kind === "session") {
+        void props.onReconnectSession?.();
+        return;
+      }
+      void props.onRefreshRuntime?.();
+    };
+    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
       {
-        onClick: toggle,
-        className: "flex w-full items-center gap-3 text-left",
-        "aria-expanded": isOpen,
-        "aria-controls": `collapsible-content-${props.id}`,
-        children: [
-          props.icon,
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: props.label }) }),
-          isOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 shrink-0 text-muted-foreground", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 shrink-0 text-muted-foreground", "aria-hidden": "true" })
-        ]
+        title: errorCopy.title,
+        body: errorCopy.body,
+        action: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimary, children: errorCopy.primaryCta }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleSecondary, children: errorCopy.secondaryCta })
+        ] }),
+        tone: "teach"
+      }
+    );
+  }
+  if (!snapshot) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    snapshot.protection_posture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
+    shareOpen && analyticsState.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceInsightsShareModal,
+      {
+        analytics: analyticsState.data,
+        runtime: snapshot,
+        onClose: handleShareClose
+      }
+    ) : null,
+    toastMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: toastMessage })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardHero,
+      {
+        status: state.heroStatus,
+        headline: state.headline,
+        subheadline: state.subheadline,
+        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: ctaAction, "data-primary": "true", children: state.ctaLabel })
       }
     ),
-    isOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: `collapsible-content-${props.id}`, className: "mt-3 guard-fade-in", children: props.children })
+    snapshot.operator_health ? /* @__PURE__ */ jsxRuntimeExports.jsx(OperatorHealthCard, { health: snapshot.operator_health }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceInsightsHomePreview,
+      {
+        overviewStats: [
+          { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
+          { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
+          { label: "Recorded", value: formatNumber(snapshot.receipt_count ?? 0), tone: "slate" }
+        ],
+        analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
+        analyticsLoading: analyticsState.kind === "loading" && analyticsEnabled,
+        runtime: snapshot,
+        onOpenInsights: props.onOpenInsights,
+        onShare: handleShareOpen
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HomeCommandActivityCard, { onOpen: props.onOpenCommands }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      NewAppDiscoveryBanner,
+      {
+        managedInstalls,
+        observedHarnesses,
+        receipts: snapshot.latest_receipts,
+        policies: policyItems,
+        onOpenAppDetail: props.onOpenAppDetail
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AppsAtAGlance,
+          {
+            managedInstalls,
+            observedHarnesses,
+            queuedItems: props.requests.kind === "ready" ? props.requests.items : [],
+            onOpenAppDetail: props.onOpenAppDetail
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HomeProtectionModule,
+          {
+            snapshot,
+            managedInstalls,
+            onOpenFleet: props.onOpenFleet,
+            onOpenSupplyChain: props.onOpenSupplyChain
+          }
+        ),
+        dailyStory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          CollapsibleCard,
+          {
+            id: "daily-brief",
+            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+            label: dailyStory.title,
+            defaultOpen: true,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: dailyStory.body }),
+              dailyStory.stats && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: dailyStory.stats.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  className: "rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-dark",
+                  children: [
+                    s.value,
+                    " ",
+                    s.label
+                  ]
+                },
+                s.label
+              )) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { className: "mt-4", variant: "secondary", onClick: props.onOpenTodayEvidence, children: "Review today's activity" })
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+        snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
+        policyItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Reset remembered decisions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Clear remembered decisions when you want Guard to ask again next time. This does not remove your history." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: clearHarnesses.slice(0, 4).map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ClearHarnessButton,
+            {
+              harness,
+              onClearPolicies: handleClearPolicies
+            },
+            harness
+          )) })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CloudStatusCard,
+        {
+          snapshot,
+          showUpsell: cloudUpsellVisible,
+          onOpenSettings: props.onOpenSettings
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(KeyboardHelpCard, { onOpenHelp: props.onOpenHelp })
+    ] }),
+    props.clearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ClearConfirmDialog,
+      {
+        clearConfirm: props.clearConfirm,
+        approvalGate: props.approvalGate,
+        clearPassword,
+        clearTotpCode,
+        clearError,
+        clearSubmitting,
+        onClearPasswordChange: handleClearPasswordChange,
+        onClearTotpCodeChange: handleClearTotpCodeChange,
+        onCancelClear: props.onCancelClear,
+        onConfirmClear: handleConfirmClearWithToast
+      }
+    )
   ] });
 }
 export {
@@ -957,6 +976,7 @@ export {
   buildDaemonErrorCopy,
   buildDailyStory,
   buildEmptyStateCopy,
+  buildHomeRuntimeErrorCopy,
   buildRecentProtectionCopy,
   computeStreak,
   deriveHomeState,

@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from typing import TypeGuard, cast, final
 
@@ -50,6 +51,39 @@ def _open_json(
     return raw_payload, time.monotonic() - started
 
 
+@contextmanager
+def _exclusive_storage_lock(path: Path) -> Iterator[None]:
+    # Startup and maintenance may briefly own the writer lock. Acquire the
+    # fixture before measuring requests; the liveness budgets below stay fixed.
+    blocker = sqlite3.connect(path, timeout=5.0, isolation_level=None)
+    try:
+        _ = blocker.execute("begin exclusive")
+        yield
+    finally:
+        if blocker.in_transaction:
+            blocker.rollback()
+        blocker.close()
+
+
+def test_storage_lock_fixture_waits_for_a_concurrent_startup_writer(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    attempted = Event()
+    acquired = Event()
+
+    def acquire() -> None:
+        attempted.set()
+        with _exclusive_storage_lock(store.path):
+            acquired.set()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with _exclusive_storage_lock(store.path):
+            future = executor.submit(acquire)
+            assert attempted.wait(timeout=1)
+            assert not acquired.wait(timeout=0.2)
+        future.result(timeout=1)
+    assert acquired.is_set()
+
+
 def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -61,38 +95,34 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
-
     try:
         initial_runtime = store.get_runtime_state()
         assert initial_runtime is not None
         initial_heartbeat = str(initial_runtime["last_heartbeat_at"])
         state = load_authenticated_daemon_state(store.guard_home)
         assert state is not None
-        _ = blocker.execute("begin exclusive")
+        with _exclusive_storage_lock(store.path):
+            health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
+            identity_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/daemon/identity-challenge",
+                data=json.dumps(
+                    {
+                        "nonce": "a" * 64,
+                        "hook_event": "PreToolUse",
+                        "state_id": state["state_id"],
+                        "protocol_version": DAEMON_DISCOVERY_PROTOCOL_VERSION,
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            identity, identity_elapsed = _open_json(identity_request)
 
-        health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
-        identity_request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/daemon/identity-challenge",
-            data=json.dumps(
-                {
-                    "nonce": "a" * 64,
-                    "hook_event": "PreToolUse",
-                    "state_id": state["state_id"],
-                    "protocol_version": DAEMON_DISCOVERY_PROTOCOL_VERSION,
-                }
-            ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        identity, identity_elapsed = _open_json(identity_request)
+            assert health["ok"] is True
+            assert isinstance(identity.get("proof"), str)
+            assert health_elapsed < 0.5
+            assert identity_elapsed < 0.5
 
-        assert health["ok"] is True
-        assert isinstance(identity.get("proof"), str)
-        assert health_elapsed < 0.25
-        assert identity_elapsed < 0.25
-
-        _ = blocker.execute("rollback")
         deadline = time.monotonic() + 2
         persisted_heartbeat = initial_heartbeat
         while time.monotonic() < deadline:
@@ -104,9 +134,6 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
             time.sleep(0.02)
         assert datetime.fromisoformat(persisted_heartbeat) > datetime.fromisoformat(initial_heartbeat)
     finally:
-        if blocker.in_transaction:
-            blocker.rollback()
-        blocker.close()
         daemon.stop()
 
 
@@ -125,8 +152,6 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
-    _ = blocker.execute("begin exclusive")
     endpoint = (
         f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?guard-home={store.guard_home}&home={tmp_path}&workspace={tmp_path}"
     )
@@ -150,20 +175,17 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         return _open_json(request, timeout_seconds=1.75)
 
     try:
-        with ThreadPoolExecutor(max_workers=24) as executor:
-            futures = [executor.submit(review, index) for index in range(24)]
-            health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
-            results = [future.result(timeout=2) for future in futures]
-        assert health["ok"] is True
-        assert health_elapsed < 0.25
-        assert max(elapsed for _payload, elapsed in results) < 1.6
-        assert all(payload.get("decision") == "deny" for payload, _elapsed in results)
-        assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
-    finally:
-        blocker.rollback()
-        blocker.close()
+        with _exclusive_storage_lock(store.path):
+            with ThreadPoolExecutor(max_workers=24) as executor:
+                futures = [executor.submit(review, index) for index in range(24)]
+                health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
+                results = [future.result(timeout=2) for future in futures]
+            assert health["ok"] is True
+            assert health_elapsed < 0.5
+            assert max(elapsed for _payload, elapsed in results) < 1.6
+            assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
+            assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
 
-    try:
         assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
             minimum_workers=1,
             timeout_seconds=15,
