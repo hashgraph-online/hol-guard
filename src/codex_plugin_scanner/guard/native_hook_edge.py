@@ -6,10 +6,11 @@ import json
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from .native_approval_errors import FINITE_FAILURE_CODES
 from .native_decision_receipt import receipt_matches_edge
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_request, record_native_resident_client_failure_code
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
@@ -153,8 +154,20 @@ def _valid_pre_tool_action(action: dict[str, Any], *, harness: str) -> bool:
 
 
 def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
-    if not isinstance(result, dict) or set(result) != _PRE_TOOL_RESULT_KEYS:
+    if not isinstance(result, dict) or set(result) not in (
+        _PRE_TOOL_RESULT_KEYS,
+        _PRE_TOOL_RESULT_KEYS | {"command_extensions"},
+    ):
         return False
+    if "command_extensions" in result:
+        from .native_command_observations import validate_native_command_observations
+
+        extensions = validate_native_command_observations(result["command_extensions"])
+        if extensions is None:
+            return False
+        binding = cast(dict[str, object], extensions["binding"])
+        if binding["uncertainty_count"] and result.get("minimum_action") != "block":
+            return False
     if not _valid_pre_tool_result_fields(result):
         return False
     action = result.get("action")
@@ -169,6 +182,16 @@ def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
     # `warn` is an allow-with-warning floor. All stronger actions remain
     # denying floors; this keeps the Python edge purely mechanical.
     return decision == ("allow" if minimum_action in {"allow", "warn"} else "deny")
+
+
+def _native_error_code(payload: object) -> str | None:
+    """Accept only the resident's finite error envelope for local diagnostics."""
+    if not isinstance(payload, dict) or set(payload) != {"error", "retryable"}:
+        return None
+    code = payload.get("error")
+    if type(payload.get("retryable")) is not bool or not isinstance(code, str):
+        return None
+    return code if code in FINITE_FAILURE_CODES else None
 
 
 def _decode_edge(payload: object) -> dict[str, Any] | None:
@@ -329,7 +352,11 @@ def review_raw_hook_native(
         )
         return record_native_hook_result("native_fail_safe", None)
     try:
-        decoded = _decode_edge(json.loads(output))
+        response_payload = json.loads(output)
+        error_code = _native_error_code(response_payload)
+        if error_code is not None:
+            record_native_resident_client_failure_code(error_code)
+        decoded = _decode_edge(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
         decoded = None
     if decoded is None:

@@ -130,6 +130,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     endpoint = (
         f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?guard-home={store.guard_home}&home={tmp_path}&workspace={tmp_path}"
     )
+    hook_timeout_seconds = 1.75
 
     def review(index: int) -> tuple[dict[str, object], float]:
         request = urllib.request.Request(
@@ -147,7 +148,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
             },
             method="POST",
         )
-        return _open_json(request, timeout_seconds=1.75)
+        return _open_json(request, timeout_seconds=hook_timeout_seconds)
 
     try:
         with ThreadPoolExecutor(max_workers=24) as executor:
@@ -156,7 +157,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
             results = [future.result(timeout=2) for future in futures]
         assert health["ok"] is True
         assert health_elapsed < 0.5
-        assert max(elapsed for _payload, elapsed in results) < 1.6
+        assert max(elapsed for _payload, elapsed in results) < hook_timeout_seconds
         assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
     finally:

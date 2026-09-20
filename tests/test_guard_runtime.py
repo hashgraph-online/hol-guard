@@ -93,6 +93,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 from tests.support.network import stub_authenticated_urlopen
 
 COPILOT_NATIVE_DENY_COMMANDS = (
@@ -4918,6 +4919,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        write_synthetic_daemon_auth_token(home_dir)
         event = {
             "hook_event_name": "PreToolUse",
             "artifact_id": "codex:project:dangerous-command",
@@ -4951,6 +4953,7 @@ clearer UX and an implementation plan with technical references.
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:4455/requests/request-1" in reason
+        assert "guard-token=gld1." in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
@@ -16378,6 +16381,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
@@ -16411,6 +16415,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     assert "Open HOL Guard" in payload["systemMessage"]
     assert "approve" in payload["systemMessage"].lower()
     assert "http://127.0.0.1:4455/requests/" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "prompt_request"
@@ -16505,6 +16510,7 @@ def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
@@ -16534,6 +16540,7 @@ def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_saved_artifact_allow_does_not_lower_reapproval(
@@ -18583,6 +18590,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     event = {
         "hook_event_name": "PostToolUse",
@@ -18622,6 +18630,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
     assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+    assert "guard-token=gld1." in payload["stopReason"]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
@@ -18893,6 +18902,7 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     event = {
         "hook_event_name": "PostToolUse",
@@ -18932,6 +18942,7 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
 
 
 def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approval(

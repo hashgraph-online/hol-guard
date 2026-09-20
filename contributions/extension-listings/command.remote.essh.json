@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.remote.essh",
+  "tagline": "Reviews essh host group execution and removal of cached hosts, keys, and workspaces.",
+  "category": "delivery-remote",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "maintainerGithubIds": [
+    "13101478"
+  ]
+}

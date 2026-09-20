@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_MAX_SECONDS,
     _PUBLISH_RETRY_SECONDS,
@@ -66,13 +67,15 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._epoch = 0
         self._last_error: str | None = None
         self._published_config_digest: str | None = None
-        self._published_policy_fingerprint: tuple[str, str] | None = None
-        self._observed_policy_fingerprint: tuple[str, str] | None = None
+        self._published_policy_fingerprint: tuple[str, str, str] | None = None
+        self._observed_policy_fingerprint: tuple[str, str, str] | None = None
         self._renewal_due_monotonic: float | None = None
         self._renewal_after_generation: int | None = None
         self._retry_not_before_monotonic: float | None = None
         self._failure_count = 0
         self._workspace_paths: set[Path] = set()
+        self._command_control_runtime = None
+        self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (
             tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]] | None
         ) = None
@@ -251,12 +254,15 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if not self._acked or self._snapshot is None or self._closed:
                 return None
             snapshot = self._snapshot
-            return {
+            binding = {
                 "generation": snapshot.get("generation"),
                 "policy_digest": snapshot.get("policy_digest"),
                 "runtime_identity": snapshot.get("runtime_identity"),
                 "mode": snapshot.get("mode"),
             }
+            if "command_extensions" in snapshot:
+                binding["command_extensions_bound"] = True
+            return binding
 
     @property
     def last_error(self) -> str | None:
@@ -304,6 +310,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 }
                 self._input_fingerprint = fingerprint
                 if self._policy_input_changed(changed_paths):
+                    self.request_publish()
+            if self._monotonic_clock() >= self._reconcile_due_monotonic:
+                self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
+                if self._policy_input_changed():
                     self.request_publish()
             with self._condition:
                 if self._closed:
@@ -381,11 +391,24 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 renew_after_generation = self._renewal_after_generation
             publish_epoch = self._epoch
         try:
-            # Compile and validate policy asynchronously; failures keep the barrier closed.
-            context = self._publication_context()
-            if context is None:
+            # A cold verified read may itself migrate authenticated catalog
+            # state and close the mutation barrier. Recapture once before IPC;
+            # accepting its previous epoch would also hide concurrent changes.
+            for _ in range(2):
+                with self._condition:
+                    publish_epoch = self._epoch
+                context = self._publication_context()
+                if context is None:
+                    return
+                with self._condition:
+                    if self._closed:
+                        return
+                    if self._epoch == publish_epoch:
+                        break
+                context = None
+            else:
                 return
-            identity, capabilities, master_key, config, client = context
+            identity, capabilities, master_key, config, command_extensions, client = context
             resident_fingerprint_before = self._current_input_fingerprint()[1]
             try:
                 snapshot, resident_generation = _publish_snapshot_v3(
@@ -393,6 +416,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     identity=identity,
                     capabilities=capabilities,
                     config=config,
+                    command_extensions=command_extensions,
                     master_key=master_key,
                     client=client,
                     renew_after_generation=renew_after_generation,
@@ -403,6 +427,13 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 master_key = None
             resident_fingerprint = self._current_input_fingerprint()[1]
             resident_directory_fingerprint = self._resident_directory_fingerprint()
+            # A separate process may commit authority while the resident is
+            # acknowledging this candidate. Re-read verified authority outside
+            # the hook barrier and reject an ACK for the earlier controls.
+            if self._compiled_command_extensions() != command_extensions:
+                with self._condition:
+                    self._acked = False
+                raise NativePolicySnapshotError("native_command_control_binding_changed")
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
@@ -434,6 +465,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._published_policy_fingerprint = (
                     cast(str, snapshot["config_digest"]),
                     cast(str, snapshot["mode"]),
+                    _digest_v3(command_extensions),
                 )
                 self._observed_policy_fingerprint = self._published_policy_fingerprint
                 self._acked = True
@@ -450,7 +482,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
 
     def _publication_context(
         self,
-    ) -> tuple[Any, Any, bytes, Mapping[str, object], Callable[..., bytes | None]] | None:
+    ) -> tuple[Any, Any, bytes, Mapping[str, object], Mapping[str, object], Callable[..., bytes | None]] | None:
         status_provider = self._status_provider
         if status_provider is None:
             from .native_runtime import native_runtime_status
@@ -470,7 +502,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         ):
             self._record_error("native_policy_snapshot_runtime_unavailable")
             return None
-        if set(getattr(capabilities, "features", ())) < _REQUIRED_PUBLISH_FEATURES:
+        if not _REQUIRED_PUBLISH_FEATURES.issubset(set(getattr(capabilities, "features", ()))):
+            with self._condition:
+                self._acked = False
             self._record_error("native_policy_snapshot_protocol_unsupported")
             return None
         material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
@@ -489,12 +523,13 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._record_error("native_policy_snapshot_integrity_key_unavailable")
                 return None
             config = self._compiled_effective_policy()
+            command_extensions = self._compiled_command_extensions()
             client = self._client_request
             if client is None:
                 from .native_resident_client import native_resident_client_request
 
                 client = native_resident_client_request
-            return identity, capabilities, material[0], config, client
+            return identity, capabilities, material[0], config, command_extensions, client
         finally:
             material = None
 

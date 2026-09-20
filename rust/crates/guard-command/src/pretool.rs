@@ -10,6 +10,7 @@ use search::safe_search_arguments;
 pub mod generic;
 
 pub use generic::evaluate_pre_tool_envelope;
+pub use generic::evaluate_pre_tool_envelope_with_extensions;
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)

@@ -40,13 +40,14 @@ def test_resident_fingerprint_mismatch_enters_bounded_retry_backoff(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, lambda **_kwargs: b"unused"),
+        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(
         publisher_module,
         "_publish_snapshot_v3",
         lambda **_kwargs: ({}, 2),
     )
+    monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     try:
         publisher._publish_once()
         retry_deadline = publisher._retry_not_before_monotonic
@@ -83,8 +84,9 @@ def test_run_loop_backs_off_after_resident_mismatch_at_expired_deadline(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, lambda **_kwargs: b"unused"),
+        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
+    monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(publisher_module, "_publish_snapshot_v3", lambda **_kwargs: ({}, 2))
 
     class StopAfterResidentRetry:

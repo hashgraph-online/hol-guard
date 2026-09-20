@@ -48,7 +48,8 @@ const AUTH_TOKEN_BYTES: usize = 32;
 const AUTH_NONCE_BYTES: usize = 32;
 const AUTH_PROOF_BYTES: usize = 32;
 const AUTH_WORKERS: usize = 4;
-const AUTH_QUEUE_CAPACITY: usize = 16;
+const AUTH_QUEUE_CAPACITY: usize = 32;
+const AUTH_QUEUE_CAPACITY_MAX: usize = 64;
 const EVALUATION_WORKERS: usize = 16;
 const EVALUATION_QUEUE_CAPACITY: usize = 32;
 const AUTHENTICATED_PREFETCH_BYTES: usize = 64 * 1024;
@@ -60,6 +61,30 @@ const SERVER_PROOF_LABEL: &[u8] = b"hol-guard-resident-server-v1\0";
 const CLIENT_PROOF_LABEL: &[u8] = b"hol-guard-resident-client-v1\0";
 #[cfg(unix)]
 const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
+
+pub(crate) fn evaluation_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get().clamp(EVALUATION_WORKERS, 32))
+        .unwrap_or(EVALUATION_WORKERS)
+}
+
+pub(crate) fn auth_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| (n.get() / 4).clamp(AUTH_WORKERS, 8))
+        .unwrap_or(AUTH_WORKERS)
+}
+
+pub(crate) fn evaluation_queue_capacity() -> usize {
+    evaluation_workers()
+        .saturating_mul(2)
+        .clamp(EVALUATION_QUEUE_CAPACITY, 64)
+}
+
+pub(crate) fn auth_queue_capacity() -> usize {
+    auth_workers()
+        .saturating_mul(8)
+        .clamp(AUTH_QUEUE_CAPACITY, AUTH_QUEUE_CAPACITY_MAX)
+}
 
 fn read_stdin_bounded() -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
@@ -345,5 +370,17 @@ mod tests {
         assert_ne!(first, second);
         first_nonce[0] ^= 1;
         assert_ne!(first, hmac_sha256(&token, SERVER_PROOF_LABEL, &first_nonce));
+    }
+
+    #[test]
+    fn resident_worker_pools_scale_within_bounds() {
+        let evaluation = super::evaluation_workers();
+        let auth = super::auth_workers();
+        assert!((EVALUATION_WORKERS..=32).contains(&evaluation));
+        assert!((AUTH_WORKERS..=8).contains(&auth));
+        assert!((EVALUATION_QUEUE_CAPACITY..=64).contains(&super::evaluation_queue_capacity()));
+        assert!(
+            (AUTH_QUEUE_CAPACITY..=AUTH_QUEUE_CAPACITY_MAX).contains(&super::auth_queue_capacity())
+        );
     }
 }

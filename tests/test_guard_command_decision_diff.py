@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from tests.guard_command_corpus import load_seed_manifest
 from tests.guard_command_decision_diff import (
     BASE_RELEASE_SHA,
@@ -203,27 +205,31 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
-def test_fresh_process_report_is_environment_independent_and_bounded() -> None:
+@pytest.mark.parametrize(
+    ("hash_seed", "timezone", "locale"),
+    [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
+    ids=["utc", "pacific"],
+)
+def test_fresh_process_report_is_environment_independent_and_bounded(
+    hash_seed: str, timezone: str, locale: str
+) -> None:
     script = Path(__file__).with_name("guard_command_decision_diff.py")
     expected_digest = report_framed_sha256(_fixture())
-    metrics: list[dict[str, object]] = []
     manifest = load_seed_manifest()
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
-    for hash_seed, timezone, locale in (("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")):
-        environ = os.environ.copy()
-        environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
-        completed = subprocess.run(
-            [sys.executable, str(script), "--metrics"],
-            check=True,
-            capture_output=True,
-            timeout=evaluation_budget_seconds + 15,
-            env=environ,
-        )
-        value = cast(object, json.loads(completed.stdout))
-        assert isinstance(value, dict)
-        metrics.append(cast(dict[str, object], value))
-    assert [item["report_framed_sha256"] for item in metrics] == [expected_digest, expected_digest]
-    assert all(float(str(item["elapsed_seconds"])) < evaluation_budget_seconds for item in metrics), metrics
-    assert all(float(str(item["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])) for item in metrics), (
-        metrics
+    spawn_overhead_seconds = 15
+    environ = os.environ.copy()
+    environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
+    completed = subprocess.run(
+        [sys.executable, str(script), "--metrics"],
+        check=True,
+        capture_output=True,
+        timeout=evaluation_budget_seconds + spawn_overhead_seconds,
+        env=environ,
     )
+    value = cast(object, json.loads(completed.stdout))
+    assert isinstance(value, dict)
+    metrics = cast(dict[str, object], value)
+    assert metrics["report_framed_sha256"] == expected_digest
+    assert float(str(metrics["elapsed_seconds"])) < evaluation_budget_seconds + spawn_overhead_seconds, metrics
+    assert float(str(metrics["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])), metrics

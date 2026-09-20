@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import threading
 import time
@@ -391,3 +392,22 @@ def test_serve_enables_full_capacity_on_the_caller_thread(
     assert stopper.is_alive() is False
     assert daemon._owned_service_ready is False
     assert daemon._owner_lock is None
+
+
+def test_persist_aibom_inventory_context_swallows_sqlite_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home", prime_policy_integrity=False),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    monkeypatch.setattr(
+        daemon._server.store,
+        "get_cloud_workspace_id",
+        lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image is malformed")),
+    )
+
+    daemon._persist_aibom_inventory_context()

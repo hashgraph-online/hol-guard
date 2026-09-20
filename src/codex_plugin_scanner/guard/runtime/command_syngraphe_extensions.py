@@ -106,7 +106,7 @@ class SyngrapheSafeFlagMatcher:
     verified Syngraphe preview. Only canonical tokens are inspected here.
     """
 
-    matcher: CommandMatcher
+    matchers: tuple[CommandMatcher, ...]
     flag: str
     options_with_values: frozenset[str]
 
@@ -114,7 +114,7 @@ class SyngrapheSafeFlagMatcher:
         if command.confidence != "exact":
             return ()
         evidence: list[MatcherEvidence] = []
-        for item in self.matcher.match(command):
+        for item in (item for child in self.matchers for item in child.match(command)):
             segment = command.segments[item.segment_index]
             # Expansion may introduce a value-taking option before the preview
             # flag. xargs replacement can rewrite even a literal flag at launch.
@@ -165,7 +165,7 @@ def _rule(
             CommandSafeVariant(
                 variant_id=variant_id,
                 title=label,
-                matcher=SyngrapheSafeFlagMatcher(variant.matcher, flag, value_options),
+                matcher=SyngrapheSafeFlagMatcher((variant.matcher,), flag, value_options),
             )
         )
     return CommandSafetyRule(

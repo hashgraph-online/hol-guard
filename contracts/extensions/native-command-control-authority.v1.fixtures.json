@@ -1,0 +1,65 @@
+{
+  "schema": "guard.native-command-control-authority-fixtures.v1",
+  "verifier_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+  "null_floor_link_digest": "dd6154d19f03079ea55f73f3c42195fc52a7af8dbe026dd80cff5416c9ce0691",
+  "vectors": [
+    {
+      "name": "committed",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 4,
+        "authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "phase": "committed",
+        "effective_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "recovery": null
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"effective_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"epoch\":1,\"mac\":\"ed332527eff4b33ed4243635a2deea2dc2546b70266d23cec42889a137cd82e9\",\"mutation_revision\":4,\"phase\":\"committed\",\"recovery\":null,\"schema\":\"guard.native-command-control-authority.v1\"}"
+    },
+    {
+      "name": "closed",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 5,
+        "authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "phase": "closed",
+        "effective_digest": null,
+        "recovery": null
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"effective_digest\":null,\"epoch\":1,\"mac\":\"9c275c822399fb1a7a1f0203c3e8a02c66e1af82fc5fd8acc58d59fb5ca8190c\",\"mutation_revision\":5,\"phase\":\"closed\",\"recovery\":null,\"schema\":\"guard.native-command-control-authority.v1\"}"
+    },
+    {
+      "name": "current-floor-recovery",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 2,
+        "mutation_revision": 5,
+        "authority_key_id": "4444444444444444444444444444444444444444444444444444444444444444",
+        "phase": "committed",
+        "effective_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "recovery": {
+          "schema": "guard.native-command-control-recovery.v1",
+          "previous_epoch": 1,
+          "previous_mutation_revision": 4,
+          "previous_authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+          "previous_floor_digest": "bd874cc146a48137f8ec096484981764843d91833832c8a990a76bbbbec6498e",
+          "nonce": "6666666666666666666666666666666666666666666666666666666666666666"
+        }
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"effective_digest\":\"5555555555555555555555555555555555555555555555555555555555555555\",\"epoch\":2,\"mac\":\"f932674d92ea78e0f6d5c09710e7e3a63a1329673192d54f00e2dda324c438ac\",\"mutation_revision\":5,\"phase\":\"committed\",\"recovery\":{\"nonce\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"previous_authority_key_id\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"previous_epoch\":1,\"previous_floor_digest\":\"bd874cc146a48137f8ec096484981764843d91833832c8a990a76bbbbec6498e\",\"previous_mutation_revision\":4,\"schema\":\"guard.native-command-control-recovery.v1\"},\"schema\":\"guard.native-command-control-authority.v1\"}"
+    }
+  ],
+  "current_floor": {
+    "revision": 7,
+    "managed_revision": 3,
+    "effective_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "authority": {
+      "epoch": 1,
+      "mutation_revision": 4,
+      "authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+      "recovery": null
+    }
+  },
+  "current_floor_link_digest": "bd874cc146a48137f8ec096484981764843d91833832c8a990a76bbbbec6498e"
+}

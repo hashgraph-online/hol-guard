@@ -7,6 +7,10 @@ mod approval_contracts;
 pub use approval_contracts::*;
 mod native_hook_receipt;
 pub use native_hook_receipt::*;
+mod native_command_observations;
+pub use native_command_observations::*;
+mod native_command_controls;
+pub use native_command_controls::*;
 mod approval_v4_contracts;
 pub use approval_v4_contracts::*;
 
@@ -129,6 +133,8 @@ pub struct PreToolResultV1 {
     pub reason_code: String,
     pub reason: String,
     pub explicitly_benign: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_extensions: Option<NativeCommandObservationsV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

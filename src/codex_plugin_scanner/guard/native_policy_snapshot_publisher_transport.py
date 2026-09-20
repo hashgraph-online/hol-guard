@@ -76,6 +76,7 @@ def _publish_snapshot_v3(
     identity: Any,
     capabilities: Any,
     config: Mapping[str, object],
+    command_extensions: Mapping[str, object],
     master_key: bytes,
     client: Callable[..., bytes | None],
     renew_after_generation: int | None,
@@ -96,6 +97,7 @@ def _publish_snapshot_v3(
             issued_at_ms=int(publisher._wall_clock() * 1_000),
             deadline_monotonic=publisher._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS,
             renew_after_generation=renew_after_generation,
+            command_extensions=command_extensions,
         )
         encoded = _policy_snapshot_push_bytes_v3(snapshot)
         output = client(

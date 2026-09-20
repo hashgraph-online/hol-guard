@@ -8,6 +8,8 @@ import re
 from collections.abc import Mapping
 from typing import Final, cast
 
+from .native_command_observations import valid_native_command_receipt_binding, validate_native_command_observations
+
 NATIVE_HOOK_DECISION_RECEIPT_SCHEMA: Final = "guard-native-hook-decision-receipt.v1"
 NATIVE_HOOK_DECISION_RECEIPT_MAX_BYTES: Final = 16 * 1024
 NATIVE_HOOK_DECISION_RECEIPT_MAX_STRING_BYTES: Final = 512
@@ -53,7 +55,7 @@ def _bounded_identifier(value: object, *, pattern: re.Pattern[str], maximum: int
     return value
 
 
-def _optional_digest(value: object) -> str | None | object:
+def _optional_digest(value: object) -> str | object | None:
     if value is None:
         return None
     if isinstance(value, str) and _HEX64.fullmatch(value):
@@ -65,7 +67,7 @@ _INVALID = object()
 
 
 def _identity_payload(receipt: Mapping[str, object]) -> dict[str, object]:
-    return {
+    identity = {
         "schema": "guard-native-hook-decision-identity.v1",
         "version": 1,
         "request_id": receipt["request_id"],
@@ -88,6 +90,9 @@ def _identity_payload(receipt: Mapping[str, object]) -> dict[str, object]:
         "observe_mode": receipt["observe_mode"],
         "deadline_budget_ms": receipt["deadline_budget_ms"],
     }
+    if "command_extensions" in receipt:
+        identity["command_extensions"] = receipt["command_extensions"]
+    return identity
 
 
 def canonical_receipt_bytes(receipt: Mapping[str, object]) -> bytes:
@@ -167,7 +172,9 @@ def validate_native_decision_receipt(value: object) -> dict[str, object] | None:
     if not isinstance(value, Mapping):
         return None
     receipt = dict(cast(Mapping[str, object], value))
-    if set(receipt) != _REQUIRED_FIELDS:
+    if set(receipt) not in (_REQUIRED_FIELDS, _REQUIRED_FIELDS | {"command_extensions"}):
+        return None
+    if "command_extensions" in receipt and not valid_native_command_receipt_binding(receipt["command_extensions"]):
         return None
     decision_id = _validate_receipt_identity(receipt)
     if decision_id is None or not _validate_receipt_policy(receipt) or not _validate_receipt_limits(receipt):
@@ -209,7 +216,15 @@ def receipt_matches_edge(payload: Mapping[str, object], receipt: object) -> bool
         "reviewed_output_sha256": result.get("reviewed_output_sha256"),
         "observe_mode": result.get("observe_mode") is True,
     }
-    return all(validated[key] == value for key, value in expected.items())
+    extension_evidence = result.get("command_extensions")
+    if extension_evidence is not None:
+        extension_evidence = validate_native_command_observations(extension_evidence)
+        if extension_evidence is None or event_name != "PreToolUse":
+            return False
+        expected["command_extensions"] = extension_evidence["binding"]
+    elif "command_extensions" in validated:
+        return False
+    return all(validated.get(key) == value for key, value in expected.items())
 
 
 __all__ = [

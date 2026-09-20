@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 _ARTIFACTS = {
+    "contracts/extensions/native-command-program.v1.json": "extensions/native-command-program.v1.json",
     "contracts/guard-cloud-review/v2/contract.json": "guard-cloud-review/v2/contract.json",
     "contracts/guard-cloud-review/v2/command-result.json": "guard-cloud-review/v2/command-result.json",
     "contracts/guard-cloud-review/v2/fixtures.json": "guard-cloud-review/v2/fixtures.json",
@@ -14,14 +15,17 @@ _ARTIFACTS = {
     "contracts/extensions/trust-class-map.v1.json": "extensions/trust-class-map.v1.json",
     "contracts/extensions/contribution.v1.schema.json": "extensions/contribution.v1.schema.json",
     "contributions/extensions/command.blitcp.json": "extensions/contributions/command.blitcp.json",
+    "contributions/extensions/command.errand.json": "extensions/contributions/command.errand.json",
     "contributions/extensions/command.noodle.json": "extensions/contributions/command.noodle.json",
     "contributions/extensions/command.ollama.json": "extensions/contributions/command.ollama.json",
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
+    "contributions/extensions/command.remote.essh.json": "extensions/contributions/command.remote.essh.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contributions/extensions/command.syngraphe.json": "extensions/contributions/command.syngraphe.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
+    "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
 }
 
 

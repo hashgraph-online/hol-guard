@@ -17,6 +17,10 @@ _RELEASE_BRANCHES = frozenset({"main", "release/3.0"})
 _SHA = re.compile(r"[0-9a-f]{40}")
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+_PUBLICATION_JOBS = {
+    "main": frozenset({"Publish main release to PyPI", "Create main GitHub release"}),
+    "release/3.0": frozenset({"Publish alpha to PyPI", "Create alpha GitHub prerelease"}),
+}
 
 
 def _mapping(value: object, label: str) -> dict:
@@ -100,6 +104,54 @@ def verify_release_source(
     return verified
 
 
+def publication_completed(
+    event: dict, *, repository: str, sha: str, branch: str, fetch_json: Callable[[str], object]
+) -> bool:
+    """Distinguish a completed release from successful build-only publishing runs."""
+    run_id = _positive_id(_mapping(event.get("workflow_run"), "workflow run event").get("id"), "workflow run ID")
+    expected_names = _PUBLICATION_JOBS[branch]
+    publication_jobs: dict[str, dict] = {}
+    # Read the original attempt, never a later rerun's jobs, and bound pagination.
+    for page in range(1, 11):
+        payload = _mapping(
+            fetch_json(f"/repos/{repository}/actions/runs/{run_id}/attempts/1/jobs?per_page=100&page={page}"),
+            "publishing jobs",
+        )
+        total_count = payload.get("total_count")
+        jobs = payload.get("jobs")
+        if type(total_count) is not int or not 0 <= total_count <= 1000 or not isinstance(jobs, list):
+            raise ValueError("Invalid publishing job list")
+        for raw_job in jobs:
+            job = _mapping(raw_job, "publishing job")
+            name = job.get("name")
+            if not isinstance(name, str):
+                raise ValueError("Invalid publishing job name")
+            if name not in expected_names:
+                continue
+            if name in publication_jobs:
+                raise ValueError("Duplicate canonical publishing job")
+            if (
+                job.get("run_id") != run_id
+                or job.get("head_sha") != sha
+                or job.get("status") != "completed"
+                or not isinstance(job.get("conclusion"), str)
+            ):
+                raise ValueError("Publishing job does not match the completed release run")
+            publication_jobs[name] = job
+        if page * 100 >= total_count:
+            break
+        if len(jobs) != 100:
+            raise ValueError("Incomplete publishing job list")
+    if publication_jobs.keys() != expected_names:
+        raise ValueError("Canonical publishing jobs are missing from the completed run")
+    conclusions = {job.get("conclusion") for job in publication_jobs.values()}
+    if conclusions == {"skipped"}:
+        return False
+    if conclusions != {"success"}:
+        raise ValueError("Canonical package and release publication did not both succeed")
+    return True
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Never forward the workflow token to a redirected API location."""
 
@@ -139,6 +191,11 @@ def main() -> int:
             repository=os.environ["GITHUB_REPOSITORY"],
             fetch_json=github_json,
         )
+        if not publication_completed(
+            event, repository=os.environ["GITHUB_REPOSITORY"], sha=sha, branch=branch, fetch_json=github_json
+        ):
+            print("Publishing workflow completed without a release; downstream publication is skipped")
+            return 0
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
             output.write(f"sha={sha}\nbranch={branch}\n")
     except (KeyError, ValueError, OSError, urllib.error.URLError) as error:

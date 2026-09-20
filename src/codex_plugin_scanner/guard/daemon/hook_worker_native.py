@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_mode import python_oracle_surface_enabled
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus, native_output_sha256
 from ..runtime.hook_output_text import extract_payload_output
@@ -19,6 +21,7 @@ from .hook_availability_policy import (
     recording_only_pre_tool_response,
 )
 from .hook_native_review_approval import pause_native_pre_tool_for_approval
+from .hook_native_review_fence import native_review_fence
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -127,6 +130,7 @@ class _HookWorkerNativeHost(Protocol):
     _review_pre_tool_native: Callable[..., dict[str, object] | None]
     _native_runtime_status: Callable[[], NativeRuntimeStatus]
     _review_raw_hook_native: Callable[..., dict[str, object] | None]
+    _review_native_edge_with_snapshot: Callable[..., tuple[dict[str, object], bool]]
     _record_post_tool_activity: Callable[..., None]
     _record_native_decision_receipt: Callable[[object], Mapping[str, object] | None]
 
@@ -316,9 +320,84 @@ class HookWorkerNativeMixin:
         deadline: float | None,
     ) -> dict[str, object]:
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-        recording_only = hook_review_is_recording_only(guard_home=guard_home, workspace=workspace) or (
-            policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
-        )
+        # Native evaluation and Python delivery use the same acknowledged
+        # posture. A local Watch edit cannot weaken an enforcing snapshot
+        # before its replacement is accepted. A missing binding already takes
+        # the existing unavailable route, whose response is posture-independent.
+        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        fenced: bool | None = None
+        try:
+            with native_review_fence(
+                policy_snapshot=policy_snapshot,
+                event_name=event_name,
+                recording_only=recording_only,
+                guard_home=guard_home,
+                deadline=deadline,
+            ) as fenced:
+                response, native_used = self._review_native_edge_with_snapshot(
+                    payload=payload,
+                    harness=harness,
+                    event_name=event_name,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
+                    policy_snapshot=policy_snapshot,
+                    recording_only=recording_only,
+                )
+                if (
+                    fenced
+                    and native_used
+                    and response.get("policy_action") == "allow"
+                    and deadline is not None
+                    and time.monotonic() >= deadline
+                ):
+                    raise TimeoutError("native_review_fence_deadline")
+            if native_used:
+                self.metrics.record_route("native_resident")
+            return response
+        except TimeoutError:
+            return _record_unavailable_native(
+                self,
+                payload,
+                harness=harness,
+                event_name=event_name,
+                reason_code="native_review_deadline_exceeded",
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=recording_only,
+            )
+        except (OSError, NativePolicySnapshotError):
+            if fenced is False:
+                raise
+            return _record_unavailable_native(
+                self,
+                payload,
+                harness=harness,
+                event_name=event_name,
+                reason_code="native_command_control_fence_unavailable",
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                recording_only=recording_only,
+            )
+
+    def _review_native_edge_with_snapshot(
+        self: _HookWorkerNativeHost,
+        *,
+        payload: dict[str, object],
+        harness: str,
+        event_name: str,
+        default_harness: str,
+        home_dir: Path,
+        guard_home: Path,
+        workspace: Path | None,
+        deadline: float | None,
+        policy_snapshot: Mapping[str, object] | None,
+        recording_only: bool,
+    ) -> tuple[dict[str, object], bool]:
         edge = self._review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -342,35 +421,40 @@ class HookWorkerNativeMixin:
                 "PostToolUse": "native_post_tool_unavailable",
                 "PreToolUse": "native_pre_tool_unavailable",
             }.get(event_name, "native_hook_event_unavailable")
-            return _record_unavailable_native(
-                self,
-                payload,
-                harness=harness,
-                event_name=event_name,
-                reason_code=reason_code,
-                workspace=workspace,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                recording_only=recording_only,
+            return (
+                _record_unavailable_native(
+                    self,
+                    payload,
+                    harness=harness,
+                    event_name=event_name,
+                    reason_code=reason_code,
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    recording_only=recording_only,
+                ),
+                False,
             )
         native_event = str(edge["event_name"])
         native_harness = str(edge["harness"])
         native_result = edge["result"]
         if not isinstance(native_result, Mapping):
-            return _record_unavailable_native(
-                self,
-                payload,
-                harness=harness,
-                event_name=event_name,
-                reason_code="native_hook_edge_invalid_response",
-                workspace=workspace,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                recording_only=recording_only,
+            return (
+                _record_unavailable_native(
+                    self,
+                    payload,
+                    harness=harness,
+                    event_name=event_name,
+                    reason_code="native_hook_edge_invalid_response",
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    recording_only=recording_only,
+                ),
+                False,
             )
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
-        self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
@@ -381,7 +465,10 @@ class HookWorkerNativeMixin:
                         reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
                         reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
                     )
-                    return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
+                    return (
+                        _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt),
+                        True,
+                    )
             action = str(native_result.get("minimum_action") or "")
             if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                 response = pause_native_pre_tool_for_approval(
@@ -393,13 +480,16 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                 )
-                return _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt)
-            return _record_native_pre_activity(
-                self,
-                native_harness,
-                payload,
-                harness_json_from_native_pre_tool(native_harness, native_result),
-                accepted_receipt,
+                return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
+            return (
+                _record_native_pre_activity(
+                    self,
+                    native_harness,
+                    payload,
+                    harness_json_from_native_pre_tool(native_harness, native_result),
+                    accepted_receipt,
+                ),
+                True,
             )
         if recording_only:
             native_result = _watch_native_post_tool_result(native_result, payload)
@@ -408,7 +498,7 @@ class HookWorkerNativeMixin:
             payload=payload,
             succeeded=hook_post_succeeded(native_event, payload),
         )
-        return harness_json_from_native_post_tool(native_harness, native_result)
+        return (harness_json_from_native_post_tool(native_harness, native_result), True)
 
     def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
         """Accept only a validated Rust receipt; persistence remains best-effort."""

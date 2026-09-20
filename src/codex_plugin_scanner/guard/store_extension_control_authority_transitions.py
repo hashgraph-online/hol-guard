@@ -44,6 +44,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         expected_revision: int,
         key: bytes,
     ) -> ExtensionControlAuthorityView | None:
+        self._invalidate_native_extension_control_policy()
         self._validate_serialized_layers(layers_json)
         if (
             _row_int(row, "previous_revision") != expected_revision

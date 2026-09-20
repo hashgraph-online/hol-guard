@@ -8,6 +8,8 @@ execute mutable local code are not eligible for Python-side retry reuse.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import shlex
 import sqlite3
@@ -18,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
+from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -90,6 +93,18 @@ def pause_native_pre_tool_for_approval(
 ) -> dict[str, object]:
     """Pause a native review result and attach any queued approval metadata."""
 
+    try:
+        native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+    except ValueError:
+        failed = dict(native_result)
+        failed.update(
+            decision="deny",
+            minimum_action="block",
+            policy_action="block",
+            reason_code="native_review_policy_binding_invalid",
+            reason="HOL Guard could not bind this review to its native policy.",
+        )
+        return harness_json_from_native_pre_tool(harness, failed)
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
     identity = _native_review_binding(
@@ -154,6 +169,10 @@ def queue_native_pre_tool_review(
 ) -> dict[str, object] | None:
     """Persist one native review as an approval-center request."""
 
+    try:
+        native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+    except ValueError:
+        return None
     persist = getattr(store, "add_approval_request", None)
     lookup = getattr(store, "get_approval_request", None)
     if not callable(persist) or not callable(lookup):
@@ -323,7 +342,18 @@ def _native_review_binding(
     identity_tokens = (decision, minimum_action, policy_action, reason_code)
     if any(_NATIVE_IDENTITY_TOKEN.fullmatch(value) is None for value in identity_tokens):
         return None
-    return ":".join(("native-review-v4", request_digest, *identity_tokens))
+    identity = ":".join(("native-review-v4", request_digest, *identity_tokens))
+    try:
+        policy_binding = native_review_policy_binding(
+            harness=harness, native_result=native_result, verified_receipt=native_receipt
+        )
+    except ValueError:
+        return None
+    if policy_binding is None:
+        return identity
+    encoded = json.dumps(policy_binding, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    domain = hashlib.sha256(b"hol-guard.native-review-extension-binding.v1\0" + encoded).hexdigest()
+    return f"{identity}:{domain}"
 
 
 def _native_review_matching_allow(

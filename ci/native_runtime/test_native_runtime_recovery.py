@@ -24,7 +24,13 @@ from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewReque
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 
 
-def _request(workspace: Path, *, guard_home: Path, request_id: str) -> HookReviewRequest:
+def _request(
+    workspace: Path,
+    *,
+    guard_home: Path,
+    request_id: str,
+    deadline_monotonic: float | None = None,
+) -> HookReviewRequest:
     return HookReviewRequest(
         harness="claude-code",
         event_name="PostToolUse",
@@ -39,6 +45,7 @@ def _request(workspace: Path, *, guard_home: Path, request_id: str) -> HookRevie
         home_dir=workspace,
         guard_home=guard_home,
         source_scope="project",
+        deadline_monotonic=deadline_monotonic,
         request_id=request_id,
     )
 
@@ -146,10 +153,15 @@ def test_resident_runtime_restarts_after_contained_shutdown(tmp_path: Path) -> N
                 assert first is not None and first.decision == "allow"
                 close_resident_native_runtimes()
 
+                # This test proves functional cold-restart recovery. Production
+                # adapter recovery latency is enforced separately by the installed
+                # native SLO suite, so do not conflate that SLO with the default
+                # 750 ms interactive request budget used by warm hook traffic.
                 second_request = _request(
                     tmp_path,
                     guard_home=guard_home,
                     request_id="after-shutdown",
+                    deadline_monotonic=time.monotonic() + 3.0,
                 )
                 second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
                 assert second is not None and second.decision == "allow"

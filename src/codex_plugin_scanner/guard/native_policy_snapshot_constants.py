@@ -63,6 +63,8 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
         "policy-snapshot-resident-generation-v1",
         "native-policy-in-memory-v1",
         "native-resident-client-v1",
+        "native-command-program-v1",
+        "native-command-control-fence-v1",
     }
 )
 _VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
@@ -109,6 +111,7 @@ _SNAPSHOT_FIELDS = frozenset(
         "integrity",
     }
 )
+_OPTIONAL_SNAPSHOT_FIELDS = frozenset({"command_extensions"})
 _SCOPE_FIELDS = frozenset({"schema", "kind", "scope_digest", "workspace_binding"})
 _EFFECTIVE_POLICY_FIELDS = frozenset(
     {

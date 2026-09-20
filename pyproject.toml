@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.0.1"
+version = "3.1.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -88,6 +88,7 @@ dev = [
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.3",
+    "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
     "fastapi==0.137.1",
@@ -129,12 +130,14 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
+"contributions/extensions/command.errand.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.errand.json"
 "contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
 "contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
 "contributions/extensions/command.ollama.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.ollama.json"
@@ -145,6 +148,7 @@ packages = ["src/codex_plugin_scanner"]
 "contributions/extensions/command.syngraphe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.syngraphe.json"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
+"contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
 
 [tool.hatch.build]
 artifacts = [
