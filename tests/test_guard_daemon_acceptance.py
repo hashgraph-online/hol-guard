@@ -57,7 +57,7 @@ def test_packaged_correctness_workloads(
     assert result.pid_stable
     assert result.workers_stable
     assert result.queue_bounded
-    assert result.rss_growth_bytes < 128 * 1024 * 1024 * coverage_scale
+    assert result.rss_growth_bytes < 128 * 1024 * 1024
     # Codex requests add an authenticated challenge round trip in the mixed-harness profile.
     p95_limit_ms = (1_000 if workload["id"] == "mixed-harness-fairness" else 750) * coverage_scale
     assert result.p95_ms < p95_limit_ms

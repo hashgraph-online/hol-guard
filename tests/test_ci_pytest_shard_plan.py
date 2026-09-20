@@ -75,11 +75,11 @@ def test_scheduling_only_nodes_cannot_own_or_inflate_a_coverage_shard() -> None:
     traced_nodes = [f"{node}_followup" for node in scheduling_nodes]
     durations = {**_durations(scheduling_nodes, seconds=600.0), **_durations(traced_nodes)}
 
-    shards, loads = build_affinity_node_shards(scheduling_nodes + traced_nodes, 2, durations)
+    shards, loads = build_affinity_node_shards(scheduling_nodes + traced_nodes, len(traced_nodes), durations)
 
     assert all(shards)
     assert sorted(node for shard in shards for node in shard) == sorted(traced_nodes)
-    assert loads == [1.0, 1.0]
+    assert loads == [1.0] * len(traced_nodes)
     assert not SCHEDULING_ONLY_NODE_IDS.intersection(node for shard in shards for node in shard)
 
 

@@ -92,6 +92,8 @@ jobs:
           fi
 
   test-plan:
+    # Admit coverage producers before the additional untraced suite fills runners.
+    needs: coverage-plan
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -106,7 +108,7 @@ jobs:
       - uses: ./.github/actions/plan-pytest
         with:
           python-version: "3.12"
-          shard-count: "32"
+          shard-count: "64"
           telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
           github-token: ${{ github.token }}
 
@@ -139,7 +141,9 @@ jobs:
         python-version: ["3.12"]
         shard-index: [
           0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-          16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+          16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+          32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+          48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63
         ]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -204,6 +208,10 @@ jobs:
             uv run --no-sync pytest -p pytest_duration_report -p pytest_coverage_core "@$shard_file" --tb=short --durations=10 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
+            --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows \
+            --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_resolving_one_request_with_100k_rows_stays_under_100ms \
+            --deselect 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' \
+            --deselect tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
         if: always()
@@ -350,31 +358,18 @@ jobs:
   scheduling-sensitive:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12.14", "3.14.7"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      - uses: ./.github/actions/setup-ci-python
         with:
-          python-version: "3.12"
-      - name: Set up uv
-        id: setup-uv-primary
-        continue-on-error: true
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
+          python-version: ${{ matrix.python-version }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-          save-cache: false
-      - name: Retry uv setup after transient download failure
-        if: steps.setup-uv-primary.outcome == 'failure'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
-          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-          save-cache: false
-      - run: uv sync --frozen --extra dev --python 3.12
       - name: Run scheduling-sensitive tests untraced
         run: >-
           uv run --no-sync pytest
@@ -385,6 +380,10 @@ jobs:
           tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial
           tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon
           tests/test_guard_continuation_contract.py
+          tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows
+          tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_resolving_one_request_with_100k_rows_stays_under_100ms
+          tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]
+          tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner
           --tb=short
 
   compatibility:

@@ -58,9 +58,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--deselect" not in collector
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert payload["env"]["CI_COVERAGE_PYTHON_VERSION"] == "3.14.7"
+    assert jobs["test-plan"]["needs"] == "coverage-plan"
+    assert "needs" not in jobs["coverage-plan"]
 
     for planner, executor, version, env_name, count, width in (
-        ("test-plan", "tests", "3.12", "CI_PYTHON_VERSION", 32, 2),
+        ("test-plan", "tests", "3.12", "CI_PYTHON_VERSION", 64, 2),
         ("coverage-plan", "coverage", "3.14", "CI_COVERAGE_PYTHON_VERSION", 128, 3),
     ):
         plan_job = jobs[planner]
@@ -93,11 +95,18 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "-p pytest_coverage_core" in coverage_job
     assert jobs["coverage"]["name"] == "coverage (3.14, ${{ matrix.shard-index }})"
     assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
-    for node in (SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE):
-        assert f"--deselect {node}" in coverage_job
+    for node in SCHEDULING_ONLY_NODE_IDS:
+        assert f"--deselect {node}" in coverage_job or f"--deselect '{node}'" in coverage_job
         assert node in scheduling_job
-    assert coverage_job.count("--deselect ") == 2
-    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} == SCHEDULING_ONLY_NODE_IDS
+    assert coverage_job.count("--deselect ") == len(SCHEDULING_ONLY_NODE_IDS)
+    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
+    assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
+    timing_setup = next(
+        step
+        for step in jobs["scheduling-sensitive"]["steps"]
+        if step.get("uses") == "./.github/actions/setup-ci-python"
+    )
+    assert timing_setup["with"]["python-version"] == "${{ matrix.python-version }}"
     assert "--cov" not in scheduling_job
 
     candidate = jobs["duration-manifest-candidate"]

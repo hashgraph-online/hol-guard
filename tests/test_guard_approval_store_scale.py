@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.store_approvals import (
     resolve_approval_request,
     resolve_request_with_queue_result,
 )
-from tests.coverage_ci import under_coverage_scale
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -232,7 +231,7 @@ class TestQueueScaleTargets:
         assert result["resolved"] is True
         assert result["remaining_pending_count"] == 99_999
         assert result["next_selectable_request_id"] == "req-099998"
-        assert elapsed < 0.1 * under_coverage_scale(3.0)
+        assert elapsed < 0.1
 
     def test_resolving_duplicates_stays_within_oauth_source(self) -> None:
         conn = _make_conn()
@@ -272,7 +271,7 @@ class TestQueueScaleTargets:
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
-        assert elapsed < 0.05 * under_coverage_scale(3.0)
+        assert elapsed < 0.05
 
 
 class TestSearchFilter:

@@ -2843,7 +2843,24 @@ def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
 def _guard_daemon_pid_is_proven_dead(pid: int) -> bool:
     if os.name == "nt":
         return windows_process_liveness(pid) is False
+    if _guard_daemon_child_has_exited(pid):
+        return True
     return not _guard_daemon_pid_is_running(pid)
+
+
+def _guard_daemon_child_has_exited(pid: int) -> bool:
+    """Observe an exited child without consuming its owner's process status."""
+    required = ("waitid", "P_PID", "WEXITED", "WNOHANG", "WNOWAIT", "CLD_EXITED", "CLD_KILLED", "CLD_DUMPED")
+    if pid <= 0 or not all(hasattr(os, name) for name in required):
+        return False
+    try:
+        result = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except (OSError, ValueError, OverflowError):
+        # Non-children and unsupported platforms retain the existing liveness proof.
+        return False
+    return (
+        result is not None and result.si_pid == pid and result.si_code in (os.CLD_EXITED, os.CLD_KILLED, os.CLD_DUMPED)
+    )
 
 
 def _wait_for_guard_daemon_pid_death(pid: int, *, timeout: float = 1.0) -> bool:
