@@ -27,9 +27,9 @@ from .command_activity_contract import (
 )
 from .command_evaluation import CompositeCommandEvaluation, OwnedCommandRuleMatch
 from .command_risk_effects import command_risk_effects
-from .command_rules import CommandRuleMode
 from .effect_contract import UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
+from .generated_command_catalog import CommandRuleMode
 
 
 @dataclass(frozen=True, slots=True)

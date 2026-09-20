@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.daemon.hook_process_worker import (
     HookWorkerSlot,
     retire_worker_slot,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _spawn_term_ignoring_descendant(ready_path: str, escaped_path: str) -> None:
@@ -492,6 +493,9 @@ def test_transient_spawn_thread_exhaustion_replenishes_capacity(
     tmp_path,
     monkeypatch,
 ) -> None:
+    # The daemon initializes storage before starting resident workers. Keep
+    # first-run schema migration outside this spawn-recovery review deadline.
+    _ = GuardStore(tmp_path)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
     original_start = threading.Thread.start
     failed_once = False
@@ -506,6 +510,7 @@ def test_transient_spawn_thread_exhaustion_replenishes_capacity(
     monkeypatch.setattr(threading.Thread, "start", transient_spawn_failure)
     try:
         runner.start()
+        assert runner.stats()["ready"] == 1
         result = runner.review(
             payload={"hook_event_name": "SessionStart"},
             harness="pi",

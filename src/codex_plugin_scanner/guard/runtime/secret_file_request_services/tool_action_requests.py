@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from ..command_evaluation import CompositeCommandEvaluation
 from ..command_model import CanonicalCommand
 from ..compound_git_inspection import (
     is_low_risk_git_inspection_segment,
@@ -58,6 +59,7 @@ def extract_sensitive_tool_action_request(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     canonical_command: CanonicalCommand | None = None,
+    native_evaluation: CompositeCommandEvaluation | None = None,
 ) -> ToolActionRequestMatch | None:
     """Extract a sensitive native tool action from arguments."""
 
@@ -206,6 +208,11 @@ def extract_sensitive_tool_action_request(
             raw_command_text=raw_command_text,
             execution_context=destructive_execution_context,
             raw_execution_context=raw_destructive_execution_context,
+            native_evaluation=(
+                native_evaluation
+                if candidate_canonical is not None and candidate_canonical.normalized_text == command_text
+                else None
+            ),
         )
         if destructive_shell_request is not None:
             destructive_shell_request = _request_with_shell_execution_context(
@@ -232,6 +239,7 @@ def extract_sensitive_tool_action_request(
                 raw_command_text=raw_command_text,
                 execution_context=raw_destructive_execution_context,
                 raw_execution_context=raw_destructive_execution_context,
+                native_evaluation=native_evaluation,
             )
             if destructive_shell_request is not None:
                 destructive_shell_request = _request_with_shell_execution_context(
@@ -248,6 +256,29 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
                 return destructive_shell_request
+        if (
+            native_evaluation is not None
+            and candidate_canonical is not None
+            and native_evaluation.command.security_identity == candidate_canonical.security_identity
+            and native_evaluation.minimum_action == "block"
+            and not native_evaluation.matches
+            and any(
+                reason.reason_code == "native.classification-block"
+                for reason in native_evaluation.decision_plane.reasons
+            )
+        ):
+            # A bound native rejection has no semantic rule match to project,
+            # but it must still produce a request that retains the hard block.
+            return ToolActionRequestMatch(
+                tool_name=requested_tool_name,
+                normalized_tool_name=effective_tool_name,
+                command_text=raw_command_text,
+                action_class="unmodeled shell command",
+                reason="HOL Guard blocked this command because the native evaluator could not safely classify it.",
+                canonical_command=candidate_canonical,
+                guard_default_action="block",
+                reason_code="native-command-classification-block",
+            )
     return None
 
 

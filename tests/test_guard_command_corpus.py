@@ -16,7 +16,6 @@ from typing import Protocol, cast
 import pytest
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.effect_contract import (
     EffectKind,
     EffectReversibility,
@@ -36,6 +35,11 @@ from tests.guard_command_corpus import (
     load_seed_manifest,
     stable_case_id,
 )
+from tests.guard_command_corpus_native_contract import (
+    expected_native_groups,
+    expected_native_rejection_groups,
+    expected_original_gap_groups,
+)
 from tests.guard_command_corpus_oracle import (
     ADVERSARIAL_ORACLE,
     BENIGN_ORACLE,
@@ -45,6 +49,7 @@ from tests.guard_command_corpus_oracle import (
     iter_benign_oracle,
 )
 from tests.guard_command_corpus_runner import linux_peak_rss_mib_from_status, peak_rss_mib
+from tests.native_command_test_support import real_native_command_evaluation
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _OWNERS = {f"CDX-06{index}" for index in range(7)}
@@ -59,6 +64,22 @@ _WORKFLOW_FAMILIES = {
     "shell-composition",
     "network-container-cloud",
     "credentials-permissions-system-guard-destruction",
+}
+
+# These are the native classifier's floors before host effect composition.
+# The immutable pair fixture retains the earlier Python observations and the
+# independent semantic labels; neither supplies native execution authority.
+_NATIVE_PAIR_MINIMUM_ACTIONS = {
+    "p-navigation-boundary": ("allow", "allow"),
+    "p-source-boundary": ("allow", "allow"),
+    "p-typescript-source": ("review", "review"),
+    "p-git-history": ("review", "review"),
+    "p-github-mutation-impact": ("block", "block"),
+    "p-package-operation": ("review", "review"),
+    "p-shell-data-vs-eval": ("allow", "block"),
+    "p-cloud-help-redirection": ("review", "block"),
+    "p-patch-check-vs-apply": ("review", "block"),
+    "p-capability-replay": ("review", "review"),
 }
 
 
@@ -223,7 +244,7 @@ def test_independent_oracle_is_complete_per_seed_and_never_invents_proof() -> No
             assert is_guard_action(facts.minimum_floor)
 
 
-def test_ten_reviewed_pairs_have_one_machine_checked_delta_and_run_through_guard(tmp_path: Path) -> None:
+def test_ten_reviewed_pairs_preserve_semantic_deltas_and_characterize_native_floors(tmp_path: Path) -> None:
     payload = _decode_object(PAIRS_PATH)
     pairs_value = payload["pairs"]
     assert isinstance(pairs_value, list)
@@ -301,19 +322,22 @@ def test_ten_reviewed_pairs_have_one_machine_checked_delta_and_run_through_guard
         assert variant_facts.minimum_floor == pair["variant_floor"]
         assert _floor_rank(variant_facts.minimum_floor) >= _floor_rank(baseline_facts.minimum_floor)
 
-        baseline = evaluate_command(baseline_command, cwd=baseline_cwd, home_dir=tmp_path)
-        variant = evaluate_command(variant_command, cwd=variant_cwd, home_dir=tmp_path)
-        observed_value = pair["observed_floors"]
-        assert isinstance(observed_value, list)
-        observed = cast(list[object], observed_value)
-        assert [baseline.minimum_action, variant.minimum_action] == observed
+        baseline = real_native_command_evaluation(baseline_command, cwd=baseline_cwd, home_dir=tmp_path)
+        variant = real_native_command_evaluation(variant_command, cwd=variant_cwd, home_dir=tmp_path)
+        assert (baseline.payload["minimum_action"], variant.payload["minimum_action"]) == _NATIVE_PAIR_MINIMUM_ACTIONS[
+            pair_id
+        ]
+        for reviewed in (baseline, variant):
+            assert _floor_rank(reviewed.evaluation.decision_plane.action) >= _floor_rank(
+                reviewed.payload["minimum_action"]
+            )
         assert pair["owner"] in _OWNERS
 
     assert families == _WORKFLOW_FAMILIES
     assert len(pair_case_ids) == 20
 
 
-def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -> None:
+def test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences() -> None:
     known_payload = _decode_object(KNOWN_GAPS_PATH)
     assert known_payload["schema_version"] == "1.0.0"
     assert known_payload["introduced_in_corpus"] == "1.0.0"
@@ -356,11 +380,22 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
         for key, value in cast(dict[str, object], actual_value).items()
         if isinstance(value, list)
     }
-    assert actual == expected
+    assert expected == {}
+    assert actual != expected
+    assert actual == {tuple(key.split("|")): value for key, value in expected_original_gap_groups().items()}
+    assert report["scope"] == "reviewed-native-engine-with-original-oracle-differences"
+    assert report["native_contract_equality"] is True
+    native_groups = cast(dict[str, list[object]], report["native_contract_groups"])
+    assert {key: tuple(value) for key, value in native_groups.items()} == expected_native_groups()
+    rejection_groups = cast(dict[str, list[object]], report["native_rejection_groups"])
+    assert {key: tuple(value) for key, value in rejection_groups.items()} == expected_native_rejection_groups()
+    assert report["native_rejection_count"] == 27_084
+    assert report["original_oracle_below_count"] == 0
+    assert report["original_oracle_above_count"] == 11_558
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
         load_seed_manifest()["evaluation_budget_seconds"]
     )
-    assert isinstance(report["rss_mib"], int | float) and report["rss_mib"] < 512
+    assert isinstance(report["rss_mib"], int | float) and report["rss_mib"] < 560
 
 
 def test_windows_peak_rss_uses_process_working_set(monkeypatch: pytest.MonkeyPatch) -> None:

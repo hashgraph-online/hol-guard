@@ -1,0 +1,1359 @@
+{
+  "extension": {
+    "action_classes": [
+      "Rclone destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews rclone operations that delete, move, purge, or synchronize data.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.backup.rclone",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Rclone command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Rclone destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion, purge, move, and synchronization operations that can remove data.",
+        "example_command": "rclone delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Rclone destructive synchronization",
+        "permission_id": "command.backup.rclone.permission.mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://rclone.org/commands/",
+      "https://rclone.org/commands/rclone_delete/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Rclone destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion, purge, move, and synchronization operations that can remove data.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "deletefile"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "purge"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rmdirs"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "move"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "moveto"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "rclone",
+                  "rclone.cmd",
+                  "rclone.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--verbose",
+                  "-n",
+                  "-q",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--log-level",
+                  "--password-command",
+                  "--rc-addr"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "bisync"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.backup.rclone.permission.mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.backup.rclone.mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deletefile"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "purge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rmdirs"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "moveto"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "bisync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Rclone command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deletefile"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "purge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rmdirs"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "moveto"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "bisync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Rclone dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deletefile"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "purge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rmdirs"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "moveto"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "rclone",
+                      "rclone.cmd",
+                      "rclone.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--quiet",
+                      "--verbose",
+                      "-n",
+                      "-q",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--log-file",
+                      "--log-level",
+                      "--password-command",
+                      "--rc-addr"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "bisync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Rclone no-act",
+            "variant_id": "no-act"
+          }
+        ],
+        "safer_alternatives": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "severity": "critical",
+        "title": "Rclone destructive synchronization"
+      }
+    ],
+    "safer_alternatives": [
+      "Run the same command with --dry-run and inspect every affected path first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

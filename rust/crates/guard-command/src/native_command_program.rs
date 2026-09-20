@@ -48,6 +48,8 @@ mod compile;
 mod evaluation;
 #[path = "native_command_program_observations.rs"]
 mod observations;
+#[path = "native_command_source.rs"]
+pub mod source;
 #[path = "native_command_program_wire.rs"]
 mod wire;
 use compile::{compile_node, validate_graph};

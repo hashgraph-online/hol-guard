@@ -34,10 +34,20 @@ assert(
 
 assert(
   resolveSupplyChainAuditWorkspaceTarget({
+    selectedWorkspaceDir: " /workspace/project ",
+    managedWorkspaceDir: "workspace/managed",
+    statusWorkspaceDir: "workspace/status",
+  }) === "/workspace/project",
+  "audit workspace target should prefer the explicitly selected project",
+);
+
+assert(
+  resolveSupplyChainAuditWorkspaceTarget({
+    selectedWorkspaceDir: "   ",
     managedWorkspaceDir: "workspace/managed",
     statusWorkspaceDir: "workspace/status",
   }) === "workspace/managed",
-  "audit workspace target should prefer managed install workspace",
+  "audit workspace target should fall back to managed install workspace",
 );
 
 assert(

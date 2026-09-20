@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from .command_evaluation import evaluate_command
+from .command_evaluation import CompositeCommandEvaluation, evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand
 from .secret_file_request_services import benign_requests as _benign_requests
@@ -230,6 +230,7 @@ def extract_sensitive_tool_action_request(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     canonical_command: CanonicalCommand | None = None,
+    native_evaluation: CompositeCommandEvaluation | None = None,
 ) -> ToolActionRequestMatch | None:
     """Extract a sensitive action through the partitioned classifier services."""
 
@@ -240,6 +241,7 @@ def extract_sensitive_tool_action_request(
         cwd=cwd,
         home_dir=home_dir,
         canonical_command=canonical_command,
+        native_evaluation=native_evaluation,
     )
 
 

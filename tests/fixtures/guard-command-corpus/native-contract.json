@@ -1,0 +1,1416 @@
+{
+  "authoring_method": "Expected signatures were authored from reviewed native source and host critical floors. Membership counts and hashes use only immutable corpus inputs and explicit variant selectors; native evaluation results are not an authoring input.",
+  "groups": [
+    {
+      "basis": "host critical capability replay floor blocks the exact native command",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:capability-replay|all",
+      "membership": {
+        "case_ids_framed_sha256": "3a52d2d13a29b7cb91537b6935f18266c05220f56bf3aa142ccc09a3b16d3567",
+        "count": 4166
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:capability-replay",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host critical route53 destructive target floor blocks despite native declarative review",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:flag-order|all",
+      "membership": {
+        "case_ids_framed_sha256": "5841fa1530648b474b20cd24603d1a5a568fdcee9775fc8998d747c6b85c92fb",
+        "count": 4167
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:flag-order",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host critical Stripe deletion floor blocks despite native declarative review; description values do not erase the operation",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:flag-values|all",
+      "membership": {
+        "case_ids_framed_sha256": "cc24a2560d9caaab51370638599842b824c5a9079c73e53bb3a647be92ba0ba0",
+        "count": 4167
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:flag-values",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.github.unknown"
+        ]
+      },
+      "group_id": "adversarial:graphql|all",
+      "membership": {
+        "case_ids_framed_sha256": "e71b79874ac93b25dab8eb3a1d0a1ee07e340eaa4680cff4421bb879fcdccf2b",
+        "count": 4166
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:graphql",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "heredoc input redirection remains outside inherited native parser grammar",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_redirect_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:heredocs|all",
+      "membership": {
+        "case_ids_framed_sha256": "3afcc1ef45efa091e3c85d60a0b891043698ee30e3f3eec988783966757d8b8a",
+        "count": 4167
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:heredocs",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host critical local package source floor strengthens native command review to require-reapproval",
+      "expected": {
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:package-sources|all",
+      "membership": {
+        "case_ids_framed_sha256": "23e236acfa6d4427b74d173e350c33ee842e3537f2bec696b915410f7570f461",
+        "count": 4166
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:package-sources",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "exact shell model retains PATH override; inherited compatibility admission fails closed on overridden launch context",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": true,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:path-shadowing|all",
+      "membership": {
+        "case_ids_framed_sha256": "b3552161a47bd35642eb0677ac5f530d576cbcb5a7a551326627d02b96252dd6",
+        "count": 4167
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:path-shadowing",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "tee sink remains exactly parsed; host cat pipeline floor requires reapproval; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:pipelines|variant-mod4-0",
+      "membership": {
+        "case_ids_framed_sha256": "e705bf12eb37927474f0399fec3f9fd83beb01b2581ee1a47cd959bb8ac35d99",
+        "count": 1042
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:pipelines",
+      "variant_modulus": 4,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "dd sink is exactly parsed; inherited domain classifier records owned destructive-shell uncertainty; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.shell-mutations.destructive-shell"
+        ]
+      },
+      "group_id": "adversarial:pipelines|variant-mod4-1",
+      "membership": {
+        "case_ids_framed_sha256": "e0c2fda3cf3a99006c86a6eaff8544158156ad9002c0e69b3d28016894e1604b",
+        "count": 1042
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:pipelines",
+      "variant_modulus": 4,
+      "variant_remainder": 1
+    },
+    {
+      "basis": "sed sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_redirect_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:pipelines|variant-mod4-2",
+      "membership": {
+        "case_ids_framed_sha256": "957b0f7842b768f4eb618fe27d613732a498f1e02472671a2c5b035986a55838",
+        "count": 1041
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:pipelines",
+      "variant_modulus": 4,
+      "variant_remainder": 2
+    },
+    {
+      "basis": "base64 sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_redirect_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:pipelines|variant-mod4-3",
+      "membership": {
+        "case_ids_framed_sha256": "4f6638741fa6cefe88dda42e0b36f11de1a83cb9b1c47b0b08379c57e1e8ef02",
+        "count": 1041
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:pipelines",
+      "variant_modulus": 4,
+      "variant_remainder": 3
+    },
+    {
+      "basis": "arbitrary output redirection remains outside inherited native parser grammar",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_redirect_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:redirects|all",
+      "membership": {
+        "case_ids_framed_sha256": "80c2d32db37332cedab53906756d38ca3fbf2c5bd68034437d9325e5e0c166e7",
+        "count": 4167
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:redirects",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "command substitution remains outside inherited native parser grammar",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_substitution_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:substitutions|all",
+      "membership": {
+        "case_ids_framed_sha256": "237eef2ec1918e224c401ac276b98a607e378b6e1d82d71a03718be157ef8f77",
+        "count": 4167
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "adversarial:substitutions",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "output redirection remains outside inherited native parser grammar and cannot prove symlink targets safe",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "command_redirect_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:symlinks|all",
+      "membership": {
+        "case_ids_framed_sha256": "e91580f6db609ddf6782ad9b6a33df9425b21b72e4e23833127d53c13b55fd43",
+        "count": 4167
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:symlinks",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited parser rejects transparent env launch wrapper; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "transparent_wrapper_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:wrappers|variant-mod4-0",
+      "membership": {
+        "case_ids_framed_sha256": "92e81f5ca41c64dad96937bb089257b142ab1e79efff22f67da5602a2a75416f",
+        "count": 1042
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:wrappers",
+      "variant_modulus": 4,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited parser rejects transparent command launch wrapper; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "transparent_wrapper_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:wrappers|variant-mod4-1",
+      "membership": {
+        "case_ids_framed_sha256": "777f567a5d03dfe639f5ad4f63045a491736a7fee29062451b636210eb3df80f",
+        "count": 1042
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:wrappers",
+      "variant_modulus": 4,
+      "variant_remainder": 1
+    },
+    {
+      "basis": "inherited parser rejects transparent nice launch wrapper; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "transparent_wrapper_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:wrappers|variant-mod4-2",
+      "membership": {
+        "case_ids_framed_sha256": "f035951239c60a2ddaab7e9218e836b6d85d61d01e6a2814e160fb333430b2ff",
+        "count": 1042
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:wrappers",
+      "variant_modulus": 4,
+      "variant_remainder": 2
+    },
+    {
+      "basis": "inherited parser rejects transparent timeout launch wrapper; selected solely by immutable generator variant modulo four",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": "native_command_evaluation_failed",
+        "model_confidence": "uncertain",
+        "model_uncertainty": "transparent_wrapper_not_yet_supported",
+        "native_floor": "block",
+        "native_reason": "native_command_extension_evaluation_failed",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "adversarial:wrappers|variant-mod4-3",
+      "membership": {
+        "case_ids_framed_sha256": "69e02801ca7fbbd0563bd98e2d9ac09204f6b20fdcb8bafa91ea8f6171f4b45e",
+        "count": 1041
+      },
+      "original_floor": "block",
+      "source_id": "adversarial:wrappers",
+      "variant_modulus": 4,
+      "variant_remainder": 3
+    },
+    {
+      "basis": "native generic envelope classifies bun as package operation",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_package_review",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:build-typecheck-test-lint:bun-build|all",
+      "membership": {
+        "case_ids_framed_sha256": "606b341b2f4ad17b6f425fad607460df526f12370eb1e44e7537fce576423761",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:build-typecheck-test-lint:bun-build",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "ordinary process execution retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:build-typecheck-test-lint:pytest|all",
+      "membership": {
+        "case_ids_framed_sha256": "7899210cc1daa7f245e1d1530fcb9f31e2e3cba8a8f6a1e1aa612e0cd78946db",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:build-typecheck-test-lint:pytest",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "ordinary process execution retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:build-typecheck-test-lint:ruff|all",
+      "membership": {
+        "case_ids_framed_sha256": "8b70c38e77d5de7aaf26e16232531b2b72c2ac1bbd935af5b6b2d1a801d4ec37",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:build-typecheck-test-lint:ruff",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "upstream 5a076ded qualifies literal stderr duplication 2>&1; npx remains command review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:build-typecheck-test-lint:typescript-regression|all",
+      "membership": {
+        "case_ids_framed_sha256": "a2044551486ded1e53ce417f1439cd02d1a00f5c65dc542339a432b9e9abd678",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:build-typecheck-test-lint:typescript-regression",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host critical credential metadata floor strengthens native command review to require-reapproval",
+      "expected": {
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:credentials-permissions-system-guard-destruction:credential-metadata|all",
+      "membership": {
+        "case_ids_framed_sha256": "d45a4b50a51f891e8e873b0550c78dd5a67ea3f26d3ab1bec68339ea6052a7f7",
+        "count": 25
+      },
+      "original_floor": "require-reapproval",
+      "source_id": "workflow:credentials-permissions-system-guard-destruction:credential-metadata",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "literal help keeps destructive guard control inactive and remains review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:credentials-permissions-system-guard-destruction:guard-uninstall-help|all",
+      "membership": {
+        "case_ids_framed_sha256": "d2167ac236e119a005faeb5b03a4d08812bf971284a7e895bd3bfd0550c5c175",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:credentials-permissions-system-guard-destruction:guard-uninstall-help",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host system metadata floor remains review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:credentials-permissions-system-guard-destruction:permission-read|all",
+      "membership": {
+        "case_ids_framed_sha256": "0c2aff60331d64c0ee9d986621a752ed132908c85df3f7942b51beccc3503432",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:credentials-permissions-system-guard-destruction:permission-read",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host system metadata floor remains review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:credentials-permissions-system-guard-destruction:system-status|all",
+      "membership": {
+        "case_ids_framed_sha256": "51cdbec6f1028403258eca2e258258713b2934312f601dc71291e85ac1480c6d",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:credentials-permissions-system-guard-destruction:system-status",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git branch attribution plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:git-local:branches|all",
+      "membership": {
+        "case_ids_framed_sha256": "bbaeb0bd24d69568be8b5cdd3448c2e708a1d44fbb70de00f99630b38a91e7e1",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:git-local:branches",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git diff attribution plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:git-local:diff-check|all",
+      "membership": {
+        "case_ids_framed_sha256": "6d93c544f49096f3d7797cadd62421cf52b5139ec25aafeffa36ce04db39510f",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:git-local:diff-check",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git log attribution plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:git-local:recent-log|all",
+      "membership": {
+        "case_ids_framed_sha256": "391a2ed9ad532f0265d0a223d924b4543b624cbeb096ce5d052d61b6322aa34e",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:git-local:recent-log",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git show attribution plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:git-local:show-stat|all",
+      "membership": {
+        "case_ids_framed_sha256": "f57def1063b9c3fcc12c17c4ca5cd073b78ca488c5ef9c979479258769041e5c",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:git-local:show-stat",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited routine merge grammar attributes a review permission",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:github-remote:merge-regression|all",
+      "membership": {
+        "case_ids_framed_sha256": "fa184f0271179abe03b42e49856e0dd8a40e90deba5ceda0a1871e12070c3085",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:github-remote:merge-regression",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited GitHub remote read permission retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:github-remote:pr-checks|all",
+      "membership": {
+        "case_ids_framed_sha256": "52cfa9b3034f5b67219ca372c046b8347c61c32e853febc5291eafc84c5f0539",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:github-remote:pr-checks",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited GitHub remote read permission retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:github-remote:pr-view|all",
+      "membership": {
+        "case_ids_framed_sha256": "78aec7d6700b274876db492f258a64f97761e83291d826ef7b1d449ed03392aa",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:github-remote:pr-view",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited GitHub grammar rejects GraphQL and dynamic-looking dollar tokens despite exact shell quoting",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.github.unknown"
+        ]
+      },
+      "group_id": "workflow:github-remote:resolve-thread-regression|all",
+      "membership": {
+        "case_ids_framed_sha256": "77e3704493d4f6974ff3147ba3b11f7d064284f1163bdf008b05af83c03e6e40",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:github-remote:resolve-thread-regression",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded command read plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:navigation-public-read:directory-list|all",
+      "membership": {
+        "case_ids_framed_sha256": "8cd63a05e34d3bb9e1d1fe9d170fd3fc40e7103e945bbb777119755a31a8f16f",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:navigation-public-read:directory-list",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "Reviewed exact git rev-parse --show-toplevel grammar removes unrelated compatibility owners; native execution remains review with no allow proof.",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:navigation-public-read:repository-root|all",
+      "membership": {
+        "case_ids_framed_sha256": "01021d902a34b0c14cd95bcdd2ff68517caf1b95b44cca6d1bb5640ea526e867",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:navigation-public-read:repository-root",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git status attribution plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:navigation-public-read:status|all",
+      "membership": {
+        "case_ids_framed_sha256": "06886766af13973a17a82701eabdbbf27b17d428f39e1b808e5407338c3955a6",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:navigation-public-read:status",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded command read plus cd context",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:navigation-public-read:working-directory|all",
+      "membership": {
+        "case_ids_framed_sha256": "1b56ff3f3d4ddbdb5a414f32c921e26f66ce8907f9cfd1e458a53821e3040fef",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:navigation-public-read:working-directory",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host cloud identity read floor is review; native has exact command and no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:network-container-cloud:aws-identity|all",
+      "membership": {
+        "case_ids_framed_sha256": "29e411114ac8f9d42e3d7bade0ed7c4eccc62f37f60b062201f7fe16a253754d",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:network-container-cloud:aws-identity",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Docker compatibility grammar has no exact Compose classification",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.container-runtime.docker-sensitive"
+        ]
+      },
+      "group_id": "workflow:network-container-cloud:compose-ps|all",
+      "membership": {
+        "case_ids_framed_sha256": "472f7273c8e9813b34a7076a9b3383cb51f77922e6435a10261f0c19bbde7f0e",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:network-container-cloud:compose-ps",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Docker compatibility grammar has no exact inspect/template classification",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.container-runtime.docker-sensitive"
+        ]
+      },
+      "group_id": "workflow:network-container-cloud:container-inspect|all",
+      "membership": {
+        "case_ids_framed_sha256": "14c82dd7f57673a5545576419df07085d6a77660fe2f2cc137950f279217e3c2",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:network-container-cloud:container-inspect",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "host cloud identity read floor is review; native has exact command and no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:network-container-cloud:gcloud-project|all",
+      "membership": {
+        "case_ids_framed_sha256": "65218c55b3536023c4de6560266a7a0fd5d124ba4048575019054d7b3f464367",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:network-container-cloud:gcloud-project",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "native generic envelope classifies bun as package operation",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_package_review",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:package-runner-source:bun-lock|all",
+      "membership": {
+        "case_ids_framed_sha256": "4ec695873b1622c91084a3599dbf4273c83cd38433ea09e6244207c70c19ffad",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:package-runner-source:bun-lock",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "native generic envelope classifies cargo as package operation",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_package_review",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:package-runner-source:cargo-tree|all",
+      "membership": {
+        "case_ids_framed_sha256": "5fef2021aed434bc8fa57188ce29a656e2b66ee5fbc7b1649c6c9e6ceffce96c",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:package-runner-source:cargo-tree",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "native generic envelope classifies npm as package operation; host registry floor remains review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_package_review",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:package-runner-source:registry-source|all",
+      "membership": {
+        "case_ids_framed_sha256": "57fd4e6fde79a0060efa7eabd28a783f8cecd89ed0cc70024e58760e8716ca8b",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:package-runner-source:registry-source",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "ordinary uv command retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:package-runner-source:uv-tree|all",
+      "membership": {
+        "case_ids_framed_sha256": "689f7808beb4cd84aff4c0e8bd500791997d0fd9b5fe28a43614282314bbdd1c",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:package-runner-source:uv-tree",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded source search pipeline has no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:shell-composition:cd-pipeline|all",
+      "membership": {
+        "case_ids_framed_sha256": "10912f36c014f7a2569574e327af6b35bd4cf852b34524d10be842c8c62ed90d",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:shell-composition:cd-pipeline",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "upstream 5a076ded qualifies only contained cd plus fixed find/python py_compile arguments and removes destructive-owner uncertainty for that exact grammar",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:shell-composition:find-exec|all",
+      "membership": {
+        "case_ids_framed_sha256": "af689934f84670524758c91b70ce163d13fb0998b5e14491a177683acea4391b",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:shell-composition:find-exec",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git status attribution with bounded wc consumer",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:shell-composition:json-pipeline|all",
+      "membership": {
+        "case_ids_framed_sha256": "4d0c6912e7ccf077beb3c4f7055d202d8d0dbc28c17ac8150ac11fe97031d6cf",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:shell-composition:json-pipeline",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "upstream 5a076ded qualifies literal stderr duplication 2>&1; bun remains package review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_package_review",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:shell-composition:stderr-pipeline|all",
+      "membership": {
+        "case_ids_framed_sha256": "47ee1060658a14b812bacda6d6e193fb195ae93e71de9712021fffb341101fe0",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:shell-composition:stderr-pipeline",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded source listing pipeline has no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:source-search-read:source-files|all",
+      "membership": {
+        "case_ids_framed_sha256": "2c3d326cb1151973d9849a16af37c600848b484aea35d816a864d5011c51d135",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:source-search-read:source-files",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "nonmutating sed range does not trigger a write or destructive owner",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:source-search-read:source-view|all",
+      "membership": {
+        "case_ids_framed_sha256": "f582452be9a1f9bc6f6950229c76f840dec1cc274f7bade30269b7ecf801337a",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:source-search-read:source-view",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded source search pipeline has no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:source-search-read:symbol-search|all",
+      "membership": {
+        "case_ids_framed_sha256": "8adff642be0283efaaef368b51db90bd6eac93d3f5fd271f89e4ef69db3a372f",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:source-search-read:symbol-search",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "bounded source search pipeline has no compatibility uncertainty",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:source-search-read:targeted-search|all",
+      "membership": {
+        "case_ids_framed_sha256": "dce7e80915179997f2f0ad25ec2b850bdc08765481f74f097e9c024872e64865",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:source-search-read:targeted-search",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "ordinary workspace copy lacks managed or sensitive target indication",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:workspace-patch-write:copy-generated|all",
+      "membership": {
+        "case_ids_framed_sha256": "4a68475249ee9d40db0fad89cef9123f620efc38561abbce17b99595cda07354",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:workspace-patch-write:copy-generated",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "ordinary workspace formatter retains contextual review",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:workspace-patch-write:format-write|all",
+      "membership": {
+        "case_ids_framed_sha256": "8a52bec6fe9ef5ca2dc2e6cea4c0aa161daca5cf9dfeab93465c9fb7b5f6dde0",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:workspace-patch-write:format-write",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "inherited Git apply fallback attributes all fifteen compatibility owners as uncertain",
+      "expected": {
+        "decision_plane_floor": "block",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "block",
+        "native_reason": "native_command_extension_uncertain",
+        "path_overridden": false,
+        "uncertain_rule_ids": [
+          "command.git.blame",
+          "command.git.branch",
+          "command.git.clone",
+          "command.git.describe",
+          "command.git.diff",
+          "command.git.fetch",
+          "command.git.grep",
+          "command.git.log",
+          "command.git.ls-files",
+          "command.git.pull",
+          "command.git.push",
+          "command.git.reflog",
+          "command.git.remote",
+          "command.git.show",
+          "command.git.status"
+        ]
+      },
+      "group_id": "workflow:workspace-patch-write:patch-apply|all",
+      "membership": {
+        "case_ids_framed_sha256": "47b154292329689dd76e969a85e4d24e95e549d4454e527fd9dbd444819541fd",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:workspace-patch-write:patch-apply",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    },
+    {
+      "basis": "Reviewed git apply --check literal relative patch path removes unrelated compatibility owners; independent patch-read and workspace proofs and native review remain required.",
+      "expected": {
+        "decision_plane_floor": "review",
+        "evaluation_error": null,
+        "model_confidence": "exact",
+        "model_uncertainty": null,
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
+        "path_overridden": false,
+        "uncertain_rule_ids": []
+      },
+      "group_id": "workflow:workspace-patch-write:patch-check|all",
+      "membership": {
+        "case_ids_framed_sha256": "ea8886b39f6e06b6ac2f7ba11b0f5355e8ca4133cd400a9fc280c526ef32fbf9",
+        "count": 25
+      },
+      "original_floor": "review",
+      "source_id": "workflow:workspace-patch-write:patch-check",
+      "variant_modulus": 1,
+      "variant_remainder": 0
+    }
+  ],
+  "immutable_input_sha256": {
+    "tests/fixtures/guard-command-corpus/known-gaps.json": "5574b48b2a274aaf43d964b4bf4ff75ac337ff86c3c3d25b23dcbcf63de13513",
+    "tests/fixtures/guard-command-corpus/minimal-delta-pairs.json": "f8a972f4924ad015753659cd0a987e5d077f2c9981b42187184ad689231c459f",
+    "tests/fixtures/guard-command-corpus/seed-manifest.json": "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a2309862cf3728",
+    "tests/guard_command_corpus.py": "47d191710b9a903f539375d25b3b356057d09480874f862ec676173727595ecb",
+    "tests/guard_command_corpus_oracle.py": "7c7dee62735838dd5cf759156a64860e24c1afc6a5df54aeb402a9785f1a0d91",
+    "tests/guard_command_corpus_oracle_adversarial.py": "cbe6761e3ae7e6f646947d212998a26846742ccd702f2d6b237c72f83b8d23c5",
+    "tests/guard_command_corpus_oracle_benign.py": "7a2b72a23365f39ae602734f1e3c796af4fd76f6f459c7f2efcd49efb236530c",
+    "tests/guard_command_corpus_oracle_loader.py": "21c96c2bfbb655cce88f70c17cad3a8681c9cfc4d87118fbb6685b8d88c6032f",
+    "tests/guard_command_corpus_oracle_types.py": "31ae3f338de752bf5d122e9a8274184bc525c1fc4dbf4410f970bb380628e59c"
+  },
+  "inherited_source_identities": {
+    "baseline_commit": "f674f69665cfbcb79ab9e82d671e99f7674905ae",
+    "sources": {
+      "rust/crates/guard-command/src/command_ascii_comparison.rs": {
+        "baseline_git_blob": "78a49d3d3ea6a6e82f39ce89d61c5f987cde4087",
+        "baseline_sha256": "8a3a7abb80bee469f2a34fc67b644005d4992c248f61014002e61ab0f750a7b1",
+        "byte_identical": true,
+        "candidate_git_blob": "78a49d3d3ea6a6e82f39ce89d61c5f987cde4087",
+        "candidate_sha256": "8a3a7abb80bee469f2a34fc67b644005d4992c248f61014002e61ab0f750a7b1"
+      },
+      "rust/crates/guard-command/src/command_compatibility.rs": {
+        "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
+        "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
+        "byte_identical": false,
+        "candidate_git_blob": "4a7ba531300a7d9938f3922a744520a27dadcd28",
+        "candidate_sha256": "7815628c58822adc116167578845b94ccb498a620be32270811248d1d074f91d",
+        "reviewed_change": "Admit only parser-recorded sudo wrappers; other wrapper/context uncertainty is unchanged."
+      },
+      "rust/crates/guard-command/src/command_compatibility/domains.rs": {
+        "baseline_git_blob": "9b3e5b7dfa3c418ac4710fdfc143adf6a54f23d8",
+        "baseline_sha256": "1499f4ec9c0ee73dce6f3d3a8c2980046d4e41b8c8220174a1fe744aeb4f07ed",
+        "byte_identical": false,
+        "candidate_git_blob": "e5538ac02c9378ddad3ef633ab384e56ca0a389b",
+        "candidate_sha256": "22dd9e12e4c7561acb32bab664733cfd73977d1aabfc395b0e5b241d70edc114",
+        "reviewed_change": "Bound interpreter environment attribution, destructive help/version, and rejected Compose rmi values; execution review remains independent.",
+        "upstream_change": "bounded-stderr-redirect-and-exact-cd-find-py-compile-support",
+        "upstream_change_commit": "5a076ded9182f4466b875effffae3b156fba9e04"
+      },
+      "rust/crates/guard-command/src/command_compatibility/git.rs": {
+        "baseline_git_blob": "12d088858e8e37cc2e85b12a2f1f26e045009751",
+        "baseline_sha256": "dec9c3dd132d33316ad4f935b390a5a6e0fdb22816b383791656fbb36cfb4a89",
+        "byte_identical": false,
+        "candidate_git_blob": "b75a85c34645edacc4a620367928f74dcfeb7114",
+        "candidate_sha256": "e56f4805dbeff9f4894d0ecb2194c707e83552dbe96f123bdb4ab4e24ca0cc04",
+        "reviewed_change": "The exact rev-parse --show-toplevel and apply --check literal-relative-path grammars avoid unrelated uncertain owners; intrinsic review remains."
+      },
+      "rust/crates/guard-command/src/command_compatibility/github.rs": {
+        "baseline_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
+        "baseline_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4",
+        "byte_identical": true,
+        "candidate_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
+        "candidate_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4"
+      },
+      "rust/crates/guard-command/src/command_compatibility/github_api.rs": {
+        "baseline_git_blob": "905bb6ac282939b95d2842fc136087b4a5cf463f",
+        "baseline_sha256": "b7d9b5cb03ce1fdedb96abbe25bea590ad44d5e00c14c21bd3f42e40352507da",
+        "byte_identical": true,
+        "candidate_git_blob": "905bb6ac282939b95d2842fc136087b4a5cf463f",
+        "candidate_sha256": "b7d9b5cb03ce1fdedb96abbe25bea590ad44d5e00c14c21bd3f42e40352507da"
+      },
+      "rust/crates/guard-command/src/command_compatibility/interpreter.rs": {
+        "byte_identical": false,
+        "candidate_git_blob": "6a670366ba38be2818005dd820da8252f28043df",
+        "candidate_sha256": "fbef078baff4a8bf861a9f8014170c1001e2a41e5cfc954001e3821dc621590f",
+        "reviewed_change": "Closed interpreter literal/public-environment/Artisan forms avoid invented secret ownership; unmodeled programs retain uncertainty."
+      },
+      "rust/crates/guard-command/src/command_option_parsing.rs": {
+        "baseline_git_blob": "1088dee6717e4beb216a1d62de6d71e5730589f5",
+        "baseline_sha256": "a483ff6b493de0270d44a25d4553ebf35f08092b47846f1e262dd72d9bf1c989",
+        "byte_identical": true,
+        "candidate_git_blob": "1088dee6717e4beb216a1d62de6d71e5730589f5",
+        "candidate_sha256": "a483ff6b493de0270d44a25d4553ebf35f08092b47846f1e262dd72d9bf1c989"
+      },
+      "rust/crates/guard-command/src/lib.rs": {
+        "baseline_git_blob": "96c8675f0b7b86e7463867ec5ac65fded42d1b09",
+        "baseline_sha256": "67fd0552f32a3fe7c87bd9e2aa408a02a5f77ca22fdf9c5608f748db29ee965c",
+        "byte_identical": false,
+        "candidate_git_blob": "d5fe0ca265a1140975f3b4624c9fe2abc9e8fe33",
+        "candidate_sha256": "e335eeee8b12b1405199dc4d313ef8a35188b95f10e7ca971be098d3fd68dbe1",
+        "reviewed_change": "Bound sudo extraction and decoder-to-shell pipelines; distinguish literal argument braces from unsupported parameter expansion and shell groups; reject active fd subprocess modes until nested execution proof is modeled.",
+        "upstream_change": "bounded-stderr-redirect-and-exact-cd-find-py-compile-support",
+        "upstream_change_commit": "5a076ded9182f4466b875effffae3b156fba9e04",
+        "upstream_style_change": "map_or-true-to-is_none_or-preserves-parser-predicate",
+        "upstream_style_change_commit": "5db89d51a51f3b5ede9ec9ad2d76f9a0e58aaf4a"
+      },
+      "rust/crates/guard-command/src/parser_wrappers.rs": {
+        "byte_identical": false,
+        "candidate_git_blob": "0cf34d2c73b704d00f51d159bf370dac8a06ed79",
+        "candidate_sha256": "2a2e194250f179601774d7620b4bf9d35b899ad0d40218e20a495344726f1cc4",
+        "reviewed_change": "Bound sudo options and encoded stdin shell forms preserve raw source and wrapper evidence; unknown execution modes remain uncertain."
+      }
+    }
+  },
+  "schema": "guard.command-corpus-native-contract.v1",
+  "scope": "independently-authored-native-capability-contract-not-a-replacement-security-oracle",
+  "totals": {
+    "below_original_oracle": 0,
+    "cases": 51000,
+    "equal_to_original_oracle": 39442,
+    "groups": 58,
+    "improved_bounded_git_cases": 50,
+    "improved_bounded_git_sources": 2,
+    "improved_upstream_benign_cases": 75,
+    "improved_upstream_benign_sources": 3,
+    "native_evaluation_errors": 27084,
+    "sources": 52,
+    "stronger_than_original_oracle": 11558
+  }
+}

@@ -568,10 +568,13 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
         auditConnectGate={auditSession.auditConnectGate}
         auditError={auditSession.auditError}
         auditSnapshot={auditSession.auditSnapshot}
+        auditWorkspaceDir={auditSession.auditWorkspaceDir}
+        auditWorkspaceSelectionRequired={auditSession.auditWorkspaceSelectionRequired}
         auditRunning={auditSession.auditRunning}
         auditPhase={auditSession.auditPhase}
         cloudState={snapshot.cloud_state}
         onRunAudit={auditSession.handleRunAudit}
+        onAuditWorkspaceDirChange={auditSession.setAuditWorkspaceDir}
       />
 
       <div className="flex flex-wrap items-start justify-between gap-3">

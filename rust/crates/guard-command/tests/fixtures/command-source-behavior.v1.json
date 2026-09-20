@@ -1,0 +1,12 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {"id":"inactive", "command":"example-cli destroy", "enabled_extensions":[], "disabled_permissions":[], "expected_action":"review", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[]},
+    {"id":"active", "command":"example-cli destroy", "enabled_extensions":["command.example-cli"], "disabled_permissions":[], "expected_action":"review", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[0]},
+    {"id":"dry-run", "command":"example-cli destroy --dry-run", "enabled_extensions":["command.example-cli"], "disabled_permissions":[], "expected_action":"review", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[]},
+    {"id":"compound", "command":"example-cli destroy --dry-run; example-cli destroy", "enabled_extensions":["command.example-cli"], "disabled_permissions":[], "expected_action":"review", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[1]},
+    {"id":"disabled-permission", "command":"example-cli destroy", "enabled_extensions":["command.example-cli"], "disabled_permissions":["command.example-cli.permission.destroy"], "expected_action":"block", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[0]},
+    {"id":"unrelated-safe", "command":"pwd", "enabled_extensions":["command.example-cli"], "disabled_permissions":[], "expected_action":"allow", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[]},
+    {"id":"unknown", "command":"another-unknown-cli inspect", "enabled_extensions":["command.example-cli"], "disabled_permissions":[], "expected_action":"review", "rule_id":"command.example-cli.destroy", "expected_effective_segments":[]}
+  ]
+}

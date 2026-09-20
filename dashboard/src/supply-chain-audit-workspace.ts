@@ -19,9 +19,14 @@ export function resolveSupplyChainAuditWorkspaceDir(
 }
 
 export function resolveSupplyChainAuditWorkspaceTarget(input: {
+  selectedWorkspaceDir?: string | null;
   managedWorkspaceDir?: string | null;
   statusWorkspaceDir?: string | null;
 }): string | null {
+  const selected = input.selectedWorkspaceDir?.trim();
+  if (selected) {
+    return selected;
+  }
   const managed = input.managedWorkspaceDir?.trim();
   if (managed) {
     return managed;

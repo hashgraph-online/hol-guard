@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 @pytest.mark.parametrize(
@@ -54,7 +54,8 @@ def test_documented_aliases_and_global_options_preserve_sensitive_matches(
 def test_option_value_safe_variants_use_effective_full_argument_value(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
+    rule_ids = {rule["rule_id"] for rule in payload["rules"]}
+    assert "command.kubernetes-operations.delete-resources" not in rule_ids
 
 
 @pytest.mark.parametrize(

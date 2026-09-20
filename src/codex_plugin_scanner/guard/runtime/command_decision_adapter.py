@@ -7,11 +7,9 @@ from typing import Literal
 
 from codex_plugin_scanner.guard.models import GuardAction
 
-from .command_extension_observations import CommandExtensionObservation
-from .command_extensions import CommandSafetyExtension
+from .command_extensions import CommandSafetyExtension, CommandSafetyRule
 from .command_model import CanonicalCommand
 from .command_risk_effects import command_risk_effects
-from .command_rules import CommandRuleMode, CommandSafetyRule
 from .effect_contract import (
     UNCERTAINTY_FLOOR,
     DecisionBasis,
@@ -38,10 +36,11 @@ from .extension_evidence import (
     OwnedSafeVariant,
     SafeVariantOutcome,
 )
+from .native_command_extension_evidence import NativeCommandExtensionObservation
 
 LegacyCommandFloor = Literal["allow", "monitor", "review", "block"]
 
-_MODE_FLOOR: dict[CommandRuleMode, LegacyCommandFloor] = {
+_MODE_FLOOR: dict[str, LegacyCommandFloor] = {
     "disabled": "allow",
     "monitor": "monitor",
     "review": "review",
@@ -65,6 +64,8 @@ _SEVERITY: dict[str, EvidenceSeverity] = {
 def legacy_rule_floor(extension: CommandSafetyExtension, rule: CommandSafetyRule) -> LegacyCommandFloor:
     if extension.required and rule.severity == "critical":
         return "block"
+    if rule.default_mode == "disabled":
+        return "allow"
     if extension.required:
         return "review"
     return _MODE_FLOOR[rule.default_mode]
@@ -72,7 +73,7 @@ def legacy_rule_floor(extension: CommandSafetyExtension, rule: CommandSafetyRule
 
 def extension_evidence_batch(
     command: CanonicalCommand,
-    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
+    observations: tuple[NativeCommandExtensionObservation, ...],
 ) -> ExtensionEvidenceBatch:
     """Translate every review-or-stronger match and matcher uncertainty."""
 
@@ -157,7 +158,7 @@ def decision_factors(
 
 
 def interaction_policy_factors(
-    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
+    observations: tuple[NativeCommandExtensionObservation, ...],
 ) -> tuple[DecisionFactor, ...]:
     """Preserve the existing review floor outside extension-owned evidence."""
 
@@ -183,7 +184,7 @@ def interaction_policy_factors(
 
 def evaluate_extension_interaction(
     command: CanonicalCommand,
-    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
+    observations: tuple[NativeCommandExtensionObservation, ...],
 ) -> EffectDecision:
     """Evaluate extension evidence plus the compatibility review policy."""
 
@@ -209,7 +210,7 @@ def command_uncertainties(command: CanonicalCommand, *, sensitive: bool) -> tupl
 
 
 def extension_uncertainties(
-    observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
+    observations: tuple[NativeCommandExtensionObservation, ...],
 ) -> tuple[UncertaintyKind, ...]:
     return tuple(
         sorted(
@@ -243,7 +244,7 @@ def _reason_to_dict(reason: object) -> dict[str, object]:
 
 
 def _rule_identity(
-    observation: CommandExtensionObservation[CommandSafetyExtension],
+    observation: NativeCommandExtensionObservation,
 ) -> ExtensionRuleIdentity:
     return ExtensionRuleIdentity(
         extension_id=observation.extension.extension_id,

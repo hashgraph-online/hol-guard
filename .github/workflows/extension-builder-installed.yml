@@ -56,6 +56,10 @@ jobs:
         run: |
           python3 -m venv .builder-ci-venv
           .builder-ci-venv/bin/python -m pip install --disable-pip-version-check -e '.[dev]'
+      - name: Build the native source compiler
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
       - name: Verify compiler and native integration contracts
         run: |
           .builder-ci-venv/bin/python -m pytest -q tests/test_guard_extension_builder_*.py --tb=short

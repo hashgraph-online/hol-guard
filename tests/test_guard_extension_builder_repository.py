@@ -14,9 +14,8 @@ from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit
 from codex_plugin_scanner.guard.extension_builder.models import make_discovery as normalized_discovery
-from codex_plugin_scanner.guard.extension_builder.render_native import contribution_path, detector_path
+from codex_plugin_scanner.guard.extension_builder.render_native import command_source_path, contribution_path
 from codex_plugin_scanner.guard.extension_builder.repository_edits import (
-    CATALOG_PATH,
     PYPROJECT_PATH,
     STAGING_PATH,
     TRUST_PATH,
@@ -24,7 +23,17 @@ from codex_plugin_scanner.guard.extension_builder.repository_edits import (
 from codex_plugin_scanner.guard.extension_builder.repository_plan import ownership_root, plan_repository
 from codex_plugin_scanner.guard.extension_builder.repository_write import LOCK_NAME, apply_kit
 from codex_plugin_scanner.guard.extension_builder.review import default_review
-from tests.extension_builder_support import file_snapshot, make_kit, repository_fixture
+from tests.extension_builder_support import (
+    file_snapshot,
+    make_kit,
+    repository_fixture,
+    use_built_native_source_compiler,
+)
+
+
+@pytest.fixture(autouse=True)
+def _native_source_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_built_native_source_compiler(monkeypatch)
 
 
 @pytest.mark.parametrize("kind", ["cli", "mcp"])
@@ -92,17 +101,14 @@ def test_review_update_preserves_unrelated_shared_file_edits(tmp_path: Path) -> 
     apply_kit(original, repository, write=True)
     project = repository / PYPROJECT_PATH
     project.write_text(project.read_text(encoding="utf-8") + "\n# Keep this maintainer note.\n", encoding="utf-8")
-    catalog = repository / CATALOG_PATH
-    catalog.write_text(catalog.read_text(encoding="utf-8") + "\n# Keep this catalog note.\n", encoding="utf-8")
     updated = make_kit(tmp_path, reviewed=True)
     plan = apply_kit(updated, repository)
     assert any(item["action"] == "update" for item in plan["files"])
     apply_kit(updated, repository, write=True, expected_plan=plan["planDigest"])
     assert "# Keep this maintainer note." in project.read_text(encoding="utf-8")
-    assert "# Keep this catalog note." in catalog.read_text(encoding="utf-8")
-    assert (repository / detector_path(updated.discovery.metadata)).read_text(
+    assert (repository / command_source_path(updated.discovery.metadata)).read_text(
         encoding="utf-8"
-    ) == updated.native_files()[detector_path(updated.discovery.metadata)]
+    ) == updated.native_files()[command_source_path(updated.discovery.metadata)]
 
 
 @pytest.mark.parametrize("remove", [False, True])
@@ -110,7 +116,7 @@ def test_manually_changed_owned_file_is_never_overwritten(tmp_path: Path, remove
     original = make_kit(tmp_path)
     repository = repository_fixture(tmp_path)
     apply_kit(original, repository, write=True)
-    target = repository / detector_path(original.discovery.metadata)
+    target = repository / command_source_path(original.discovery.metadata)
     if remove:
         target.unlink()
     else:
@@ -140,7 +146,6 @@ def test_removed_shared_registration_is_not_silently_restored(tmp_path: Path) ->
 @pytest.mark.parametrize(
     "path,original,replacement",
     [
-        (CATALOG_PATH, "_DIRECT_EXTENSION_CATALOGS = (", "_OTHER_CATALOG = ("),
         (STAGING_PATH, "_ARTIFACTS = {", "_OTHER_ARTIFACTS = {"),
         (PYPROJECT_PATH, "[tool.hatch.build.targets.wheel.force-include]", "[tool.hatch.build.targets.wheel.other]"),
     ],
@@ -161,8 +166,9 @@ def test_unknown_repository_layout_fails_without_changes(
 def test_existing_unmanaged_native_file_is_a_conflict(tmp_path: Path) -> None:
     kit = make_kit(tmp_path)
     repository = repository_fixture(tmp_path)
-    target = repository / detector_path(kit.discovery.metadata)
-    target.write_text("# Existing maintainer detector.\n", encoding="utf-8")
+    target = repository / command_source_path(kit.discovery.metadata)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text('{"existing":"maintainer source"}\n', encoding="utf-8")
     before = file_snapshot(repository)
     with pytest.raises(BuilderError, match="ownership record"):
         apply_kit(kit, repository, write=True)
@@ -179,9 +185,12 @@ def test_existing_executable_coverage_is_not_duplicated(tmp_path: Path, identity
         base.discovery.operations,
         base.discovery.limitations,
     )
-    kit = build_kit(discovery, default_review(discovery))
     repository = repository_fixture(tmp_path)
-    with pytest.raises(BuilderError, match="already has Guard coverage"):
+    with pytest.raises(
+        BuilderError,
+        match=r"Native source validation failed|already has Guard coverage|already owned by another source",
+    ):
+        kit = build_kit(discovery, default_review(discovery))
         plan_repository(kit, repository)
 
 
@@ -282,7 +291,7 @@ def test_existing_file_modes_are_preserved(tmp_path: Path) -> None:
     project.chmod(0o600)
     apply_kit(kit, repository, write=True)
     assert stat.S_IMODE(project.stat().st_mode) == 0o600
-    assert stat.S_IMODE((repository / detector_path(kit.discovery.metadata)).stat().st_mode) == 0o644
+    assert stat.S_IMODE((repository / command_source_path(kit.discovery.metadata)).stat().st_mode) == 0o644
 
 
 def test_symlinked_repository_target_is_rejected(tmp_path: Path) -> None:

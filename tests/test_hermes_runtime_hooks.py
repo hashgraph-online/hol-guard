@@ -21,8 +21,8 @@ from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import (
     hermes_native_decision,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_hermes_payload
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -435,3 +435,25 @@ def test_protection_display_name_skips_blank_runtime_label() -> None:
         )
         == "Protected"
     )
+
+
+def test_hermes_merge_preserves_unrelated_bounded_hooks_text(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import merge_guard_pretool_hook
+
+    config: dict[str, object] = {
+        "hooks": {
+            "pre_tool_call": [
+                {
+                    "matcher": "write_file",
+                    "command": "echo mention managed/bounded-hooks in docs",
+                    "fail_closed": False,
+                }
+            ]
+        }
+    }
+    expected = (tmp_path / "python3", "-I", str(tmp_path / "managed" / "bounded-hooks" / "hermes.py"))
+    changed, removed = merge_guard_pretool_hook(config, command=expected, timeout_seconds=5)
+    assert changed is True
+    assert removed == []
+    commands = [entry.get("command") for entry in config["hooks"]["pre_tool_call"] if isinstance(entry, dict)]
+    assert any(isinstance(command, str) and "echo mention" in command for command in commands)

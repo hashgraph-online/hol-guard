@@ -1,0 +1,850 @@
+{
+  "extension": {
+    "action_classes": [
+      "Vercel destructive command",
+      "Vercel production command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews deployment and project deletion plus production deployment, promotion, and rollback.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.platform.vercel",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Vercel command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Vercel destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies removal of Vercel deployments or projects.",
+        "example_command": "vercel remove",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Vercel resource deletion",
+        "permission_id": "command.platform.vercel.permission.deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the deployment or project before removing it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Vercel production command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deployment, promotion, or rollback of a Vercel production deployment.",
+        "example_command": "vercel promote",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Vercel production change",
+        "permission_id": "command.platform.vercel.permission.production-change",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect deployment state or promotion status before changing production."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://vercel.com/docs/cli/remove",
+      "https://vercel.com/docs/cli/project",
+      "https://vercel.com/docs/cli/promote",
+      "https://vercel.com/docs/cli/rollback"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Vercel destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies removal of Vercel deployments or projects.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "project",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.platform.vercel.permission.deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.platform.vercel.deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "project",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the deployment or project before removing it."
+        ],
+        "severity": "critical",
+        "title": "Vercel resource deletion"
+      },
+      {
+        "action_classes": [
+          "Vercel production command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deployment, promotion, or rollback of a Vercel production deployment.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "promote"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rollback"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--prod"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "deploy"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "deploy"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-A",
+                  "-S",
+                  "-T",
+                  "-t"
+                ],
+                "required_flags": [
+                  "--prod"
+                ]
+              },
+              "op": "zero-operand-flags.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-A",
+                  "-S",
+                  "-T",
+                  "-t"
+                ],
+                "required_flags": [
+                  "-p"
+                ]
+              },
+              "op": "zero-operand-flags.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.platform.vercel.permission.production-change",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.platform.vercel.production-change",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vercel",
+                  "vercel.cmd",
+                  "vercel.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [
+                  "--cwd",
+                  "--global-config",
+                  "--local-config",
+                  "--project",
+                  "--scope",
+                  "--team",
+                  "--token",
+                  "-a",
+                  "-s",
+                  "-t"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "promote",
+                  "status"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Promotion status inspection",
+            "variant_id": "status"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "promote"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-a",
+                      "-s",
+                      "-t"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deploy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-A",
+                      "-S",
+                      "-T",
+                      "-t"
+                    ],
+                    "required_flags": [
+                      "--help",
+                      "--prod"
+                    ]
+                  },
+                  "op": "zero-operand-flags.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "vercel",
+                      "vercel.cmd",
+                      "vercel.exe"
+                    ],
+                    "options_with_values": [
+                      "--cwd",
+                      "--global-config",
+                      "--local-config",
+                      "--project",
+                      "--scope",
+                      "--team",
+                      "--token",
+                      "-A",
+                      "-S",
+                      "-T",
+                      "-t"
+                    ],
+                    "required_flags": [
+                      "--help",
+                      "-p"
+                    ]
+                  },
+                  "op": "zero-operand-flags.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect deployment state or promotion status before changing production."
+        ],
+        "severity": "high",
+        "title": "Vercel production change"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect deployment, project, and promotion state before remote changes."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

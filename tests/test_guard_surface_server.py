@@ -471,6 +471,12 @@ class TestGuardSurfaceServer:
             "repair_failing_managed_harness_hooks",
             lambda _store: (_ for _ in ()).throw(RuntimeError("hook discovery failed")),
         )
+        activity_probes: list[GuardStore] = []
+        monkeypatch.setattr(
+            daemon_server_module,
+            "_repair_command_activity_persistence_health",
+            lambda current_store: activity_probes.append(current_store),
+        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         request = urllib.request.Request(
@@ -494,6 +500,8 @@ class TestGuardSurfaceServer:
             "sandbox",
         ]
         assert payload["failed_harnesses"] == []
+        assert activity_probes == [store]
+        assert "decision_stream" in payload["check_ids"]
         assert payload["message"] == (
             "Repair paused before every supported protection layer could be confirmed. Retry repair here."
         )

@@ -1,0 +1,214 @@
+{
+  "extension": {
+    "action_classes": [
+      "Skill Sunset configuration audit command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.skill-sunset",
+    "homepage": "https://github.com/ooocooc/open-skill-sunset",
+    "icon": {
+      "background": "#6B21A8",
+      "kind": "react-icon",
+      "name": "HiMiniCube"
+    },
+    "license": "MIT",
+    "name": "Skill Sunset command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Skill Sunset configuration audit command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies the canonical `skill-sunset audit` surface, which reads a selected agent configuration tree, writes an advisory report, and can launch the generated HTML report when --open is present.",
+        "example_command": "skill-sunset audit",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Skill Sunset configuration audit",
+        "permission_id": "command.skill-sunset.permission.audit",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Confirm the target and report output directory before starting the audit.",
+          "Omit --open in non-interactive environments and review the generated report as untrusted data."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.ooocooc",
+      "url": "https://github.com/ooocooc/open-skill-sunset"
+    },
+    "reference_urls": [
+      "https://github.com/ooocooc/open-skill-sunset/blob/main/src/cli.js"
+    ],
+    "required": false,
+    "risk_classes": [
+      "local_secret_read"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Skill Sunset configuration audit command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies the canonical `skill-sunset audit` surface, which reads a selected agent configuration tree, writes an advisory report, and can launch the generated HTML report when --open is present.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "skill-sunset",
+                  "skill-sunset.cmd",
+                  "skill-sunset.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--fail-on",
+                  "--format",
+                  "--lang",
+                  "--out"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "audit"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.skill-sunset.permission.audit",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.skill-sunset.audit",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "skill-sunset",
+                      "skill-sunset.cmd",
+                      "skill-sunset.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fail-on",
+                      "--format",
+                      "--lang",
+                      "--out"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Skill Sunset audit command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "skill-sunset",
+                      "skill-sunset.cmd",
+                      "skill-sunset.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fail-on",
+                      "--format",
+                      "--lang",
+                      "--out"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Skill Sunset audit command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the target and report output directory before starting the audit.",
+          "Omit --open in non-interactive environments and review the generated report as untrusted data."
+        ],
+        "severity": "low",
+        "title": "Skill Sunset configuration audit"
+      }
+    ],
+    "safer_alternatives": [
+      "Confirm the audit target and output directory before running Skill Sunset.",
+      "Treat generated findings as advisory evidence and review them before changing agent configuration."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

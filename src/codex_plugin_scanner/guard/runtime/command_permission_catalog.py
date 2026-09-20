@@ -7,12 +7,15 @@ import json
 import re
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final, final
+from typing import TYPE_CHECKING, Final, Literal, final
 
 from ..models import GuardAction
-from .command_rules import CommandRuleMode, CommandRuleSeverity, CommandSafetyRule, example_for_matcher
+from .generated_command_catalog import CommandRuleMode
 
-PermissionRiskTier = CommandRuleSeverity
+if TYPE_CHECKING:
+    from .command_rules import CommandSafetyRule
+
+PermissionRiskTier = Literal["critical", "high", "medium", "low"]
 COMMAND_PERMISSION_SCHEMA_VERSION: Final = 1
 _PERMISSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:-[a-z0-9]+)*$")
 _FAMILY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -171,6 +174,10 @@ def permission_for_rule(
     *,
     configurable: bool,
 ) -> CommandPermissionSpec:
+    # Legacy authoring derives examples from matchers; native metadata consumers
+    # must be able to import this module without loading executable matchers.
+    from .command_rules import example_for_matcher
+
     suffix = rule.rule_id.removeprefix(f"{extension_id}.")
     return CommandPermissionSpec(
         permission_id=f"{extension_id}.permission.{suffix}",

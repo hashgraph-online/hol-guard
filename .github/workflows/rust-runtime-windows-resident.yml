@@ -10,6 +10,7 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
@@ -20,6 +21,7 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -30,6 +32,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-workspace:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
+      - name: Check locked Rust workspace
+        shell: pwsh
+        run: |
+          cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustfmt --edition 2021 --check rust/crates/guard-runtime/src/main.rs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   windows-resident:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -44,32 +71,28 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        shell: pwsh
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
-      - name: Check locked Rust workspace
-        shell: pwsh
-        run: |
-          cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps | Out-Null
-          rustfmt --edition 2021 --check rust/crates/guard-runtime/src/main.rs
-          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
-          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Check Python transport boundary
         shell: pwsh
         run: |
           uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build version-matched Windows runtime
         shell: pwsh
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOL_GUARD_BUILD_SHA = "${{ github.sha }}"
           $env:HOL_GUARD_PACKAGE_VERSION = $version
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rust/target/release/hol-guard-runtime.exe self-test --json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise authenticated Windows resident runtime
         shell: pwsh
         env:
@@ -91,11 +114,10 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Check locked Rust workspace
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null

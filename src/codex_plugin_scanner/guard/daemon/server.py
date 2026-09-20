@@ -16,7 +16,6 @@ import platform
 import secrets
 import socket
 import sqlite3
-import stat
 import tempfile
 import threading
 import time
@@ -112,6 +111,12 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..directory_path_authority import (
+    DirectoryPathTrustError,
+    trusted_guard_directory_roots,
+    validate_guard_directory_path,
+    validated_owned_temporary_workspace,
+)
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
@@ -159,7 +164,6 @@ from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
 from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
-from ..runtime.command_evaluation import evaluate_command
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.command_shadow_evaluation import (
     CommandShadowCohort,
@@ -168,9 +172,14 @@ from ..runtime.command_shadow_evaluation import (
     build_command_shadow_observation,
 )
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError, ExtensionControlAuthorityView
-from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from ..runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlRuntimeSnapshot,
+    current_extension_control_snapshot,
+)
 from ..runtime.isolation_provider import load_managed_provider_registry
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
+from ..runtime.native_command_evaluation import evaluate_command_native
 from ..runtime.network_status import build_network_status, project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.runner import (
@@ -221,6 +230,7 @@ from ..store_evidence import (
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
 from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
+from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
     handle_command_activity_analytics,
@@ -317,6 +327,7 @@ _EXTENSION_CONTROL_PATHS = frozenset(
     {
         "/v1/extension-controls/preview",
         "/v1/extension-controls/test",
+        "/v1/extension-controls/inspect",
         "/v1/extension-controls/apply",
         "/v1/extension-controls/refresh",
         "/v1/extension-controls/recover-authority",
@@ -704,7 +715,17 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+        from ..native_command_control_authority_io import NativeCommandControlMutationRequiredError
+
+        try:
+            view = self.store.read_extension_control_authority_for_registry(
+                BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True
+            )
+        except NativeCommandControlMutationRequiredError:
+            # Release the shared read before a migration takes an exclusive
+            # lease and re-verifies authority. Routine refreshes must coexist
+            # with the native decision's shared mutation fence.
+            view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
         return self.extension_control_runtime.refresh(view)
 
     def process_request(self, request: Any, client_address: Any) -> None:
@@ -2059,7 +2080,36 @@ _PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
 
 
 def _repair_command_activity_persistence_health(store: GuardStore) -> None:
-    evaluation = evaluate_command(_PROTECTION_REPAIR_PROBE_COMMAND)
+    snapshot = current_extension_control_snapshot()
+    if snapshot is None:
+        try:
+            snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+                store.read_extension_control_authority_for_registry(
+                    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+                    read_only=True,
+                )
+            )
+        except Exception:
+            snapshot = None
+    try:
+        evaluation = (
+            evaluate_command_native(
+                _PROTECTION_REPAIR_PROBE_COMMAND,
+                guard_home=store.guard_home,
+                extension_control_snapshot=snapshot,
+            )
+            if snapshot is not None
+            else None
+        )
+    except Exception:
+        evaluation = None
+    if evaluation is None:
+        with suppress(Exception):
+            store.record_command_activity_persistence_failure(
+                error_code="native_evaluation_unavailable",
+                occurred_at=datetime.now(timezone.utc),
+            )
+        return
     occurred_at = datetime.now(timezone.utc)
     activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
     decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
@@ -2706,6 +2756,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             try:
                 if parsed.path.endswith("/test"):
                     response = self._daemon_server().extension_control_api.test_command(payload)
+                elif parsed.path.endswith("/inspect"):
+                    response = self._daemon_server().extension_control_api.inspect_command(payload)
                 elif parsed.path.endswith("/preview"):
                     response = self._daemon_server().extension_control_api.preview(payload)
                 elif parsed.path.endswith("/apply"):
@@ -3690,7 +3742,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._enforce_package_firewall_rate_limit(operation, payload):
             return
         entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(
+                payload,
+                reject_invalid_explicit=operation == "audit",
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
+            return
         current_status = package_shim_status(context)
         if not package_firewall_operation_allowed(
             entitlement,
@@ -3732,15 +3791,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error)
             return
         except ValueError as error:
-            error_code = str(error)
-            error_payload: dict[str, object] = {"error": error_code, "operation": operation}
-            if error_code == "workspace_dir_required":
-                error_payload["message"] = (
-                    "Guard needs a project folder with package manifests before it can run "
-                    "the workspace audit. Open Guard from a connected app workspace or pass "
-                    "workspace_dir in the audit request."
-                )
-            self._write_json(error_payload, status=400)
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         except Exception as error:
             status, error_payload = _supply_chain_package_action_error_response(
@@ -3834,7 +3885,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         raise ValueError("unsupported_supply_chain_operation")
 
-    def _resolve_supply_chain_workspace_dir(self, payload: dict[str, object]) -> Path | None:
+    def _resolve_supply_chain_workspace_dir(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> Path | None:
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
@@ -3846,15 +3902,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace_value=payload.get("workspace"),
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
+            reject_invalid_explicit=reject_invalid_explicit,
         )
 
-    def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace_dir = self._resolve_supply_chain_workspace_dir(payload)
+    def _supply_chain_context(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> HarnessContext:
+        workspace_dir = self._resolve_supply_chain_workspace_dir(
+            payload,
+            reject_invalid_explicit=reject_invalid_explicit,
+        )
         return HarnessContext(
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
+
+    @staticmethod
+    def _supply_chain_value_error_payload(operation: str, error_code: str) -> dict[str, object]:
+        error_payload: dict[str, object] = {"error": error_code, "operation": operation}
+        if error_code == "workspace_dir_required":
+            error_payload["message"] = (
+                "Guard needs a project folder with package manifests before it can run "
+                "the workspace audit. Open Guard from a connected app workspace or pass "
+                "workspace_dir in the audit request."
+            )
+        elif error_code == "workspace_dir_invalid":
+            error_payload["message"] = (
+                "Guard could not use the selected project folder. Choose an existing local folder and try again."
+            )
+        return error_payload
 
     @staticmethod
     def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:
@@ -5842,7 +5922,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
         guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
         try:
-            loaded = None if guard_home is None else load_guard_config(guard_home, workspace=workspace_path)
+            loaded = (
+                None
+                if guard_home is None
+                else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
+            )
             observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
@@ -7508,59 +7592,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         roots: tuple[Path, ...] | None = None,
     ) -> Path:
-        expanded = os.path.expanduser(value)
-        if not os.path.isabs(expanded):
-            raise _HookPathValidationError(parameter, "relative_path")
         try:
-            candidate = os.path.realpath(expanded)
-        except OSError:
-            raise _HookPathValidationError(parameter, "path_resolve_failed") from None
-        effective_roots = roots
-        if parameter in {"home", "workspace"} and effective_roots is None:
-            effective_roots = self._hook_safe_roots()
-        if effective_roots is not None:
-            root_match = False
-            for root in effective_roots:
-                root_path = os.path.realpath(os.fspath(root))
-                try:
-                    if os.path.commonpath([candidate, root_path]) == root_path:
-                        root_match = True
-                        break
-                except ValueError:
-                    continue
-            if not root_match and parameter == "workspace":
-                root_match = self._is_owned_temporary_hook_workspace(candidate)
-            if not root_match:
-                raise _HookPathValidationError(parameter, "unexpected_root")
-        return Path(candidate)
+            return validate_guard_directory_path(
+                value,
+                self._hook_safe_roots() if roots is None else roots,
+                allow_owned_temporary=parameter == "workspace",
+            )
+        except DirectoryPathTrustError as error:
+            raise _HookPathValidationError(parameter, error.reason) from error
 
     @staticmethod
     def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
-        candidate_path = Path(candidate)
-        try:
-            temporary_root = trusted_temporary_root_for_path(candidate_path)
-        except OSError:
-            return False
-        if temporary_root is None:
-            return False
-        try:
-            # codeql[py/path-injection] candidate is canonical and contained by a trusted temp root.
-            candidate_stat = candidate_path.stat()
-        except OSError:
-            return False
-        if not stat.S_ISDIR(candidate_stat.st_mode):
-            return False
-        getuid = getattr(os, "getuid", None)
-        if not callable(getuid):
-            current_home = Path.home().resolve()
-            return _GuardDaemonHandler._path_is_within_root(
-                temporary_root,
-                current_home,
-            ) and _GuardDaemonHandler._path_is_within_root(
-                candidate_path,
-                temporary_root,
-            )
-        return candidate_stat.st_uid == getuid()
+        return _GuardDaemonHandler._validated_owned_temporary_hook_workspace(candidate) is not None
+
+    @staticmethod
+    def _validated_owned_temporary_hook_workspace(candidate: str) -> Path | None:
+        return validated_owned_temporary_workspace(candidate)
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
@@ -7578,12 +7625,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return expected
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
-        current_home = Path.home().resolve()
-        roots: list[Path] = [current_home]
-        guard_home_root = self._daemon_server().store.guard_home.expanduser().resolve().parent
-        if not self._path_is_within_root(guard_home_root, current_home):
-            roots.append(guard_home_root)
-        return tuple(roots)
+        return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
 
     @staticmethod
     def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
@@ -8246,21 +8288,14 @@ class GuardDaemonServer:
             storage_complete = self._maintain_storage_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
-        workspace_id = self._server.store.get_cloud_workspace_id()
-        if (
-            workspace_id is None
-            or workspace_id != self._aibom_context_workspace_id
-            or self._aibom_workspace_dir is None
-        ):
-            return
-        payload: dict[str, object] = {
-            "workspace_dir": str(self._aibom_workspace_dir),
-            "workspace_id": workspace_id,
-        }
-        if self._aibom_home_dir is not None:
-            payload["home_dir"] = str(self._aibom_home_dir)
-        now = _now()
-        self._server.store.set_sync_payload("aibom_inventory_context", payload, now)
+        persist_aibom_inventory_context(
+            store=self._server.store,
+            cached_workspace_id=self._aibom_context_workspace_id,
+            workspace_dir=self._aibom_workspace_dir,
+            home_dir=self._aibom_home_dir,
+            now=_now(),
+            record_diagnostic=self._diagnostics.record,
+        )
 
     def _serve_forever(self) -> None:
         stop_reason = "serve_loop_returned"

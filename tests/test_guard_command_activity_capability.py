@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     load_or_create_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 @pytest.mark.parametrize(
@@ -30,7 +31,9 @@ def test_only_claimed_final_allow_records_capability(
     command: str,
     action: GuardAction,
     expected_reason: ActivityDecisionReason,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home, prime_policy_integrity=False)
     payload = {
@@ -65,6 +68,6 @@ def test_only_claimed_final_allow_records_capability(
     assert activity is not None
     assert activity.decision_reason_code is expected_reason
     if action == "allow":
-        assert activity.match_count == 0
+        assert activity.match_count == 1
     else:
         assert activity.match_count > 0

@@ -15,7 +15,10 @@ from ..codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from ..stable_guard_cli import prune_safe_cli_executable
+from .adapter_safe_output import write_text_at_authorized_path
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
+from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
+from .cursor_hook_config import isolated_cursor_hook_python
 from .desktop_hook_proxy import (
     _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
 )
@@ -27,6 +30,60 @@ _MAX_HOOK_INPUT_BYTES = 1_000_000
 _FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
+_BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
+
+
+def _bounded_hook_script_stem(harness: str) -> str | None:
+    stem = harness.strip().lower().replace("_", "-")
+    if not stem or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in stem):
+        return None
+    return stem
+
+
+def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
+    """Return the managed stdlib hook client path for one harness."""
+
+    stem = _bounded_hook_script_stem(harness)
+    if stem is None:
+        return None
+    return guard_home.joinpath(*_BOUNDED_HOOK_SCRIPT_DIR, f"{stem}.py")
+
+
+def _render_bounded_hook_script(*, guard_home: Path, harness: str, timeout_seconds: float) -> str:
+    timeout_token = str(int(timeout_seconds)) if timeout_seconds == int(timeout_seconds) else str(timeout_seconds)
+    return (
+        BOUNDED_HOOK_SCRIPT_TEMPLATE.replace(
+            "__GUARD_HOME__",
+            json.dumps(str(guard_home.resolve(strict=False))),
+        )
+        .replace("__HARNESS__", json.dumps(harness.strip().lower().replace("_", "-")))
+        .replace("__TIMEOUT_SECONDS__", timeout_token)
+    )
+
+
+def _isolated_bounded_hook_command(
+    *,
+    guard_home: Path,
+    harness: str,
+    timeout_seconds: float,
+) -> tuple[str, ...] | None:
+    interpreter = isolated_cursor_hook_python()
+    script_path = bounded_hook_script_path(guard_home, harness)
+    if interpreter is None or script_path is None:
+        return None
+    try:
+        script_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        write_text_at_authorized_path(
+            script_path,
+            _render_bounded_hook_script(
+                guard_home=guard_home,
+                harness=harness,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return (interpreter, "-I", str(script_path.resolve(strict=False)))
 
 
 def bounded_cli_hook_command(
@@ -63,6 +120,13 @@ def bounded_cli_hook_command(
         desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
         if desktop_proxy is not None:
             return desktop_proxy
+        isolated_command = _isolated_bounded_hook_command(
+            guard_home=guard_home,
+            harness=harness,
+            timeout_seconds=timeout_seconds,
+        )
+        if isolated_command is not None:
+            return isolated_command
         return (
             python_executable,
             _FROZEN_BRIDGE_COMMAND,
@@ -427,6 +491,7 @@ def main_from_argv(argv: Sequence[str]) -> int:
 __all__ = [
     "_FROZEN_BRIDGE_COMMAND",
     "bounded_cli_hook_command",
+    "bounded_hook_script_path",
     "main_from_argv",
     "run_bounded_cli_hook",
 ]

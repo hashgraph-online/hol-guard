@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -11,6 +12,36 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _routine_semver_spec_matches,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
+from tests.git_execution_test_support import assert_host_git_proof_result
+from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
+
+
+@pytest.fixture(autouse=True)
+def _real_native_command_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import native_command_evaluation
+    from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+
+    fixtures: dict[str, RealNativeReviewFixture] = {}
+
+    def review(command: str, **_kwargs: object) -> dict[str, object]:
+        fixture = fixtures.get(command)
+        if fixture is None:
+            fixture = real_native_review_fixture(command)
+            fixtures[command] = fixture
+        return fixture.payload
+
+    seed = real_native_review_fixture("printf native-fixture")
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", review)
+    monkeypatch.setattr(
+        ExtensionControlRuntimeSnapshot,
+        "from_authority_view",
+        staticmethod(lambda _view: seed.snapshot),
+    )
+
+
+def _shell_path(path: Path) -> str:
+    return shlex.quote(path.as_posix())
 
 
 def _artifact(
@@ -44,7 +75,7 @@ def test_harnesses_evaluate_compound_source_inspection_as_one_unit(
     (workspace / "src").mkdir(parents=True)
 
     artifact = _artifact(
-        f'cd {workspace} && fd -t f . | head -20 && echo "---MATCHES---" && rg -n TODO src | head -20',
+        f'cd {_shell_path(workspace)} && fd -t f . | head -20 && echo "---MATCHES---" && rg -n TODO src | head -20',
         home=home,
         harness=harness,
     )
@@ -64,7 +95,7 @@ def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
     (inspected_workspace / "src").mkdir(parents=True)
 
     artifact = _artifact(
-        f"cd {inspected_workspace} && grep -n TODO src/example.ts | head -20",
+        f"cd {_shell_path(inspected_workspace)} && grep -n TODO src/example.ts | head -20",
         home=home,
         harness=harness,
         workspace=active_workspace,
@@ -84,7 +115,7 @@ def test_harnesses_accept_safe_leading_delay_before_cross_workspace_inspection(
 
     assert (
         _artifact(
-            f"sleep 30 && cd {workspace} && grep -n TODO src/example.ts | head -20",
+            f"sleep 30 && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20",
             home=home,
             harness=harness,
         )
@@ -105,7 +136,7 @@ def test_compound_inspection_rejects_excessive_or_repeated_delays(tmp_path: Path
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    command = f"{delay_prefix} && cd {workspace} && grep -n TODO src/example.ts | head -20"
+    command = f"{delay_prefix} && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20"
 
     assert _artifact(command, home=home) is not None
 
@@ -116,7 +147,7 @@ def test_compound_inspection_accepts_safe_stderr_suppression(tmp_path: Path, pat
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && grep -rn {pattern} src 2>/dev/null | head -20", home=home) is None
+    assert _artifact(f"cd {_shell_path(workspace)} && grep -rn {pattern} src 2>/dev/null | head -20", home=home) is None
 
 
 @pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< input.txt"))
@@ -125,7 +156,7 @@ def test_compound_inspection_keeps_file_redirection_guarded(tmp_path: Path, redi
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && grep -rn TODO src {redirect} | head -20", home=home) is not None
+    assert _artifact(f"cd {_shell_path(workspace)} && grep -rn TODO src {redirect} | head -20", home=home) is not None
 
 
 def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Path) -> None:
@@ -137,7 +168,7 @@ def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Pa
 
     assert (
         _artifact(
-            f"cd {inspected_workspace} && git push origin main",
+            f"cd {_shell_path(inspected_workspace)} && git push origin main",
             home=home,
             workspace=active_workspace,
         )
@@ -145,7 +176,7 @@ def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Pa
     )
     assert (
         _artifact(
-            f"cd {inspected_workspace} && vitest run src/example.test.ts --maxWorkers=1",
+            f"cd {_shell_path(inspected_workspace)} && vitest run src/example.test.ts --maxWorkers=1",
             home=home,
             workspace=active_workspace,
         )
@@ -164,7 +195,7 @@ def test_harnesses_review_bounded_workspace_python_script_without_calling_it_des
     script.write_text("print('converted')\n", encoding="utf-8")
 
     artifact = _artifact(
-        f"cd {workspace} && python3 scripts/wp_to_pelican.py 2>&1",
+        f"cd {_shell_path(workspace)} && python3 scripts/wp_to_pelican.py 2>&1",
         home=home,
         harness=harness,
         workspace=workspace,
@@ -222,7 +253,7 @@ def test_declared_local_vitest_runner_requires_execution_review(tmp_path: Path) 
     _write_local_vitest(test_workspace, with_lock=True)
 
     artifact = _artifact(
-        f"cd {test_workspace} && npx vitest run tests/example.test.tsx 2>&1 | tail -15",
+        f"cd {_shell_path(test_workspace)} && npx vitest run tests/example.test.tsx 2>&1 | tail -15",
         home=home,
         workspace=active_workspace,
     )
@@ -240,7 +271,7 @@ def test_local_vitest_without_lock_evidence_still_requires_review(tmp_path: Path
     _write_local_vitest(test_workspace, with_lock=False)
 
     artifact = _artifact(
-        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        f"cd {_shell_path(test_workspace)} && npx vitest run tests/example.test.tsx",
         home=home,
         workspace=active_workspace,
     )
@@ -264,7 +295,7 @@ def test_local_vitest_runner_retargeted_to_another_package_requires_review(tmp_p
     runner.symlink_to("../unrelated/payload.mjs")
 
     artifact = _artifact(
-        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        f"cd {_shell_path(test_workspace)} && npx vitest run tests/example.test.tsx",
         home=home,
         workspace=active_workspace,
     )
@@ -285,7 +316,7 @@ def test_local_vitest_package_symlinked_outside_node_modules_requires_review(tmp
     package_root.symlink_to(outside_package, target_is_directory=True)
 
     artifact = _artifact(
-        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        f"cd {_shell_path(test_workspace)} && npx vitest run tests/example.test.tsx",
         home=home,
         workspace=active_workspace,
     )
@@ -306,7 +337,7 @@ def test_local_runner_override_requests_still_require_review(tmp_path: Path, run
     (test_workspace / "evil").mkdir()
 
     artifact = _artifact(
-        f"cd {test_workspace} && npx {runner_request} run tests/example.test.tsx",
+        f"cd {_shell_path(test_workspace)} && npx {runner_request} run tests/example.test.tsx",
         home=home,
         workspace=active_workspace,
     )
@@ -330,31 +361,45 @@ def test_routine_runner_semver_matching(specifier: str, version: str, expected: 
     assert _routine_semver_spec_matches(specifier, version) is expected
 
 
-def test_compound_git_and_filesystem_inspection_is_one_unit(tmp_path: Path) -> None:
+def test_compound_git_and_filesystem_inspection_requires_host_binary_proof(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "workspace"
     (workspace / "repository").mkdir(parents=True)
 
     artifact = _artifact(
-        f'cd {workspace} && git -C repository status --short && echo "---FILES---" && ls -la | head -20',
+        f'cd {_shell_path(workspace)} && git -C repository status --short && echo "---FILES---" && ls -la | head -20',
         home=home,
     )
 
-    assert artifact is None
+    assert_host_git_proof_result(artifact is None, cwd=workspace)
+    if os.name == "nt":
+        assert artifact is not None
+        assert artifact.metadata["compound_segment_count"] == 5
+        assert artifact.metadata["command_evaluation_status"] == "native_unavailable"
+        assert artifact.metadata["guard_default_action"] == "require-reapproval"
 
 
-def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None:
+def test_compound_stdin_only_python_observer_requires_host_binary_proof(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "workspace"
     workspace.mkdir(parents=True)
 
     artifact = _artifact(
-        f"cd {workspace} && printf data | {shlex.quote(sys.executable)} "
+        f"cd {_shell_path(workspace)} && printf data | {_shell_path(Path(sys.executable))} "
         + '-c "import sys; print(sys.stdin.read().strip())"',
         home=home,
     )
 
-    assert artifact is None
+    if os.name == "nt":
+        # The compound host recognizer has no Windows executable ACL proof.
+        # A stdin-only script cannot waive the launch identity requirement.
+        assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
+        assert artifact is not None
+        assert artifact.metadata["compound_segment_count"] == 3
+        assert artifact.metadata["command_evaluation_status"] == "native_unavailable"
+        assert artifact.metadata["guard_default_action"] == "require-reapproval"
+    else:
+        assert artifact is None
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -367,7 +412,7 @@ def test_harnesses_keep_compound_destructive_commands_guarded(
     workspace.mkdir(parents=True)
 
     artifact = _artifact(
-        f"cd {workspace} && printf ready && rm -rf ./generated-output",
+        f"cd {_shell_path(workspace)} && printf ready && rm -rf ./generated-output",
         home=home,
         harness=harness,
     )
@@ -472,7 +517,7 @@ def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:
     script.parent.mkdir()
     script.write_text("#!/bin/sh\n", encoding="utf-8")
 
-    assert _artifact(f"cd {workspace} && bash -n scripts/check.sh && echo valid", home=home) is None
+    assert _artifact(f"cd {_shell_path(workspace)} && bash -n scripts/check.sh && echo valid", home=home) is None
 
 
 @pytest.mark.parametrize(
@@ -499,4 +544,4 @@ def test_compound_recovery_preserves_real_risk_boundaries(tmp_path: Path, suffix
     (workspace / "src").mkdir()
     (workspace / "settings.txt").write_text("public\n", encoding="utf-8")
 
-    assert _artifact(f"cd {workspace} && {suffix}", home=home) is not None
+    assert _artifact(f"cd {_shell_path(workspace)} && {suffix}", home=home) is not None

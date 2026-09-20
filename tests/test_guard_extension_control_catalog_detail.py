@@ -98,7 +98,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
         extensions,
         sort_keys=True,
         separators=(",", ":"),
-        ensure_ascii=True,
+        ensure_ascii=False,
     ).encode()
     assert hashlib.sha256(canonical_bytes).hexdigest() == payload["catalog_digest"]
 

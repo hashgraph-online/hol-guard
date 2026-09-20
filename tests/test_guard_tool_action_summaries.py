@@ -29,6 +29,29 @@ def test_destructive_tool_action_summary_explains_user_impact():
     assert artifact.metadata["runtime_request_signals"] == [expected_summary]
 
 
+def test_artifact_discovery_without_native_evidence_preserves_review_floor():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "rm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "opencode",
+        request,
+        config_path="opencode.json",
+        source_scope="project",
+    )
+
+    assert artifact.metadata["native_extension_evidence"] == "unavailable"
+    assert artifact.metadata["command_action_floor"] == "review"
+    assert artifact.metadata["command_rule_matches"] == []
+    assert artifact.metadata["extension_control_resolution"] == {
+        "blocked": True,
+        "failures": ["native-evidence-unavailable"],
+    }
+
+
 def test_non_destructive_tool_action_summary_preserves_specific_classifier_reason():
     request = extract_sensitive_tool_action_request(
         "bash",

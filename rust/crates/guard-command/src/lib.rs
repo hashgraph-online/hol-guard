@@ -10,6 +10,7 @@ mod command_structured_matchers;
 mod executable_flag_contract;
 pub mod native_command_controls;
 pub mod native_command_program;
+mod parser_wrappers;
 pub mod pretool;
 
 use serde::{Deserialize, Serialize};
@@ -105,9 +106,13 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
     }
 
-    let raw_segments = match split_execution_segments(raw) {
-        Ok(value) => value,
-        Err(reason) => return Ok(uncertain(request, raw, reason)),
+    let raw_segments = if let Some(value) = contained_compile_check_segments(raw) {
+        value
+    } else {
+        match split_execution_segments(raw) {
+            Ok(value) => value,
+            Err(reason) => return Ok(uncertain(request, raw, reason)),
+        }
     };
     if raw_segments.len() > MAX_COMMAND_SEGMENTS {
         return Ok(uncertain(request, raw, "command_segment_limit_exceeded"));
@@ -136,6 +141,11 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
             environment_names.push(name.to_owned());
             executable_index += 1;
         }
+        let (executable_index, wrapper_chain) =
+            match parser_wrappers::unwrap_sudo(&tokens, executable_index) {
+                Ok(value) => value,
+                Err(reason) => return Ok(uncertain(request, raw, reason)),
+            };
         let executable = tokens.get(executable_index).cloned();
         let arguments = if executable.is_some() {
             tokens[executable_index + 1..].to_vec()
@@ -145,7 +155,14 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         if executable.as_deref().is_some_and(is_shell_control_keyword) {
             return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
         }
-        if executable.as_deref().is_some_and(is_transparent_wrapper) {
+        if executable.as_deref().is_some_and(is_transparent_wrapper)
+            && !parser_wrappers::is_encoded_stdin_shell(
+                executable.as_deref(),
+                &arguments,
+                &raw_segment,
+                segments.last(),
+            )
+        {
             return Ok(uncertain(
                 request,
                 raw,
@@ -169,7 +186,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
             executable,
             arguments,
             environment_names,
-            wrapper_chain: Vec::new(),
+            wrapper_chain,
             path_overridden,
             execution_context: format!("top:{}", raw_segment.group_index),
             pipeline_index: raw_segment.pipeline_index,
@@ -182,18 +199,27 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     }
 
     let path_overridden = segments.iter().any(|segment| segment.path_overridden);
+    let wrapper_chain = segments
+        .iter()
+        .flat_map(|segment| segment.wrapper_chain.iter().cloned())
+        .collect::<Vec<_>>();
+    let parser_profile = if wrapper_chain.is_empty() {
+        "posix-simple-v1"
+    } else {
+        "posix-bounded-wrappers-v2"
+    };
     Ok(CanonicalCommandV1 {
         exact_raw_text: true,
         normalized_text: raw.to_owned(),
         dialect: request.dialect.clone(),
         transport: request.transport.clone(),
         extraction_provenance: request.extraction_provenance.clone(),
-        wrapper_chain: Vec::new(),
+        wrapper_chain,
         segments,
         confidence: "exact".to_owned(),
         uncertainty_reason: None,
         path_overridden,
-        parser_profile: "posix-simple-v1".to_owned(),
+        parser_profile: parser_profile.to_owned(),
     })
 }
 
@@ -260,15 +286,33 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
             '$' if chars.get(index + 1) == Some(&'(') => {
                 return Err("command_substitution_not_yet_supported");
             }
+            '$' if chars.get(index + 1) == Some(&'{') => {
+                return Err("parameter_expansion_not_yet_supported");
+            }
             '$' if chars
                 .get(index + 1)
                 .is_some_and(|next| *next == '\'' || *next == '"') =>
             {
                 return Err("non_posix_quoting_not_yet_supported");
             }
+            '<' | '>' if is_stderr_to_stdout_redirect(&chars, index) => {}
             '<' | '>' => return Err("command_redirect_not_yet_supported"),
-            '(' | ')' | '{' | '}' => return Err("compound_shell_not_yet_supported"),
+            '(' | ')' => return Err("compound_shell_not_yet_supported"),
+            '{' | '}'
+                if (index == 0
+                    || is_shell_token_whitespace(chars[index - 1])
+                    || matches!(chars[index - 1], ';' | '&' | '|'))
+                    && chars.get(index + 1).is_none_or(|value| {
+                        is_shell_token_whitespace(*value) || matches!(*value, ';' | '&' | '|')
+                    }) =>
+            {
+                return Err("compound_shell_not_yet_supported");
+            }
             '&' => {
+                if is_stderr_to_stdout_redirect(&chars, index) {
+                    index += 1;
+                    continue;
+                }
                 if chars.get(index + 1) != Some(&'&') {
                     return Err("background_job_not_yet_supported");
                 }
@@ -337,6 +381,87 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
         return Err("empty_command_segment");
     }
     Ok(segments)
+}
+
+fn contained_compile_check_segments(command: &str) -> Option<Vec<RawSegment>> {
+    let chars: Vec<char> = command.chars().collect();
+    let and_index = chars.windows(2).position(|window| window == ['&', '&'])?;
+    if chars[and_index + 2..]
+        .windows(2)
+        .any(|window| window == ['&', '&'])
+    {
+        return None;
+    }
+    let (cd_start, cd_end) = trimmed_bounds(&chars, 0, and_index)?;
+    let (find_start, find_end) = trimmed_bounds(&chars, and_index + 2, chars.len())?;
+    let cd: String = chars[cd_start..cd_end].iter().collect();
+    let find: String = chars[find_start..find_end].iter().collect();
+    let cd_tokens = shell_tokens(&cd).ok()?;
+    let find_tokens = shell_tokens(&find).ok()?;
+    if cd_tokens.len() != 2
+        || cd_tokens.first().map(String::as_str) != Some("cd")
+        || !is_plain_cd_target(&cd_tokens[1])
+        || find_tokens.first().map(String::as_str) != Some("find")
+        || !is_contained_compile_check_arguments(&find_tokens[1..])
+    {
+        return None;
+    }
+    Some(vec![
+        RawSegment {
+            group_index: 0,
+            pipeline_index: 0,
+            start: cd_start,
+            end: cd_end,
+        },
+        RawSegment {
+            group_index: 1,
+            pipeline_index: 0,
+            start: find_start,
+            end: find_end,
+        },
+    ])
+}
+
+fn trimmed_bounds(chars: &[char], start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut left = start;
+    let mut right = end;
+    while left < right && chars[left].is_whitespace() {
+        left += 1;
+    }
+    while right > left && chars[right - 1].is_whitespace() {
+        right -= 1;
+    }
+    (left < right).then_some((left, right))
+}
+
+fn is_stderr_to_stdout_redirect(chars: &[char], index: usize) -> bool {
+    let start = match chars.get(index) {
+        Some('&') => index.checked_sub(2),
+        Some('>') => index.checked_sub(1),
+        _ => None,
+    };
+    let Some(start) = start else {
+        return false;
+    };
+    let Some(redirect) = chars.get(start..start.saturating_add(4)) else {
+        return false;
+    };
+    redirect == ['2', '>', '&', '1']
+        && (start == 0 || is_shell_token_whitespace(chars[start - 1]))
+        && chars.get(start + 4).is_none_or(|value| {
+            is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
+        })
+}
+
+fn is_plain_cd_target(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.chars().any(|value| {
+            matches!(
+                value,
+                '$' | '`' | '<' | '>' | '|' | ';' | '&' | '(' | ')' | '{' | '}' | '\0'
+            )
+        })
 }
 
 fn push_segment(
@@ -516,10 +641,93 @@ fn is_nested_command_executor(executable: &str, arguments: &[String]) -> bool {
     ) {
         return true;
     }
+    if matches!(basename, "fd" | "fd.exe") {
+        return fd_arguments_execute_command(arguments);
+    }
     basename == "find"
+        && !is_contained_compile_check_arguments(arguments)
         && arguments
             .iter()
             .any(|argument| matches!(argument.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
+}
+
+fn fd_arguments_execute_command(arguments: &[String]) -> bool {
+    // fd substitutes filesystem search results into a subprocess invocation.
+    // Its exec modes need their own bounded source and execution proof; an
+    // exact shell tokenization must not silently treat them as a plain search.
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if argument == "--" {
+            return false;
+        }
+        if matches!(argument.as_str(), "--exec" | "--exec-batch")
+            || argument.starts_with("--exec=")
+            || argument.starts_with("--exec-batch=")
+        {
+            return true;
+        }
+        if argument.starts_with("--") {
+            if matches!(
+                argument.as_str(),
+                "--base-directory"
+                    | "--changed-after"
+                    | "--changed-before"
+                    | "--changed-within"
+                    | "--color"
+                    | "--exact-depth"
+                    | "--exclude"
+                    | "--extension"
+                    | "--format"
+                    | "--ignore-file"
+                    | "--max-depth"
+                    | "--max-results"
+                    | "--min-depth"
+                    | "--owner"
+                    | "--path-separator"
+                    | "--search-path"
+                    | "--size"
+                    | "--threads"
+                    | "--type"
+            ) {
+                arguments.next();
+            }
+            continue;
+        }
+        let Some(cluster) = argument.strip_prefix('-') else {
+            continue;
+        };
+        for (offset, flag) in cluster.char_indices() {
+            if matches!(flag, 'x' | 'X') {
+                return true;
+            }
+            if matches!(flag, 'c' | 'd' | 'E' | 'e' | 'j' | 'o' | 'S' | 't') {
+                if offset + flag.len_utf8() == cluster.len() {
+                    arguments.next();
+                }
+                break;
+            }
+        }
+    }
+    false
+}
+
+fn is_contained_compile_check_arguments(arguments: &[String]) -> bool {
+    const EXPECTED: [&str; 9] = [
+        "src",
+        "-name",
+        "*.py",
+        "-exec",
+        "python",
+        "-m",
+        "py_compile",
+        "{}",
+        "+",
+    ];
+    arguments.len() == EXPECTED.len()
+        && arguments
+            .iter()
+            .zip(EXPECTED)
+            .all(|(actual, expected)| actual == expected)
 }
 
 #[cfg(test)]
@@ -589,13 +797,53 @@ mod tests {
     }
 
     #[test]
+    fn parses_frozen_contained_routine_forms_without_general_shell_expansion() {
+        let stderr_pipeline = parse_command(&request(
+            "cd workspace/service && bun run typecheck 2>&1 | head -40",
+        ))
+        .unwrap();
+        assert_eq!(
+            stderr_pipeline.confidence, "exact",
+            "{:?}",
+            stderr_pipeline.uncertainty_reason
+        );
+        assert_eq!(stderr_pipeline.segments.len(), 3);
+        assert_eq!(
+            stderr_pipeline.segments[1].arguments,
+            ["run", "typecheck", "2>&1"]
+        );
+        assert_eq!(stderr_pipeline.segments[2].tokens, ["head", "-40"]);
+
+        let compile_check = parse_command(&request(
+            "cd workspace/service && find src -name '*.py' -exec python -m py_compile {} +",
+        ))
+        .unwrap();
+        assert_eq!(compile_check.confidence, "exact");
+        assert_eq!(compile_check.segments.len(), 2);
+        assert_eq!(
+            compile_check.segments[1].arguments,
+            [
+                "src",
+                "-name",
+                "*.py",
+                "-exec",
+                "python",
+                "-m",
+                "py_compile",
+                "{}",
+                "+"
+            ]
+        );
+    }
+
+    #[test]
     fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         for command in [
             "echo $(uname)",
             "cat <<EOF",
             "echo hello > out.txt",
             "sleep 1 &",
-            "sudo rm -rf /tmp/example",
+            "sudo -s rm -rf /tmp/example",
             "sh -c 'rm -rf /tmp/example'",
             "eval 'rm -rf /tmp/example'",
             "if true; then echo yes; fi",

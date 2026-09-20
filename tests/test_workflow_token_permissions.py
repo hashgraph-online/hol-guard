@@ -196,6 +196,8 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
             },
         ),
         ("extension-claim-notice.yml", "notify", {"contents": "read", "pull-requests": "write"}),
+        ("release-please.yml", "release-please", {"contents": "write", "pull-requests": "write"}),
+        ("release-please.yml", "dispatch-stable-publish", {"actions": "write", "contents": "read"}),
         ("publish-mcp-registry.yml", "publish", {"contents": "read", "id-token": "write"}),
         (
             "scorecard.yml",

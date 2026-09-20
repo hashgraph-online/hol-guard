@@ -30,17 +30,10 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
         with:
-          workspaces: rust
-          shared-key: authority
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          components: rustfmt clippy
       - name: Enforce permanent source ownership
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -56,11 +49,7 @@ jobs:
         run: uv run --no-sync python scripts/ci/python_hook_semantic_callgraph_gate.py --root .
       - name: Enforce native receipt persistence contract at exact HEAD
         run: uv run --no-sync python scripts/ci/native_receipt_persistence_gate.py --root . --json native-receipt-persistence.json
-      - name: Enforce Python capability cleanup ownership
-        run: |
-          uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
-            --root . --json python-capability-cleanup.json
-      - name: Prove excluded Python module is absent from the built wheel
+      - name: Prove source and built artifact capability ownership
         run: |
           PACKAGE_ARTIFACT_DIR=$(mktemp -d)
           uv build --wheel --sdist --out-dir "$PACKAGE_ARTIFACT_DIR"
@@ -69,9 +58,8 @@ jobs:
           test -n "$BUILT_WHEEL"
           test -n "$BUILT_SDIST"
           uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
-            --root . --artifact "$BUILT_WHEEL" --json python-capability-cleanup-wheel.json
-           uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
-             --root . --artifact "$BUILT_SDIST" --json python-capability-cleanup-sdist.json
+            --root . --artifact "$BUILT_WHEEL" --artifact "$BUILT_SDIST" \
+            --json python-capability-cleanup.json
       - name: Compile and lint complete Rust workspace
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
@@ -131,7 +119,5 @@ jobs:
             rust-authority-performance.json
             native-receipt-persistence.json
             python-capability-cleanup.json
-            python-capability-cleanup-wheel.json
-            python-capability-cleanup-sdist.json
           if-no-files-found: error
           retention-days: 30

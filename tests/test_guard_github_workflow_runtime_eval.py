@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import shlex
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -23,8 +24,13 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact
 from codex_plugin_scanner.guard.runtime.approval_context import approval_context_tokens_validation_reason
 from codex_plugin_scanner.guard.runtime.command_decision_adapter import effect_decision_to_dict
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
@@ -37,9 +43,19 @@ from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import canonical_framed_payload, format_utc_timestamp
+from tests.native_workflow_test_support import evaluate_native_workflow_command
 from tests.test_guard_github_workflow_runtime import _COMMAND, _descriptor, _seed_resolved_request
 
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
+
+
+def _protected_control_authority() -> ExtensionControlAuthorityView:
+    return ExtensionControlAuthorityView(
+        health=AuthorityHealth.PROTECTED,
+        revision=1,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        layers=(),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -101,9 +117,17 @@ def test_claimed_workflow_authorization_preserves_command_floor_approval_context
     workspace.mkdir()
     store = GuardStore(guard_home)
     descriptor = _descriptor()
-    preauthorization = evaluate_command(
+    monkeypatch.setattr(
+        store, "read_extension_control_authority_for_registry", lambda *_args, **_kwargs: _protected_control_authority()
+    )
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    )
+    monkeypatch.setattr(workflow_hook, "evaluate_command_native", evaluate_native_workflow_command)
+    preauthorization = evaluate_native_workflow_command(
         _COMMAND,
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
+        extension_control_snapshot=snapshot,
     )
     artifact = GuardArtifact(
         artifact_id="codex:project:tool-action:github",
@@ -149,7 +173,7 @@ def test_claimed_workflow_authorization_preserves_command_floor_approval_context
 
     initial = evaluate()
     assert not isinstance(initial, int)
-    assert initial.policy_action == "require-reapproval"
+    assert initial.policy_action == "review"
     request = _seed_resolved_request(store, descriptor)
     assert issue_resolved_github_workflow_capability(store, request, resolved_at=format_utc_timestamp(_ISSUED))
 
@@ -178,6 +202,11 @@ def test_exact_workflow_capability_satisfies_require_reapproval_on_normal_retry(
     workspace.mkdir()
     store = GuardStore(guard_home)
     descriptor = _descriptor_for_workspace(workspace)
+    monkeypatch.setattr(
+        store, "read_extension_control_authority_for_registry", lambda *_args, **_kwargs: _protected_control_authority()
+    )
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    monkeypatch.setattr(workflow_hook, "evaluate_command_native", evaluate_native_workflow_command)
     artifact = GuardArtifact(
         artifact_id="codex:project:tool-action:github",
         name="Bash GitHub maintenance",
@@ -308,7 +337,7 @@ def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(tmp
     original = b"#!/bin/sh\nexit 0\n"
     executable.write_bytes(original)
     executable.chmod(0o755)
-    command = f"{executable} issue lock 17 --repo example/repo"
+    command = f"{shlex.quote(executable.as_posix())} issue lock 17 --repo example/repo"
     artifact = GuardArtifact(
         artifact_id="codex:project:tool-action:github-restored",
         name="Bash GitHub maintenance",
@@ -328,7 +357,7 @@ def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(tmp
         operation = parse_github_workflow_operation(
             parse_shell_command(command),
             repository="example/repo",
-            expected_executable=str(executable),
+            expected_executable=executable.as_posix(),
         )
         assert operation is not None
         base = _descriptor_for_workspace(workspace)

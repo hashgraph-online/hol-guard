@@ -106,10 +106,21 @@ export function supplyChainAuditConnectUserMessage(error: unknown): string | nul
   return "Sign in to HOL Guard Cloud on this machine, then run the workspace audit.";
 }
 
+export function isSupplyChainAuditWorkspaceRequiredError(error: unknown): boolean {
+  return error instanceof GuardHarnessActionError && error.payload?.error === "workspace_dir_required";
+}
+
+export function isSupplyChainAuditWorkspaceInvalidError(error: unknown): boolean {
+  return error instanceof GuardHarnessActionError && error.payload?.error === "workspace_dir_invalid";
+}
+
 export function supplyChainAuditUserMessage(error: unknown): string | null {
   if (error instanceof GuardHarnessActionError) {
-    if (error.payload?.error === "workspace_dir_required") {
-      return "Open Guard from the project you want to audit, or run `hol-guard supply-chain audit --json` from that project folder. The folder must contain a supported package manifest or lockfile.";
+    if (isSupplyChainAuditWorkspaceRequiredError(error)) {
+      return "Enter the project folder to audit below, then run the audit again. Or run `hol-guard supply-chain audit --json` from that project folder.";
+    }
+    if (isSupplyChainAuditWorkspaceInvalidError(error)) {
+      return "Guard could not use that project folder. Choose an existing local folder and run the audit again.";
     }
     return supplyChainAuditConnectUserMessage(error);
   }

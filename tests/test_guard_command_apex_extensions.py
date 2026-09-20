@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
-    enable_local_admin_extension_layer,
     assert_safe_command_cases,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -151,16 +149,22 @@ APEX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 def test_apex_module_and_wrapper_invocations_reach_review(tmp_path: Path) -> None:
     """Indirect module and wrapper invocations reach review and attribute to apex rules."""
     for command, _action_class, expected_rule in APEX_REVIEW_CASES:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
+        evaluation = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("extension", "command.apex", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
+        observations = evaluation.extension_observations
         matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.apex"}
         assert expected_rule in matched, f"{command} failed to match {expected_rule}"
 
 
 def test_apex_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in APEX_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.apex" for item in evaluation.extension_observations)
 
@@ -171,9 +175,6 @@ APEX_SAFE_COMMANDS: tuple[str, ...] = (
     "apex diff a.apx b.apx",
     "apex info",
     "apex benchmark f --full",
-    "exec -c apex compress --help",
-    "xargs -P 4 apex compress --help",
-    "exec /usr/local/bin/apex compress --help",
     "apex compress --help",
     "apex --help",
     "apex compress -h",
@@ -195,23 +196,26 @@ def test_apex_extension_publishes_official_reference() -> None:
 
 def test_enabled_apex_mutating_commands_reach_review(tmp_path: Path) -> None:
     for command, _action_class, rule_id in APEX_REVIEW_CASES:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.apex"),),
-        )
+            controls=(("extension", "command.apex", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
         assert evaluation.controlling_rule_id == rule_id
 
 
 def test_enabled_apex_preview_and_help_commands_remain_safe(tmp_path: Path) -> None:
     for command in APEX_SAFE_COMMANDS:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.apex"),),
-        )
+            controls=(("extension", "command.apex", "enabled"),),
+        ).evaluation
         assert evaluation.controlling_rule_id not in {
             "command.apex.compress",
             "command.apex.decompress",

@@ -18,7 +18,11 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
 from codex_plugin_scanner.guard.runtime import git_pathspecs as git_pathspecs_module
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+
+# Windows rejects ASCII newlines in filenames; keep an unusual Unicode separator
+# there while POSIX continues to exercise Git's NUL-delimited newline handling.
+_LINE_BREAK_FILENAME = "line\u2028break.py" if os.name == "nt" else "line\nbreak.py"
 
 
 def _write(path: Path, text: str) -> None:
@@ -66,7 +70,7 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _write(repository / "src" / "nested" / "MODEL.PY", "print('safe')\n")
     _write(repository / ".env", "TOKEN=fixture\n")
     _write(repository / "notes with spaces.md", "safe\n")
-    _write(repository / "line\nbreak.py", "print('safe')\n")
+    _write(repository / _LINE_BREAK_FILENAME, "print('safe')\n")
     _write(repository / "-leading.py", "print('safe')\n")
     _git(repository, "add", "--all")
     _git(repository, "commit", "--quiet", "-m", "initial fixture")
@@ -119,7 +123,7 @@ def test_git_pathspec_resolution_handles_glob_icase_exclude_and_unusual_names(gi
         cwd=git_repository,
     )
     unusual = git_pathspecs_module.resolve_git_pathspecs(
-        (":(top,literal)notes with spaces.md", ":(top,literal)line\nbreak.py", ":(top,literal)-leading.py"),
+        (":(top,literal)notes with spaces.md", f":(top,literal){_LINE_BREAK_FILENAME}", ":(top,literal)-leading.py"),
         cwd=git_repository,
     )
 
@@ -131,7 +135,7 @@ def test_git_pathspec_resolution_handles_glob_icase_exclude_and_unusual_names(gi
     assert unusual.complete
     assert {path.name for path in unusual.resolved_paths} == {
         "notes with spaces.md",
-        "line\nbreak.py",
+        _LINE_BREAK_FILENAME,
         "-leading.py",
     }
     assert globbed.selection_identity
@@ -293,32 +297,38 @@ def test_git_pathspec_environment_preserves_windows_loader_variable_case_insensi
 
     environment = git_pathspecs_module._git_pathspec_environment()
 
-    assert environment["SystemRoot"] == r"C:\Windows"
+    assert {key.casefold(): value for key, value in environment.items()}["systemroot"] == r"C:\Windows"
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "rule_id", "minimum_action"),
     (
-        "git status",
-        "git diff",
-        "git diff --staged",
-        "git diff HEAD~1",
-        "git diff -- src/",
-        'git diff -- ":(glob)src/**/*.py"',
-        "git log --oneline",
-        "git show HEAD",
+        ("git status", "command.git.status", "allow"),
+        ("git diff", "command.git.diff", "review"),
+        ("git diff --staged", "command.git.index-inspection", "block"),
+        ("git diff HEAD~1", "command.git.diff", "review"),
+        ("git diff -- src/", "command.git.diff", "review"),
+        ('git diff -- ":(glob)src/**/*.py"', "command.git.diff", "review"),
+        ("git log --oneline", "command.git.log", "review"),
+        ("git show HEAD", "command.git.show", "review"),
     ),
 )
-def test_normal_git_workflows_receive_no_new_preflight_review(
+def test_normal_git_workflows_preserve_native_ownership_and_proof_requirements(
     command: str,
+    rule_id: str,
+    minimum_action: str,
     git_repository: Path,
 ) -> None:
     payload = inspect_command(command, cwd=git_repository, home_dir=git_repository.parent)
 
-    assert payload["status"] == "no_match"
+    # Native Git reads retain their helper/configuration proof floors. These
+    # pathspec forms must not invent a more specific owner merely from a token.
+    assert payload["controlling_rule_id"] == rule_id
+    assert payload["minimum_action"] == minimum_action
+    assert payload["status"] == ("no_match" if minimum_action == "allow" else "review")
     classification = payload["classification"]
     assert isinstance(classification, dict)
-    assert classification["matched"] is False
+    assert classification["matched"] is (minimum_action != "allow")
 
 
 def test_git_pathspec_query_does_not_execute_aliases_hooks_or_diff_helpers(git_repository: Path) -> None:

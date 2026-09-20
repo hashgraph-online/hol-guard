@@ -1,0 +1,284 @@
+{
+  "extension": {
+    "action_classes": [
+      "RabbitMQ destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews RabbitMQ deletion and broker reset operations.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.messaging.rabbitmq",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "RabbitMQ command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "RabbitMQ destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies queue, user, virtual-host, and broker reset operations.",
+        "example_command": "rabbitmqctl delete_queue jobs",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "RabbitMQ resource deletion",
+        "permission_id": "command.messaging.rabbitmq.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the target resource, bindings, permissions, and recovery policy first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://www.rabbitmq.com/docs/man/rabbitmqctl.8"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "RabbitMQ destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies queue, user, virtual-host, and broker reset operations.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--erlang-cookie",
+                  "--formatter",
+                  "--node",
+                  "--timeout",
+                  "-n",
+                  "-t"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "delete_queue"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--erlang-cookie",
+                  "--formatter",
+                  "--node",
+                  "--timeout",
+                  "-n",
+                  "-t"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "delete_user"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--erlang-cookie",
+                  "--formatter",
+                  "--node",
+                  "--timeout",
+                  "-n",
+                  "-t"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "delete_vhost"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--erlang-cookie",
+                  "--formatter",
+                  "--node",
+                  "--timeout",
+                  "-n",
+                  "-t"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "force_reset"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--erlang-cookie",
+                  "--formatter",
+                  "--node",
+                  "--timeout",
+                  "-n",
+                  "-t"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "reset"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.messaging.rabbitmq.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.messaging.rabbitmq.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            "title": "RabbitMQ command preview",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "rabbitmqctl",
+                  "rabbitmqctl.bat",
+                  "rabbitmqctl.cmd",
+                  "rabbitmqctl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            "title": "RabbitMQ command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List the target resource, bindings, permissions, and recovery policy first."
+        ],
+        "severity": "critical",
+        "title": "RabbitMQ resource deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "List bindings, permissions, and recovery state before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

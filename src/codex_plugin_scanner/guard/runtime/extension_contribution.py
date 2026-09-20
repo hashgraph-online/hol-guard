@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 from collections.abc import Mapping
@@ -14,7 +13,7 @@ from typing import Final, cast
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-_SCHEMA_VERSION: Final = "guard.extension-contribution.v1"
+_SCHEMA_VERSION: Final = "guard.extension-contribution.v2"
 _PACKAGE_DATA: Final = ("codex_plugin_scanner", "guard", "contracts", "data")
 
 
@@ -28,7 +27,6 @@ def frozen_package_data(*parts: str) -> Path | None:
     return path if path.is_file() or path.is_dir() else None
 
 
-_MODULE_PREFIX: Final = "codex_plugin_scanner.guard.runtime."
 _ALLOWED_ICON_NAMES: Final = frozenset(
     {
         "HiMiniBolt",
@@ -63,27 +61,33 @@ def validate_contribution_file(path: Path) -> dict[str, object]:
 
 
 def validate_contribution(payload: Mapping[str, object], *, filename: str = "contribution") -> None:
+    if payload.get("schemaVersion") == "guard.extension-contribution.v1":
+        raise ValueError(
+            f"{filename} uses legacy contribution v1; convert it to a command source and regenerate descriptor v2"
+        )
     try:
         _validator().validate(dict(payload))
     except ValidationError as exc:
         raise ValueError(f"{filename} failed contribution schema: {exc.message}") from exc
-    if payload.get("trustClass") != "external":
-        raise ValueError(f"{filename} cannot self-declare a non-external trust class")
-    if payload.get("activation") != "opt-in":
-        raise ValueError(f"{filename} must use opt-in activation")
+    trust_class = payload.get("trustClass")
+    activation = payload.get("activation")
+    if (trust_class == "external") != (activation == "opt-in"):
+        raise ValueError(f"{filename} trust class and activation projection disagree")
     extension_id = payload.get("id")
     if not isinstance(extension_id, str) or not extension_id.startswith("command."):
         raise ValueError(f"{filename} has invalid id")
     icon = payload.get("icon")
     if isinstance(icon, dict) and icon.get("kind") == "react-icon" and icon.get("name") not in _ALLOWED_ICON_NAMES:
         raise ValueError(f"{filename} uses an icon name that is not allowlisted")
-    detector = payload.get("detector")
-    if not isinstance(detector, dict):
-        raise ValueError(f"{filename} detector must be an in-tree python-module")
-    module_name = detector.get("module")
-    if not isinstance(module_name, str) or not module_name.startswith(_MODULE_PREFIX):
-        raise ValueError(f"{filename} detector module is outside the runtime package")
-    _bind_detector(extension_id, module_name, filename)
+    native_source = payload.get("nativeSource")
+    if not isinstance(native_source, dict):
+        raise ValueError(f"{filename} must bind a generated native command source")
+    expected_path = f"contributions/command-sources/{extension_id}.json"
+    if native_source.get("path") != expected_path:
+        raise ValueError(f"{filename} native source is not bound to {extension_id}")
+    expected_trust = _reviewed_trust_class(extension_id)
+    if trust_class != expected_trust:
+        raise ValueError(f"{filename} trust class disagrees with the reviewed trust map")
 
 
 def contribution_ids(root: Path | None = None) -> frozenset[str]:
@@ -109,6 +113,7 @@ def contribution_catalog_overlay(extension_id: str) -> dict[str, object] | None:
 def reset_contribution_cache() -> None:
     _contribution_index.cache_clear()
     _validator.cache_clear()
+    _trust_classes.cache_clear()
 
 
 def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
@@ -168,35 +173,45 @@ def _validator() -> Draft202012Validator:
 def _schema_bytes() -> bytes:
     try:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
-        return (root / "contribution.v1.schema.json").read_bytes()
+        return (root / "contribution.v2.schema.json").read_bytes()
     except (FileNotFoundError, ModuleNotFoundError, OSError):
-        frozen = frozen_package_data("extensions", "contribution.v1.schema.json")
+        frozen = frozen_package_data("extensions", "contribution.v2.schema.json")
         if frozen is not None and frozen.is_file():
             return frozen.read_bytes()
         if _frozen_runtime():
             raise FileNotFoundError("frozen Guard is missing packaged extension contribution schema") from None
-        repo_schema = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "contribution.v1.schema.json"
+        repo_schema = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "contribution.v2.schema.json"
         return repo_schema.read_bytes()
 
 
-def _expected_detector_module(extension_id: str) -> str:
-    suffix = extension_id.removeprefix("command.").replace("-", "_").replace(".", "_")
-    return f"{_MODULE_PREFIX}command_{suffix}_extensions"
+@lru_cache(maxsize=1)
+def _trust_classes() -> dict[str, str]:
+    try:
+        root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
+        raw = (root / "trust-class-map.v1.json").read_bytes()
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        frozen = frozen_package_data("extensions", "trust-class-map.v1.json")
+        if frozen is not None and frozen.is_file():
+            raw = frozen.read_bytes()
+        elif _frozen_runtime():
+            raise FileNotFoundError("frozen Guard is missing packaged extension trust map") from None
+        else:
+            raw = (Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+    payload = json.loads(raw.decode("utf-8"))
+    classes = payload.get("classes") if isinstance(payload, dict) else None
+    if not isinstance(classes, dict):
+        raise ValueError("invalid extension trust map")
+    result: dict[str, str] = {}
+    for name in ("first-party", "trusted-library", "external"):
+        values = classes.get(name)
+        if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
+            raise ValueError("invalid extension trust map")
+        for extension_id in values:
+            if extension_id in result:
+                raise ValueError("duplicate extension trust binding")
+            result[extension_id] = name
+    return result
 
 
-def _detector_source_path(module_leaf: str) -> Path:
-    return Path(__file__).with_name(f"{module_leaf}.py")
-
-
-def _bind_detector(extension_id: str, module_name: str, filename: str) -> None:
-    if module_name != _expected_detector_module(extension_id):
-        raise ValueError(f"{filename} detector is not bound to {extension_id}")
-    module_leaf = module_name.rsplit(".", 1)[-1]
-    path = _detector_source_path(module_leaf)
-    if path.is_file():
-        if f'"{extension_id}"' not in path.read_text(encoding="utf-8"):
-            raise ValueError(f"{filename} detector does not define {extension_id}")
-        return
-    if _frozen_runtime() and importlib.util.find_spec(module_name) is not None:
-        return
-    raise ValueError(f"{filename} detector module is missing")
+def _reviewed_trust_class(extension_id: str) -> str:
+    return _trust_classes().get(extension_id, "external")

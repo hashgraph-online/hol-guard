@@ -57,13 +57,39 @@ fn command_index(arguments: &[String]) -> Option<usize> {
     None
 }
 
+fn bounded_inspection(arguments: &[String]) -> bool {
+    if arguments == ["rev-parse", "--show-toplevel"] {
+        return true;
+    }
+    let [command, mode, patch] = arguments else {
+        return false;
+    };
+    // These fixed built-ins cannot be replaced by aliases. This admits their
+    // capability attribution only; patch read and workspace proofs remain the
+    // responsibility of the ordinary command decision, not this classifier.
+    command == "apply"
+        && mode == "--check"
+        && !patch.is_empty()
+        && patch.len() <= 4096
+        && !patch.starts_with(['-', '/', '\\'])
+        && patch
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
+        && patch
+            .split('/')
+            .all(|part| !matches!(part, "" | "." | ".."))
+}
+
 pub(super) fn observe(
     segment: &CommandSegmentV1,
     index: usize,
     result: &mut CompatibilityObservations,
 ) {
     let arguments = &segment.arguments;
-    if arguments.len() == 1 && matches!(arguments[0].as_str(), "--help" | "--version" | "-h") {
+    if arguments
+        .first()
+        .is_some_and(|argument| matches!(argument.as_str(), "--help" | "--version" | "-h"))
+    {
         return;
     }
     let Some(command_index) = command_index(arguments) else {
@@ -75,6 +101,9 @@ pub(super) fn observe(
         return;
     };
     let command = arguments[command_index].as_str();
+    if command_index == 0 && bounded_inspection(arguments) {
+        return;
+    }
     if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
@@ -117,5 +146,49 @@ pub(super) fn observe(
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
     {
         result.rule("command.git.index-inspection", index, true);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn observations(command: &str) -> CompatibilityObservations {
+        let model = crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap();
+        let mut result = CompatibilityObservations::default();
+        observe(&model.segments[0], 0, &mut result);
+        result
+    }
+
+    #[test]
+    fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
+        for command in [
+            "git rev-parse --show-toplevel",
+            "git apply --check workspace/patches/change.patch",
+        ] {
+            assert!(observations(command).rule_matches.is_empty(), "{command}");
+        }
+    }
+
+    #[test]
+    fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
+        for command in [
+            "git -c alias.apply=payload apply --check change.patch",
+            "git rev-parse --git-dir",
+            "git apply change.patch",
+            "git apply --check --unsafe-paths change.patch",
+            "git apply --check ../change.patch",
+            "git apply --check -",
+        ] {
+            let result = observations(command);
+            assert!(!result.rule_matches.is_empty(), "{command}");
+            assert!(
+                result.rule_matches.iter().all(|item| item.uncertainty),
+                "{command}"
+            );
+        }
     }
 }
