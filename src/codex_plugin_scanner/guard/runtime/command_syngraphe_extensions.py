@@ -18,22 +18,39 @@ from .secret_file_request_services.shell_quote_tokens import (
     shell_tokens_preserving_quote_context,
 )
 
-# Verified against Syngraphe 0.4.0 src/cli/main.ts and its shared plan/apply
-# commands. --scope takes a value globally; only document creation has --title.
+# Verified against src/cli/main.ts and the published CLI reference, including the
+# agent policy surface. --scope takes a value globally; only document creation
+# has --title, only init has --policy, and only policy add has --force.
 # Commander does not support boolean assignments such as --dry-run=true.
 _EXECUTABLES = ("syngraphe", "syg")
 _EXECUTABLE_NAMES = frozenset(name for executable in _EXECUTABLES for name in executable_names(executable))
 _FLAGS = frozenset({"--dry-run", "--json", "--help", "-h", "--version", "-v"})
+# Command-local boolean flags. They are declared per rule so an unknown option
+# stays fail-secure everywhere the CLI itself would reject it.
+_INIT_FLAGS = frozenset({"--policy"})
+_POLICY_FLAGS = frozenset({"--force"})
 _WRAPPERS = (
     ("exec", frozenset({"-a"}), frozenset({"-c", "-l"})),
     ("xargs", frozenset({"-n", "-P", "-I", "-L", "-s", "-a", "-E", "-d"}), frozenset({"-0", "-r", "-t"})),
     ("command", frozenset(), frozenset({"-p"})),
 )
-_SAFER_ALTERNATIVES = ("Run the same command with --dry-run first to inspect the exact plan without modifying files.",)
+_DRY_RUN_ALTERNATIVE = "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+_SAFER_ALTERNATIVES = (_DRY_RUN_ALTERNATIVE,)
+# Only --force can replace a file the repository owns, so its alternative also
+# points at the file itself: Syngraphe never restores what it replaces.
+_POLICY_SAFER_ALTERNATIVES = (
+    _DRY_RUN_ALTERNATIVE,
+    "Read the existing AGENT-POLICY.md before --force replaces it; Syngraphe does not manage or restore its contents.",
+)
 
 
-def _mutation_paths(*paths: tuple[str, ...], creation: bool = False) -> AnyMatcher:
+def _mutation_paths(
+    *paths: tuple[str, ...],
+    creation: bool = False,
+    command_flags: frozenset[str] = frozenset(),
+) -> AnyMatcher:
     options = frozenset({"--scope", "--title"}) if creation else frozenset({"--scope"})
+    known_flags = _FLAGS | command_flags
     # env/sudo and transparent shell wrappers are normalized by the canonical
     # parser. These remaining wrappers use the same structured path matcher.
     return AnyMatcher(
@@ -43,7 +60,7 @@ def _mutation_paths(*paths: tuple[str, ...], creation: bool = False) -> AnyMatch
                     executable,
                     paths,
                     global_options_with_values=options,
-                    global_flags=_FLAGS,
+                    global_flags=known_flags,
                     fail_secure_unknown_options=True,
                 )
                 for executable in _EXECUTABLES
@@ -55,10 +72,10 @@ def _mutation_paths(*paths: tuple[str, ...], creation: bool = False) -> AnyMatch
                     allow_leading_options=True,
                     leading_options_with_values=value_options,
                     interspersed_options_with_values=options,
-                    interspersed_flags=_FLAGS | flags,
+                    interspersed_flags=known_flags | wrapper_flags,
                     fail_secure_unknown_options=True,
                 )
-                for wrapper, value_options, flags in _WRAPPERS
+                for wrapper, value_options, wrapper_flags in _WRAPPERS
             ),
         )
     )
@@ -120,7 +137,15 @@ class SyngrapheSafeFlagMatcher:
         return tuple(evidence)
 
 
-def _rule(name: str, title: str, description: str, action: str, example: str, matcher: AnyMatcher) -> CommandSafetyRule:
+def _rule(
+    name: str,
+    title: str,
+    description: str,
+    action: str,
+    example: str,
+    matcher: AnyMatcher,
+    safer_alternatives: tuple[str, ...] = _SAFER_ALTERNATIVES,
+) -> CommandSafetyRule:
     value_options = frozenset(
         option
         for child in matcher.matchers
@@ -152,7 +177,7 @@ def _rule(name: str, title: str, description: str, action: str, example: str, ma
         # including operations that are not destructive.
         risk_classes=("destructive_shell",),
         action_classes=(action,),
-        safer_alternatives=_SAFER_ALTERNATIVES,
+        safer_alternatives=safer_alternatives,
         default_mode="review",
         matcher=matcher,
         safe_variants=tuple(variants),
@@ -164,10 +189,21 @@ SYNGRAPHE_COMMAND_RULES = (
     _rule(
         "init",
         "Syngraphe context initialization",
-        "Creates .context/ and may create or patch agent bootstrap files consumed by humans and coding agents.",
+        "Creates .context/, inserts managed blocks in agent bootstrap files, replaces a managed body an earlier "
+        "Syngraphe published, and with --policy also creates AGENT-POLICY.md.",
         "Syngraphe initialization command",
         "syngraphe init",
-        _mutation_paths(("init",)),
+        _mutation_paths(("init",), command_flags=_INIT_FLAGS),
+    ),
+    _rule(
+        "policy-add",
+        "Syngraphe agent policy creation",
+        "Creates AGENT-POLICY.md at the repository root as a starting point for agent operating rules that the "
+        "repository owns and Syngraphe never manages afterwards; --force replaces an existing one.",
+        "Syngraphe agent policy command",
+        "syngraphe policy add",
+        _mutation_paths(("policy", "add"), command_flags=_POLICY_FLAGS),
+        safer_alternatives=_POLICY_SAFER_ALTERNATIVES,
     ),
     _rule(
         "document-new",
@@ -197,11 +233,11 @@ SYNGRAPHE_COMMAND_EXTENSION_SPECS = (
         name="Syngraphe repository context protection",
         description=(
             "Reviews shared repository context initialization, document creation, "
-            "and state archiving through syngraphe or syg."
+            "state archiving, and agent policy creation through syngraphe or syg."
         ),
         action_classes=tuple(action for rule in SYNGRAPHE_COMMAND_RULES for action in rule.action_classes),
         risk_classes=("destructive_shell",),
-        safer_alternatives=_SAFER_ALTERNATIVES,
+        safer_alternatives=_POLICY_SAFER_ALTERNATIVES,
         reference_urls=("https://github.com/suffro/syngraphe", "https://syngraphe.dev/"),
         executables=_EXECUTABLES,
         ecosystem_ids=("syngraphe",),

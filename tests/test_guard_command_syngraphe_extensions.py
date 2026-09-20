@@ -37,11 +37,14 @@ from tests.command_extension_contracts import assert_reviewed_command_cases, ass
 _EXTENSION_ID = "command.syngraphe"
 _MUTATIONS = (
     ("init", "init", "Syngraphe initialization command"),
+    ("init --policy", "init", "Syngraphe initialization command"),
     *(
         (f"{category} new example", "document-new", "Syngraphe document creation command")
         for category in ("truth", "decision", "state", "history")
     ),
     ("state archive example", "state-archive", "Syngraphe state archive command"),
+    ("policy add", "policy-add", "Syngraphe agent policy command"),
+    ("policy add --force", "policy-add", "Syngraphe agent policy command"),
 )
 
 
@@ -145,10 +148,62 @@ def test_complete_read_only_surface(executable: str, tmp_path: Path, syngraphe_e
     commands.extend(
         (
             f"{executable} decision --help",
+            # `policy` owns no action of its own: it prints help and writes nothing.
+            f"{executable} policy",
+            f"{executable} policy --help",
+            f"{executable} policy -h",
+            f"{executable} policy add --help",
+            f"{executable} policy add -h",
             f'printf "%s" "{executable} state new example"',
         )
     )
     assert_safe_command_cases(tuple(commands), tmp_path)
+
+
+@pytest.mark.parametrize("executable", ("syngraphe", "syg"))
+def test_agent_policy_previews_are_the_only_safe_policy_writes(
+    executable: str, tmp_path: Path, syngraphe_enabled: None
+) -> None:
+    """A verified --dry-run is the whole safety predicate; --force never weakens it."""
+    assert_safe_command_cases(
+        (
+            f"{executable} policy add --dry-run",
+            f"{executable} policy add --dry-run --json",
+            f"{executable} policy add --force --dry-run",
+            f"{executable} policy add --force --dry-run --json",
+            f"{executable} init --policy --dry-run",
+            f"{executable} init --policy --dry-run --json",
+        ),
+        tmp_path,
+    )
+    for options in permutations(("--force", "--dry-run", "--json")):
+        assert_safe_command_cases((f"{executable} policy add {' '.join(options)}",), tmp_path)
+    for options in permutations(("--policy", "--dry-run", "--json")):
+        assert_safe_command_cases((f"{executable} init {' '.join(options)}",), tmp_path)
+    # --json alone is not a preview: the CLI rejects it without --dry-run.
+    # --scope is a usage error for a Git-root concept, never a safe variant.
+    assert_reviewed_command_cases(
+        tuple(
+            (f"{executable} {arguments}", "Syngraphe agent policy command", f"{_EXTENSION_ID}.policy-add")
+            for arguments in (
+                "policy add --json",
+                "policy add --force --json",
+                "policy add --scope packages/api",
+                "policy add --force --scope packages/api",
+                'policy add --scope "packages/api context"',
+                "policy add --force --dry-run=true",
+                "policy add --force --DRY-RUN",
+                "policy add -- --dry-run",
+                "policy add --unknown --dry-run",
+                "policy add $OPTIONS --dry-run",
+            )
+        )
+        + tuple(
+            (f"{executable} {arguments}", "Syngraphe initialization command", f"{_EXTENSION_ID}.init")
+            for arguments in ("init --policy --json", "init --policy --scope packages/api")
+        ),
+        tmp_path,
+    )
 
 
 @pytest.mark.parametrize("executable", ("syngraphe", "syg"))
@@ -210,6 +265,9 @@ def test_safe_segments_cannot_suppress_mutations(
         "rm -rf build ; syngraphe state new example --dry-run",
         'sh -c "syg state new example --dry-run" && rm -rf build',
         'syg state new example --title "$(rm -rf build)" --dry-run',
+        "syg policy add --force --dry-run && rm -rf build",
+        "rm -rf build ; syngraphe policy add --force --dry-run",
+        "syngraphe init --policy --dry-run | rm -rf build",
     ),
 )
 def test_other_extensions_keep_their_evidence(command: str, tmp_path: Path, syngraphe_enabled: None) -> None:
@@ -324,6 +382,7 @@ def test_metadata_ownership_and_evidence_privacy(tmp_path: Path, syngraphe_enabl
         f"{_EXTENSION_ID}.init",
         f"{_EXTENSION_ID}.document-new",
         f"{_EXTENSION_ID}.state-archive",
+        f"{_EXTENSION_ID}.policy-add",
     }
     for rule in extension.rules:
         assert rule.default_mode == "review"
@@ -331,10 +390,22 @@ def test_metadata_ownership_and_evidence_privacy(tmp_path: Path, syngraphe_enabl
         for action in rule.action_classes:
             assert risk_classes_for_command_action(action) == rule.risk_classes
         assert "--dry-run" in rule.safer_alternatives[0]
-    command = '/private/example/syg --scope private-scope state new private-document --title "Private title marker"'
-    observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(parse_shell_command(command))
-    assert any(item.extension.extension_id == _EXTENSION_ID for item in observations)
-    encoded = json.dumps([extension.to_dict(), *(item.to_dict() for item in observations)])
-    for private_value in (command, "/private/example", "private-scope", "private-document", "Private title marker"):
-        assert private_value not in encoded
+    policy_rule = next(rule for rule in extension.rules if rule.rule_id == f"{_EXTENSION_ID}.policy-add")
+    # --force is the one Syngraphe operation that replaces prose a person wrote.
+    assert any("AGENT-POLICY.md" in alternative for alternative in policy_rule.safer_alternatives)
+    for command in (
+        '/private/example/syg --scope private-scope state new private-document --title "Private title marker"',
+        "/private/example/syg --scope private-scope policy add --force",
+    ):
+        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(parse_shell_command(command))
+        assert any(item.extension.extension_id == _EXTENSION_ID for item in observations)
+        encoded = json.dumps([extension.to_dict(), *(item.to_dict() for item in observations)])
+        for private_value in (
+            command,
+            "/private/example",
+            "private-scope",
+            "private-document",
+            "Private title marker",
+        ):
+            assert private_value not in encoded
     assert not list(tmp_path.iterdir())
